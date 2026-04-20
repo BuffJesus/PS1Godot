@@ -16,6 +16,7 @@ public partial class PS1GodotPlugin : EditorPlugin
     private const string BuildPsxsplashMenuLabel = "PS1Godot: Build psxsplash runtime";
     private const string LaunchEmulatorMenuLabel = "PS1Godot: Launch in PCSX-Redux";
     private const string RunOnPsxMenuLabel = "PS1Godot: Run on PSX (export + build + launch)";
+    private const string ConvertMeshToPS1MenuLabel = "PS1Godot: Convert selected MeshInstance3D to PS1MeshInstance";
 
     private PS1TriggerBoxGizmo? _triggerBoxGizmo;
 
@@ -28,6 +29,7 @@ public partial class PS1GodotPlugin : EditorPlugin
         AddToolMenuItem(BuildPsxsplashMenuLabel, Callable.From(OnBuildPsxsplash));
         AddToolMenuItem(LaunchEmulatorMenuLabel, Callable.From(OnLaunchEmulator));
         AddToolMenuItem(RunOnPsxMenuLabel, Callable.From(OnRunOnPsx));
+        AddToolMenuItem(ConvertMeshToPS1MenuLabel, Callable.From(OnConvertMeshToPS1));
 
         _triggerBoxGizmo = new PS1TriggerBoxGizmo();
         AddNode3DGizmoPlugin(_triggerBoxGizmo);
@@ -44,6 +46,7 @@ public partial class PS1GodotPlugin : EditorPlugin
         RemoveToolMenuItem(BuildPsxsplashMenuLabel);
         RemoveToolMenuItem(LaunchEmulatorMenuLabel);
         RemoveToolMenuItem(RunOnPsxMenuLabel);
+        RemoveToolMenuItem(ConvertMeshToPS1MenuLabel);
 
         if (_triggerBoxGizmo != null)
         {
@@ -170,6 +173,98 @@ public partial class PS1GodotPlugin : EditorPlugin
         {
             GD.PushError($"[PS1Godot] Splashpack export failed: {e.Message}");
         }
+    }
+
+    // One-click "make this mesh exportable as a PS1 mesh." Use case: an
+    // FBX import that contains a regular MeshInstance3D somewhere in its
+    // sub-tree. After toggling Editable Children on the import, the user
+    // selects the body MeshInstance3D and runs this — a sibling
+    // PS1MeshInstance is created on the scene root with the same Mesh +
+    // Transform + material override. Names it "Player" if no Player node
+    // exists yet (lets the test_logger.lua Player.GetPosition tracker
+    // pick it up automatically).
+    //
+    // Doesn't touch the source node — destructive cleanup is on the
+    // author. Once they delete the imported FBX scene, only the new
+    // PS1MeshInstance remains.
+    private void OnConvertMeshToPS1()
+    {
+        var sceneRoot = EditorInterface.Singleton.GetEditedSceneRoot();
+        if (sceneRoot == null)
+        {
+            GD.PushWarning("[PS1Godot] No scene open. Open the .tscn you want to add the PS1MeshInstance to.");
+            return;
+        }
+
+        var selected = EditorInterface.Singleton.GetSelection().GetSelectedNodes();
+        bool playerExists = sceneRoot.FindChild("Player", recursive: true, owned: false) != null;
+        int converted = 0;
+        Node? lastCreated = null;
+
+        foreach (var n in selected)
+        {
+            if (n is not MeshInstance3D src) continue;
+            if (src.Mesh == null)
+            {
+                GD.PushWarning($"[PS1Godot] '{src.Name}' has no Mesh — skipping.");
+                continue;
+            }
+
+            var ps1 = new PS1MeshInstance
+            {
+                Mesh = src.Mesh,
+                MaterialOverride = src.MaterialOverride,
+                Collision = PS1MeshInstance.CollisionKind.None,
+                BitDepth = PSXBPP.TEX_8BIT,
+            };
+
+            // Pick a name — first conversion claims "Player" if it's free,
+            // subsequent ones use the source name.
+            if (!playerExists && converted == 0)
+            {
+                ps1.Name = "Player";
+                playerExists = true;
+            }
+            else
+            {
+                ps1.Name = src.Name + "_PS1";
+            }
+
+            // Add as a child of the scene root so it's saved with the
+            // .tscn (not stuck inside an imported sub-scene).
+            sceneRoot.AddChild(ps1);
+            ps1.Owner = sceneRoot;
+            // Match world-space placement of the source.
+            ps1.GlobalTransform = src.GlobalTransform;
+
+            // Carry over per-surface override materials too — useful when
+            // the FBX has a couple of distinct materials per surface.
+            int surfaceCount = src.Mesh.GetSurfaceCount();
+            for (int s = 0; s < surfaceCount; s++)
+            {
+                var ovr = src.GetSurfaceOverrideMaterial(s);
+                if (ovr != null) ps1.SetSurfaceOverrideMaterial(s, ovr);
+            }
+
+            converted++;
+            lastCreated = ps1;
+            GD.Print($"[PS1Godot] Converted '{src.Name}' → '{ps1.Name}' (PS1MeshInstance, {surfaceCount} surface(s))");
+        }
+
+        if (converted == 0)
+        {
+            GD.PushWarning("[PS1Godot] Nothing converted. Select one or more MeshInstance3D nodes in the Scene tree (toggle 'Editable Children' on imported FBX scenes first to expose internal meshes).");
+            return;
+        }
+
+        // Make the inspector follow the created node so the author can
+        // immediately tweak BitDepth / FlatColor / Collision, etc.
+        if (lastCreated != null)
+        {
+            EditorInterface.Singleton.GetSelection().Clear();
+            EditorInterface.Singleton.GetSelection().AddNode(lastCreated);
+        }
+        GD.Print($"[PS1Godot] {converted} mesh(es) converted. Original FBX nodes are unchanged — delete them once you're sure the PS1MeshInstance has what you need.");
     }
 
     private void OnSubdivide()
