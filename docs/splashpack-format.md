@@ -1,8 +1,8 @@
-# Splashpack format v20
+# Splashpack format v21
 
 Extracted from `psxsplash-main/src/splashpack.{hh,cpp}` and
-`splashedit-main/Runtime/PSXSceneWriter.cs`. Keep this in sync when either side
-bumps the version.
+`godot-ps1/addons/ps1godot/exporter/SplashpackWriter.cs`. Keep this in sync when
+either side bumps the version.
 
 > **Authoritative source:** the C++ structs with `static_assert(sizeof(...) == N)`
 > in `splashpack.hh`. If this doc disagrees with the code, the code wins.
@@ -26,14 +26,16 @@ the respective sidecar file, not absolute addresses.
 Little-endian throughout. The PS1 MIPS CPU is little-endian; writer and loader
 both assume it.
 
-## File header — `SPLASHPACKFileHeader` (120 bytes)
+## File header — `SPLASHPACKFileHeader` (136 bytes)
 
-Source: `splashpack.cpp` lines 21–74. `static_assert(sizeof(...) == 120)`.
+Source: `splashpack.cpp` ~lines 21–85. `static_assert(sizeof(...) == 136)`.
+v21 appended 16 bytes at the end of the v20 header for editor-driven player
+rigs (camera offset + avatar attachment).
 
 | Offset | Type | Field | Notes |
 |-------:|------|-------|-------|
 | 0 | `char[2]` | `magic` | `"SP"` |
-| 2 | `u16` | `version` | `20`; loader asserts `>= 20` |
+| 2 | `u16` | `version` | `21`; loader asserts `>= 21` |
 | 4 | `u16` | `luaFileCount` | |
 | 6 | `u16` | `gameObjectCount` | |
 | 8 | `u16` | `textureAtlasCount` | |
@@ -85,6 +87,10 @@ Source: `splashpack.cpp` lines 21–74. `static_assert(sizeof(...) == 120)`.
 | 112 | `u16` | `skinnedMeshCount` | |
 | 114 | `u16` | `pad_skin` | 0 |
 | 116 | `u32` | `skinTableOffset` | |
+| 120 | `PackedVec3` | `cameraRigOffset` | v21+. Player-local PSX units; runtime rotates by yaw. |
+| 126 | `PackedVec3` | `playerAvatarOffset` | v21+. Mesh-origin to player-origin offset, player-local. |
+| 132 | `u16` | `playerAvatarObjectIndex` | v21+. Which gameObject auto-tracks player; `0xFFFF` = none. |
+| 134 | `u16` | `pad_rig` | 0 |
 
 ## Post-header layout (main `.splashpack`)
 
@@ -92,7 +98,7 @@ Written in this order by `PSXSceneWriter.Write()` and read linearly by
 `SplashPackLoader::LoadSplashpack()`:
 
 ```
-Header (120 bytes)
+Header (136 bytes)
 ├── LuaFile[]          — luaFileCount × sizeof(LuaFile)
 ├── GameObject[]       — gameObjectCount × sizeof(GameObject)
 ├── SPLASHPACKCollider[] — colliderCount × 32 bytes
@@ -171,7 +177,7 @@ All fp12 fields are stored as `u16` with range 0–65535; the writer has overflo
 guards that log an error but write a clamped value, so corrupt scenes fail at
 export-time, not runtime.
 
-## Version history (as of v20)
+## Version history (as of v21)
 
 - v10: audio clips
 - v11: fog config
@@ -181,6 +187,11 @@ export-time, not runtime.
 - v17: animations
 - v18: skinned meshes
 - v20: three-file split (main / vram / spu)
+- v21: editor-driven player rig — `cameraRigOffset` + `playerAvatarOffset`
+  + `playerAvatarObjectIndex` appended to the header (+16 bytes). Runtime
+  reads a `Camera3D` child of `PS1Player` as the third-person offset and a
+  `MeshInstance3D` child as the auto-tracked avatar. `Camera.SetMode` Lua
+  API flips between first- and third-person at runtime.
 
 ## When porting the writer to Godot
 

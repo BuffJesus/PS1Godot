@@ -8,6 +8,12 @@
 
 local tick = 0
 
+-- Camera mode toggle state. Select cycles between "third" and "first"
+-- via Camera.SetMode. ThirdPerson is the default; the runtime auto-hides
+-- the avatar mesh in first-person so the camera can live at player eye
+-- height without rendering the back of its own head.
+local cameraMode = "third"
+
 -- UI handles, resolved once in onCreate. -1 = element absent.
 local hudCanvas, tickCounterEl = -1, -1
 local dialogCanvas, dialogBodyEl = -1, -1
@@ -144,6 +150,19 @@ function onUpdate(self, dt)
     tick = tick + 1
     if tick % 30 == 0 and tickCounterEl >= 0 then
         UI.SetText(tickCounterEl, "tick=" .. tick)
+    end
+
+    -- Press Select to toggle first/third person. Demo only — a real game
+    -- would put this behind an Options menu + persisted preference.
+    if Input.IsPressed(Input.SELECT) then
+        if cameraMode == "third" then
+            Camera.SetMode("first")
+            cameraMode = "first"
+        else
+            Camera.SetMode("third")
+            cameraMode = "third"
+        end
+        Debug.Log("camera mode -> " .. cameraMode)
     end
 
     -- Track runtime player position + facing onto the Player mesh so it
