@@ -22,10 +22,12 @@ function onCreate(self)
     dialogCanvas = UI.FindCanvas("dialog")
     Debug.Log("test_logger: hud=" .. hudCanvas .. " tickEl=" .. tickCounterEl .. " dialog=" .. dialogCanvas)
 
-    -- Kick the bounce animation on loop. The runtime's AnimationPlayer
-    -- drives the Cube's position via the splashpack keyframe track.
+    -- Kick the bounce animation on loop (Cube2 moves up/down) and the
+    -- spin animation on loop (green Cube rotates around Y). The runtime
+    -- AnimationPlayer handles both concurrently.
     Animation.Play("bounce", { loop = true })
-    Debug.Log("test_logger: Animation.Play('bounce', loop=true)")
+    Animation.Play("spin", { loop = true })
+    Debug.Log("test_logger: Animation.Play('bounce' + 'spin', loop=true)")
 end
 
 function onUpdate(self, dt)

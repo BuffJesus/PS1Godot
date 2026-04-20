@@ -14,8 +14,11 @@ public enum PS1InterpMode
 }
 
 // One keyframe inside a PS1Animation. Child node of a PS1Animation.
-// The animation's TargetObjectName is the object whose position this
-// keyframe drives.
+// Interpretation of Value depends on the parent animation's TrackType:
+//   Position: Godot world-space XYZ in meters (converted to PSX fp12).
+//   Rotation: Euler angles per axis in **degrees** (0..360). Exporter
+//             converts to PSX fp10 angle units (4096 = full turn).
+//   Active:   Value.X used as a boolean (non-zero = active, 0 = hidden).
 [Tool]
 [GlobalClass]
 public partial class PS1AnimationKeyframe : Node
@@ -26,11 +29,8 @@ public partial class PS1AnimationKeyframe : Node
     [Export(PropertyHint.Range, "0,8191,1")]
     public int Frame { get; set; } = 0;
 
-    // Target position at this frame, in Godot world coordinates. At
-    // export we convert to PSX fp12 (divided by the scene's GteScaling)
-    // with Y negated to match PSX's Y-down convention — same as the
-    // static mesh / collider pipeline.
-    [Export] public Vector3 Position { get; set; } = Vector3.Zero;
+    // Track-type-dependent triple (see the class comment for units).
+    [Export] public Vector3 Value { get; set; } = Vector3.Zero;
 
     // How to interpolate between this keyframe and the next.
     [Export] public PS1InterpMode Interp { get; set; } = PS1InterpMode.Linear;

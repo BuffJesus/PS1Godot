@@ -184,19 +184,12 @@ public static class SceneCollector
         foreach (var child in anim.GetChildren())
         {
             if (child is not PS1AnimationKeyframe kf) continue;
-            // Godot → PSX: divide by GteScaling, negate Y, convert to fp12
-            // int16 for storage in the keyframe.values[3] triple.
-            float s = Mathf.Max(data.GteScaling, 0.0001f);
-            int vx = Mathf.RoundToInt(kf.Position.X / s * 4096f);
-            int vy = Mathf.RoundToInt(-kf.Position.Y / s * 4096f);
-            int vz = Mathf.RoundToInt(kf.Position.Z / s * 4096f);
+            (short v0, short v1, short v2) = EncodeKeyframeValue(kf.Value, anim.TrackType, data.GteScaling);
             kfs.Add(new KeyframeRecord
             {
                 Frame = (ushort)Mathf.Clamp(kf.Frame, 0, 8191),
                 Interp = kf.Interp,
-                V0 = (short)Mathf.Clamp(vx, short.MinValue, short.MaxValue),
-                V1 = (short)Mathf.Clamp(vy, short.MinValue, short.MaxValue),
-                V2 = (short)Mathf.Clamp(vz, short.MinValue, short.MaxValue),
+                V0 = v0, V1 = v1, V2 = v2,
             });
         }
 
@@ -215,11 +208,48 @@ public static class SceneCollector
         {
             Name = name,
             TargetObjectName = target,
+            TrackType = anim.TrackType,
             TotalFrames = (ushort)Mathf.Clamp(anim.TotalFrames, 1, 8191),
             Keyframes = kfs,
         });
-        GD.Print($"[PS1Godot] Animation '{name}': target='{target}' frames={anim.TotalFrames} keyframes={kfs.Count}");
+        GD.Print($"[PS1Godot] Animation '{name}': track={anim.TrackType} target='{target}' frames={anim.TotalFrames} keyframes={kfs.Count}");
     }
+
+    // Encode a Godot-space triple into the runtime's fp12 / fp10 values
+    // per the given track type.
+    //   Position: (x, y, z) meters → PSX fp12 with Y flipped.
+    //   Rotation: Euler degrees per axis → psyqo::Angle fp10
+    //             (4096 = 360°). PSX Y-down mirrors Godot X & Z rotation
+    //             signs; Y rotation is negated.
+    //   Active:   value.X → 0 or 1.
+    private static (short, short, short) EncodeKeyframeValue(Vector3 v, PS1AnimationTrackType type, float gteScaling)
+    {
+        switch (type)
+        {
+            case PS1AnimationTrackType.Position:
+            {
+                float s = Mathf.Max(gteScaling, 0.0001f);
+                int vx = Mathf.RoundToInt(v.X / s * 4096f);
+                int vy = Mathf.RoundToInt(-v.Y / s * 4096f);
+                int vz = Mathf.RoundToInt(v.Z / s * 4096f);
+                return (ClampShort(vx), ClampShort(vy), ClampShort(vz));
+            }
+            case PS1AnimationTrackType.Rotation:
+            {
+                // 1 full turn (360°) = 4096 in fp10.
+                const float DegToFp10 = 4096f / 360f;
+                int rx = Mathf.RoundToInt(-v.X * DegToFp10);
+                int ry = Mathf.RoundToInt(-v.Y * DegToFp10);
+                int rz = Mathf.RoundToInt(v.Z * DegToFp10);
+                return (ClampShort(rx), ClampShort(ry), ClampShort(rz));
+            }
+            case PS1AnimationTrackType.Active:
+                return ((short)(v.X != 0f ? 1 : 0), 0, 0);
+        }
+        return (0, 0, 0);
+    }
+
+    private static short ClampShort(int v) => (short)Mathf.Clamp(v, short.MinValue, short.MaxValue);
 
     // Compute world AABB for a PS1TriggerBox by baking its GlobalTransform
     // into the 8 corners of the local half-extent box, same approach the

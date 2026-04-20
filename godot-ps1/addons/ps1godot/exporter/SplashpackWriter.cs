@@ -323,7 +323,7 @@ public static class SplashpackWriter
             long trackStart = w.BaseStream.Position;
             BackfillUInt32(w, trackArrOffPos, (uint)trackStart);
 
-            w.Write((byte)2);                  // trackType = ObjectPosition
+            w.Write((byte)a.TrackType);        // trackType (Position/Rotation/Active)
             w.Write((byte)a.Keyframes.Count);  // keyframeCount
             byte objNameLen = (byte)Math.Min(Encoding.UTF8.GetByteCount(a.TargetObjectName ?? ""), 255);
             w.Write(objNameLen);               // objNameLen
@@ -344,7 +344,7 @@ public static class SplashpackWriter
             foreach (var kf in a.Keyframes)
             {
                 // frameAndInterp: upper 3 bits interp, lower 13 bits frame.
-                ushort fai = (ushort)((kf.Frame & 0x1FFF) | (((uint)kf.Interp & 0x7) << 13));
+                ushort fai = (ushort)(((uint)kf.Frame & 0x1FFFu) | (((uint)kf.Interp & 0x7u) << 13));
                 w.Write(fai);
                 w.Write(kf.V0);
                 w.Write(kf.V1);

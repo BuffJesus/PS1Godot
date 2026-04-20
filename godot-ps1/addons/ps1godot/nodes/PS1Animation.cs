@@ -2,17 +2,24 @@ using Godot;
 
 namespace PS1Godot;
 
-// A named timeline that drives one target GameObject's position over a
-// fixed number of frames. Keyframes are PS1AnimationKeyframe child nodes;
+// Matches the GameObject-oriented subset of the runtime's TrackType
+// enum (cutscene.hh). Other track types (camera, UI, rumble) live in
+// cutscenes — a single-track animation sticks to GameObjects.
+public enum PS1AnimationTrackType
+{
+    Position = 2,  // TrackType::ObjectPosition
+    Rotation = 3,  // TrackType::ObjectRotation
+    Active   = 4,  // TrackType::ObjectActive
+}
+
+// A named timeline that drives one target GameObject over a fixed
+// number of frames. Keyframes are PS1AnimationKeyframe child nodes;
 // authors reorder / add / delete them via the scene tree, not via an
-// array editor.
+// array editor. Keyframe value interpretation depends on TrackType —
+// see PS1AnimationKeyframe.cs.
 //
-// MVP supports one track per animation (ObjectPosition). Extending to
-// rotation / scale / UI visibility adds new track types without breaking
-// the schema.
-//
-// Play from Lua: Animation.Play("<AnimationName>") — exposed via the
-// runtime's existing AnimationPlayer.
+// MVP still ships one track per animation. Multi-track timelines live
+// in cutscenes (follow-up). Play from Lua via Animation.Play("<name>").
 [Tool]
 [GlobalClass]
 public partial class PS1Animation : Node
@@ -24,6 +31,9 @@ public partial class PS1Animation : Node
     // Must match the Name of a PS1MeshInstance somewhere in the scene —
     // that's what the runtime's object name table resolves to a GameObject.
     [Export] public string TargetObjectName { get; set; } = "";
+
+    // What this animation drives on the target.
+    [Export] public PS1AnimationTrackType TrackType { get; set; } = PS1AnimationTrackType.Position;
 
     // Total length in 30-fps frames. 60 = 2 seconds. Max 8191 per the
     // runtime's 13-bit frame field in CutsceneKeyframe (~4.5 minutes).

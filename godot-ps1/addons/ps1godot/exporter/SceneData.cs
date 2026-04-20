@@ -84,6 +84,7 @@ public sealed class AnimationRecord
 {
     public required string Name { get; init; }
     public required string TargetObjectName { get; init; }
+    public required PS1AnimationTrackType TrackType { get; init; }
     public required ushort TotalFrames { get; init; }
     public required System.Collections.Generic.List<KeyframeRecord> Keyframes { get; init; }
 }
