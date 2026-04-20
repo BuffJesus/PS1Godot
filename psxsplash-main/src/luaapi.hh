@@ -192,8 +192,12 @@ private:
     // Camera.MoveRight(step) 
     static int Camera_MoveRight(lua_State* L);
 
-    // Camera.FollowPsxPlayer 
+    // Camera.FollowPsxPlayer
     static int Camera_FollowPsxPlayer(lua_State* L);
+
+    // Camera.SetMode("first"|"third") — flips between 1st and 3rd-person
+    // camera. Avatar mesh (if any) auto-hides in 1st-person.
+    static int Camera_SetMode(lua_State* L);
 
     // Camera.LookAt(target) or Camera.LookAt(x, y, z)
     static int Camera_LookAt(lua_State* L);

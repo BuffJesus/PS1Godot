@@ -6,6 +6,7 @@
 #include "cutscene.hh"
 #include "animation.hh"
 #include "skinmesh.hh"
+#include "streq.hh"
 #include "uisystem.hh"
 
 #include <psyqo/soft-math.hh>
@@ -198,6 +199,9 @@ void LuaAPI::RegisterAll(psyqo::Lua& L, SceneManager* scene, CutscenePlayer* cut
     
     L.push(Camera_FollowPsxPlayer);
     L.setField(-2, "FollowPsxPlayer");
+
+    L.push(Camera_SetMode);
+    L.setField(-2, "SetMode");
 
     L.push(Camera_LookAt);
     L.setField(-2, "LookAt");
@@ -1457,7 +1461,28 @@ int LuaAPI::Camera_FollowPsxPlayer(lua_State* L) {
     psyqo::Lua lua(L);
 
     if (s_sceneManager && lua.isBoolean(1)) {
-        s_sceneManager->setCameraFollowPlayer(lua.toBoolean(1)); 
+        s_sceneManager->setCameraFollowPlayer(lua.toBoolean(1));
+    }
+    return 0;
+}
+
+int LuaAPI::Camera_SetMode(lua_State* L) {
+    psyqo::Lua lua(L);
+    if (!s_sceneManager) return 0;
+
+    // Accept either an integer (0=third, 1=first) or a string ("third",
+    // "first"). Strings are kinder at the Lua call-site.
+    if (lua.isString(1)) {
+        const char* s = lua.toString(1);
+        if (streq(s, "first")) {
+            s_sceneManager->setCameraMode(PlayerCameraMode::FirstPerson);
+        } else if (streq(s, "third")) {
+            s_sceneManager->setCameraMode(PlayerCameraMode::ThirdPerson);
+        }
+    } else if (lua.isNumber(1)) {
+        int n = static_cast<int>(lua.toNumber(1));
+        if (n == 0) s_sceneManager->setCameraMode(PlayerCameraMode::ThirdPerson);
+        else if (n == 1) s_sceneManager->setCameraMode(PlayerCameraMode::FirstPerson);
     }
     return 0;
 }
@@ -1925,12 +1950,7 @@ struct PersistEntry {
 
 static PersistEntry s_persistData[16] = {};
 
-// Inline string helpers (no libc on bare-metal PS1)
-static bool streq(const char* a, const char* b) {
-    while (*a && *b) { if (*a++ != *b++) return false; }
-    return *a == *b;
-}
-
+// streq comes from streq.hh. Local helper for strcopy only:
 static void strcopy(char* dst, const char* src, int maxLen) {
     int i = 0;
     for (; i < maxLen - 1 && src[i]; i++) dst[i] = src[i];

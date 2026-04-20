@@ -654,23 +654,30 @@ void psxsplash::SceneManager::GameTick(psyqo::GPU &gpu) {
     // by cutscenes and Lua. After a cutscene ends in free mode, the
     // camera stays at the last cutscene position.
     if (m_cameraFollowsPlayer && !(m_cutscenePlayer.isPlaying() && m_cutscenePlayer.hasCameraTracks())) {
-        // Third-person camera rig. Offset is captured at export time from
-        // the Camera3D child of PS1Player (editor-tunable), in PSX units,
-        // player-local: +X right, +Y down, +Z behind facing. Runtime
-        // rotates by playerRotationY so the camera stays behind regardless
-        // of which way the player turns. Rotation around Y:
+        // Third-person rig: offset is captured at export time from the
+        // Camera3D child of PS1Player (editor-tunable), player-local.
+        // First-person: camera at player eye, no offset. Runtime rotates
+        // either offset by playerRotationY so the rig stays behind as
+        // the player turns. Rotation around Y:
         //   dx = cosY*offsetX - sinY*offsetZ
         //   dz = -sinY*offsetX - cosY*offsetZ
         //   dy = offsetY (Y is the rotation axis)
+        psyqo::Vec3 activeOffset = m_cameraRigOffset;
+        if (m_cameraMode == PlayerCameraMode::FirstPerson) {
+            activeOffset.x.value = 0;
+            activeOffset.y.value = 0;
+            activeOffset.z.value = 0;
+        }
+
         auto sinY = m_trig.sin(playerRotationY);
         auto cosY = m_trig.cos(playerRotationY);
 
         auto camX = static_cast<psyqo::FixedPoint<12>>(m_playerPosition.x)
-                  + cosY * m_cameraRigOffset.x - sinY * m_cameraRigOffset.z;
+                  + cosY * activeOffset.x - sinY * activeOffset.z;
         auto camY = static_cast<psyqo::FixedPoint<12>>(m_playerPosition.y)
-                  + m_cameraRigOffset.y;
+                  + activeOffset.y;
         auto camZ = static_cast<psyqo::FixedPoint<12>>(m_playerPosition.z)
-                  - sinY * m_cameraRigOffset.x - cosY * m_cameraRigOffset.z;
+                  - sinY * activeOffset.x - cosY * activeOffset.z;
 
         m_currentCamera.SetPosition(camX, camY, camZ);
         m_currentCamera.SetRotation(playerRotationX, playerRotationY, playerRotationZ);
@@ -684,29 +691,40 @@ void psxsplash::SceneManager::GameTick(psyqo::GPU &gpu) {
     if (m_playerAvatarObjectIndex < m_gameObjects.size()) {
         GameObject* avatar = m_gameObjects[m_playerAvatarObjectIndex];
         if (avatar) {
-            auto sinY = m_trig.sin(playerRotationY);
-            auto cosY = m_trig.cos(playerRotationY);
+            // In first-person mode the camera sits at the player's eye,
+            // so the avatar would render inside the view frustum and
+            // block the screen. Skip tracking + render entirely until
+            // mode flips back.
+            bool wantVisible = (m_cameraMode != PlayerCameraMode::FirstPerson);
+            if (avatar->isActive() != wantVisible) {
+                avatar->setActive(wantVisible);
+            }
 
-            auto newX = static_cast<psyqo::FixedPoint<12>>(m_playerPosition.x)
-                      + cosY * m_playerAvatarOffset.x - sinY * m_playerAvatarOffset.z;
-            auto newY = static_cast<psyqo::FixedPoint<12>>(m_playerPosition.y)
-                      + m_playerAvatarOffset.y;
-            auto newZ = static_cast<psyqo::FixedPoint<12>>(m_playerPosition.z)
-                      - sinY * m_playerAvatarOffset.x - cosY * m_playerAvatarOffset.z;
+            if (wantVisible) {
+                auto sinY = m_trig.sin(playerRotationY);
+                auto cosY = m_trig.cos(playerRotationY);
 
-            int32_t dx = newX.value - avatar->position.x.value;
-            int32_t dy = newY.value - avatar->position.y.value;
-            int32_t dz = newZ.value - avatar->position.z.value;
-            avatar->position.x = newX;
-            avatar->position.y = newY;
-            avatar->position.z = newZ;
-            avatar->aabbMinX += dx; avatar->aabbMaxX += dx;
-            avatar->aabbMinY += dy; avatar->aabbMaxY += dy;
-            avatar->aabbMinZ += dz; avatar->aabbMaxZ += dz;
-            avatar->setDynamicMoved(true);
-            avatar->rotation = psxsplash::transposeMatrix33(
-                psyqo::SoftMath::generateRotationMatrix33(
-                    playerRotationY, psyqo::SoftMath::Axis::Y, m_trig));
+                auto newX = static_cast<psyqo::FixedPoint<12>>(m_playerPosition.x)
+                          + cosY * m_playerAvatarOffset.x - sinY * m_playerAvatarOffset.z;
+                auto newY = static_cast<psyqo::FixedPoint<12>>(m_playerPosition.y)
+                          + m_playerAvatarOffset.y;
+                auto newZ = static_cast<psyqo::FixedPoint<12>>(m_playerPosition.z)
+                          - sinY * m_playerAvatarOffset.x - cosY * m_playerAvatarOffset.z;
+
+                int32_t dx = newX.value - avatar->position.x.value;
+                int32_t dy = newY.value - avatar->position.y.value;
+                int32_t dz = newZ.value - avatar->position.z.value;
+                avatar->position.x = newX;
+                avatar->position.y = newY;
+                avatar->position.z = newZ;
+                avatar->aabbMinX += dx; avatar->aabbMaxX += dx;
+                avatar->aabbMinY += dy; avatar->aabbMaxY += dy;
+                avatar->aabbMinZ += dz; avatar->aabbMaxZ += dz;
+                avatar->setDynamicMoved(true);
+                avatar->rotation = psxsplash::transposeMatrix33(
+                    psyqo::SoftMath::generateRotationMatrix33(
+                        playerRotationY, psyqo::SoftMath::Axis::Y, m_trig));
+            }
         }
     }
 

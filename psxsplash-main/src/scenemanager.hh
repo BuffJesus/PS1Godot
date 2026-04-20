@@ -33,6 +33,16 @@ namespace psxsplash {
 // Forward-declare; full definition in loadingscreen.hh
 class LoadingScreen;
 
+// How the camera behaves relative to PS1Player each frame. Mirrors
+// PS1CameraMode on the authoring side (PS1Player.cs). Lua can flip
+// between modes at runtime via Camera.SetMode(name).
+enum class PlayerCameraMode : uint8_t {
+    ThirdPerson = 0,  // Trails at m_cameraRigOffset (editor-configurable).
+    FirstPerson = 1,  // Lives at m_playerPosition; player avatar hidden.
+    // Orbit mode (radius + right-stick rotation) sits in ROADMAP Phase
+    // 2.5 still — adding later so the enum stays stable.
+};
+
 class SceneManager {
   public:
     void InitializeScene(uint8_t* splashpackData, LoadingScreen* loading = nullptr);
@@ -99,6 +109,8 @@ class SceneManager {
 
     // enable/disable (Lua-driven)
     void setCameraFollowPlayer(bool enabled) { m_cameraFollowsPlayer = enabled; }
+    void setCameraMode(PlayerCameraMode mode) { m_cameraMode = mode; }
+    PlayerCameraMode getCameraMode() const { return m_cameraMode; }
 
     // Interactable access (for Lua API)
     Interactable* getInteractable(uint16_t index) {
@@ -210,6 +222,7 @@ class SceneManager {
     psyqo::Vec3 m_cameraRigOffset;
     psyqo::Vec3 m_playerAvatarOffset;
     uint16_t m_playerAvatarObjectIndex = 0xFFFF;
+    PlayerCameraMode m_cameraMode = PlayerCameraMode::ThirdPerson;
     
     int32_t m_playerRadius;          
     int32_t m_velocityY;             
