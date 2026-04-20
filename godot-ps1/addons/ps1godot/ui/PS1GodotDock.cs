@@ -25,8 +25,9 @@ public partial class PS1GodotDock : VBoxContainer
 
     private Label? _sceneNameLabel;
     private Label? _sceneStatsLabel;
-    private ProgressBar? _triBar;
-    private Label? _triBarLabel;
+    private BudgetRow? _triRow;
+    private BudgetRow? _vramRow;
+    private BudgetRow? _spuRow;
 
     public PS1GodotDock()
     {
@@ -107,24 +108,20 @@ public partial class PS1GodotDock : VBoxContainer
         _sceneStatsLabel.AddThemeColorOverride("font_color", new Color(1, 1, 1, 0.55f));
         inner.AddChild(_sceneStatsLabel);
 
-        // Triangle budget bar — first concrete budget readout. VRAM / SPU
-        // bars will follow the same pattern once we have quick estimators
-        // for them (Phase 3 VRAM viewer work).
-        _triBarLabel = new Label { Text = "Triangles" };
-        _triBarLabel.AddThemeColorOverride("font_color", new Color(1, 1, 1, 0.65f));
-        _triBarLabel.Visible = false;
-        inner.AddChild(_triBarLabel);
+        // Budget rows — triangle count, VRAM, SPU. Each gets a label
+        // above its bar with "used / max" text and the bar colored per
+        // BudgetColor(). Rows hide entirely until scene stats are valid.
+        _triRow = new BudgetRow("Triangles");
+        inner.AddChild(_triRow.Label);
+        inner.AddChild(_triRow.Bar);
 
-        _triBar = new ProgressBar
-        {
-            MinValue = 0,
-            MaxValue = 100,
-            Value = 0,
-            ShowPercentage = false,
-            CustomMinimumSize = new Vector2(0, 10),
-            Visible = false,
-        };
-        inner.AddChild(_triBar);
+        _vramRow = new BudgetRow("VRAM");
+        inner.AddChild(_vramRow.Label);
+        inner.AddChild(_vramRow.Bar);
+
+        _spuRow = new BudgetRow("SPU");
+        inner.AddChild(_spuRow.Label);
+        inner.AddChild(_spuRow.Bar);
 
         // ── Setup section (placeholder until Phase 0.5 detection lands) ─
         AddSectionHeader(inner, "Setup");
@@ -147,37 +144,43 @@ public partial class PS1GodotDock : VBoxContainer
     public void ApplySceneStats(SceneStats.Result stats)
     {
         if (_sceneNameLabel == null || _sceneStatsLabel == null ||
-            _triBar == null || _triBarLabel == null) return;
+            _triRow == null || _vramRow == null || _spuRow == null) return;
 
         if (!stats.HasPS1Scene)
         {
             _sceneNameLabel.Text = "— no PS1Scene —";
             _sceneStatsLabel.Text = "Add a PS1Scene node to see budgets here.";
-            _triBar.Visible = false;
-            _triBarLabel.Visible = false;
+            _triRow.Hide();
+            _vramRow.Hide();
+            _spuRow.Hide();
             return;
         }
 
         _sceneNameLabel.Text = stats.SceneName ?? "scene";
-        _sceneStatsLabel.Text = $"{stats.MeshCount} meshes · {stats.AudioClipCount} audio clips";
+        _sceneStatsLabel.Text =
+            $"{stats.MeshCount} meshes · {stats.UniqueTextureCount} textures · {stats.AudioClipCount} audio clips";
 
         if (stats.TargetTriangles > 0)
         {
-            double ratio = (double)stats.TriangleCount / stats.TargetTriangles;
-            _triBar.MaxValue = stats.TargetTriangles;
-            _triBar.Value = stats.TriangleCount;
-            _triBar.SelfModulate = BudgetColor(ratio);
-            _triBar.Visible = true;
-            _triBarLabel.Text = $"Triangles {stats.TriangleCount} / {stats.TargetTriangles}";
-            _triBarLabel.Visible = true;
+            _triRow.Show(
+                $"Triangles  {stats.TriangleCount} / {stats.TargetTriangles}",
+                stats.TriangleCount, stats.TargetTriangles);
         }
         else
         {
-            _triBar.Visible = false;
-            _triBarLabel.Text = $"Triangles {stats.TriangleCount} (no budget set)";
-            _triBarLabel.Visible = true;
+            _triRow.ShowLabelOnly($"Triangles  {stats.TriangleCount} (no budget set)");
         }
+
+        _vramRow.Show(
+            $"VRAM  {FormatKb(stats.VramEstimateBytes)} / {FormatKb(SceneStats.VramBudgetBytes)}",
+            stats.VramEstimateBytes, SceneStats.VramBudgetBytes);
+
+        _spuRow.Show(
+            $"SPU  {FormatKb(stats.SpuEstimateBytes)} / {FormatKb(SceneStats.SpuBudgetBytes)}",
+            stats.SpuEstimateBytes, SceneStats.SpuBudgetBytes);
     }
+
+    private static string FormatKb(long bytes) => $"{bytes / 1024} KB";
 
     // Green up to 80 %, amber to 95 %, red above. Matches the palette
     // the docs/ui-ux-plan.md § B dock sketch calls out.
@@ -186,6 +189,53 @@ public partial class PS1GodotDock : VBoxContainer
         if (ratio < 0.80) return new Color(0.35f, 0.80f, 0.40f);
         if (ratio < 0.95) return new Color(0.95f, 0.75f, 0.25f);
         return new Color(0.90f, 0.25f, 0.25f);
+    }
+
+    // A label + thin colored progress bar, controlled as a pair. Lives
+    // inside the dock so the instantiation order stays obvious: the
+    // label always renders directly above its bar.
+    private sealed class BudgetRow
+    {
+        public readonly Label Label;
+        public readonly ProgressBar Bar;
+
+        public BudgetRow(string initialText)
+        {
+            Label = new Label { Text = initialText, Visible = false };
+            Label.AddThemeColorOverride("font_color", new Color(1, 1, 1, 0.70f));
+            Bar = new ProgressBar
+            {
+                MinValue = 0,
+                MaxValue = 100,
+                Value = 0,
+                ShowPercentage = false,
+                CustomMinimumSize = new Vector2(0, 10),
+                Visible = false,
+            };
+        }
+
+        public void Show(string text, long used, long max)
+        {
+            Label.Text = text;
+            Label.Visible = true;
+            Bar.MaxValue = max;
+            Bar.Value = System.Math.Min(used, max);
+            Bar.SelfModulate = BudgetColor((double)used / max);
+            Bar.Visible = true;
+        }
+
+        public void ShowLabelOnly(string text)
+        {
+            Label.Text = text;
+            Label.Visible = true;
+            Bar.Visible = false;
+        }
+
+        public void Hide()
+        {
+            Label.Visible = false;
+            Bar.Visible = false;
+        }
     }
 
     private static Button MakeSecondary(string text, string tooltip)
