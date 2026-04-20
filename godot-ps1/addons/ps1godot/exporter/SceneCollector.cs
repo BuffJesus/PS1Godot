@@ -489,7 +489,7 @@ public static class SceneCollector
 
             // Stash the current play state so we restore it when done.
             var originalClip = ap.CurrentAnimation;
-            float originalPos = ap.CurrentAnimationPosition;
+            double originalPos = ap.CurrentAnimationPosition;
             ap.CurrentAnimation = clipName;
 
             for (int f = 0; f < frameCount; f++)

@@ -47,7 +47,13 @@ public partial class PS1GodotPlugin : EditorPlugin
         _dock.LaunchEmulatorRequested += OnLaunchEmulator;
         _dock.AnalyzeTexturesRequested += OnAnalyzeTextures;
         _dock.ExportOnlyRequested += OnExportEmptySplashpack;
+        // AddControlToDock is marked [Obsolete] in Godot 4.7-dev in favor
+        // of AddDock(EditorDock), which isn't stable yet. The old API still
+        // works; suppressing the warning so warnings-as-errors builds
+        // pass. Migrate once 4.7 stabilizes or we pin to 4.4 per ROADMAP.
+#pragma warning disable CS0618 // Obsolete: AddControlToDock / RemoveControlFromDocks
         AddControlToDock(DockSlot.RightBr, _dock);
+#pragma warning restore CS0618
 
         // Refresh dock stats whenever the edited scene changes. Also
         // push an initial read so the dock isn't blank on startup.
@@ -80,7 +86,9 @@ public partial class PS1GodotPlugin : EditorPlugin
 
         if (_dock != null)
         {
+#pragma warning disable CS0618 // Obsolete — see AddControlToDock site above.
             RemoveControlFromDocks(_dock);
+#pragma warning restore CS0618
             _dock.QueueFree();
             _dock = null;
         }
