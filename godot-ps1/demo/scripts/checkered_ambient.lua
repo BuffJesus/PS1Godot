@@ -14,6 +14,11 @@ function onTriggerEnter(idx)
         UI.SetCanvasVisible(sysVoiceCanvas, true)
         Audio.Play("system_ignore_checkered", 100, 64)
         enterTick = Timer.GetFrameCount()
+        -- Clear any pending auto-hide left over from a previous exit.
+        -- Without this, re-entering the zone while the previous "It is
+        -- not part of the test" fade is still scheduled would cause
+        -- test_logger's onUpdate to yank the canvas mid-message.
+        sysVoiceHideAtFrame = nil
     end
 end
 
@@ -26,13 +31,13 @@ function onTriggerExit(idx)
             UI.SetText(sysVoiceText, "It is not part of the test.")
             Audio.Play("system_not_part_of_test", 100, 64)
             -- Ask test_logger's onUpdate to hide the canvas after ~3 s.
-            -- Trigger scripts don't get onUpdate callbacks, so we need a
-            -- collaborator that does. Shared global sentinel: stored
-            -- frame number to hide at. test_logger hides + clears when
-            -- Timer.GetFrameCount() reaches it.
+            -- Trigger scripts don't get onUpdate callbacks, so we need
+            -- a collaborator that does. Shared global sentinel carries
+            -- the target frame number.
             sysVoiceHideAtFrame = Timer.GetFrameCount() + 180
         else
             UI.SetCanvasVisible(sysVoiceCanvas, false)
+            sysVoiceHideAtFrame = nil
         end
     end
 end

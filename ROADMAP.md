@@ -401,6 +401,42 @@ Assets pack via Phase 2 bullet 6; Lua can't trigger them yet.
       trigger." Counts SPU-RAM per area; warns on overflow.
 - [ ] `Music.PlayXA(track)` / `Music.Stop()` / `Music.SetVolume(v)`.
 
+### Sequenced music + music-driven events *(blocked: upstream psxsplash)*
+
+Upstream psxsplash is working on sequenced-music support (no ETA, per
+Discord 2026-04-20 spicyjpeg; likely a few months). The existing team
+has confirmed custom events in the sequence timeline would be
+"not hard to support." When that lands, surface it through Lua so
+music can drive gameplay, not just play alongside it.
+
+- [ ] `Music.PlaySequenced(name)` — play an authored sequence
+      (replacement for the XA streaming path once sequences exist).
+- [ ] `onMusicEvent(cueName, beatNumber)` — Lua callback the runtime
+      dispatches when the sequence hits an author-placed event marker.
+      Shape mirrors `onInteract` / `onTriggerEnter`: scene-level hook
+      script invoked with the event args. Unlocks:
+        - rhythm-game inputs keyed to the beat,
+        - boss phase transitions triggered by the track (e.g., "enrage
+          at the chorus drop"),
+        - dialog / cutscene timing synchronized without dead-reckoning
+          frame counts,
+        - visual effects flashed on a downbeat without the author
+          polling the music clock.
+- [ ] `Music.GetBeat()` / `Music.GetBar()` — query the sequencer
+      position without waiting for an event. Supports "should enemies
+      telegraph their attack 1 beat before swinging?" logic.
+- [ ] `PS1Scene.MusicSequenceFile` authoring property — drops in the
+      sequence asset; exporter handles packaging the same way audio
+      clips work today.
+- [ ] Event-marker authoring UI — either a timeline overlay on the
+      sequence asset's inspector, or a plain string list "emit event
+      'chorus_start' at beat 128". Minimum viable is the string list;
+      timeline view is Phase 3 polish.
+
+Track progress by watching the upstream psxsplash repo; open the
+integration work when the format stabilizes. Tracker entry in
+`docs/psxsplash-improvements.md` once we know the format shape.
+
 ### Save / load
 
 PS1 BIOS has memory-card syscalls; nothing in psxsplash surfaces them today.
