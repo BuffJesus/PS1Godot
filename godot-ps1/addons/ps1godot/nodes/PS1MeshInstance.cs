@@ -56,9 +56,12 @@ public partial class PS1MeshInstance : MeshInstance3D
     //   4=Up      5=Right    6=Down     7=Left
     //   8=L2      9=R2      10=L1      11=R1
     //   12=Triangle 13=Circle 14=Cross 15=Square
-    // Cross (14) is the conventional "interact" button; default to that.
+    // Runtime reserves Cross (14) for jump and Square (15) for sprint on a
+    // digital pad, so those collide if used for interact. Default to
+    // Triangle (12) — PS1-era convention for "action/menu" buttons and
+    // clear of both reservations. Circle (13) is also free.
     [Export(PropertyHint.Range, "0,15,1")]
-    public int InteractButton { get; set; } = 14;
+    public int InteractButton { get; set; } = 12;
     // Repeatable = fires every time within cooldown. Non-repeatable = once, then locked.
     [Export] public bool InteractionRepeatable { get; set; } = true;
     [Export(PropertyHint.Range, "0,600,1")]
