@@ -429,10 +429,6 @@ script = ExtResource("13_kf")
 Frame = 239
 Interp = 4
 
-# Narration audio + text fire together from test_logger.lua so they're
-# guaranteed in sync. PS1AudioEvent nodes were removed because runtime
-# cutscene-frame and Lua onUpdate-tick advance at different rates.
-
 [node name="PS1Player" type="Node3D" parent="." unique_id=1681451007]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 8)
 script = ExtResource("13_tdg64")
