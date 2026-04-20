@@ -149,7 +149,8 @@ public partial class PS1GodotPlugin : EditorPlugin
         foreach (var obj in sceneData.Objects)
         {
             totalTris += obj.Mesh.Triangles.Count;
-            GD.Print($"[PS1Godot]     - {obj.Node.Name}  bpp={obj.Node.BitDepth}  collide={obj.Node.Collision}  → {obj.Mesh.Triangles.Count} tris");
+            var p = obj.Node.GlobalPosition;
+            GD.Print($"[PS1Godot]     - {obj.Node.Name}  pos=({p.X:F2},{p.Y:F2},{p.Z:F2})  bpp={obj.Node.BitDepth}  collide={obj.Node.Collision}  → {obj.Mesh.Triangles.Count} tris");
         }
         GD.Print($"[PS1Godot]   Total triangles: {totalTris}");
 
@@ -164,40 +165,6 @@ public partial class PS1GodotPlugin : EditorPlugin
             GD.Print($"[PS1Godot]   .vram       = {vramBytes}B");
             GD.Print($"[PS1Godot]   .spu        = {spuBytes}B");
 
-            // Debug dump: read back and decode the GameObject section so we can
-            // cross-check against what psxsplash logs at scene init.
-            byte[] bytes = System.IO.File.ReadAllBytes(absPath);
-            int objCount = sceneData.Objects.Count;
-            GD.Print($"[PS1Godot dbg] Header counts: gameObjectCount={System.BitConverter.ToUInt16(bytes, 6)}");
-            for (int i = 0; i < objCount; i++)
-            {
-                int off = 120 + i * 92; // header + i × GameObject
-                uint polyOff = System.BitConverter.ToUInt32(bytes, off + 0);
-                int px = System.BitConverter.ToInt32(bytes, off + 4);
-                int py = System.BitConverter.ToInt32(bytes, off + 8);
-                int pz = System.BitConverter.ToInt32(bytes, off + 12);
-                ushort polyCount = System.BitConverter.ToUInt16(bytes, off + 52); // after 4+12+36
-                int aabbMinX = System.BitConverter.ToInt32(bytes, off + 68);
-                int aabbMinY = System.BitConverter.ToInt32(bytes, off + 72);
-                int aabbMinZ = System.BitConverter.ToInt32(bytes, off + 76);
-                int aabbMaxX = System.BitConverter.ToInt32(bytes, off + 80);
-                int aabbMaxY = System.BitConverter.ToInt32(bytes, off + 84);
-                int aabbMaxZ = System.BitConverter.ToInt32(bytes, off + 88);
-                GD.Print($"[PS1Godot dbg] obj[{i}] {sceneData.Objects[i].Node.Name}: pos=({px},{py},{pz}) polyCount={polyCount} polyOff=0x{polyOff:X} aabb=({aabbMinX},{aabbMinY},{aabbMinZ})..({aabbMaxX},{aabbMaxY},{aabbMaxZ})");
-                if (polyCount > 0 && polyOff < bytes.Length)
-                {
-                    short v0x = System.BitConverter.ToInt16(bytes, (int)polyOff + 0);
-                    short v0y = System.BitConverter.ToInt16(bytes, (int)polyOff + 2);
-                    short v0z = System.BitConverter.ToInt16(bytes, (int)polyOff + 4);
-                    short v1x = System.BitConverter.ToInt16(bytes, (int)polyOff + 6);
-                    short v1y = System.BitConverter.ToInt16(bytes, (int)polyOff + 8);
-                    short v1z = System.BitConverter.ToInt16(bytes, (int)polyOff + 10);
-                    short v2x = System.BitConverter.ToInt16(bytes, (int)polyOff + 12);
-                    short v2y = System.BitConverter.ToInt16(bytes, (int)polyOff + 14);
-                    short v2z = System.BitConverter.ToInt16(bytes, (int)polyOff + 16);
-                    GD.Print($"[PS1Godot dbg]    tri0 v0=({v0x},{v0y},{v0z}) v1=({v1x},{v1y},{v1z}) v2=({v2x},{v2y},{v2z})");
-                }
-            }
         }
         catch (System.Exception e)
         {
