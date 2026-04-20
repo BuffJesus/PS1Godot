@@ -137,10 +137,14 @@ public static class SkinnedTestBuilder
     {
         var anim = new Animation { Length = 1.0f, LoopMode = Animation.LoopModeEnum.Linear };
 
-        // One rotation track on the Tip bone. 3 keyframes: rest at 0 s
-        // and 1 s, 30° bend at 0.5 s. Quaternion axis-angle around Z.
+        // One rotation track on the Tip bone. AnimationPlayer.RootNode
+        // defaults to NodePath("..") — the parent, i.e. SkinnedTest —
+        // so track paths are resolved from there. Skeleton3D is a
+        // sibling of AnimationPlayer under SkinnedTest, so the correct
+        // path is just "Skeleton3D:Tip" (no leading `../`).
+        // 3 keyframes: rest at 0 s and 1 s, 30° bend at 0.5 s around Z.
         int track = anim.AddTrack(Animation.TrackType.Rotation3D);
-        anim.TrackSetPath(track, new NodePath("../Skeleton3D:Tip"));
+        anim.TrackSetPath(track, new NodePath("Skeleton3D:Tip"));
         var bend = new Quaternion(new Vector3(0, 0, 1), Mathf.Pi / 6f);
         anim.RotationTrackInsertKey(track, 0.0, Quaternion.Identity);
         anim.RotationTrackInsertKey(track, 0.5, bend);
