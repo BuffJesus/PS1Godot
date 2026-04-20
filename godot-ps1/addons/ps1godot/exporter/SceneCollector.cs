@@ -318,6 +318,14 @@ public static class SceneCollector
         var result = new System.Collections.Generic.List<byte>();
         if (mesh.Mesh == null) return result.ToArray();
 
+        // Count unweighted triangles so we can flag them. Observed in the
+        // psxsplash Discord (Kenji 195, 2026-04-20): unrigged vertices
+        // silently default to bone 0, so a half-rigged crowd appears to
+        // "jump in sync with one bone" because every unweighted vertex
+        // moves together. Warning here lets authors catch the problem at
+        // export time instead of debugging it on-PSX.
+        int unweightedTris = 0;
+
         int surfaceCount = mesh.Mesh.GetSurfaceCount();
         for (int s = 0; s < surfaceCount; s++)
         {
@@ -342,6 +350,7 @@ public static class SceneCollector
                 (i1, i2) = (i2, i1);
 
                 byte triBone = 0;
+                bool anyWeight = false;
                 if (hasSkin)
                 {
                     // Sum weights by bone across the three vertices; pick max.
@@ -354,6 +363,7 @@ public static class SceneCollector
                             int bone = bonesArr[baseIdx + k];
                             float w = weightsArr[baseIdx + k];
                             if (w <= 0f) continue;
+                            anyWeight = true;
                             sums.TryGetValue(bone, out float acc);
                             sums[bone] = acc + w;
                         }
@@ -372,12 +382,25 @@ public static class SceneCollector
                     if (bestBone >= 64) bestBone = 63;          // runtime cap
                     triBone = (byte)bestBone;
                 }
+                if (!anyWeight) unweightedTris++;
                 // Per-vertex bytes: same bone for all three verts of the
                 // triangle (per-triangle rigid). Matches the layout the
                 // runtime expects (3 bytes per triangle).
                 result.Add(triBone); result.Add(triBone); result.Add(triBone);
             }
         }
+
+        if (unweightedTris > 0)
+        {
+            GD.PushWarning(
+                $"[PS1Godot] '{mesh.Name}': {unweightedTris} triangle(s) have no bone weights " +
+                $"and will default to bone 0. All unweighted geometry will move together with " +
+                $"whatever animates bone 0 — a classic symptom (Discord, 2026-04-20) is a crowd " +
+                $"of figures \"jumping in sync\" because half their bodies are unrigged. Paint " +
+                $"weights on every vertex in your DCC tool, or split the mesh so unrigged parts " +
+                $"live on a separate static MeshInstance3D.");
+        }
+
         return result.ToArray();
     }
 
