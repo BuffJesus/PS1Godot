@@ -175,6 +175,22 @@ public static class SceneCollector
 
             EmitCollisionFor(pmi, objectIndex, data);
             EmitInteractableFor(pmi, objectIndex, data);
+
+            // Stage 0 skinned-mesh detection: if this is a PS1SkinnedMesh,
+            // log enough that the author can tell the exporter "saw" it.
+            // Splashpack emission + bone matrix baking land in Phase 2
+            // bullet 11 stages 1+. Until then the mesh still exports as a
+            // static PS1MeshInstance (bind-pose only; animations ignored).
+            if (pmi is PS1SkinnedMesh ps1Skin)
+            {
+                int boneCount = DetectBoneCount(ps1Skin);
+                int animCount = ps1Skin.ClipNames != null ? ps1Skin.ClipNames.Length : 0;
+                GD.Print(
+                    $"[PS1Godot] PS1SkinnedMesh '{ps1Skin.Name}' detected: " +
+                    $"{boneCount} bones, {animCount} authored clips, " +
+                    $"sampling @ {ps1Skin.TargetFps} fps. " +
+                    $"(stage 0 — splashpack skin-data emission pending; exporting as static mesh for now.)");
+            }
         }
         else if (n is PS1TriggerBox tb && tb.Visible)
         {
@@ -252,6 +268,17 @@ public static class SceneCollector
     // ps1_default.tres uses that parameter name — see ps1.gdshader).
     // Returns null if the material type isn't recognized or has no
     // texture set.
+    // Best-effort bone count for a PS1SkinnedMesh. Returns 0 if the
+    // mesh isn't bound to a Skeleton3D or if the skeleton has no bones
+    // yet (e.g., placeholder authoring). Used for logging in stage 0;
+    // stage 1+ will walk the skeleton to emit real SkinData.
+    private static int DetectBoneCount(PS1SkinnedMesh mesh)
+    {
+        if (mesh.Skeleton == null || mesh.Skeleton.IsEmpty) return 0;
+        var node = mesh.GetNodeOrNull<Skeleton3D>(mesh.Skeleton);
+        return node?.GetBoneCount() ?? 0;
+    }
+
     private static Texture2D? ExtractAlbedoTexture(Material? mat)
     {
         if (mat == null) return null;
