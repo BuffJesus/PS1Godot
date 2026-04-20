@@ -202,11 +202,32 @@ albedo_color = Color(0.25, 0.45, 0.95, 1)
 [sub_resource type="StandardMaterial3D" id="mat_room_magenta"]
 albedo_color = Color(0.85, 0.25, 0.75, 1)
 
-[sub_resource type="StandardMaterial3D" id="mat_room_floor"]
-albedo_color = Color(0.35, 0.35, 0.4, 1)
+; Distinctive "tiled" look for the portal-test area — bright yellow floor
+; stands out against the grass/checkered demo ground so the rooms are
+; easy to spot from spawn.
+[sub_resource type="StandardMaterial3D" id="mat_room_floor_a"]
+albedo_color = Color(0.95, 0.85, 0.25, 1)
 
-[sub_resource type="PlaneMesh" id="PlaneMesh_rooms"]
-size = Vector2(12, 6)
+[sub_resource type="StandardMaterial3D" id="mat_room_floor_b"]
+albedo_color = Color(0.25, 0.85, 0.55, 1)
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_room_half"]
+size = Vector2(5, 5)
+
+; Wall slab + marker pillar meshes. Walls are 0.15 m thick so they sit
+; comfortably inside each room's 5×3×5 AABB without straddling the
+; shared boundary.
+[sub_resource type="BoxMesh" id="BoxMesh_wall_side"]
+size = Vector3(5, 3, 0.15)
+
+[sub_resource type="BoxMesh" id="BoxMesh_wall_end"]
+size = Vector3(0.15, 3, 5)
+
+[sub_resource type="BoxMesh" id="BoxMesh_pillar"]
+size = Vector3(0.4, 6, 0.4)
+
+[sub_resource type="StandardMaterial3D" id="mat_pillar"]
+albedo_color = Color(0.98, 0.65, 0.15, 1)
 
 [sub_resource type="StandardMaterial3D" id="mat_checker"]
 albedo_texture = ExtResource("6_checker")
@@ -634,39 +655,106 @@ libraries/ = SubResource("AnimationLibrary_ntps4")
 
 ; ── Test scene for PS1Room + PS1PortalLink (Phase 2 bullet 12) ──────────
 ; Two adjacent rooms at x=+10..+18 connected by a portal at x=+12.5.
-; Scene stays SceneType=ExplorationOutdoor for now so the existing outdoor
-; demo keeps working — rooms are emitted to the splashpack but the runtime
-; ignores them under BVH culling. Flip PS1Scene.SceneType to Interior to
-; see actual portal occlusion on PSX. Walk east (~+X) from spawn to reach.
+; Walk east from spawn — yellow floor + tall orange pillars are visible
+; from a distance so the test area is easy to find. Pass through the gap
+; in the side walls to enter RoomA; cross through the open shared face
+; to reach RoomB through the portal.
+;
+; Walls sit inside each room's 5×3×5 volume (offset 0.075 m from the
+; AABB face) so every wall triangle's vertices stay within one room and
+; the assignment is clean. The shared face at x=12.5 is left open — the
+; PS1PortalLink is the doorway.
 
-[node name="RoomFloor" type="MeshInstance3D" parent="." unique_id=2004180001]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 12.5, 0, 0)
-material_override = SubResource("mat_room_floor")
-mesh = SubResource("PlaneMesh_rooms")
+[node name="RoomFloorA" type="MeshInstance3D" parent="." unique_id=2004180001]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0, 0)
+material_override = SubResource("mat_room_floor_a")
+mesh = SubResource("PlaneMesh_room_half")
 script = ExtResource("2_mesh")
 Collision = 1
 
-[node name="RoomCubeA" type="MeshInstance3D" parent="." unique_id=2004180002]
+[node name="RoomFloorB" type="MeshInstance3D" parent="." unique_id=2004180002]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 15, 0, 0)
+material_override = SubResource("mat_room_floor_b")
+mesh = SubResource("PlaneMesh_room_half")
+script = ExtResource("2_mesh")
+Collision = 1
+
+[node name="RoomCubeA" type="MeshInstance3D" parent="." unique_id=2004180003]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 1, 0)
 material_override = SubResource("mat_room_blue")
 mesh = SubResource("BoxMesh_cube")
 script = ExtResource("2_mesh")
 Collision = 1
 
-[node name="RoomCubeB" type="MeshInstance3D" parent="." unique_id=2004180003]
+[node name="RoomCubeB" type="MeshInstance3D" parent="." unique_id=2004180004]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 15, 1, 0)
 material_override = SubResource("mat_room_magenta")
 mesh = SubResource("BoxMesh_cube")
 script = ExtResource("2_mesh")
 Collision = 1
 
-[node name="PS1Room_A" type="Node3D" parent="." unique_id=2004180004]
+; ── RoomA walls (N + S only — west face is the player entrance,
+;    east face is the shared portal with RoomB) ──
+[node name="RoomA_WallN" type="MeshInstance3D" parent="." unique_id=2004180011]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 1.5, -2.425)
+material_override = SubResource("mat_room_blue")
+mesh = SubResource("BoxMesh_wall_side")
+script = ExtResource("2_mesh")
+Collision = 1
+
+[node name="RoomA_WallS" type="MeshInstance3D" parent="." unique_id=2004180012]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 1.5, 2.425)
+material_override = SubResource("mat_room_blue")
+mesh = SubResource("BoxMesh_wall_side")
+script = ExtResource("2_mesh")
+Collision = 1
+
+; ── RoomB walls (E + N + S; west face is the shared portal with RoomA) ──
+[node name="RoomB_WallE" type="MeshInstance3D" parent="." unique_id=2004180020]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 17.425, 1.5, 0)
+material_override = SubResource("mat_room_magenta")
+mesh = SubResource("BoxMesh_wall_end")
+script = ExtResource("2_mesh")
+Collision = 1
+
+[node name="RoomB_WallN" type="MeshInstance3D" parent="." unique_id=2004180021]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 15, 1.5, -2.425)
+material_override = SubResource("mat_room_magenta")
+mesh = SubResource("BoxMesh_wall_side")
+script = ExtResource("2_mesh")
+Collision = 1
+
+[node name="RoomB_WallS" type="MeshInstance3D" parent="." unique_id=2004180022]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 15, 1.5, 2.425)
+material_override = SubResource("mat_room_magenta")
+mesh = SubResource("BoxMesh_wall_side")
+script = ExtResource("2_mesh")
+Collision = 1
+
+; ── Approach pillars: tall orange markers visible from spawn so the
+; player can spot the test area from a distance. Sit just outside the
+; rooms (x=4, ±3 z) so they don't get assigned to either room.
+[node name="ApproachPillarN" type="MeshInstance3D" parent="." unique_id=2004180030]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 3, -3)
+material_override = SubResource("mat_pillar")
+mesh = SubResource("BoxMesh_pillar")
+script = ExtResource("2_mesh")
+Collision = 1
+
+[node name="ApproachPillarS" type="MeshInstance3D" parent="." unique_id=2004180031]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 3, 3)
+material_override = SubResource("mat_pillar")
+mesh = SubResource("BoxMesh_pillar")
+script = ExtResource("2_mesh")
+Collision = 1
+
+[node name="PS1Room_A" type="Node3D" parent="." unique_id=2004180005]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 1.5, 0)
 script = ExtResource("12_room")
 RoomName = "RoomA_Blue"
 VolumeSize = Vector3(5, 3, 5)
 
-[node name="PS1Room_B" type="Node3D" parent="." unique_id=2004180005]
+[node name="PS1Room_B" type="Node3D" parent="." unique_id=2004180006]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 15, 1.5, 0)
 script = ExtResource("12_room")
 RoomName = "RoomB_Magenta"
@@ -676,7 +764,7 @@ VolumeSize = Vector3(5, 3, 5)
 ; we rotate 90° around Y so forward points +X — into RoomB. The exporter
 ; auto-corrects if the author got the direction wrong, but authoring it
 ; right keeps the Godot gizmo matching intent.
-[node name="PS1PortalLink_AB" type="Node3D" parent="." unique_id=2004180006]
+[node name="PS1PortalLink_AB" type="Node3D" parent="." unique_id=2004180007]
 transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, 12.5, 1.5, 0)
 script = ExtResource("12_portal")
 RoomA = NodePath("../PS1Room_A")
