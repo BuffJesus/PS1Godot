@@ -128,6 +128,12 @@ public sealed class SceneData
     /// <summary>Path the scene was collected from (used in logs/errors).</summary>
     public string ScenePath { get; set; } = "";
 
+    // Authored scene category (matches the PS1 optimization reference's
+    // seven scene types). The writer maps this to the runtime's binary
+    // render path (BVH vs room/portal). Budgets are authoring-only and
+    // don't round-trip to the splashpack yet.
+    public PS1Scene.SceneTypeKind SceneType { get; set; } = PS1Scene.SceneTypeKind.ExplorationOutdoor;
+
     /// <summary>
     /// World-units per GTE unit. Scene-level scaling factor — keeps vertex
     /// positions in fp12 short range (±32767, i.e. ±~8 GTE units).

@@ -8,14 +8,39 @@ namespace PS1Godot;
 [GlobalClass]
 public partial class PS1Scene : Node3D
 {
+    // Scene categories matching the PS1 optimization reference
+    // (docs/ps1_large_rpg_optimization_reference.md REF-GAP-4). These are
+    // authoring-time labels that drive budgets + editor overlays. The
+    // exporter collapses them to the runtime's two render paths:
+    //   BVH (0)       → ExplorationOutdoor, TownSquare, Combat, CutsceneCloseup, Menu
+    //   Room/portal(1) → Interior, DungeonCorridor
     public enum SceneTypeKind
     {
-        Exterior = 0,  // BVH frustum culling
-        Interior = 1,  // Room/portal culling
+        ExplorationOutdoor = 0,
+        TownSquare = 1,
+        Interior = 2,
+        DungeonCorridor = 3,
+        Combat = 4,
+        Menu = 5,
+        CutsceneCloseup = 6,
     }
 
     [ExportGroup("Scene")]
-    [Export] public SceneTypeKind SceneType { get; set; } = SceneTypeKind.Exterior;
+    [Export] public SceneTypeKind SceneType { get; set; } = SceneTypeKind.ExplorationOutdoor;
+
+    // Budget fields are authoring metadata — no runtime impact yet. Editor
+    // overlays (Phase 3 dock) will compare these caps against the actual
+    // scene contents and warn when exceeded. Rough defaults come from the
+    // reference's "exploration outdoor" category; tune per scene.
+    [ExportGroup("Budgets (authoring only, no runtime effect)")]
+    [Export(PropertyHint.Range, "0,20000,100")]
+    public int TargetTriangles { get; set; } = 2000;
+    [Export(PropertyHint.Range, "0,64,1")]
+    public int MaxActors { get; set; } = 8;
+    [Export(PropertyHint.Range, "0,128,1")]
+    public int MaxEffects { get; set; } = 16;
+    [Export(PropertyHint.Range, "0,32,1")]
+    public int MaxTexturePages { get; set; } = 8;
 
     [ExportGroup("Player")]
     [Export] public Vector3 PlayerStartPosition { get; set; } = Vector3.Zero;

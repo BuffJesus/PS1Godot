@@ -292,7 +292,15 @@ public static class SplashpackWriter
 
         w.Write((ushort)0);            // bvhNodeCount
         w.Write((ushort)0);            // bvhTriRefCount
-        w.Write((ushort)0);            // sceneType (0 = exterior)
+        // Map the authored 7-way SceneType to the runtime's 2-way render
+        // path: 0 = BVH exterior, 1 = room/portal interior.
+        ushort runtimeSceneType = scene.SceneType switch
+        {
+            PS1Scene.SceneTypeKind.Interior => 1,
+            PS1Scene.SceneTypeKind.DungeonCorridor => 1,
+            _ => 0,
+        };
+        w.Write(runtimeSceneType);      // sceneType
         w.Write((ushort)triggerBoxCount); // triggerBoxCount
         w.Write((ushort)0);            // collisionMeshCount (legacy)
         w.Write((ushort)0);            // collisionTriCount (legacy)

@@ -25,6 +25,7 @@ public static class SceneCollector
             data.SprintSpeedMps = ps1Scene.SprintSpeed;
             data.JumpHeightMeters = ps1Scene.JumpHeight;
             data.GravityMps2 = ps1Scene.Gravity;
+            data.SceneType = ps1Scene.SceneType;
             GD.Print($"[PS1Godot] Scene params: move={ps1Scene.MoveSpeed}, jump={ps1Scene.JumpHeight}, gravity={ps1Scene.Gravity}, gteScaling={ps1Scene.GteScaling}");
         }
         else
