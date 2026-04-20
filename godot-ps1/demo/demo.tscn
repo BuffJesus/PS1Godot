@@ -10,6 +10,8 @@
 [ext_resource type="Script" uid="uid://bp1p1kqop2wwy" path="res://addons/ps1godot/nodes/PS1UICanvas.cs" id="10_uican"]
 [ext_resource type="Script" uid="uid://c01mt2tth0oll" path="res://addons/ps1godot/nodes/PS1UIElement.cs" id="11_uiel"]
 [ext_resource type="Resource" path="res://addons/ps1godot/themes/PS1Theme.tres" id="11_theme"]
+[ext_resource type="Script" path="res://addons/ps1godot/nodes/PS1Room.cs" id="12_room"]
+[ext_resource type="Script" path="res://addons/ps1godot/nodes/PS1PortalLink.cs" id="12_portal"]
 [ext_resource type="Script" uid="uid://dqtfgfu4x00ke" path="res://addons/ps1godot/nodes/PS1Animation.cs" id="12_anim"]
 [ext_resource type="Script" uid="uid://bg1ih72kp4c3g" path="res://addons/ps1godot/nodes/PS1AnimationKeyframe.cs" id="13_kf"]
 [ext_resource type="Script" uid="uid://cfdlp12g2rtct" path="res://addons/ps1godot/nodes/PS1Player.cs" id="13_tdg64"]
@@ -193,6 +195,18 @@ _surfaces = [{
 
 [sub_resource type="BoxMesh" id="BoxMesh_cube"]
 size = Vector3(2, 2, 2)
+
+[sub_resource type="StandardMaterial3D" id="mat_room_blue"]
+albedo_color = Color(0.25, 0.45, 0.95, 1)
+
+[sub_resource type="StandardMaterial3D" id="mat_room_magenta"]
+albedo_color = Color(0.85, 0.25, 0.75, 1)
+
+[sub_resource type="StandardMaterial3D" id="mat_room_floor"]
+albedo_color = Color(0.35, 0.35, 0.4, 1)
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_rooms"]
+size = Vector2(12, 6)
 
 [sub_resource type="StandardMaterial3D" id="mat_checker"]
 albedo_texture = ExtResource("6_checker")
@@ -616,3 +630,54 @@ ClipNames = PackedStringArray("wave")
 
 [node name="AnimationPlayer" type="AnimationPlayer" parent="SkinnedTest" unique_id=106166795]
 libraries/ = SubResource("AnimationLibrary_ntps4")
+
+; ── Test scene for PS1Room + PS1PortalLink (Phase 2 bullet 12) ──────────
+; Two adjacent rooms at x=+10..+18 connected by a portal at x=+12.5.
+; Scene stays SceneType=ExplorationOutdoor for now so the existing outdoor
+; demo keeps working — rooms are emitted to the splashpack but the runtime
+; ignores them under BVH culling. Flip PS1Scene.SceneType to Interior to
+; see actual portal occlusion on PSX. Walk east (~+X) from spawn to reach.
+
+[node name="RoomFloor" type="MeshInstance3D" parent="." unique_id=2004180001]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 12.5, 0, 0)
+material_override = SubResource("mat_room_floor")
+mesh = SubResource("PlaneMesh_rooms")
+script = ExtResource("2_mesh")
+Collision = 1
+
+[node name="RoomCubeA" type="MeshInstance3D" parent="." unique_id=2004180002]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 1, 0)
+material_override = SubResource("mat_room_blue")
+mesh = SubResource("BoxMesh_cube")
+script = ExtResource("2_mesh")
+Collision = 1
+
+[node name="RoomCubeB" type="MeshInstance3D" parent="." unique_id=2004180003]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 15, 1, 0)
+material_override = SubResource("mat_room_magenta")
+mesh = SubResource("BoxMesh_cube")
+script = ExtResource("2_mesh")
+Collision = 1
+
+[node name="PS1Room_A" type="Node3D" parent="." unique_id=2004180004]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 1.5, 0)
+script = ExtResource("12_room")
+RoomName = "RoomA_Blue"
+VolumeSize = Vector3(5, 3, 5)
+
+[node name="PS1Room_B" type="Node3D" parent="." unique_id=2004180005]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 15, 1.5, 0)
+script = ExtResource("12_room")
+RoomName = "RoomB_Magenta"
+VolumeSize = Vector3(5, 3, 5)
+
+; Portal at the shared face between the two rooms. Forward = -Z in Godot;
+; we rotate 90° around Y so forward points +X — into RoomB. The exporter
+; auto-corrects if the author got the direction wrong, but authoring it
+; right keeps the Godot gizmo matching intent.
+[node name="PS1PortalLink_AB" type="Node3D" parent="." unique_id=2004180006]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, 12.5, 1.5, 0)
+script = ExtResource("12_portal")
+RoomA = NodePath("../PS1Room_A")
+RoomB = NodePath("../PS1Room_B")
+PortalSize = Vector2(2, 2.5)
