@@ -13,6 +13,8 @@
 [ext_resource type="Script" uid="uid://dqtfgfu4x00ke" path="res://addons/ps1godot/nodes/PS1Animation.cs" id="12_anim"]
 [ext_resource type="Script" uid="uid://bg1ih72kp4c3g" path="res://addons/ps1godot/nodes/PS1AnimationKeyframe.cs" id="13_kf"]
 [ext_resource type="Script" uid="uid://cfdlp12g2rtct" path="res://addons/ps1godot/nodes/PS1Player.cs" id="13_tdg64"]
+[ext_resource type="Script" path="res://addons/ps1godot/nodes/PS1Cutscene.cs" id="14_cs"]
+[ext_resource type="Script" path="res://addons/ps1godot/nodes/PS1AnimationTrack.cs" id="15_tr"]
 
 [sub_resource type="Resource" id="Resource_ykvhj"]
 script = ExtResource("2_onvmd")
@@ -167,6 +169,41 @@ script = ExtResource("13_kf")
 script = ExtResource("13_kf")
 Frame = 89
 Value = Vector3(0, 360, 0)
+
+[node name="IntroCutscene" type="Node" parent="."]
+script = ExtResource("14_cs")
+CutsceneName = "intro"
+TotalFrames = 90
+
+[node name="CamPosTrack" type="Node" parent="IntroCutscene"]
+script = ExtResource("15_tr")
+TrackType = 0
+
+[node name="CamPosKf0" type="Node" parent="IntroCutscene/CamPosTrack"]
+script = ExtResource("13_kf")
+Frame = 0
+Value = Vector3(0, 8, 8)
+
+[node name="CamPosKf1" type="Node" parent="IntroCutscene/CamPosTrack"]
+script = ExtResource("13_kf")
+Frame = 89
+Value = Vector3(0, 4, 5)
+Interp = 4
+
+[node name="CamRotTrack" type="Node" parent="IntroCutscene"]
+script = ExtResource("15_tr")
+TrackType = 1
+
+[node name="CamRotKf0" type="Node" parent="IntroCutscene/CamRotTrack"]
+script = ExtResource("13_kf")
+Frame = 0
+Value = Vector3(-30, 0, 0)
+
+[node name="CamRotKf1" type="Node" parent="IntroCutscene/CamRotTrack"]
+script = ExtResource("13_kf")
+Frame = 89
+Value = Vector3(0, 0, 0)
+Interp = 4
 
 [node name="PS1Player" type="Node3D" parent="." unique_id=1681451007]
 transform = Transform3D(-0.50056714, 0, 0.86569774, 0, 1, 0, -0.86569774, 0, -0.50056714, -8.617312, 12.140091, 7.6345844)

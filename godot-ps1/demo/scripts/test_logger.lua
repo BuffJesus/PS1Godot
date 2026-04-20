@@ -28,6 +28,13 @@ function onCreate(self)
     Animation.Play("bounce", { loop = true })
     Animation.Play("spin", { loop = true })
     Debug.Log("test_logger: Animation.Play('bounce' + 'spin', loop=true)")
+
+    -- Play the intro cutscene once: 3-second camera pan from
+    -- (0, 8, 8) looking down to the player's normal viewpoint
+    -- (0, 4, 5). Tests B.2 Phase 2 camera tracks and helps probe the
+    -- known cutscene-camera-bug (improvements tracker entry N+1).
+    Cutscene.Play("intro")
+    Debug.Log("test_logger: Cutscene.Play('intro')")
 end
 
 function onUpdate(self, dt)
