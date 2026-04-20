@@ -253,6 +253,50 @@ Good upstream PR candidate: small change, broadly useful.
 
 ---
 
+### N+4. Background / sky color tied to fog color
+
+**Problem.** `Renderer::SetFog()` does:
+
+```cpp
+m_clearcolor = fog.color;
+```
+
+So the framebuffer clear color is always the fog color. Every pixel
+of "sky" (anywhere there's no geometry, including the entire upper
+half of an exterior scene) renders as the saturated fog color. A
+soft distance haze becomes a wall of opaque colored void above the
+horizon.
+
+**Why we care.** Authors immediately try saturated fog colors (deep
+green forest, blue dusk, red Mars surface) and get an unusable
+flat-color sky. Workaround is to pick fog colors that double as
+acceptable skies — but a real "fog stays in the distance only" look
+is impossible with one color.
+
+**Proposed direction.** Two fields in `SPLASHPACKFileHeader`:
+`backgroundR/G/B` for the framebuffer clear and the existing
+`fogR/G/B` for the distance tint. Renderer takes both:
+
+```cpp
+m_clearcolor = backgroundColor;  // not fog.color
+```
+
+Authors get separate control: blue sky + grey fog, or whatever the
+scene needs. PS1 still has no actual skybox, but at least the empty
+clear isn't pretending to be fog.
+
+**Status.** Unfiled. One header field addition + one renderer line.
+Backwards compat: if backgroundColor is unset (all zero), fall back
+to the current behavior (clear = fog color).
+
+**Evidence.**
+- `2026-04-19` — Phase 2 fog testing. Author set FogColor to a
+  saturated green for forest atmosphere, got an opaque green sky
+  filling the upper half of the screen instead of fog confined to
+  distant geometry. Screenshot in session log.
+
+---
+
 ### N+3. Fog near/far distance not independently authorable
 
 **Problem.** `Renderer::SetFog()` derives the fog *near* distance from
