@@ -9,8 +9,10 @@
 [ext_resource type="Material" path="res://demo/materials/ps1_green.tres" id="5_green"]
 [ext_resource type="Texture2D" uid="uid://cul6k2s7n8ysj" path="res://demo/textures/test_checker.png" id="6_checker"]
 [ext_resource type="Script" uid="uid://bbl6b0g2qjisp" path="res://addons/ps1godot/nodes/PS1TriggerBox.cs" id="9_oeqrt"]
-[ext_resource type="Script" path="res://addons/ps1godot/nodes/PS1UICanvas.cs" id="10_uican"]
-[ext_resource type="Script" path="res://addons/ps1godot/nodes/PS1UIElement.cs" id="11_uiel"]
+[ext_resource type="Script" uid="uid://bp1p1kqop2wwy" path="res://addons/ps1godot/nodes/PS1UICanvas.cs" id="10_uican"]
+[ext_resource type="Script" uid="uid://c01mt2tth0oll" path="res://addons/ps1godot/nodes/PS1UIElement.cs" id="11_uiel"]
+[ext_resource type="Script" path="res://addons/ps1godot/nodes/PS1Animation.cs" id="12_anim"]
+[ext_resource type="Script" path="res://addons/ps1godot/nodes/PS1AnimationKeyframe.cs" id="13_kf"]
 
 [sub_resource type="Resource" id="Resource_ykvhj"]
 script = ExtResource("2_onvmd")
@@ -71,57 +73,80 @@ far = 80.0
 script = ExtResource("3_cam")
 
 [node name="PS1TriggerBox" type="Node3D" parent="." unique_id=710725990]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 2.5)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.1003563, 1, 2.5)
 script = ExtResource("9_oeqrt")
 HalfExtents = Vector3(1.5, 1.5, 1)
 ScriptFile = "res://demo/scripts/test_trigger.lua"
 metadata/_custom_type_script = "uid://bbl6b0g2qjisp"
 
-[node name="HUD" type="Node" parent="."]
+[node name="HUD" type="Node" parent="." unique_id=1821183015]
 script = ExtResource("10_uican")
 CanvasName = "hud"
-Residency = 0
-VisibleOnLoad = true
 SortOrder = 10
 
-[node name="TickCounter" type="Node" parent="HUD"]
+[node name="TickCounter" type="Node" parent="HUD" unique_id=309336461]
 script = ExtResource("11_uiel")
 ElementName = "tick_counter"
-Type = 2
-VisibleOnLoad = true
-X = 16
-Y = 16
 Width = 120
-Height = 16
-Color = Color(1, 1, 1, 1)
 Text = "tick=0"
 
-[node name="Dialog" type="Node" parent="."]
+[node name="Dialog" type="Node" parent="." unique_id=817879986]
 script = ExtResource("10_uican")
 CanvasName = "dialog"
 Residency = 1
 VisibleOnLoad = false
 SortOrder = 20
 
-[node name="Background" type="Node" parent="Dialog"]
+[node name="Background" type="Node" parent="Dialog" unique_id=189084372]
 script = ExtResource("11_uiel")
 ElementName = "bg"
 Type = 1
-VisibleOnLoad = true
 X = 40
 Y = 160
 Width = 240
 Height = 64
 Color = Color(0, 0, 0.4, 1)
 
-[node name="Body" type="Node" parent="Dialog"]
+[node name="Body" type="Node" parent="Dialog" unique_id=2095917132]
 script = ExtResource("11_uiel")
 ElementName = "body"
-Type = 2
-VisibleOnLoad = true
 X = 48
 Y = 172
 Width = 224
 Height = 48
-Color = Color(1, 1, 1, 1)
 Text = "Hello from PS1Godot!"
+
+[node name="BounceAnim" type="Node" parent="."]
+script = ExtResource("12_anim")
+AnimationName = "bounce"
+TargetObjectName = "Cube2"
+TotalFrames = 60
+
+[node name="Kf0" type="Node" parent="BounceAnim"]
+script = ExtResource("13_kf")
+Frame = 0
+Position = Vector3(4, 0.5, -3)
+
+[node name="Kf1" type="Node" parent="BounceAnim"]
+script = ExtResource("13_kf")
+Frame = 15
+Position = Vector3(4, 2.5, -3)
+Interp = 3
+
+[node name="Kf2" type="Node" parent="BounceAnim"]
+script = ExtResource("13_kf")
+Frame = 30
+Position = Vector3(4, 0.5, -3)
+Interp = 2
+
+[node name="Kf3" type="Node" parent="BounceAnim"]
+script = ExtResource("13_kf")
+Frame = 45
+Position = Vector3(4, 2.5, -3)
+Interp = 3
+
+[node name="Kf4" type="Node" parent="BounceAnim"]
+script = ExtResource("13_kf")
+Frame = 59
+Position = Vector3(4, 0.5, -3)
+Interp = 2

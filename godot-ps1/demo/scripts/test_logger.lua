@@ -21,6 +21,11 @@ function onCreate(self)
     end
     dialogCanvas = UI.FindCanvas("dialog")
     Debug.Log("test_logger: hud=" .. hudCanvas .. " tickEl=" .. tickCounterEl .. " dialog=" .. dialogCanvas)
+
+    -- Kick the bounce animation on loop. The runtime's AnimationPlayer
+    -- drives the Cube's position via the splashpack keyframe track.
+    Animation.Play("bounce", { loop = true })
+    Debug.Log("test_logger: Animation.Play('bounce', loop=true)")
 end
 
 function onUpdate(self, dt)
