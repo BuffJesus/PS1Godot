@@ -2,14 +2,17 @@ using Godot;
 
 namespace PS1Godot;
 
-// Matches the GameObject-oriented subset of the runtime's TrackType
-// enum (cutscene.hh). Other track types (camera, UI, rumble) live in
-// cutscenes — a single-track animation sticks to GameObjects.
+// Matches the runtime's TrackType enum (cutscene.hh). Camera tracks
+// don't need a target object — the runtime drives its singleton Camera
+// directly. Object tracks need a TargetObjectName matching a
+// PS1MeshInstance somewhere in the scene.
 public enum PS1AnimationTrackType
 {
-    Position = 2,  // TrackType::ObjectPosition
-    Rotation = 3,  // TrackType::ObjectRotation
-    Active   = 4,  // TrackType::ObjectActive
+    CameraPosition = 0,  // TrackType::CameraPosition (cutscenes only)
+    CameraRotation = 1,  // TrackType::CameraRotation (cutscenes only)
+    Position       = 2,  // TrackType::ObjectPosition
+    Rotation       = 3,  // TrackType::ObjectRotation
+    Active         = 4,  // TrackType::ObjectActive
 }
 
 // A named timeline that drives one target GameObject over a fixed

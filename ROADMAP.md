@@ -437,6 +437,29 @@ runtime so first-person / orbit actually take effect.
 - [ ] Orbit mode: right-stick rotates camera around player pivot, radius
       authored on PS1Player. **[runtime]**
 
+### Texture animation (UV scroll + frame-flip)
+
+Highest visual return per cycle on PS1: water rippling, conveyors,
+mouths flapping, eyes blinking, scrolling skyboxes. Two cheap
+mechanisms cover most cases — UV-shifting and atlas-region cycling.
+
+- [ ] **UV-scroll track type** — `TrackType::ObjectUVScroll` adds a
+      per-frame UV offset (`du`, `dv` in fp12) to all of an object's
+      triangles. Emit as a new track in PS1Animation / PS1Cutscene with
+      values `(scrollSpeedU, scrollSpeedV, 0)`. Authored as a Vector2
+      in pixels-per-second; exporter converts. **[runtime]**
+- [ ] **Atlas-region flip** — `TrackType::ObjectFrameSwap` swaps
+      between authored UV rectangles within a single texture page.
+      Each keyframe selects a frame index; the runtime rewrites U/V
+      offsets on the object's triangles each tick. Use case: blinking
+      eyes, mouth shapes for dialog, animated water tiles. Frame
+      regions authored as a list on PS1MeshInstance (e.g.
+      `Vector2I[] FrameRects` in atlas pixels). **[runtime]**
+- [ ] **Per-mesh UV anim mode** on `PS1MeshInstance` so you can mark a
+      mesh as "use UV scroll" without writing a per-mesh Lua script.
+- [ ] Demo addition: animated water plane (UV scroll) + a face mesh on
+      an NPC with mouth-flap atlas frames (frame swap).
+
 ### UI / HUD from Lua
 
 Canvas assets export; runtime mutation doesn't.

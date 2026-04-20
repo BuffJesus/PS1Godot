@@ -26,6 +26,9 @@ public static class SceneCollector
             data.JumpHeightMeters = ps1Scene.JumpHeight;
             data.GravityMps2 = ps1Scene.Gravity;
             data.SceneType = ps1Scene.SceneType;
+            data.FogEnabled = ps1Scene.FogEnabled;
+            data.FogColor = ps1Scene.FogColor;
+            data.FogDensity = (byte)Mathf.Clamp(ps1Scene.FogDensity, 1, 10);
             GD.Print($"[PS1Godot] Scene params: move={ps1Scene.MoveSpeed}, jump={ps1Scene.JumpHeight}, gravity={ps1Scene.Gravity}, gteScaling={ps1Scene.GteScaling}");
         }
         else
@@ -357,16 +360,17 @@ public static class SceneCollector
 
     // Encode a Godot-space triple into the runtime's fp12 / fp10 values
     // per the given track type.
-    //   Position: (x, y, z) meters → PSX fp12 with Y flipped.
-    //   Rotation: Euler degrees per axis → psyqo::Angle fp10
-    //             (4096 = 360°). PSX Y-down mirrors Godot X & Z rotation
-    //             signs; Y rotation is negated.
+    //   Position / CameraPosition: (x, y, z) meters → PSX fp12 with Y flipped.
+    //   Rotation / CameraRotation: Euler degrees per axis → psyqo::Angle
+    //             fp10 (4096 = 360°). PSX Y-down mirrors Godot X & Y
+    //             rotation signs; Z rotation passes through.
     //   Active:   value.X → 0 or 1.
     private static (short, short, short) EncodeKeyframeValue(Vector3 v, PS1AnimationTrackType type, float gteScaling)
     {
         switch (type)
         {
             case PS1AnimationTrackType.Position:
+            case PS1AnimationTrackType.CameraPosition:
             {
                 float s = Mathf.Max(gteScaling, 0.0001f);
                 int vx = Mathf.RoundToInt(v.X / s * 4096f);
@@ -375,6 +379,7 @@ public static class SceneCollector
                 return (ClampShort(vx), ClampShort(vy), ClampShort(vz));
             }
             case PS1AnimationTrackType.Rotation:
+            case PS1AnimationTrackType.CameraRotation:
             {
                 // 1 full turn (360°) = 4096 in fp10.
                 const float DegToFp10 = 4096f / 360f;

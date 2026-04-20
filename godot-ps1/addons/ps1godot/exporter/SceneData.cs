@@ -233,4 +233,9 @@ public sealed class SceneData
     public float SprintSpeedMps { get; set; } = 6.0f;
     public float JumpHeightMeters { get; set; } = 1.2f;
     public float GravityMps2 { get; set; } = 9.81f;
+
+    // ─── Fog (pulled from PS1Scene in SceneCollector) ──
+    public bool FogEnabled { get; set; } = false;
+    public Color FogColor { get; set; } = new Color(0.5f, 0.5f, 0.6f);
+    public byte FogDensity { get; set; } = 5;
 }

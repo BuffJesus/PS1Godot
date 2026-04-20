@@ -43,8 +43,10 @@ public partial class PS1Scene : Node3D
     public int MaxTexturePages { get; set; } = 8;
 
     [ExportGroup("Player")]
-    [Export] public Vector3 PlayerStartPosition { get; set; } = Vector3.Zero;
-    [Export] public Vector3 PlayerStartRotation { get; set; } = Vector3.Zero;
+    // Player spawn now lives on the PS1Player node — drop one in the
+    // scene and place it where you want the player to appear. The old
+    // PlayerStartPosition / PlayerStartRotation fields here were never
+    // wired through the exporter.
     [Export(PropertyHint.Range, "0.3,3.0,0.05")]
     public float PlayerHeight { get; set; } = 1.7f;
     [Export(PropertyHint.Range, "0.1,2.0,0.05")]

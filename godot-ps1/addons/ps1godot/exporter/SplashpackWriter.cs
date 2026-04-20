@@ -735,12 +735,13 @@ public static class SplashpackWriter
         offsets.AudioTableOffsetPos = w.BaseStream.Position;
         w.Write((uint)0);              // audioTableOffset (backfilled)
 
-        // Fog block (6 bytes)
-        w.Write((byte)0);              // fogEnabled
-        w.Write((byte)0);              // fogR
-        w.Write((byte)0);              // fogG
-        w.Write((byte)0);              // fogB
-        w.Write((byte)5);              // fogDensity (default 5, 1-10)
+        // Fog block (6 bytes) — RGB888 + density byte. Reads
+        // scene.FogEnabled / FogColor / FogDensity authored on PS1Scene.
+        w.Write((byte)(scene.FogEnabled ? 1 : 0));
+        w.Write((byte)Mathf.Clamp((int)(scene.FogColor.R * 255f), 0, 255));
+        w.Write((byte)Mathf.Clamp((int)(scene.FogColor.G * 255f), 0, 255));
+        w.Write((byte)Mathf.Clamp((int)(scene.FogColor.B * 255f), 0, 255));
+        w.Write(scene.FogDensity);
         w.Write((byte)0);              // pad3
 
         // Room system counts
