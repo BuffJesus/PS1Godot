@@ -28,6 +28,8 @@ public partial class PS1GodotDock : VBoxContainer
     private BudgetRow? _triRow;
     private BudgetRow? _vramRow;
     private BudgetRow? _spuRow;
+    private VBoxContainer? _setupBox;
+    private Label? _setupSummary;
 
     public PS1GodotDock()
     {
@@ -123,19 +125,85 @@ public partial class PS1GodotDock : VBoxContainer
         inner.AddChild(_spuRow.Label);
         inner.AddChild(_spuRow.Bar);
 
-        // ── Setup section (placeholder until Phase 0.5 detection lands) ─
+        // ── Setup section ───────────────────────────────────────────────
         AddSectionHeader(inner, "Setup");
-        var setupHint = new Label
+
+        _setupSummary = new Label
         {
-            Text = "Dependency detection arrives with Phase 0.5. For now, see SETUP.md.",
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
         };
-        setupHint.AddThemeColorOverride("font_color", new Color(1, 1, 1, 0.55f));
-        inner.AddChild(setupHint);
+        _setupSummary.AddThemeColorOverride("font_color", new Color(1, 1, 1, 0.75f));
+        inner.AddChild(_setupSummary);
+
+        _setupBox = new VBoxContainer();
+        _setupBox.AddThemeConstantOverride("separation", 2);
+        inner.AddChild(_setupBox);
+
+        RefreshSetupStatus();
 
         // Spacer pushes everything to the top.
         var spacer = new Control { SizeFlagsVertical = SizeFlags.ExpandFill };
         inner.AddChild(spacer);
+    }
+
+    public void RefreshSetupStatus()
+    {
+        if (_setupBox == null || _setupSummary == null) return;
+
+        foreach (var child in _setupBox.GetChildren())
+        {
+            child.QueueFree();
+        }
+
+        var rows = SetupDetector.Detect();
+        int ok = 0, missing = 0;
+        foreach (var row in rows)
+        {
+            if (row.Status == SetupDetector.Status.Ok) ok++;
+            else if (row.Status == SetupDetector.Status.Missing) missing++;
+
+            _setupBox.AddChild(BuildSetupRow(row));
+        }
+
+        _setupSummary.Text = missing == 0
+            ? $"All {rows.Count} dependencies found."
+            : $"{missing} of {rows.Count} dependencies missing — hover for details.";
+        _setupSummary.AddThemeColorOverride(
+            "font_color",
+            missing == 0 ? new Color(0.55f, 0.85f, 0.55f) : new Color(0.95f, 0.75f, 0.35f));
+    }
+
+    private static Control BuildSetupRow(SetupDetector.Row row)
+    {
+        var h = new HBoxContainer();
+        h.AddThemeConstantOverride("separation", 6);
+
+        string glyph = row.Status switch
+        {
+            SetupDetector.Status.Ok => "✓",
+            SetupDetector.Status.Missing => "✗",
+            _ => "·",
+        };
+        Color glyphColor = row.Status switch
+        {
+            SetupDetector.Status.Ok => new Color(0.45f, 0.85f, 0.50f),
+            SetupDetector.Status.Missing => new Color(0.95f, 0.45f, 0.45f),
+            _ => new Color(1, 1, 1, 0.55f),
+        };
+
+        var glyphLabel = new Label { Text = glyph, CustomMinimumSize = new Vector2(14, 0) };
+        glyphLabel.AddThemeColorOverride("font_color", glyphColor);
+        h.AddChild(glyphLabel);
+
+        var name = new Label
+        {
+            Text = row.Name,
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+            TooltipText = row.Detail,
+        };
+        h.AddChild(name);
+
+        return h;
     }
 
     // Called by the plugin on scene-change or manual refresh.
