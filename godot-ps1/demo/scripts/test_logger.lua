@@ -146,35 +146,29 @@ function onUpdate(self, dt)
     end
 
     -- Track runtime player position + facing onto the Player mesh.
-    -- Facing is quantized to 8 compass directions so the static mesh
-    -- snaps to a plausible angle without per-frame jitter. Held when
-    -- the player stops moving (prevents snap-back to 0°).
+    -- Facing is quantized to 4 cardinal directions; held when the
+    -- player stops moving (prevents snap-back).
+    --
+    -- psxlua is integer-only (LUA_NUMBER = long). No float literals,
+    -- no fractional math. Entity.SetRotationY(N) where N is an
+    -- integer = N * 90° (readFP multiplies by 4096, runtime shifts
+    -- right 2 → fp10 = N * 1024 = N quarter-turns).
     if playerMesh ~= nil then
         local p = Player.GetPosition()
         Entity.SetPosition(playerMesh, p.x, p.y, p.z)
 
         local dx = p.x - prevPX
         local dz = p.z - prevPZ
-        -- Deadzone avoids re-triggering rotation from float drift.
-        if (dx * dx + dz * dz) > 0.00001 then
+        if dx ~= 0 or dz ~= 0 then
             local adx, adz = dx, dz
             if adx < 0 then adx = -adx end
             if adz < 0 then adz = -adz end
-            -- Entity.SetRotationY takes fp12 where 4.0 = full turn
-            -- (fp12 → fp10 shift inside the runtime). PSX uses Y-down
-            -- so these are "viewed from above" yaw values:
-            --   0.0 = face -Z   1.0 = face +X (right)   2.0 = face +Z
-            --   3.0 = face -X   half-steps = diagonals
-            if adz > adx * 2.4 then
-                facingYaw = (dz > 0) and 2.0 or 0.0
-            elseif adx > adz * 2.4 then
-                facingYaw = (dx > 0) and 1.0 or 3.0
+            -- Pick whichever axis has the bigger delta. PSX yaw:
+            --   0 = face -Z   1 = face +X   2 = face +Z   3 = face -X
+            if adz >= adx then
+                facingYaw = (dz > 0) and 2 or 0
             else
-                if     dx > 0 and dz < 0 then facingYaw = 0.5
-                elseif dx > 0 and dz > 0 then facingYaw = 1.5
-                elseif dx < 0 and dz > 0 then facingYaw = 2.5
-                else                          facingYaw = 3.5
-                end
+                facingYaw = (dx > 0) and 1 or 3
             end
             Entity.SetRotationY(playerMesh, facingYaw)
         end
