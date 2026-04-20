@@ -9,6 +9,8 @@
 [ext_resource type="Material" path="res://demo/materials/ps1_green.tres" id="5_green"]
 [ext_resource type="Texture2D" uid="uid://cul6k2s7n8ysj" path="res://demo/textures/test_checker.png" id="6_checker"]
 [ext_resource type="Script" uid="uid://bbl6b0g2qjisp" path="res://addons/ps1godot/nodes/PS1TriggerBox.cs" id="9_oeqrt"]
+[ext_resource type="Script" path="res://addons/ps1godot/nodes/PS1UICanvas.cs" id="10_uican"]
+[ext_resource type="Script" path="res://addons/ps1godot/nodes/PS1UIElement.cs" id="11_uiel"]
 
 [sub_resource type="Resource" id="Resource_ykvhj"]
 script = ExtResource("2_onvmd")
@@ -74,3 +76,52 @@ script = ExtResource("9_oeqrt")
 HalfExtents = Vector3(1.5, 1.5, 1)
 ScriptFile = "res://demo/scripts/test_trigger.lua"
 metadata/_custom_type_script = "uid://bbl6b0g2qjisp"
+
+[node name="HUD" type="Node" parent="."]
+script = ExtResource("10_uican")
+CanvasName = "hud"
+Residency = 0
+VisibleOnLoad = true
+SortOrder = 10
+
+[node name="TickCounter" type="Node" parent="HUD"]
+script = ExtResource("11_uiel")
+ElementName = "tick_counter"
+Type = 2
+VisibleOnLoad = true
+X = 16
+Y = 16
+Width = 120
+Height = 16
+Color = Color(1, 1, 1, 1)
+Text = "tick=0"
+
+[node name="Dialog" type="Node" parent="."]
+script = ExtResource("10_uican")
+CanvasName = "dialog"
+Residency = 1
+VisibleOnLoad = false
+SortOrder = 20
+
+[node name="Background" type="Node" parent="Dialog"]
+script = ExtResource("11_uiel")
+ElementName = "bg"
+Type = 1
+VisibleOnLoad = true
+X = 40
+Y = 160
+Width = 240
+Height = 64
+Color = Color(0, 0, 0.4, 1)
+
+[node name="Body" type="Node" parent="Dialog"]
+script = ExtResource("11_uiel")
+ElementName = "body"
+Type = 2
+VisibleOnLoad = true
+X = 48
+Y = 172
+Width = 224
+Height = 48
+Color = Color(1, 1, 1, 1)
+Text = "Hello from PS1Godot!"

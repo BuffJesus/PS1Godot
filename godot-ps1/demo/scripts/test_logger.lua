@@ -4,27 +4,41 @@
 
 local tick = 0
 
+-- UI handles, resolved once in onCreate. -1 means the canvas/element
+-- wasn't exported — harmless (UI.SetText short-circuits on bad handles).
+local hudCanvas = -1
+local tickCounterEl = -1
+local dialogCanvas = -1
+
 function onCreate(self)
     Debug.Log("test_logger: onCreate fired")
-    -- A/B test: try numeric index 0 (bypasses name lookup) and name "test"
-    -- (goes through findAudioClipByName). If index 0 plays and name returns
-    -- -1, the name table is borked; if both return -1, the clip isn't
-    -- loaded at all (SPU upload failed).
-    local byIndex = Audio.Play(0, 100, 64)
-    Debug.Log("test_logger: Audio.Play(0) -> " .. byIndex)
     local byName = Audio.Play("test", 100, 64)
     Debug.Log("test_logger: Audio.Play('test') -> " .. byName)
+
+    hudCanvas = UI.FindCanvas("hud")
+    if hudCanvas >= 0 then
+        tickCounterEl = UI.FindElement(hudCanvas, "tick_counter")
+    end
+    dialogCanvas = UI.FindCanvas("dialog")
+    Debug.Log("test_logger: hud=" .. hudCanvas .. " tickEl=" .. tickCounterEl .. " dialog=" .. dialogCanvas)
 end
 
 function onUpdate(self, dt)
     tick = tick + 1
-    -- Log once per second-ish so we can confirm onUpdate is ticking
-    -- without flooding the log buffer.
     if tick % 30 == 0 then
         Debug.Log("test_logger: onUpdate tick=" .. tick)
+        if tickCounterEl >= 0 then
+            UI.SetText(tickCounterEl, "tick=" .. tick)
+        end
     end
 end
 
 function onInteract(self)
     Debug.Log("test_logger: onInteract (pressed X near cube)")
+    -- Toggle the MenuOnly dialog canvas so the interactable demos both
+    -- the onInteract event and the MenuOnly residency path.
+    if dialogCanvas >= 0 then
+        local vis = UI.IsCanvasVisible(dialogCanvas)
+        UI.SetCanvasVisible(dialogCanvas, not vis)
+    end
 end
