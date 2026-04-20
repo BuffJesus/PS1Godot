@@ -135,6 +135,21 @@ public sealed class SkinnedMeshRecord
     // PSXMesh writer emits so the runtime's skinned render path can
     // walk them in lockstep with the Tri[] array.
     public required byte[] BoneIndices { get; init; }
+    // Baked animation clips. Empty means rest-pose-only rendering.
+    public System.Collections.Generic.List<SkinClipRecord> Clips { get; init; } = new();
+}
+
+// One baked animation clip. Frames is frameCount × boneCount × 24 bytes
+// laid out as [frame0_bone0, frame0_bone1, … frame1_bone0, …]. Each
+// BakedBoneMatrix = 9 int16 rotation (row-major) + 3 int16 translation
+// (fp12, PSX Y-down). Loader reads this blob raw, no further parsing.
+public sealed class SkinClipRecord
+{
+    public required string Name { get; init; }
+    public required byte Flags { get; init; }     // bit 0 = loop
+    public required byte Fps { get; init; }       // sample rate (1–30)
+    public required ushort FrameCount { get; init; }
+    public required byte[] FrameData { get; init; }
 }
 
 // UI canvas + its widgets. Serialized as a 12-byte descriptor in the UI

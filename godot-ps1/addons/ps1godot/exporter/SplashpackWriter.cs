@@ -581,14 +581,31 @@ public static class SplashpackWriter
             long blockStart = w.BaseStream.Position;
             BackfillUInt32(w, dataOffPos[i], (uint)blockStart);
 
+            byte clipCount = (byte)Math.Min(sm.Clips.Count, 16);  // SKINMESH_MAX_CLIPS
             w.Write(sm.GameObjectIndex);     // u16
             w.Write(sm.BoneCount);            // u8
-            w.Write((byte)0);                 // u8 clipCount (stage 2 will bake)
+            w.Write(clipCount);               // u8
             w.Write(sm.BoneIndices);          // polyCount × 3 bytes
+            AlignTo4(w);
 
-            // Align to 4 so the (future) clip array starts clean. Even
-            // with 0 clips the loader's parse won't read past the block,
-            // but keeping alignment stable avoids surprises in stage 2.
+            // Clips: loader expects length-prefixed name (in-place
+            // null-terminated), flags, fps, u16 frameCount (2-byte
+            // aligned), then frameCount × boneCount × 24 bytes of
+            // BakedBoneMatrix. See splashpack.cpp:503 for the parser.
+            for (int c = 0; c < clipCount; c++)
+            {
+                var clip = sm.Clips[c];
+                byte nameLen = (byte)Math.Min(Encoding.UTF8.GetByteCount(clip.Name ?? ""), 255);
+                w.Write(nameLen);
+                if (nameLen > 0) w.Write(Encoding.UTF8.GetBytes(clip.Name!));
+                w.Write((byte)0);             // the loader writes a \0 here; we pre-emit so the name byte count is deterministic
+                w.Write(clip.Flags);
+                w.Write(clip.Fps);
+                AlignTo2(w);
+                w.Write(clip.FrameCount);
+                w.Write(clip.FrameData);
+            }
+
             AlignTo4(w);
         }
 
@@ -1256,6 +1273,11 @@ public static class SplashpackWriter
         long pos = w.BaseStream.Position;
         int padding = (int)(4 - (pos % 4)) % 4;
         for (int i = 0; i < padding; i++) w.Write((byte)0);
+    }
+
+    private static void AlignTo2(BinaryWriter w)
+    {
+        if ((w.BaseStream.Position & 1) != 0) w.Write((byte)0);
     }
 
     private static void BackfillUInt32(BinaryWriter w, long position, uint value)

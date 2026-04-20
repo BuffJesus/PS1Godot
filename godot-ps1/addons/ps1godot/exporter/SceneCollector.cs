@@ -199,19 +199,24 @@ public static class SceneCollector
                         $"[PS1Godot] PS1SkinnedMesh '{ps1Skin.Name}' has {boneCount} bones; " +
                         $"runtime cap is 64. Bone indices >= 64 will be clamped.");
                 }
-                byte[] boneIndices = ComputeBoneIndices(ps1Skin, boneCount);
+                int clampedBoneCount = System.Math.Min(boneCount, 64);
+                byte[] boneIndices = ComputeBoneIndices(ps1Skin, clampedBoneCount);
+
+                var clips = BakeSkinClips(ps1Skin, clampedBoneCount, data.GteScaling);
+
                 data.SkinnedMeshes.Add(new SkinnedMeshRecord
                 {
                     Name = ps1Skin.Name,
                     GameObjectIndex = objectIndex,
-                    BoneCount = (byte)System.Math.Min(boneCount, 64),
+                    BoneCount = (byte)clampedBoneCount,
                     BoneIndices = boneIndices,
+                    Clips = clips,
                 });
-                int animCount = ps1Skin.ClipNames != null ? ps1Skin.ClipNames.Length : 0;
                 GD.Print(
                     $"[PS1Godot] PS1SkinnedMesh '{ps1Skin.Name}': {boneCount} bones, " +
-                    $"{boneIndices.Length / 3} triangles, {animCount} authored clips. " +
-                    $"(stage 1 — skin data emitted; clip baking pending.)");
+                    $"{boneIndices.Length / 3} triangles, {clips.Count} baked clips " +
+                    $"({System.Linq.Enumerable.Sum(System.Linq.Enumerable.Select(clips, c => (int)c.FrameCount))} total frames). " +
+                    $"(stage 2 — clips baked for PSX playback.)");
             }
         }
         else if (n is PS1TriggerBox tb && tb.Visible)
@@ -374,6 +379,184 @@ public static class SceneCollector
             }
         }
         return result.ToArray();
+    }
+
+    // Resolve the AnimationPlayer for a PS1SkinnedMesh. Explicit path
+    // wins; otherwise look for an AnimationPlayer among the mesh's
+    // siblings (the typical test-asset layout: Skeleton/SkinnedMesh/AP
+    // as siblings under a common parent Node3D). Returns null if none.
+    private static AnimationPlayer? ResolveAnimationPlayer(PS1SkinnedMesh mesh)
+    {
+        if (mesh.AnimationPlayerPath != null && !mesh.AnimationPlayerPath.IsEmpty)
+        {
+            return mesh.GetNodeOrNull<AnimationPlayer>(mesh.AnimationPlayerPath);
+        }
+        var parent = mesh.GetParent();
+        if (parent == null) return null;
+        foreach (var child in parent.GetChildren())
+        {
+            if (child is AnimationPlayer ap) return ap;
+        }
+        return null;
+    }
+
+    // Bake all of the mesh's authored clips into BakedBoneMatrix blobs
+    // the runtime can play back frame-by-frame. One call handles the
+    // full pipeline: resolve AnimationPlayer + Skeleton3D, iterate clip
+    // names, sample each at TargetFps, pack the per-frame bone matrices
+    // into a single byte[] per clip. Returns an empty list if the skin
+    // setup is incomplete — runtime renders rest-pose only in that case.
+    private static System.Collections.Generic.List<SkinClipRecord> BakeSkinClips(
+        PS1SkinnedMesh mesh, int boneCount, float gteScaling)
+    {
+        var result = new System.Collections.Generic.List<SkinClipRecord>();
+        if (mesh.ClipNames == null || mesh.ClipNames.Length == 0) return result;
+
+        var skeleton = (mesh.Skeleton != null && !mesh.Skeleton.IsEmpty)
+            ? mesh.GetNodeOrNull<Skeleton3D>(mesh.Skeleton)
+            : null;
+        if (skeleton == null)
+        {
+            GD.PushWarning($"[PS1Godot] '{mesh.Name}': no skeleton resolved — skipping clip bake.");
+            return result;
+        }
+
+        var skin = mesh.Skin;
+        if (skin == null)
+        {
+            GD.PushWarning($"[PS1Godot] '{mesh.Name}': no Skin resource — bake math needs bind poses. Skipping clips.");
+            return result;
+        }
+
+        var ap = ResolveAnimationPlayer(mesh);
+        if (ap == null)
+        {
+            GD.PushWarning($"[PS1Godot] '{mesh.Name}': no AnimationPlayer found. Skipping clip bake.");
+            return result;
+        }
+
+        int fps = Mathf.Clamp(mesh.TargetFps, 1, 30);
+
+        // Pre-compute each bone's bind-inverse so we can reuse it across
+        // every frame. Skin.GetBindPose returns the inverse bind matrix
+        // already — it's what we multiply the current pose by.
+        int skinBindCount = skin.GetBindCount();
+        var bindInv = new Transform3D[boneCount];
+        for (int b = 0; b < boneCount; b++)
+        {
+            bindInv[b] = (b < skinBindCount) ? skin.GetBindPose(b) : Transform3D.Identity;
+        }
+
+        foreach (var rawName in mesh.ClipNames)
+        {
+            string clipName = rawName ?? "";
+            if (string.IsNullOrWhiteSpace(clipName)) continue;
+            if (!ap.HasAnimation(clipName))
+            {
+                GD.PushWarning($"[PS1Godot] '{mesh.Name}': AnimationPlayer has no '{clipName}' — skipping.");
+                continue;
+            }
+
+            var anim = ap.GetAnimation(clipName);
+            if (anim == null) continue;
+
+            int frameCount = Mathf.Max(1, Mathf.CeilToInt((float)anim.Length * fps));
+            // Runtime loads frames as count × bones × 24 bytes contiguously.
+            byte[] frameData = new byte[frameCount * boneCount * 24];
+
+            // Stash the current play state so we restore it when done.
+            var originalClip = ap.CurrentAnimation;
+            float originalPos = ap.CurrentAnimationPosition;
+            ap.CurrentAnimation = clipName;
+
+            for (int f = 0; f < frameCount; f++)
+            {
+                double time = (double)f / fps;
+                // Seek with update=true forces the AnimationMixer to apply
+                // the sampled pose to target tracks immediately (bone poses
+                // on the Skeleton3D), which is what we read below.
+                ap.Seek(time, update: true);
+
+                for (int b = 0; b < boneCount; b++)
+                {
+                    Transform3D currentPose = skeleton.GetBoneGlobalPose(b);
+                    Transform3D combined = currentPose * bindInv[b];
+                    WriteBakedBoneMatrix(frameData, (f * boneCount + b) * 24, combined, gteScaling);
+                }
+            }
+
+            // Restore AP state so the editor viewport isn't stuck on the
+            // final-frame pose of whatever clip we baked last.
+            if (!string.IsNullOrEmpty(originalClip))
+            {
+                ap.CurrentAnimation = originalClip;
+                ap.Seek(originalPos, update: true);
+            }
+            else
+            {
+                ap.Stop();
+            }
+
+            byte flags = (anim.LoopMode != Animation.LoopModeEnum.None) ? (byte)1 : (byte)0;
+            result.Add(new SkinClipRecord
+            {
+                Name = clipName,
+                Flags = flags,
+                Fps = (byte)fps,
+                FrameCount = (ushort)frameCount,
+                FrameData = frameData,
+            });
+        }
+        return result;
+    }
+
+    // Write one BakedBoneMatrix into `buf` at `offset` (24 bytes total).
+    // Layout: int16[9] row-major rotation (fp12) + int16[3] translation
+    // (fp12 at gteScaling, PSX Y-down). Same Y-negation dance the mesh
+    // vertex writer does: flip row elements that involve the Y axis
+    // exactly once, and negate the translation's Y component.
+    private static void WriteBakedBoneMatrix(byte[] buf, int offset, Transform3D t, float gteScaling)
+    {
+        // Extract row-major rotation from the basis.
+        Basis b = t.Basis;
+        // Column 0/1/2 = rotated X/Y/Z axes in skeleton-relative space.
+        // Row-major layout:
+        //   r[0..2] = row 0 = (col0.x, col1.x, col2.x)
+        //   r[3..5] = row 1 = (col0.y, col1.y, col2.y)
+        //   r[6..8] = row 2 = (col0.z, col1.z, col2.z)
+        // Y-down adjustment negates elements that touch Y exactly once:
+        //   row 0 col 1 (col1.x),
+        //   row 1 cols 0 & 2 (col0.y, col2.y),
+        //   row 2 col 1 (col1.y... wait col1.z, the Y axis's Z component).
+        // Pattern matches PSXTrig.ConvertRotationToPSXMatrix.
+        float[,] m =
+        {
+            {  b.Column0.X, -b.Column1.X,  b.Column2.X },
+            { -b.Column0.Y,  b.Column1.Y, -b.Column2.Y },
+            {  b.Column0.Z, -b.Column1.Z,  b.Column2.Z },
+        };
+        for (int i = 0; i < 3; i++)
+        {
+            for (int j = 0; j < 3; j++)
+            {
+                short fp = PSXTrig.ConvertToFixed12(m[i, j]);
+                int off = offset + (i * 3 + j) * 2;
+                buf[off + 0] = (byte)(fp & 0xFF);
+                buf[off + 1] = (byte)((fp >> 8) & 0xFF);
+            }
+        }
+
+        // Translation: PSX Y-negated + divided by gteScaling for fp12.
+        short tx = PSXTrig.ConvertCoordinateToPSX(t.Origin.X, gteScaling);
+        short ty = PSXTrig.ConvertCoordinateToPSX(-t.Origin.Y, gteScaling);
+        short tz = PSXTrig.ConvertCoordinateToPSX(t.Origin.Z, gteScaling);
+        int tOff = offset + 18;
+        buf[tOff + 0] = (byte)(tx & 0xFF);
+        buf[tOff + 1] = (byte)((tx >> 8) & 0xFF);
+        buf[tOff + 2] = (byte)(ty & 0xFF);
+        buf[tOff + 3] = (byte)((ty >> 8) & 0xFF);
+        buf[tOff + 4] = (byte)(tz & 0xFF);
+        buf[tOff + 5] = (byte)((tz >> 8) & 0xFF);
     }
 
     private static Texture2D? ExtractAlbedoTexture(Material? mat)
