@@ -13,8 +13,8 @@
 [ext_resource type="Script" uid="uid://dqtfgfu4x00ke" path="res://addons/ps1godot/nodes/PS1Animation.cs" id="12_anim"]
 [ext_resource type="Script" uid="uid://bg1ih72kp4c3g" path="res://addons/ps1godot/nodes/PS1AnimationKeyframe.cs" id="13_kf"]
 [ext_resource type="Script" uid="uid://cfdlp12g2rtct" path="res://addons/ps1godot/nodes/PS1Player.cs" id="13_tdg64"]
-[ext_resource type="Script" path="res://addons/ps1godot/nodes/PS1Cutscene.cs" id="14_cs"]
-[ext_resource type="Script" path="res://addons/ps1godot/nodes/PS1AnimationTrack.cs" id="15_tr"]
+[ext_resource type="Script" uid="uid://bwafnk42jueor" path="res://addons/ps1godot/nodes/PS1Cutscene.cs" id="14_cs"]
+[ext_resource type="Script" uid="uid://bmwv0x052a03l" path="res://addons/ps1godot/nodes/PS1AnimationTrack.cs" id="15_tr"]
 
 [sub_resource type="Resource" id="Resource_ykvhj"]
 script = ExtResource("2_onvmd")
@@ -48,7 +48,7 @@ script = ExtResource("1_scene")
 JumpHeight = 1.8
 Gravity = 20.0
 FogEnabled = true
-FogColor = Color(0, 0.62173104, 0.12987605, 1)
+FogColor = Color(0, 0.62352943, 0.12941177, 0.5372549)
 AudioClips = Array[ExtResource("2_onvmd")]([SubResource("Resource_ykvhj")])
 
 [node name="Floor" type="MeshInstance3D" parent="." unique_id=1239192714]
@@ -122,6 +122,32 @@ Width = 224
 Height = 48
 Text = "Hello from PS1Godot!"
 
+[node name="SystemVoice" type="Node" parent="."]
+script = ExtResource("10_uican")
+CanvasName = "system_voice"
+VisibleOnLoad = false
+SortOrder = 30
+
+[node name="VoiceBg" type="Node" parent="SystemVoice"]
+script = ExtResource("11_uiel")
+ElementName = "vbg"
+Type = 1
+X = 8
+Y = 200
+Width = 304
+Height = 32
+Color = Color(0, 0, 0, 1)
+
+[node name="VoiceText" type="Node" parent="SystemVoice"]
+script = ExtResource("11_uiel")
+ElementName = "vtxt"
+X = 16
+Y = 210
+Width = 288
+Height = 24
+Color = Color(0.85, 0.95, 1, 1)
+Text = "..."
+
 [node name="BounceAnim" type="Node" parent="." unique_id=1498259313]
 script = ExtResource("12_anim")
 AnimationName = "bounce"
@@ -170,39 +196,72 @@ script = ExtResource("13_kf")
 Frame = 89
 Value = Vector3(0, 360, 0)
 
-[node name="IntroCutscene" type="Node" parent="."]
+[node name="IntroCutscene" type="Node" parent="." unique_id=1594376134]
 script = ExtResource("14_cs")
 CutsceneName = "intro"
-TotalFrames = 90
+TotalFrames = 240
 
-[node name="CamPosTrack" type="Node" parent="IntroCutscene"]
+[node name="CamPosTrack" type="Node" parent="IntroCutscene" unique_id=1136654869]
 script = ExtResource("15_tr")
 TrackType = 0
 
-[node name="CamPosKf0" type="Node" parent="IntroCutscene/CamPosTrack"]
+[node name="CamPosKf0" type="Node" parent="IntroCutscene/CamPosTrack" unique_id=1293512181]
 script = ExtResource("13_kf")
-Frame = 0
-Value = Vector3(0, 8, 8)
+Value = Vector3(0, 8, 6)
 
 [node name="CamPosKf1" type="Node" parent="IntroCutscene/CamPosTrack"]
 script = ExtResource("13_kf")
-Frame = 89
+Frame = 60
+Value = Vector3(5, 6, 4)
+Interp = 4
+
+[node name="CamPosKf2" type="Node" parent="IntroCutscene/CamPosTrack"]
+script = ExtResource("13_kf")
+Frame = 120
+Value = Vector3(5, 5, -1)
+Interp = 4
+
+[node name="CamPosKf3" type="Node" parent="IntroCutscene/CamPosTrack"]
+script = ExtResource("13_kf")
+Frame = 180
+Value = Vector3(4, 5, 3)
+Interp = 4
+
+[node name="CamPosKf4" type="Node" parent="IntroCutscene/CamPosTrack" unique_id=560384909]
+script = ExtResource("13_kf")
+Frame = 239
 Value = Vector3(0, 4, 5)
 Interp = 4
 
-[node name="CamRotTrack" type="Node" parent="IntroCutscene"]
+[node name="CamRotTrack" type="Node" parent="IntroCutscene" unique_id=711669043]
 script = ExtResource("15_tr")
 TrackType = 1
 
-[node name="CamRotKf0" type="Node" parent="IntroCutscene/CamRotTrack"]
+[node name="CamRotKf0" type="Node" parent="IntroCutscene/CamRotTrack" unique_id=1515879523]
 script = ExtResource("13_kf")
-Frame = 0
-Value = Vector3(-30, 0, 0)
+Value = Vector3(-40, 0, 0)
 
 [node name="CamRotKf1" type="Node" parent="IntroCutscene/CamRotTrack"]
 script = ExtResource("13_kf")
-Frame = 89
-Value = Vector3(0, 0, 0)
+Frame = 60
+Value = Vector3(-30, -45, 0)
+Interp = 4
+
+[node name="CamRotKf2" type="Node" parent="IntroCutscene/CamRotTrack"]
+script = ExtResource("13_kf")
+Frame = 120
+Value = Vector3(-20, -120, 0)
+Interp = 4
+
+[node name="CamRotKf3" type="Node" parent="IntroCutscene/CamRotTrack"]
+script = ExtResource("13_kf")
+Frame = 180
+Value = Vector3(-15, -30, 0)
+Interp = 4
+
+[node name="CamRotKf4" type="Node" parent="IntroCutscene/CamRotTrack" unique_id=1322462890]
+script = ExtResource("13_kf")
+Frame = 239
 Interp = 4
 
 [node name="PS1Player" type="Node3D" parent="." unique_id=1681451007]

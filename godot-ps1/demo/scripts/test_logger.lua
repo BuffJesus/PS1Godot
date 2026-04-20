@@ -1,58 +1,94 @@
--- Test script to verify the PS1Godot Lua scripting pipeline.
--- Attach to a PS1MeshInstance's ScriptFile property and run on PSX.
--- Debug.Log output lands in the in-game Log window.
+-- Demo "main" script attached to the green Cube. Drives:
+--   - HUD tick counter
+--   - Intro cutscene narration (system voice text appearing on cue)
+--   - Cycling green-cube dialog on Triangle press
 
 local tick = 0
 
--- UI handles, resolved once in onCreate. -1 means the canvas/element
--- wasn't exported — harmless (UI.SetText short-circuits on bad handles).
-local hudCanvas = -1
-local tickCounterEl = -1
-local dialogCanvas = -1
+-- UI handles, resolved once in onCreate. -1 = element absent.
+local hudCanvas, tickCounterEl = -1, -1
+local dialogCanvas, dialogBodyEl = -1, -1
+local sysVoiceCanvas, sysVoiceText = -1, -1
+
+-- Narration table: { frame, text }. Drive system-voice reveals during
+-- the intro cutscene (240 frames @ 30fps = 8 s). After the last entry
+-- + a fade-out frame, the canvas hides and gameplay begins.
+local narration = {
+    { 5,   "Welcome to the Interactive Demonstration Environment(TM)." },
+    { 60,  "Please do not be alarmed by the cube." },
+    { 100, "It is perfectly stable." },
+    { 150, "The other cube is also intentional." },
+    { 200, "We think." },
+}
+local narrationIdx = 1
+local narrationDoneFrame = 240  -- hide the canvas at the end of the cutscene
+
+-- Green cube dialog. First four lines are the canonical first
+-- conversation, then we loop through the extras.
+local dialogLines = {
+    "Hey.",
+    "...You're not supposed to be here yet.",
+    "Did the camera finish moving? It never tells me.",
+    "Okay, good talk.",
+    -- cycling extras start here (index 5+)
+    "I spin because it gives me purpose.",
+    "The checkered one thinks it's better than me.",
+    "Don't trust anything that bobs.",
+}
+local dialogIdx = 0
 
 function onCreate(self)
     Debug.Log("test_logger: onCreate fired")
-    local byName = Audio.Play("test", 100, 64)
-    Debug.Log("test_logger: Audio.Play('test') -> " .. byName)
 
     hudCanvas = UI.FindCanvas("hud")
     if hudCanvas >= 0 then
         tickCounterEl = UI.FindElement(hudCanvas, "tick_counter")
     end
     dialogCanvas = UI.FindCanvas("dialog")
-    Debug.Log("test_logger: hud=" .. hudCanvas .. " tickEl=" .. tickCounterEl .. " dialog=" .. dialogCanvas)
+    if dialogCanvas >= 0 then
+        dialogBodyEl = UI.FindElement(dialogCanvas, "body")
+    end
+    sysVoiceCanvas = UI.FindCanvas("system_voice")
+    if sysVoiceCanvas >= 0 then
+        sysVoiceText = UI.FindElement(sysVoiceCanvas, "vtxt")
+    end
+    Debug.Log("test_logger: hud=" .. hudCanvas .. " dialog=" .. dialogCanvas .. " sv=" .. sysVoiceCanvas)
 
-    -- Kick the bounce animation on loop (Cube2 moves up/down) and the
-    -- spin animation on loop (green Cube rotates around Y). The runtime
-    -- AnimationPlayer handles both concurrently.
+    -- Background animations + audio cue + intro cutscene.
     Animation.Play("bounce", { loop = true })
     Animation.Play("spin", { loop = true })
-    Debug.Log("test_logger: Animation.Play('bounce' + 'spin', loop=true)")
-
-    -- Play the intro cutscene once: 3-second camera pan from
-    -- (0, 8, 8) looking down to the player's normal viewpoint
-    -- (0, 4, 5). Tests B.2 Phase 2 camera tracks and helps probe the
-    -- known cutscene-camera-bug (improvements tracker entry N+1).
     Cutscene.Play("intro")
-    Debug.Log("test_logger: Cutscene.Play('intro')")
 end
 
 function onUpdate(self, dt)
     tick = tick + 1
-    if tick % 30 == 0 then
-        Debug.Log("test_logger: onUpdate tick=" .. tick)
-        if tickCounterEl >= 0 then
-            UI.SetText(tickCounterEl, "tick=" .. tick)
+
+    -- HUD tick counter, refreshed once a second.
+    if tick % 30 == 0 and tickCounterEl >= 0 then
+        UI.SetText(tickCounterEl, "tick=" .. tick)
+    end
+
+    -- Intro narration: walk through the table, swap to the next line
+    -- as its frame is reached. Hide the canvas once the cutscene ends.
+    if sysVoiceCanvas >= 0 then
+        if narrationIdx <= #narration and tick >= narration[narrationIdx][1] then
+            UI.SetText(sysVoiceText, narration[narrationIdx][2])
+            UI.SetCanvasVisible(sysVoiceCanvas, true)
+            narrationIdx = narrationIdx + 1
+        elseif narrationIdx > #narration and tick >= narrationDoneFrame then
+            UI.SetCanvasVisible(sysVoiceCanvas, false)
         end
     end
 end
 
 function onInteract(self)
-    Debug.Log("test_logger: onInteract (pressed Triangle near cube)")
-    -- Toggle the MenuOnly dialog canvas so the interactable demos both
-    -- the onInteract event and the MenuOnly residency path.
-    if dialogCanvas >= 0 then
-        local vis = UI.IsCanvasVisible(dialogCanvas)
-        UI.SetCanvasVisible(dialogCanvas, not vis)
+    -- Each Triangle press advances one line. Past the canonical four,
+    -- loop back into the cycling extras (indices 5..end).
+    dialogIdx = dialogIdx + 1
+    if dialogIdx > #dialogLines then dialogIdx = 5 end
+    if dialogBodyEl >= 0 then
+        UI.SetText(dialogBodyEl, dialogLines[dialogIdx])
+        UI.SetCanvasVisible(dialogCanvas, true)
     end
+    Debug.Log("test_logger: dialog[" .. dialogIdx .. "] = " .. dialogLines[dialogIdx])
 end
