@@ -331,6 +331,7 @@ _data = {
 
 [node name="Scene" type="Node3D" unique_id=1345701053]
 script = ExtResource("1_scene")
+SceneType = 2
 JumpHeight = 1.8
 Gravity = 20.0
 FogEnabled = true
