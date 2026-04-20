@@ -355,17 +355,31 @@ void UISystem::renderElement(UIElement& el,
     case UIElementType::Text: {
         uint8_t fi = el.textData.fontIndex;
         if (fi > 0 && fi <= m_fontCount) {
-            // Custom font: render proportionally into OT
+            // Custom font: render proportionally into OT (handles '\n' itself)
             renderProportionalText(fi - 1, x, y,
                                    el.colorR, el.colorG, el.colorB,
                                    el.textBuf, ot, balloc);
-        } else if (m_pendingTextCount < UI_MAX_ELEMENTS) {
-            // System font: queue for renderText phase (chainprintf)
-            m_pendingTexts[m_pendingTextCount++] = {
-                x, y,
-                el.colorR, el.colorG, el.colorB,
-                el.textBuf
-            };
+        } else {
+            // System font: split on '\n' and queue one entry per line. System
+            // font is ~8 px tall, so advance Y by 8 per line.
+            const int16_t systemLineHeight = 8;
+            const char* lineStart = el.textBuf;
+            int16_t cursorY = y;
+            while (m_pendingTextCount < UI_MAX_ELEMENTS) {
+                const char* p = lineStart;
+                while (*p != '\0' && *p != '\n') p++;
+                uint8_t segLen = (uint8_t)(p - lineStart);
+                if (segLen > 0) {
+                    m_pendingTexts[m_pendingTextCount++] = {
+                        x, cursorY,
+                        el.colorR, el.colorG, el.colorB,
+                        lineStart, segLen
+                    };
+                }
+                if (*p == '\0') break;
+                lineStart = p + 1;
+                cursorY += systemLineHeight;
+            }
         }
         break;
     }
@@ -400,7 +414,7 @@ void UISystem::renderText(psyqo::GPU& gpu) {
         m_systemFont->chainprintf(gpu,
             {{.x = pt.x, .y = pt.y}},
             {{.r = pt.r, .g = pt.g, .b = pt.b}},
-            "%s", pt.text);
+            "%.*s", (int)pt.len, pt.text);
     }
 }
 
@@ -463,8 +477,14 @@ void UISystem::renderProportionalText(int fontIdx, int16_t x, int16_t y,
 
     // First: insert all glyph sprites at depth 0
     int16_t cursorX = x;
+    int16_t cursorY = y;
     while (*text) {
         uint8_t c = (uint8_t)*text++;
+        if (c == '\n') {
+            cursorX = x;
+            cursorY += fd.glyphH;
+            continue;
+        }
         if (c < 32 || c > 127) c = '?';
         uint8_t charIdx = c - 32;
 
@@ -481,7 +501,7 @@ void UISystem::renderProportionalText(int fontIdx, int16_t x, int16_t y,
         uint8_t v = (uint8_t)(baseV + charRow * fd.glyphH);
 
         auto& frag = balloc.allocateFragment<psyqo::Prim::Sprite>();
-        frag.primitive.position = {.x = cursorX, .y = y};
+        frag.primitive.position = {.x = cursorX, .y = cursorY};
         // Use advance as sprite width for proportional sizing.
         // The glyph is left-aligned in the cell, so showing advance-width
         // pixels captures the glyph content with correct spacing.

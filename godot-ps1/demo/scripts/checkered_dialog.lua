@@ -18,7 +18,13 @@ function onCreate(self)
     end
 end
 
+-- Owner ID for the shared `currentDialogOwner` global. See test_logger.lua
+-- for the coordination protocol — each script claims ownership when it
+-- opens the dialog so the previous owner stops auto-advancing.
+local MY_DIALOG_OWNER = 2
+
 function onInteract(self)
+    currentDialogOwner = MY_DIALOG_OWNER
     idx = (idx % #lines) + 1
     local line = lines[idx]
     if dialogBodyEl >= 0 then

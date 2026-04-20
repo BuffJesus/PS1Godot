@@ -18,8 +18,6 @@ local sysVoiceCanvas, sysVoiceText = -1, -1
 -- and this whole path is a no-op. Static mesh only for now — walking
 -- animation needs bullet 11 (skinned meshes).
 local playerMesh = nil
-local prevPX, prevPZ = 0, 0
-local facingYaw = 0  -- last non-stationary direction, persists when idle
 
 -- ── Narration (system voice during intro cutscene) ──
 -- Drives a Lua-side cutscene-frame counter (incremented per onUpdate
@@ -29,8 +27,11 @@ local cutsceneFrame = 0
 local narrationIdx = 1
 local cutsceneRanThisSession = false
 local narrationHidden = false
--- Note: text length ~36 chars max for the SystemVoice text element
--- (288 px wide, ~8 px/char). Voice clip plays the full long-form line.
+-- SystemVoice text element is 288 px wide (~36 chars/line at 8 px/char).
+-- Runtime now supports '\n' as an explicit line break (advances Y by
+-- glyph height, resets X), so we can author two-line text where the
+-- intended line doesn't fit single-line. Voice clip plays the full
+-- long-form phrasing.
 --
 -- Frames are in Lua-tick units (~60 fps onUpdate). Each line waits
 -- for the previous audio to finish + a real pause before firing.
@@ -38,11 +39,11 @@ local narrationHidden = false
 -- stable 1.5 s, other_cube 2.2 s, we_think 1.0 s. Gaps sized to
 -- give each line ≥1 s of silence after audio finishes.
 local narration = {
-    { 5,   "Welcome to the Demo Environment.",  "system_welcome"          },
-    { 260, "Do not be alarmed by the cube.",    "system_not_alarmed"      },
-    { 500, "It is perfectly stable.",            "system_perfectly_stable" },
-    { 720, "The other cube is also intentional.","system_other_cube"       },
-    { 980, "We think.",                          "system_we_think"         },
+    { 5,   "Welcome to the Interactive\nDemonstration Environment.", "system_welcome"          },
+    { 260, "Please do not be alarmed\nby the cube.",                 "system_not_alarmed"      },
+    { 500, "It is perfectly stable.",                                "system_perfectly_stable" },
+    { 720, "The other cube is also\nintentional.",                   "system_other_cube"       },
+    { 980, "We think.",                                              "system_we_think"         },
 }
 
 -- ── Green cube dialog sequences ──
@@ -51,22 +52,22 @@ local narration = {
 -- Press 3+: cycles three extras one per press
 -- Durations are in onUpdate ticks (~60 fps), longer than the audio so
 -- there's a beat of "text held" silence after each line plays.
--- Dialog body element is 224 px wide (~28 chars at 8 px/char). Lines
--- shortened to fit; voice clip carries the full original phrasing.
+-- Dialog body element is 224 px wide (~28 chars/line at 8 px/char).
+-- Use '\n' to split long lines across two rows (runtime-supported).
 local INTERACTIONS = {
     {
-        { text = "Hey.",                          clip = "sc_hey",       dur = 110 },
-        { text = "Not supposed to be here yet.",  clip = "sc_not_yet",   dur = 200 },
-        { text = "Did the camera stop moving?",   clip = "sc_camera",    dur = 240 },
+        { text = "Hey.",                                          clip = "sc_hey",       dur = 110 },
+        { text = "...You're not supposed\nto be here yet.",       clip = "sc_not_yet",   dur = 200 },
+        { text = "Did the camera finish\nmoving? It never tells me.", clip = "sc_camera", dur = 240 },
     },
     {
-        { text = "Okay, good talk.",              clip = "sc_good_talk", dur = 160 },
+        { text = "Okay, good talk.",                              clip = "sc_good_talk", dur = 160 },
     },
 }
 local EXTRAS = {
-    { text = "I spin. Gives me purpose.",         clip = "sc_purpose",       dur = 200 },
-    { text = "Checkered thinks it's better.",     clip = "sc_thinks_better", dur = 220 },
-    { text = "Don't trust things that bob.",      clip = "sc_bobbing",       dur = 180 },
+    { text = "I spin because it\ngives me purpose.",              clip = "sc_purpose",       dur = 200 },
+    { text = "The checkered one thinks\nit's better than me.",    clip = "sc_thinks_better", dur = 220 },
+    { text = "Don't trust anything\nthat bobs.",                  clip = "sc_bobbing",       dur = 180 },
 }
 
 local activeSeq, activeIdx, activeFrame = nil, 0, 0
@@ -145,37 +146,35 @@ function onUpdate(self, dt)
         UI.SetText(tickCounterEl, "tick=" .. tick)
     end
 
-    -- Track runtime player position + facing onto the Player mesh.
-    -- Facing is quantized to 4 cardinal directions; held when the
-    -- player stops moving (prevents snap-back).
-    --
-    -- psxlua is integer-only (LUA_NUMBER = long). No float literals,
-    -- no fractional math. Entity.SetRotationY(N) where N is an
-    -- integer = N * 90° (readFP multiplies by 4096, runtime shifts
-    -- right 2 → fp10 = N * 1024 = N quarter-turns).
+    -- Track runtime player position + facing onto the Player mesh so it
+    -- acts as the player's visible avatar. Position gets a +Y offset so
+    -- mesh feet land at player feet (PS1Player.pos is at eye height, not
+    -- feet). Rotation is driven by player yaw so the mesh turns with the
+    -- camera even when the player stands still.
     if playerMesh ~= nil then
         local p = Player.GetPosition()
         -- Entity.SetPosition takes a Vec3 table as 2nd arg, NOT 3 numbers.
         -- Runtime check: if !lua.isTable(2) return 0; — silent no-op
         -- otherwise (which made the mesh stay glued to (0,0,0)).
+        --
+        -- PS1Player position is at the camera/eye, not the feet. Our
+        -- humanoid mesh's origin is at its feet (AABB min.Y ≈ 0 in the
+        -- authored FBX). Without offsetting, mesh feet would sit at the
+        -- player's eye level and the mesh would tower over the player.
+        -- Shift mesh origin DOWN by playerHeight so mesh feet align with
+        -- player feet on the ground. 1741 raw FP12 = 1.7m at gteScaling=4.
+        -- PSX Y-down convention: positive Y = downward, so we ADD.
+        p.y = p.y + Convert.IntToFp(1741)
         Entity.SetPosition(playerMesh, p)
 
-        local dx = p.x - prevPX
-        local dz = p.z - prevPZ
-        if dx ~= 0 or dz ~= 0 then
-            local adx, adz = dx, dz
-            if adx < 0 then adx = -adx end
-            if adz < 0 then adz = -adz end
-            -- Pick whichever axis has the bigger delta. PSX yaw:
-            --   0 = face -Z   1 = face +X   2 = face +Z   3 = face -X
-            if adz >= adx then
-                facingYaw = (dz > 0) and 2 or 0
-            else
-                facingYaw = (dx > 0) and 1 or 3
-            end
-            Entity.SetRotationY(playerMesh, facingYaw)
-        end
-        prevPX, prevPZ = p.x, p.z
+        -- Mesh faces where the player faces, so the third-person camera
+        -- always sees the avatar's back. Player.GetRotation() returns a
+        -- Vec3 whose .y is the player's yaw in FP12 pi-units (1.0 = 180°);
+        -- Entity.SetRotationY expects the same unit, so pass it through.
+        -- Using player rotation (not movement delta) means the mesh still
+        -- rotates while standing still — matches what the user sees.
+        local rot = Player.GetRotation()
+        Entity.SetRotationY(playerMesh, rot.y)
     end
 
     -- ── Cutscene narration: text + audio co-fired ──
@@ -194,17 +193,24 @@ function onUpdate(self, dt)
     end
 
     -- ── Active dialog sequence advancement ──
+    -- Yield if some other script took over the dialog canvas — otherwise
+    -- our next scheduled line would overwrite their text. We don't hide
+    -- the canvas here; the new owner is managing it.
     if activeSeq ~= nil then
-        activeFrame = activeFrame + 1
-        local current = activeSeq[activeIdx]
-        if activeFrame >= current.dur then
-            activeIdx = activeIdx + 1
-            activeFrame = 0
-            if activeIdx <= #activeSeq then
-                showLine(activeSeq[activeIdx])
-            else
-                if dialogCanvas >= 0 then UI.SetCanvasVisible(dialogCanvas, false) end
-                activeSeq = nil
+        if currentDialogOwner ~= MY_DIALOG_OWNER then
+            activeSeq = nil
+        else
+            activeFrame = activeFrame + 1
+            local current = activeSeq[activeIdx]
+            if activeFrame >= current.dur then
+                activeIdx = activeIdx + 1
+                activeFrame = 0
+                if activeIdx <= #activeSeq then
+                    showLine(activeSeq[activeIdx])
+                else
+                    if dialogCanvas >= 0 then UI.SetCanvasVisible(dialogCanvas, false) end
+                    activeSeq = nil
+                end
             end
         end
     end
@@ -219,14 +225,14 @@ function onUpdate(self, dt)
         elseif idleStep == 0 then
             idleFrames = idleFrames + 1
             if idleFrames > IDLE_THRESHOLD then
-                showSysVoice("You're standing still.", "system_idle_detected")
+                showSysVoice("You appear to be\nstanding still.", "system_idle_detected")
                 idleStep = 1
                 idleStepFrame = 0
             end
         elseif idleStep == 1 then
             idleStepFrame = idleStepFrame + 1
             if idleStepFrame > IDLE_BEAT_PAUSE then
-                showSysVoice("Intentional? Or concerning?", "system_deeply_concerning")
+                showSysVoice("This is either intentional...\nor deeply concerning.", "system_deeply_concerning")
                 idleStep = 2
                 idleStepFrame = 0
             end
@@ -243,7 +249,15 @@ function onUpdate(self, dt)
     end
 end
 
+-- Owner ID for the shared `currentDialogOwner` global. Each script that
+-- shows the dialog canvas claims ownership on Triangle press; other scripts
+-- see the change and stop advancing their own queued sequences. Without
+-- this, interacting with Cube2 mid-conversation would be overwritten by
+-- the next auto-advancing line from Cube on the shared dialog canvas.
+local MY_DIALOG_OWNER = 1
+
 function onInteract(self)
+    currentDialogOwner = MY_DIALOG_OWNER
     interactionCount = interactionCount + 1
     if interactionCount <= #INTERACTIONS then
         activeSeq = INTERACTIONS[interactionCount]

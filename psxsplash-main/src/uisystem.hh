@@ -137,8 +137,10 @@ private:
     int m_canvasCount  = 0;
     int m_elementCount = 0;
 
-    // Pending text for system font only (custom fonts render in OT)
-    struct PendingText { int16_t x, y; uint8_t r, g, b; const char* text; };
+    // Pending text for system font only (custom fonts render in OT).
+    // `len` is the byte length to print (not including null). Supports
+    // multi-line text: one PendingText per line, y offset already baked.
+    struct PendingText { int16_t x, y; uint8_t r, g, b; const char* text; uint8_t len; };
     PendingText m_pendingTexts[UI_MAX_ELEMENTS];
     int m_pendingTextCount = 0;
 
