@@ -21,6 +21,7 @@ public partial class PS1GodotPlugin : EditorPlugin
     private const string LaunchEmulatorMenuLabel = "PS1Godot: Launch in PCSX-Redux";
     private const string RunOnPsxMenuLabel = "PS1Godot: Run on PSX (export + build + launch)";
     private const string ConvertMeshToPS1MenuLabel = "PS1Godot: Convert selected MeshInstance3D to PS1MeshInstance";
+    private const string AddSkinnedTestMenuLabel = "PS1Godot: Add Skinned Test Mesh (bullet 11 test asset)";
 
     private PS1TriggerBoxGizmo? _triggerBoxGizmo;
     private PS1GodotDock? _dock;
@@ -35,6 +36,7 @@ public partial class PS1GodotPlugin : EditorPlugin
         AddToolMenuItem(LaunchEmulatorMenuLabel, Callable.From(OnLaunchEmulator));
         AddToolMenuItem(RunOnPsxMenuLabel, Callable.From(OnRunOnPsx));
         AddToolMenuItem(ConvertMeshToPS1MenuLabel, Callable.From(OnConvertMeshToPS1));
+        AddToolMenuItem(AddSkinnedTestMenuLabel, Callable.From(OnAddSkinnedTestMesh));
 
         _triggerBoxGizmo = new PS1TriggerBoxGizmo();
         AddNode3DGizmoPlugin(_triggerBoxGizmo);
@@ -72,6 +74,7 @@ public partial class PS1GodotPlugin : EditorPlugin
         RemoveToolMenuItem(LaunchEmulatorMenuLabel);
         RemoveToolMenuItem(RunOnPsxMenuLabel);
         RemoveToolMenuItem(ConvertMeshToPS1MenuLabel);
+        RemoveToolMenuItem(AddSkinnedTestMenuLabel);
 
         SceneChanged -= OnSceneChanged;
 
@@ -299,6 +302,45 @@ public partial class PS1GodotPlugin : EditorPlugin
             EditorInterface.Singleton.GetSelection().AddNode(lastCreated);
         }
         GD.Print($"[PS1Godot] {converted} mesh(es) converted. Original FBX nodes are unchanged — delete them once you're sure the PS1MeshInstance has what you need.");
+    }
+
+    private void OnAddSkinnedTestMesh()
+    {
+        var sceneRoot = EditorInterface.Singleton.GetEditedSceneRoot();
+        if (sceneRoot == null)
+        {
+            GD.PushWarning("[PS1Godot] No scene open. Open the .tscn you want to drop the test mesh into.");
+            return;
+        }
+
+        // Parent choice: selected Node3D if one is picked, else the scene root.
+        Node3D parent = sceneRoot as Node3D ?? (Node3D)sceneRoot;
+        var selected = EditorInterface.Singleton.GetSelection().GetSelectedNodes();
+        if (selected.Count == 1 && selected[0] is Node3D sel)
+        {
+            parent = sel;
+        }
+
+        var test = Tools.SkinnedTestBuilder.Build();
+        parent.AddChild(test);
+        // Recursively set Owner so the nodes serialize into the .tscn.
+        SetOwnerRecursive(test, sceneRoot);
+
+        EditorInterface.Singleton.GetSelection().Clear();
+        EditorInterface.Singleton.GetSelection().AddNode(test);
+
+        EditorInterface.Singleton.MarkSceneAsUnsaved();
+        GD.Print("[PS1Godot] Added 'SkinnedTest' — a 2-bone cylinder with a 'wave' animation. " +
+                 "Export to see the stage-1 skin block emit; stage 2 will wire the animation to PSX.");
+    }
+
+    private static void SetOwnerRecursive(Node n, Node owner)
+    {
+        n.Owner = owner;
+        foreach (var child in n.GetChildren())
+        {
+            SetOwnerRecursive(child, owner);
+        }
     }
 
     private void OnSubdivide()
