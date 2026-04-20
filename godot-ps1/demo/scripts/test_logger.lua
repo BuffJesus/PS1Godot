@@ -143,6 +143,10 @@ function onCreate(self)
 
     Animation.Play("bounce", { loop = true })
     Animation.Play("spin", { loop = true })
+    -- Start the bullet-11 test rig's wave animation if present. findSkinAnim
+    -- returns silently if there's no mesh called "SkinnedMesh" in the scene,
+    -- so this no-ops for scenes without the test asset.
+    SkinnedAnim.Play("SkinnedMesh", "wave", { loop = true })
     Cutscene.Play("intro")
 end
 
