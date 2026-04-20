@@ -40,120 +40,140 @@
 script = ExtResource("2_onvmd")
 Stream = ExtResource("ea_welcome")
 ClipName = "system_welcome"
+Residency = 2
 metadata/_custom_type_script = "uid://cgk0vce50p3ph"
 
 [sub_resource type="Resource" id="Clip_not_alarmed"]
 script = ExtResource("2_onvmd")
 Stream = ExtResource("ea_not_alarmed")
 ClipName = "system_not_alarmed"
+Residency = 2
 metadata/_custom_type_script = "uid://cgk0vce50p3ph"
 
 [sub_resource type="Resource" id="Clip_stable"]
 script = ExtResource("2_onvmd")
 Stream = ExtResource("ea_stable")
 ClipName = "system_perfectly_stable"
+Residency = 2
 metadata/_custom_type_script = "uid://cgk0vce50p3ph"
 
 [sub_resource type="Resource" id="Clip_other_cube"]
 script = ExtResource("2_onvmd")
 Stream = ExtResource("ea_other_cube")
 ClipName = "system_other_cube"
+Residency = 2
 metadata/_custom_type_script = "uid://cgk0vce50p3ph"
 
 [sub_resource type="Resource" id="Clip_we_think"]
 script = ExtResource("2_onvmd")
 Stream = ExtResource("ea_we_think")
 ClipName = "system_we_think"
+Residency = 2
 metadata/_custom_type_script = "uid://cgk0vce50p3ph"
 
 [sub_resource type="Resource" id="Clip_ignore_checkered"]
 script = ExtResource("2_onvmd")
 Stream = ExtResource("ea_ignore_checkered")
 ClipName = "system_ignore_checkered"
+Residency = 2
 metadata/_custom_type_script = "uid://cgk0vce50p3ph"
 
 [sub_resource type="Resource" id="Clip_not_part"]
 script = ExtResource("2_onvmd")
 Stream = ExtResource("ea_not_part")
 ClipName = "system_not_part_of_test"
+Residency = 2
 metadata/_custom_type_script = "uid://cgk0vce50p3ph"
 
 [sub_resource type="Resource" id="Clip_idle"]
 script = ExtResource("2_onvmd")
 Stream = ExtResource("ea_idle")
 ClipName = "system_idle_detected"
+Residency = 2
 metadata/_custom_type_script = "uid://cgk0vce50p3ph"
 
 [sub_resource type="Resource" id="Clip_concerning"]
 script = ExtResource("2_onvmd")
 Stream = ExtResource("ea_concerning")
 ClipName = "system_deeply_concerning"
+Residency = 2
 metadata/_custom_type_script = "uid://cgk0vce50p3ph"
 
 [sub_resource type="Resource" id="Clip_sc_hey"]
 script = ExtResource("2_onvmd")
 Stream = ExtResource("ea_sc_hey")
 ClipName = "sc_hey"
+Residency = 2
 metadata/_custom_type_script = "uid://cgk0vce50p3ph"
 
 [sub_resource type="Resource" id="Clip_sc_not_yet"]
 script = ExtResource("2_onvmd")
 Stream = ExtResource("ea_sc_not_yet")
 ClipName = "sc_not_yet"
+Residency = 2
 metadata/_custom_type_script = "uid://cgk0vce50p3ph"
 
 [sub_resource type="Resource" id="Clip_sc_camera"]
 script = ExtResource("2_onvmd")
 Stream = ExtResource("ea_sc_camera")
 ClipName = "sc_camera"
+Residency = 2
 metadata/_custom_type_script = "uid://cgk0vce50p3ph"
 
 [sub_resource type="Resource" id="Clip_sc_good_talk"]
 script = ExtResource("2_onvmd")
 Stream = ExtResource("ea_sc_good_talk")
 ClipName = "sc_good_talk"
+Residency = 2
 metadata/_custom_type_script = "uid://cgk0vce50p3ph"
 
 [sub_resource type="Resource" id="Clip_sc_purpose"]
 script = ExtResource("2_onvmd")
 Stream = ExtResource("ea_sc_purpose")
 ClipName = "sc_purpose"
+Residency = 2
 metadata/_custom_type_script = "uid://cgk0vce50p3ph"
 
 [sub_resource type="Resource" id="Clip_sc_thinks_better"]
 script = ExtResource("2_onvmd")
 Stream = ExtResource("ea_sc_thinks_better")
 ClipName = "sc_thinks_better"
+Residency = 2
 metadata/_custom_type_script = "uid://cgk0vce50p3ph"
 
 [sub_resource type="Resource" id="Clip_sc_bobbing"]
 script = ExtResource("2_onvmd")
 Stream = ExtResource("ea_sc_bobbing")
 ClipName = "sc_bobbing"
+Residency = 2
 metadata/_custom_type_script = "uid://cgk0vce50p3ph"
 
 [sub_resource type="Resource" id="Clip_ck_part"]
 script = ExtResource("2_onvmd")
 Stream = ExtResource("ea_ck_part")
 ClipName = "ck_part"
+Residency = 2
 metadata/_custom_type_script = "uid://cgk0vce50p3ph"
 
 [sub_resource type="Resource" id="Clip_ck_always"]
 script = ExtResource("2_onvmd")
 Stream = ExtResource("ea_ck_always")
 ClipName = "ck_always"
+Residency = 2
 metadata/_custom_type_script = "uid://cgk0vce50p3ph"
 
 [sub_resource type="Resource" id="Clip_ck_why_dont"]
 script = ExtResource("2_onvmd")
 Stream = ExtResource("ea_ck_why_dont")
 ClipName = "ck_why_dont"
+Residency = 2
 metadata/_custom_type_script = "uid://cgk0vce50p3ph"
 
 [sub_resource type="Resource" id="Clip_ck_why_spin"]
 script = ExtResource("2_onvmd")
 Stream = ExtResource("ea_ck_why_spin")
 ClipName = "ck_why_spin"
+Residency = 2
 metadata/_custom_type_script = "uid://cgk0vce50p3ph"
 
 [sub_resource type="ArrayMesh" id="ArrayMesh_tdg64"]

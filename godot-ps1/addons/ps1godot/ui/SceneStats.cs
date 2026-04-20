@@ -151,13 +151,19 @@ public static class SceneStats
     // a 16-byte block). We derive samples from the AudioStreamWav's raw
     // data length; the mix() stage in the real exporter may downsample,
     // but this is close enough to flag "over budget" before export.
+    //
+    // Only Gameplay-residency clips count — MenuOnly and LoadOnDemand
+    // clips aren't expected to coexist with gameplay SPU state. Tracks
+    // Phase 2.5 REF-GAP-9.
     private static long EstimateSpuBytes(PS1Scene scene)
     {
         if (scene.AudioClips == null) return 0;
         long total = 0;
         foreach (var clip in scene.AudioClips)
         {
-            if (clip?.Stream is not AudioStreamWav wav) continue;
+            if (clip == null) continue;
+            if (clip.Residency != PS1AudioClipResidency.Gameplay) continue;
+            if (clip.Stream is not AudioStreamWav wav) continue;
             int bytesPerSample = wav.Format switch
             {
                 AudioStreamWav.FormatEnum.Format8Bits => 1,

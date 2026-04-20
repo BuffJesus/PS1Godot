@@ -176,7 +176,7 @@ public partial class PS1GodotDock : VBoxContainer
             stats.VramEstimateBytes, SceneStats.VramBudgetBytes);
 
         _spuRow.Show(
-            $"SPU  {FormatKb(stats.SpuEstimateBytes)} / {FormatKb(SceneStats.SpuBudgetBytes)}",
+            $"SPU  {FormatKb(stats.SpuEstimateBytes)} / {FormatKb(SceneStats.SpuBudgetBytes)}  (gameplay-resident)",
             stats.SpuEstimateBytes, SceneStats.SpuBudgetBytes);
     }
 

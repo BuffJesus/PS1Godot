@@ -2,6 +2,25 @@ using Godot;
 
 namespace PS1Godot;
 
+// When this clip is expected to live in SPU RAM. Only `Gameplay` clips
+// count against the scene's SPU budget — MenuOnly and LoadOnDemand
+// clips are either resident during a menu state or streamed/loaded on
+// trigger. Tracks Phase 2.5 REF-GAP-9 ("per-area SPU accounting") in
+// the roadmap. For now the flag is advisory: all clips still ship in
+// the initial .spu blob, but the dock's SPU bar subtracts non-resident
+// clips so the author sees the budget they'd have once streaming ships.
+public enum PS1AudioClipResidency
+{
+    // Always resident — sound effects, looping music, ambient beds.
+    Gameplay = 0,
+    // Only resident while a menu/pause canvas is active. Freed
+    // otherwise. Good for menu confirm/cancel SFX.
+    MenuOnly = 1,
+    // Streamed from disc (XA/CDDA) or loaded on explicit trigger.
+    // Good for long dialog that's rare enough to not need RAM residency.
+    LoadOnDemand = 2,
+}
+
 // Authored PS1 audio clip. Points at an imported Godot AudioStreamWav; at
 // export time we resample/downmix if needed, encode to PSX SPU ADPCM, and
 // stuff the bytes in the splashpack's .spu sidecar file.
@@ -30,4 +49,11 @@ public partial class PS1AudioClip : Resource
     // sampleRepeatAddr register; loop points are encoded in the ADPCM stream's
     // final block flags byte.
     [Export] public bool Loop { get; set; } = false;
+
+    // How aggressively this clip is kept in SPU RAM. Affects only the dock's
+    // SPU budget display for now; streaming / on-demand loading lands with
+    // Phase 2.5. Defaults to Gameplay for backwards compatibility — mark
+    // event-triggered dialog and menu-specific SFX explicitly to reclaim
+    // the budget.
+    [Export] public PS1AudioClipResidency Residency { get; set; } = PS1AudioClipResidency.Gameplay;
 }
