@@ -1,10 +1,10 @@
 -- Demo "main" script attached to the green Cube. Drives:
 --   - HUD tick counter
---   - Intro cutscene narration (auto-advancing system voice text in
---     sync with the PS1AudioEvents on the cutscene)
---   - Multi-line dialog sequences on Triangle interaction matching
---     the Portal-style script
---   - Idle meta line (gated to fire only after the cutscene ends)
+--   - Intro cutscene narration: text + audio co-fired from Lua so they
+--     are perfectly synced regardless of game framerate
+--   - Multi-line auto-advancing dialog sequences on Triangle press
+--   - Two-beat idle meta line, gated to fire only after the cutscene
+--     ends and only when the player is genuinely standing still
 
 local tick = 0
 
@@ -13,60 +13,58 @@ local hudCanvas, tickCounterEl = -1, -1
 local dialogCanvas, dialogBodyEl = -1, -1
 local sysVoiceCanvas, sysVoiceText = -1, -1
 
--- Cutscene-frame-based timing for narration. Increments only while
--- Cutscene.IsPlaying() returns true so the text reveals stay in sync
--- with the audio events on the cutscene regardless of game framerate.
+-- ── Narration (system voice during intro cutscene) ──
+-- Drives a Lua-side cutscene-frame counter (incremented per onUpdate
+-- while Cutscene.IsPlaying() returns true) so reveals only happen
+-- during the cutscene. Each entry fires text + audio together.
 local cutsceneFrame = 0
 local narrationIdx = 1
 local cutsceneRanThisSession = false
 local narrationHidden = false
-
--- Five system-voice text reveals matched to the audio event frames on
--- IntroCutscene (frames 5/60/100/150/200). Text shows just before
--- audio fires so the subtitle leads the voice slightly.
 local narration = {
-    { 5,   "Welcome to the Interactive Demonstration Environment(TM)." },
-    { 60,  "Please do not be alarmed by the cube." },
-    { 100, "It is perfectly stable." },
-    { 150, "The other cube is also intentional." },
-    { 200, "We think." },
+    { 5,   "Welcome to the Interactive Demonstration Environment(TM).", "system_welcome"          },
+    { 130, "Please do not be alarmed by the cube.",                     "system_not_alarmed"      },
+    { 220, "It is perfectly stable.",                                   "system_perfectly_stable" },
+    { 320, "The other cube is also intentional.",                       "system_other_cube"       },
+    { 420, "We think.",                                                 "system_we_think"         },
 }
 
--- Dialog sequences, one per interaction. Each line stays for `dur`
--- frames before auto-advancing. Sequence ends → dialog hides.
---   Press 1: 3-line first conversation.
---   Press 2: "Okay, good talk." (then dialog disappears).
---   Press 3+: cycle three extras one per press.
+-- ── Green cube dialog sequences ──
+-- Press 1: full first conversation (3 auto-advancing lines)
+-- Press 2: "Okay, good talk." (then dialog hides)
+-- Press 3+: cycles three extras one per press
+-- Durations are in onUpdate ticks (~60 fps), longer than the audio so
+-- there's a beat of "text held" silence after each line plays.
 local INTERACTIONS = {
     {
-        { text = "Hey.",                                              clip = "sc_hey",        dur = 60  },
-        { text = "...You're not supposed to be here yet.",            clip = "sc_not_yet",    dur = 110 },
-        { text = "Did the camera finish moving? It never tells me.", clip = "sc_camera",     dur = 130 },
+        { text = "Hey.",                                              clip = "sc_hey",        dur = 110 },
+        { text = "...You're not supposed to be here yet.",            clip = "sc_not_yet",    dur = 200 },
+        { text = "Did the camera finish moving? It never tells me.", clip = "sc_camera",     dur = 240 },
     },
     {
-        { text = "Okay, good talk.",                                  clip = "sc_good_talk",  dur = 90  },
+        { text = "Okay, good talk.",                                  clip = "sc_good_talk",  dur = 160 },
     },
 }
 local EXTRAS = {
-    { text = "I spin because it gives me purpose.",                   clip = "sc_purpose",        dur = 110 },
-    { text = "The checkered one thinks it's better than me.",         clip = "sc_thinks_better",  dur = 120 },
-    { text = "Don't trust anything that bobs.",                       clip = "sc_bobbing",        dur = 100 },
+    { text = "I spin because it gives me purpose.",                   clip = "sc_purpose",        dur = 200 },
+    { text = "The checkered one thinks it's better than me.",         clip = "sc_thinks_better",  dur = 220 },
+    { text = "Don't trust anything that bobs.",                       clip = "sc_bobbing",        dur = 180 },
 }
 
--- Active dialog playback state.
-local activeSeq = nil
-local activeIdx = 0
-local activeFrame = 0
-local interactionCount = 0
-local extraIdx = 0
+local activeSeq, activeIdx, activeFrame = nil, 0, 0
+local interactionCount, extraIdx = 0, 0
 
--- Idle detection. Watches Player.GetPosition once gameplay begins
--- (cutscene fully done). Resets when the player moves. Threshold ≈ 5s
--- of stillness.
+-- ── Idle detection ──
+-- Two-beat sequence: "You appear to be standing still." → pause →
+-- "This is either intentional... or deeply concerning." → hold → hide.
+-- Gated behind IsPlaying so it can never fire during the cutscene.
 local lastX, lastZ = 0, 0
 local idleFrames = 0
-local idleShown = false
-local IDLE_THRESHOLD = 150
+local idleStep = 0       -- 0 = idle counting, 1 = beat-1 shown, 2 = beat-2 shown
+local idleStepFrame = 0
+local IDLE_THRESHOLD   = 300   -- ~5s at 60fps onUpdate
+local IDLE_BEAT_PAUSE  = 180   -- ~3s gap between the two voice beats
+local IDLE_HOLD        = 240   -- hold beat-2 visible ~4s before hiding
 
 local function showLine(line)
     if dialogBodyEl >= 0 then
@@ -74,6 +72,27 @@ local function showLine(line)
         UI.SetCanvasVisible(dialogCanvas, true)
     end
     Audio.Play(line.clip, 100, 64)
+end
+
+local function showSysVoice(text, clip)
+    if sysVoiceCanvas >= 0 and sysVoiceText >= 0 then
+        UI.SetText(sysVoiceText, text)
+        UI.SetCanvasVisible(sysVoiceCanvas, true)
+    end
+    if clip ~= nil then Audio.Play(clip, 100, 64) end
+end
+
+local function hideSysVoice()
+    if sysVoiceCanvas >= 0 then
+        UI.SetCanvasVisible(sysVoiceCanvas, false)
+    end
+end
+
+local function resetIdle()
+    if idleStep > 0 then hideSysVoice() end
+    idleFrames = 0
+    idleStep = 0
+    idleStepFrame = 0
 end
 
 function onCreate(self)
@@ -103,24 +122,18 @@ function onUpdate(self, dt)
         UI.SetText(tickCounterEl, "tick=" .. tick)
     end
 
-    -- ── Cutscene narration text reveals ──
-    -- Drive cutsceneFrame from IsPlaying so text aligns with audio
-    -- events regardless of framerate. When the cutscene ends, hide
-    -- the system voice canvas once.
+    -- ── Cutscene narration: text + audio co-fired ──
     local playing = Cutscene.IsPlaying()
     if playing then
         cutsceneRanThisSession = true
         cutsceneFrame = cutsceneFrame + 1
-        if sysVoiceCanvas >= 0 and narrationIdx <= #narration
-                and cutsceneFrame >= narration[narrationIdx][1] then
-            UI.SetText(sysVoiceText, narration[narrationIdx][2])
-            UI.SetCanvasVisible(sysVoiceCanvas, true)
+        if narrationIdx <= #narration and cutsceneFrame >= narration[narrationIdx][1] then
+            local entry = narration[narrationIdx]
+            showSysVoice(entry[2], entry[3])
             narrationIdx = narrationIdx + 1
         end
     elseif cutsceneRanThisSession and not narrationHidden then
-        if sysVoiceCanvas >= 0 then
-            UI.SetCanvasVisible(sysVoiceCanvas, false)
-        end
+        hideSysVoice()
         narrationHidden = true
     end
 
@@ -140,25 +153,34 @@ function onUpdate(self, dt)
         end
     end
 
-    -- ── Idle detection ──
-    -- Never fires while the cutscene is playing or while a dialog
-    -- sequence is mid-flight (player would be reading not idle).
-    if not playing and activeSeq == nil and sysVoiceCanvas >= 0 then
+    -- ── Idle detection (only after cutscene + outside dialog) ──
+    if not playing and activeSeq == nil and sysVoiceCanvas >= 0
+            and cutsceneRanThisSession then
         local p = Player.GetPosition()
         local moved = (p.x ~= lastX) or (p.z ~= lastZ)
         if moved then
-            idleFrames = 0
-            if idleShown then
-                idleShown = false
-                UI.SetCanvasVisible(sysVoiceCanvas, false)
-            end
-        elseif cutsceneRanThisSession then
+            resetIdle()
+        elseif idleStep == 0 then
             idleFrames = idleFrames + 1
-            if not idleShown and idleFrames > IDLE_THRESHOLD then
-                UI.SetText(sysVoiceText, "You appear to be standing still. This is either intentional... or deeply concerning.")
-                UI.SetCanvasVisible(sysVoiceCanvas, true)
-                Audio.Play("system_idle_detected", 100, 64)
-                idleShown = true
+            if idleFrames > IDLE_THRESHOLD then
+                showSysVoice("You appear to be standing still.", "system_idle_detected")
+                idleStep = 1
+                idleStepFrame = 0
+            end
+        elseif idleStep == 1 then
+            idleStepFrame = idleStepFrame + 1
+            if idleStepFrame > IDLE_BEAT_PAUSE then
+                showSysVoice("This is either intentional... or deeply concerning.", "system_deeply_concerning")
+                idleStep = 2
+                idleStepFrame = 0
+            end
+        elseif idleStep == 2 then
+            idleStepFrame = idleStepFrame + 1
+            if idleStepFrame > IDLE_HOLD then
+                hideSysVoice()
+                -- Stay in step 2 but with canvas hidden — won't re-fire
+                -- until the player moves and resetIdle() runs.
+                idleStep = 3
             end
         end
         lastX, lastZ = p.x, p.z

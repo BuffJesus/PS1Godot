@@ -429,30 +429,9 @@ script = ExtResource("13_kf")
 Frame = 239
 Interp = 4
 
-[node name="VE_welcome" type="Node" parent="IntroCutscene"]
-script = ExtResource("16_ae")
-Frame = 5
-ClipName = "system_welcome"
-
-[node name="VE_not_alarmed" type="Node" parent="IntroCutscene"]
-script = ExtResource("16_ae")
-Frame = 60
-ClipName = "system_not_alarmed"
-
-[node name="VE_stable" type="Node" parent="IntroCutscene"]
-script = ExtResource("16_ae")
-Frame = 100
-ClipName = "system_perfectly_stable"
-
-[node name="VE_other_cube" type="Node" parent="IntroCutscene"]
-script = ExtResource("16_ae")
-Frame = 150
-ClipName = "system_other_cube"
-
-[node name="VE_we_think" type="Node" parent="IntroCutscene"]
-script = ExtResource("16_ae")
-Frame = 200
-ClipName = "system_we_think"
+# Narration audio + text fire together from test_logger.lua so they're
+# guaranteed in sync. PS1AudioEvent nodes were removed because runtime
+# cutscene-frame and Lua onUpdate-tick advance at different rates.
 
 [node name="PS1Player" type="Node3D" parent="." unique_id=1681451007]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 8)
