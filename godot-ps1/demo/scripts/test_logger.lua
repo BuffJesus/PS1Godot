@@ -156,6 +156,15 @@ function onUpdate(self, dt)
         UI.SetText(tickCounterEl, "tick=" .. tick)
     end
 
+    -- Auto-hide delayed system_voice messages. Trigger scripts (e.g.,
+    -- checkered_ambient) that want to show a follow-up message then
+    -- fade it can't poll time themselves — they set the global
+    -- `sysVoiceHideAtFrame` and we handle the hide on their behalf.
+    if sysVoiceHideAtFrame ~= nil and Timer.GetFrameCount() >= sysVoiceHideAtFrame then
+        hideSysVoice()
+        sysVoiceHideAtFrame = nil
+    end
+
     -- Press Select to toggle first/third person. Demo only — a real game
     -- would put this behind an Options menu + persisted preference.
     if Input.IsPressed(Input.SELECT) then

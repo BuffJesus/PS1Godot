@@ -20,11 +20,17 @@ end
 function onTriggerExit(idx)
     if sysVoiceCanvas >= 0 then
         -- After spending a few seconds inside, show the follow-up
-        -- before hiding. Otherwise just hide.
+        -- before hiding. Otherwise just hide immediately.
         local stayed = Timer.GetFrameCount() - enterTick
         if stayed > 90 and sysVoiceText >= 0 then
             UI.SetText(sysVoiceText, "It is not part of the test.")
             Audio.Play("system_not_part_of_test", 100, 64)
+            -- Ask test_logger's onUpdate to hide the canvas after ~3 s.
+            -- Trigger scripts don't get onUpdate callbacks, so we need a
+            -- collaborator that does. Shared global sentinel: stored
+            -- frame number to hide at. test_logger hides + clears when
+            -- Timer.GetFrameCount() reaches it.
+            sysVoiceHideAtFrame = Timer.GetFrameCount() + 180
         else
             UI.SetCanvasVisible(sysVoiceCanvas, false)
         end
