@@ -65,7 +65,13 @@ public static class SkinnedTestBuilder
         // Build a cylinder lying along +Y. Each vertex:
         //   - position: (cos θ · r, y, sin θ · r)
         //   - normal: (cos θ, 0, sin θ) — outward radial
-        //   - bone weights: linearly blend between Root (y=0) and Tip (y=H)
+        //   - bone weights: steep ramp — ring 0 pinned to Root, rings 1+
+        //     fully on Tip. Because PSX runtime does per-vertex RIGID
+        //     skinning (one bone per vertex, no weight blend), a slow
+        //     linear ramp would assign 3/5 rings to Root and produce a
+        //     "top half swings, bottom sits" effect that authors tend to
+        //     read as a bug. Biasing the ramp steep keeps only the base
+        //     anchored and lets 80 % of the cylinder animate.
         //
         // Vertex bones: slot 0 = Root, slot 1 = Tip (other slots unused,
         // weight 0). This keeps bone indices stable regardless of ring.
@@ -73,8 +79,9 @@ public static class SkinnedTestBuilder
         {
             float t = (float)r / (Rings - 1);
             float y = t * Height;
-            float weightTip = t;
-            float weightRoot = 1f - t;
+            // Root's weight fades out by t = 0.25 (i.e., ring 1).
+            float weightRoot = Mathf.Max(0f, 1f - 4f * t);
+            float weightTip  = 1f - weightRoot;
 
             for (int s = 0; s < Sides; s++)
             {
