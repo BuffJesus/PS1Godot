@@ -155,7 +155,10 @@ function onUpdate(self, dt)
     -- right 2 → fp10 = N * 1024 = N quarter-turns).
     if playerMesh ~= nil then
         local p = Player.GetPosition()
-        Entity.SetPosition(playerMesh, p.x, p.y, p.z)
+        -- Entity.SetPosition takes a Vec3 table as 2nd arg, NOT 3 numbers.
+        -- Runtime check: if !lua.isTable(2) return 0; — silent no-op
+        -- otherwise (which made the mesh stay glued to (0,0,0)).
+        Entity.SetPosition(playerMesh, p)
 
         local dx = p.x - prevPX
         local dz = p.z - prevPZ
