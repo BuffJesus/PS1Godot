@@ -18,6 +18,8 @@ local sysVoiceCanvas, sysVoiceText = -1, -1
 -- and this whole path is a no-op. Static mesh only for now — walking
 -- animation needs bullet 11 (skinned meshes).
 local playerMesh = nil
+local prevPX, prevPZ = 0, 0
+local facingYaw = 0  -- last non-stationary direction, persists when idle
 
 -- ── Narration (system voice during intro cutscene) ──
 -- Drives a Lua-side cutscene-frame counter (incremented per onUpdate
@@ -143,10 +145,40 @@ function onUpdate(self, dt)
         UI.SetText(tickCounterEl, "tick=" .. tick)
     end
 
-    -- Track runtime player position onto the Player mesh if one exists.
+    -- Track runtime player position + facing onto the Player mesh.
+    -- Facing is quantized to 8 compass directions so the static mesh
+    -- snaps to a plausible angle without per-frame jitter. Held when
+    -- the player stops moving (prevents snap-back to 0°).
     if playerMesh ~= nil then
         local p = Player.GetPosition()
         Entity.SetPosition(playerMesh, p.x, p.y, p.z)
+
+        local dx = p.x - prevPX
+        local dz = p.z - prevPZ
+        -- Deadzone avoids re-triggering rotation from float drift.
+        if (dx * dx + dz * dz) > 0.00001 then
+            local adx, adz = dx, dz
+            if adx < 0 then adx = -adx end
+            if adz < 0 then adz = -adz end
+            -- Entity.SetRotationY takes fp12 where 4.0 = full turn
+            -- (fp12 → fp10 shift inside the runtime). PSX uses Y-down
+            -- so these are "viewed from above" yaw values:
+            --   0.0 = face -Z   1.0 = face +X (right)   2.0 = face +Z
+            --   3.0 = face -X   half-steps = diagonals
+            if adz > adx * 2.4 then
+                facingYaw = (dz > 0) and 2.0 or 0.0
+            elseif adx > adz * 2.4 then
+                facingYaw = (dx > 0) and 1.0 or 3.0
+            else
+                if     dx > 0 and dz < 0 then facingYaw = 0.5
+                elseif dx > 0 and dz > 0 then facingYaw = 1.5
+                elseif dx < 0 and dz > 0 then facingYaw = 2.5
+                else                          facingYaw = 3.5
+                end
+            end
+            Entity.SetRotationY(playerMesh, facingYaw)
+        end
+        prevPX, prevPZ = p.x, p.z
     end
 
     -- ── Cutscene narration: text + audio co-fired ──
