@@ -6,20 +6,32 @@ namespace PS1Godot.Tools;
 
 // One-click test asset for Phase 2 bullet 11 (skinned meshes).
 // Drops a self-contained bent-cylinder rig into the currently edited
-// scene: 2-bone Skeleton3D, a cylinder mesh with per-vertex weights
-// blending smoothly between the two bones, and an AnimationPlayer with
-// a "wave" clip that rotates the tip bone 30° on Z back-and-forth.
+// scene: a chain of Rings bones along the cylinder's length, a
+// cylinder mesh whose vertex rings are 1:1 rigidly weighted to their
+// matching bone, and an AnimationPlayer with a "wave" clip that
+// rotates each non-root bone a small amount on Z. Rotations stack
+// along the chain, so bone N's global rotation is N × per-bone-delta
+// — a five-bone chain at 7.5° per bone approximates a 30° bow at the
+// tip with four visible inflection points along the way.
 //
-// Wrapping MeshInstance3D is a PS1SkinnedMesh so the exporter picks it
-// up through the normal path. Once stage 2 (clip baking) lands, the
-// runtime will actually deform the mesh per the animation; today
-// stage 1 emits the skin data and renders at bind pose.
+// Why a chain instead of a smooth weighted rig: PSX runtime does
+// per-vertex RIGID skinning (one bone per vertex, no weight blend),
+// so Godot's smooth bow curve can't be reproduced with 2 bones —
+// you'd see a single rigid hinge at the bone boundary. More bones =
+// more discrete steps = closer to smooth.
+//
+// Wrapping MeshInstance3D is a PS1SkinnedMesh so the exporter picks
+// it up through the normal path.
 public static class SkinnedTestBuilder
 {
-    private const int    Rings   = 5;     // vertex ring count along the cylinder length
-    private const int    Sides   = 8;     // vertices per ring
-    private const float  Height  = 2.0f;  // cylinder length (meters)
-    private const float  Radius  = 0.25f;
+    private const int    Rings              = 5;     // vertex ring count along the cylinder length
+    private const int    Sides              = 8;     // vertices per ring
+    private const float  Height             = 2.0f;  // cylinder length (meters)
+    private const float  Radius             = 0.25f;
+    // Bone N's local rotation at the wave peak. Stacked along the
+    // chain, ring 4's global rotation is 4 × PeakDeltaDeg = 30°.
+    private const float  PeakDeltaDeg       = 7.5f;
+    private const int    BoneCount          = Rings; // one bone per ring
 
     public static Node3D Build(string nodeName = "SkinnedTest")
     {
@@ -41,19 +53,25 @@ public static class SkinnedTestBuilder
     {
         var skel = new Skeleton3D { Name = "Skeleton3D" };
 
-        // Bone 0: Root — sits at the cylinder base.
-        int boneRoot = skel.AddBone("Root");
-        skel.SetBoneRest(boneRoot, Transform3D.Identity);
-        skel.SetBonePose(boneRoot, Transform3D.Identity);
-
-        // Bone 1: Tip — anchored at cylinder top. Rest is relative to
-        // parent, so translating up by Height puts Tip at world Y=Height.
-        int boneTip = skel.AddBone("Tip");
-        skel.SetBoneParent(boneTip, boneRoot);
-        var tipRest = new Transform3D(Basis.Identity, new Vector3(0, Height, 0));
-        skel.SetBoneRest(boneTip, tipRest);
-        skel.SetBonePose(boneTip, tipRest);
-
+        // Chain of BoneCount bones up the cylinder. Bone 0 is the root
+        // at the base; bones 1..N-1 are each parented to the previous
+        // with a local offset of one "ring spacing" upward. When bone K
+        // rotates locally, rotation propagates to every descendant —
+        // this is what stacks the per-bone delta into a bow curve.
+        float ringSpacing = Height / (Rings - 1);
+        int prev = skel.AddBone("Ring0");
+        skel.SetBoneRest(prev, Transform3D.Identity);
+        skel.SetBonePose(prev, Transform3D.Identity);
+        for (int b = 1; b < BoneCount; b++)
+        {
+            int bone = skel.AddBone($"Ring{b}");
+            skel.SetBoneParent(bone, prev);
+            // Local rest: just an offset along +Y, no rotation.
+            var rest = new Transform3D(Basis.Identity, new Vector3(0, ringSpacing, 0));
+            skel.SetBoneRest(bone, rest);
+            skel.SetBonePose(bone, rest);
+            prev = bone;
+        }
         return skel;
     }
 
@@ -62,26 +80,15 @@ public static class SkinnedTestBuilder
         var st = new SurfaceTool();
         st.Begin(Mesh.PrimitiveType.Triangles);
 
-        // Build a cylinder lying along +Y. Each vertex:
-        //   - position: (cos θ · r, y, sin θ · r)
-        //   - normal: (cos θ, 0, sin θ) — outward radial
-        //   - bone weights: steep ramp — ring 0 pinned to Root, rings 1+
-        //     fully on Tip. Because PSX runtime does per-vertex RIGID
-        //     skinning (one bone per vertex, no weight blend), a slow
-        //     linear ramp would assign 3/5 rings to Root and produce a
-        //     "top half swings, bottom sits" effect that authors tend to
-        //     read as a bug. Biasing the ramp steep keeps only the base
-        //     anchored and lets 80 % of the cylinder animate.
-        //
-        // Vertex bones: slot 0 = Root, slot 1 = Tip (other slots unused,
-        // weight 0). This keeps bone indices stable regardless of ring.
+        // Build a cylinder lying along +Y. Each vertex ring is pinned
+        // 100 % to its matching bone — ring 0 → bone 0, ring 1 → bone 1,
+        // etc. On PSX that means each ring is rigid around its own bone
+        // pivot; because the bones are a CHAIN with incremental
+        // rotations, the overall mesh still forms a smooth bow.
         for (int r = 0; r < Rings; r++)
         {
             float t = (float)r / (Rings - 1);
             float y = t * Height;
-            // Root's weight fades out by t = 0.25 (i.e., ring 1).
-            float weightRoot = Mathf.Max(0f, 1f - 4f * t);
-            float weightTip  = 1f - weightRoot;
 
             for (int s = 0; s < Sides; s++)
             {
@@ -91,8 +98,9 @@ public static class SkinnedTestBuilder
 
                 st.SetNormal(new Vector3(Mathf.Cos(theta), 0, Mathf.Sin(theta)));
                 st.SetUV(new Vector2((float)s / Sides, t));
-                st.SetBones(new[] { 0, 1, 0, 0 });
-                st.SetWeights(new[] { weightRoot, weightTip, 0f, 0f });
+                // Slot 0 = this ring's bone, weight 1; other slots unused.
+                st.SetBones(new[] { r, 0, 0, 0 });
+                st.SetWeights(new[] { 1f, 0f, 0f, 0f });
                 st.AddVertex(new Vector3(x, y, z));
             }
         }
@@ -123,12 +131,18 @@ public static class SkinnedTestBuilder
 
         var mesh = st.Commit();
 
-        // Skin: one bind per bone, inverse of its rest pose so the
-        // renderer's vertex-space → bone-space → deformed vertex math
-        // reduces to identity when the pose equals the rest.
+        // Skin: one bind per bone, inverse of that bone's rest-world
+        // transform. Because the chain is purely Y-translations, bone K's
+        // rest world position is (0, K × ringSpacing, 0); bind-inverse
+        // is translate(0, -K × ringSpacing, 0). At bind pose,
+        // GetBoneGlobalPose(K) * GetBindPose(K) == Identity, so the
+        // exporter bake produces zero-motion matrices at the rest frame.
+        float ringSpacing = Height / (Rings - 1);
         var skin = new Skin();
-        skin.AddBind(0, Transform3D.Identity);                                           // Root: rest is identity.
-        skin.AddBind(1, new Transform3D(Basis.Identity, new Vector3(0, -Height, 0)));    // Tip: inverse of its rest offset.
+        for (int b = 0; b < BoneCount; b++)
+        {
+            skin.AddBind(b, new Transform3D(Basis.Identity, new Vector3(0, -b * ringSpacing, 0)));
+        }
 
         // PS1SkinnedMesh inherits from PS1MeshInstance (and thus from
         // MeshInstance3D). New() instantiates the C# type so the
@@ -164,18 +178,23 @@ public static class SkinnedTestBuilder
     {
         var anim = new Animation { Length = 1.0f, LoopMode = Animation.LoopModeEnum.Linear };
 
-        // One rotation track on the Tip bone. AnimationPlayer.RootNode
-        // defaults to NodePath("..") — the parent, i.e. SkinnedTest —
-        // so track paths are resolved from there. Skeleton3D is a
-        // sibling of AnimationPlayer under SkinnedTest, so the correct
-        // path is just "Skeleton3D:Tip" (no leading `../`).
-        // 3 keyframes: rest at 0 s and 1 s, 30° bend at 0.5 s around Z.
-        int track = anim.AddTrack(Animation.TrackType.Rotation3D);
-        anim.TrackSetPath(track, new NodePath("Skeleton3D:Tip"));
-        var bend = new Quaternion(new Vector3(0, 0, 1), Mathf.Pi / 6f);
-        anim.RotationTrackInsertKey(track, 0.0, Quaternion.Identity);
-        anim.RotationTrackInsertKey(track, 0.5, bend);
-        anim.RotationTrackInsertKey(track, 1.0, Quaternion.Identity);
+        // One rotation track per non-root bone. Each rotates by the same
+        // local delta, and because the bones are a chain the cumulative
+        // global rotation grows along the cylinder — ring N's world
+        // rotation is N × PeakDeltaDeg at t = 0.5, then back to identity
+        // at t = 1.0. AnimationPlayer.RootNode defaults to NodePath(".."),
+        // which is the SkinnedTest node, so bone track paths look like
+        // "Skeleton3D:Ring1", "Skeleton3D:Ring2", etc.
+        float peakRad = Mathf.DegToRad(PeakDeltaDeg);
+        var bend = new Quaternion(new Vector3(0, 0, 1), peakRad);
+        for (int b = 1; b < BoneCount; b++)
+        {
+            int track = anim.AddTrack(Animation.TrackType.Rotation3D);
+            anim.TrackSetPath(track, new NodePath($"Skeleton3D:Ring{b}"));
+            anim.RotationTrackInsertKey(track, 0.0, Quaternion.Identity);
+            anim.RotationTrackInsertKey(track, 0.5, bend);
+            anim.RotationTrackInsertKey(track, 1.0, Quaternion.Identity);
+        }
 
         var lib = new AnimationLibrary();
         lib.AddAnimation("wave", anim);
