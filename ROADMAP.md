@@ -505,6 +505,84 @@ Canvas assets export; runtime mutation doesn't.
 - [ ] `UI.Show/Hide(canvas)`, `UI.SetImage(canvas, slot, atlasIdx)` for
       animated icons.
 
+### UI authoring experience *(Phase 3 polish, highest-leverage items)*
+
+The current authoring flow (PS1UICanvas + PS1UIElement with absolute
+X/Y/W/H numbers) works but the feedback loop is "edit numbers → run
+on PSX → see what's wrong → guess → repeat." Authors who aren't used
+to eyeballing 320×240 pixel positions bounce off this hard. The items
+below follow the UI/UX plan tenets (intuitive, non-intimidating,
+modern, beautiful) — see `docs/ui-ux-plan.md` § UI authoring.
+
+- [ ] **WYSIWYG preview in Godot's 2D viewport.** When a PS1UICanvas
+      is selected, render its elements at 320×240 reference scale with
+      a bordered frame showing the PS1 screen. Drag handles for
+      X/Y/W/H; inspector updates live. Uses Godot's existing 2D tools
+      — elements are rendered by a custom `_Draw()` in the canvas
+      node during editor mode.
+- [ ] **Anchors + alignment on PS1UIElement.** `Anchor = TopLeft |
+      TopCenter | TopRight | Center | BottomLeft | BottomCenter |
+      BottomRight` — computed at export time so the binary contains
+      absolute X/Y as today. Plus text alignment (left / center /
+      right). Replaces the "count pixels, hope for the best"
+      workflow with one-click placement against the PS1 screen edges.
+- [ ] **Auto-wrap text on Width.** Element Width already exists but
+      isn't used as a wrap column. Exporter measures each word
+      against the font's `advanceWidths`, inserts `\n` at word
+      boundaries to fit. Authors type a paragraph; exporter handles
+      layout. Keeps the explicit `\n` feature for when authors want
+      dramatic breaks.
+- [ ] **Dialog tree editor (custom EditorPlugin dock).** Node-based
+      graph for branching dialog. Each node: text + choices + optional
+      conditions (`QuestFlag.Has("met_NPC")`) + optional side-effects
+      (`QuestFlag.Set(...)`). Arrows connect choices to next nodes.
+      Saves as a .tres resource; exporter compiles to a dialog
+      bytecode block in the splashpack. Runtime API:
+      `Dialog.Start(treeName)`, `Dialog.Choose(choiceIdx)`,
+      `onDialogEnd(treeName)`. Replaces every game's hand-rolled
+      state machine over `UI.SetText + Input.IsPressed`.
+- [ ] **PS1 UI prefab templates.** Ship common building blocks
+      (`addons/ps1godot/ui_templates/`):
+        - `dialog_box.tscn` — 9-patch border, text area, optional
+          portrait slot, optional name-tag slot.
+        - `menu_list.tscn` — vertical list of selectable items, cursor
+          sprite, input-driven highlight.
+        - `hud_bar.tscn` — labelled progress bar for HP/MP/stamina.
+        - `toast.tscn` — floating auto-expiring notification.
+      Authors drop one onto a canvas, tweak strings, done.
+- [ ] **PS1 UI theme resource (`PS1Theme.tres`).** Central colors
+      (accent / text / shadow), default text alignment, reference
+      font. Each element opts in (checkbox `UseTheme`). Change theme
+      once → every element restyles. Supports "options → dark mode"
+      type features.
+- [ ] **9-patch border UI element.** A new `PS1UIElementType.Border`
+      that takes corner + edge texture references and renders a
+      scalable panel. Dialog boxes + HUD frames stop requiring manual
+      stacking of Box elements.
+- [ ] **Higher-level Lua helpers.** Today's `UI.SetText` +
+      `UI.SetCanvasVisible` + `Input.IsPressed` dance gets wrapped
+      into:
+        - `Dialog.Show({ text = "...", portrait = "narrator",
+          choices = { "Yes", "No" } })` → returns choice index.
+        - `Toast.Show(text, durationSeconds)` → auto-hide.
+        - `Menu.Pick(items, { cursor = "pointer" })` → blocks until
+          a pick (cooperating with Scene.SetPaused).
+      All built on the existing primitives but with dialog/menu
+      semantics baked in.
+- [ ] **Portraits / character tags.** A `PS1UIPortrait` element type
+      pointing at an atlas region + a `name` string slot. Dialog
+      prefab auto-wires them so "who's talking" is one authored
+      reference, not per-line `UI.SetImage` bookkeeping.
+- [ ] **Live PS1-quantized preview.** Render the authored UI through
+      a shader that applies the PS1 font's exact glyph metrics,
+      15-bit color clamp, and dithering in the editor — WYSIWYG
+      matching what PSX will show pixel-for-pixel, not Godot's
+      default anti-aliased preview.
+- [ ] **Canvas residency linter.** Warn when a `Gameplay` canvas
+      references an element whose assets aren't marked gameplay-
+      resident, and vice versa. Catches "oh right, this menu icon
+      doesn't load during gameplay" at author time.
+
 ### Scene queries, tags, messaging
 
 - [ ] `GameObject.SetTag/GetTag(self, tag)` (uint16 on the struct).

@@ -146,6 +146,77 @@ Templates are `.tscn` files in `addons/ps1godot/templates/`. No code.
 PS1Lua gets Godot's syntax highlighter, autocomplete from EmmyLua stubs,
 and F1-on-a-function opens the `luaapi.md` doc page at the right anchor.
 
+### G. UI authoring surfaces *(Phase 3 polish, high leverage)*
+
+Current UI authoring (drop PS1UICanvas + PS1UIElement children, type
+absolute X/Y/W/H numbers, hit Run on PSX, squint) violates every
+tenet: it's unintuitive (no visual feedback), intimidating (pixel
+math), un-modern (numeric inspector only), un-beautiful (you only
+see the output after exporting). The items below map each tenet to
+concrete changes.
+
+**Intuitive — one obvious place per action:**
+
+- **WYSIWYG canvas editor.** Selecting a PS1UICanvas shows its
+  children drawn at 320×240 reference scale in a 2D viewport
+  overlay. The PS1 screen is a bordered rectangle; elements render
+  inside, with drag-handles for X/Y and resize-handles for W/H.
+  Inspector stays in sync.
+- **One authoring flow per element kind.** Text, Box, Image,
+  9-patch Border, Portrait — each with its own inspector shape and
+  editor gizmo. No "generic fields with conditional meaning."
+- **Dialog trees as a dedicated editor dock.** Not a prefab of
+  nodes in the scene tree — a proper graph editor similar to
+  Godot's AnimationTree. Arrows between choice nodes, conditions
+  evaluated against quest flags, inline text editing.
+
+**Non-intimidating — progressive disclosure, sensible defaults:**
+
+- **Anchors instead of pixel math.** "Top-right, 8 px inset" is
+  the right primitive; authors shouldn't hand-compute `X = 312`.
+  Default anchor is TopLeft to match existing content.
+- **Auto-wrap text.** Authors type paragraphs; the exporter
+  measures against font advance widths and wraps at word
+  boundaries. Explicit `\n` stays for dramatic breaks.
+- **Prefab dialog box / menu list / HUD bar.** Drop-in resources
+  that pre-wire text/cursor/input plumbing. Authors who just want
+  "a dialog box" shouldn't have to stack three Box elements and
+  a Text element.
+- **Lua helpers over primitives.** `Dialog.Show({ text = ... })`
+  blocks until choice; `Toast.Show(text, 2)` auto-hides. `UI.*`
+  primitives stay available for power users.
+
+**Modern — clear hierarchy, responsive feedback:**
+
+- **Live PS1-quantized preview.** Font glyph bitmaps, 15-bit
+  color clamp, dithering — rendered in the editor through a
+  matching shader. What you see is what the PSX renders, not
+  Godot's anti-aliased approximation.
+- **Element list panel.** Alongside the visual preview, a
+  reorderable list of elements (like Figma's layers panel) with
+  visibility toggles and names. Z-order = list order.
+- **Inspector hints.** Below each numeric field, show the actual
+  pixel range and a plain-language description ("0–319, horizontal
+  position on the PS1 screen"). Combines with anchors so most
+  authors never touch raw pixels.
+
+**Beautiful — coherent palette, deliberate spacing:**
+
+- **Central PS1Theme resource.** Colors, font, alignment defaults.
+  Every element can opt in. Change theme once → everything
+  restyles. Follows the same spirit as the UI/UX plan's "accent
+  red" choice — one source of truth, no palette sprawl.
+- **Icons for element kinds.** Text, Box, Image, Border each get
+  a 16 px icon in the Create Node dialog and scene tree. Visible
+  identification at a glance.
+- **Consistent padding.** Prefabs land with the same internal
+  padding / line-height as the rest of the UI, so mixing an
+  authored canvas with a prefab dialog box doesn't jar.
+
+**Out of scope here:** Runtime mutations. Those stay in the
+`UI / HUD from Lua` section of ROADMAP — dock vs. Lua API are
+different surfaces.
+
 ## Non-goals
 
 - **Custom Godot theme.** Godot users already have their own theme
