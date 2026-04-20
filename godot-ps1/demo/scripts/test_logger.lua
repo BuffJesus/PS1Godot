@@ -13,6 +13,12 @@ local hudCanvas, tickCounterEl = -1, -1
 local dialogCanvas, dialogBodyEl = -1, -1
 local sysVoiceCanvas, sysVoiceText = -1, -1
 
+-- Optional "Player" PS1MeshInstance that tracks the runtime player
+-- position each frame. If no such node exists, playerMesh stays nil
+-- and this whole path is a no-op. Static mesh only for now — walking
+-- animation needs bullet 11 (skinned meshes).
+local playerMesh = nil
+
 -- ── Narration (system voice during intro cutscene) ──
 -- Drives a Lua-side cutscene-frame counter (incremented per onUpdate
 -- while Cutscene.IsPlaying() returns true) so reveals only happen
@@ -121,6 +127,11 @@ function onCreate(self)
         sysVoiceText = UI.FindElement(sysVoiceCanvas, "vtxt")
     end
 
+    playerMesh = Entity.Find("Player")
+    if playerMesh ~= nil then
+        Debug.Log("test_logger: found Player mesh, will track runtime position")
+    end
+
     Animation.Play("bounce", { loop = true })
     Animation.Play("spin", { loop = true })
     Cutscene.Play("intro")
@@ -130,6 +141,12 @@ function onUpdate(self, dt)
     tick = tick + 1
     if tick % 30 == 0 and tickCounterEl >= 0 then
         UI.SetText(tickCounterEl, "tick=" .. tick)
+    end
+
+    -- Track runtime player position onto the Player mesh if one exists.
+    if playerMesh ~= nil then
+        local p = Player.GetPosition()
+        Entity.SetPosition(playerMesh, p.x, p.y, p.z)
     end
 
     -- ── Cutscene narration: text + audio co-fired ──
