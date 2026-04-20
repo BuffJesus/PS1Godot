@@ -68,6 +68,11 @@ public static class SceneCollector
 
         WalkAddMeshes(root, data, textureCache, luaCache);
 
+        // After every region (auto-flat + authored) has been collected,
+        // scan them for coincident edges and emit portal pairs so the
+        // runtime can walk between them.
+        StitchNavPortals(data);
+
         // Player spawn: prefer an explicit PS1Player node; fall back to the
         // first Camera3D so scenes authored before PS1Player existed keep
         // working. A Camera3D child of PS1Player supplies the initial
@@ -222,6 +227,10 @@ public static class SceneCollector
         else if (n is PS1TriggerBox tb && tb.Visible)
         {
             EmitTriggerBox(tb, data, luaCache);
+        }
+        else if (n is PS1NavRegion nav)
+        {
+            EmitAuthoredNavRegion(nav, data);
         }
         else if (n is PS1UICanvas canvas)
         {
@@ -1116,6 +1125,16 @@ public static class SceneCollector
         int fp(float godotValue) => PSXTrig.ConvertWorldToFixed12(godotValue / data.GteScaling);
         float floorY = 0.5f * (wMin.Y + wMax.Y);
 
+        // World-space verts in Godot units — consumed by the portal stitcher
+        // downstream. Match the CCW corners we emit as VertsX/VertsZ.
+        var worldVerts = new[]
+        {
+            new Vector3(wMin.X, floorY, wMin.Z),
+            new Vector3(wMax.X, floorY, wMin.Z),
+            new Vector3(wMax.X, floorY, wMax.Z),
+            new Vector3(wMin.X, floorY, wMax.Z),
+        };
+
         data.NavRegions.Add(new NavRegionRecord
         {
             VertsX = new[] { fp(wMin.X), fp(wMax.X), fp(wMax.X), fp(wMin.X) },
@@ -1123,7 +1142,244 @@ public static class SceneCollector
             PlaneA = 0,
             PlaneB = 0,
             PlaneD = fp(-floorY),  // Y-down: Godot +Y → PSX -Y
+            WorldVerts = worldVerts,
         });
+    }
+
+    // Author-drawn nav region. Transform local verts to world, CCW-check
+    // them (auto-reverse if needed), fit a plane through (X, Y, Z), and
+    // emit the PSX record.
+    internal static void EmitAuthoredNavRegion(PS1NavRegion node, SceneData data)
+    {
+        var local = node.Verts;
+        if (local == null || local.Length < 3)
+        {
+            GD.PushWarning($"[PS1Godot] PS1NavRegion '{node.Name}' has <3 verts — skipped.");
+            return;
+        }
+        if (local.Length > 8)
+        {
+            GD.PushWarning($"[PS1Godot] PS1NavRegion '{node.Name}' has {local.Length} verts — runtime cap is 8; trimming.");
+        }
+
+        int count = System.Math.Min(local.Length, 8);
+        var xform = node.GlobalTransform;
+        var world = new Vector3[count];
+        for (int i = 0; i < count; i++)
+            world[i] = xform * local[i];
+
+        // CCW check via signed area on XZ. Godot +Y is up; we treat XZ as
+        // a standard right-handed plane where CCW = positive signed area.
+        float signedArea = 0;
+        for (int i = 0; i < count; i++)
+        {
+            var a = world[i];
+            var b = world[(i + 1) % count];
+            signedArea += a.X * b.Z - b.X * a.Z;
+        }
+        if (signedArea < 0)
+        {
+            System.Array.Reverse(world);
+            GD.Print($"[PS1Godot] PS1NavRegion '{node.Name}': reversed vert order to CCW.");
+        }
+
+        FitPlane(world, out float planeA, out float planeB, out float planeD);
+
+        // Auto-classify flat / ramp / stairs by slope of the fitted plane.
+        byte surface = (byte)node.SurfaceType;
+        if (node.SurfaceType == PS1NavSurfaceType.Flat)
+        {
+            float slopeDeg = Mathf.RadToDeg(Mathf.Atan(Mathf.Sqrt(planeA * planeA + planeB * planeB)));
+            if (slopeDeg >= 25f) surface = (byte)PS1NavSurfaceType.Stairs;
+            else if (slopeDeg >= 3f) surface = (byte)PS1NavSurfaceType.Ramp;
+        }
+
+        int fp(float godotValue) => PSXTrig.ConvertWorldToFixed12(godotValue / data.GteScaling);
+
+        // The runtime plane equation is Y = A·X + B·Z + D in PSX-space (Y is
+        // already negated for PSX Y-down). SplashEdit encodes this by flipping
+        // the sign of A/B/D before fp12 conversion — match that convention
+        // here. planeD is additionally scaled like a world-Y value.
+        var vertsX = new int[count];
+        var vertsZ = new int[count];
+        for (int i = 0; i < count; i++)
+        {
+            vertsX[i] = fp(world[i].X);
+            vertsZ[i] = fp(world[i].Z);
+        }
+
+        byte flags = node.Platform ? (byte)0x01 : (byte)0;
+        byte walkoff = 0; // platform walkoff handled by runtime via flags bit
+
+        data.NavRegions.Add(new NavRegionRecord
+        {
+            VertsX = vertsX,
+            VertsZ = vertsZ,
+            PlaneA = PSXTrig.ConvertWorldToFixed12(-planeA),
+            PlaneB = PSXTrig.ConvertWorldToFixed12(-planeB),
+            PlaneD = PSXTrig.ConvertWorldToFixed12(-planeD / data.GteScaling),
+            SurfaceType = surface,
+            RoomIndex = (byte)System.Math.Clamp(node.RoomIndex, 0, 255),
+            Flags = flags,
+            WalkoffEdgeMask = walkoff,
+            WorldVerts = world,
+        });
+    }
+
+    // Least-squares fit Y = A·X + B·Z + D against `pts`. Degenerates to a
+    // flat plane at mean-Y when the system is singular (all verts collinear
+    // on XZ).
+    private static void FitPlane(Vector3[] pts, out float a, out float b, out float d)
+    {
+        int n = pts.Length;
+        if (n == 3)
+        {
+            float x0 = pts[0].X, z0 = pts[0].Z, y0 = pts[0].Y;
+            float x1 = pts[1].X, z1 = pts[1].Z, y1 = pts[1].Y;
+            float x2 = pts[2].X, z2 = pts[2].Z, y2 = pts[2].Y;
+            float det = (x0 - x2) * (z1 - z2) - (x1 - x2) * (z0 - z2);
+            if (Mathf.Abs(det) < 1e-6f)
+            {
+                a = 0; b = 0; d = (y0 + y1 + y2) / 3f;
+                return;
+            }
+            float inv = 1f / det;
+            a = ((y0 - y2) * (z1 - z2) - (y1 - y2) * (z0 - z2)) * inv;
+            b = ((x0 - x2) * (y1 - y2) - (x1 - x2) * (y0 - y2)) * inv;
+            d = y0 - a * x0 - b * z0;
+            return;
+        }
+
+        double sX = 0, sZ = 0, sY = 0, sXX = 0, sXZ = 0, sZZ = 0, sXY = 0, sZY = 0;
+        foreach (var p in pts)
+        {
+            sX += p.X; sZ += p.Z; sY += p.Y;
+            sXX += p.X * p.X; sXZ += p.X * p.Z; sZZ += p.Z * p.Z;
+            sXY += p.X * p.Y; sZY += p.Z * p.Y;
+        }
+        double det2 = sXX * (sZZ * n - sZ * sZ) - sXZ * (sXZ * n - sZ * sX) + sX * (sXZ * sZ - sZZ * sX);
+        if (System.Math.Abs(det2) < 1e-9)
+        {
+            a = 0; b = 0; d = (float)(sY / n);
+            return;
+        }
+        double inv2 = 1.0 / det2;
+        a = (float)((sXY * (sZZ * n - sZ * sZ) - sXZ * (sZY * n - sZ * sY) + sX * (sZY * sZ - sZZ * sY)) * inv2);
+        b = (float)((sXX * (sZY * n - sZ * sY) - sXY * (sXZ * n - sZ * sX) + sX * (sXZ * sY - sZY * sX)) * inv2);
+        d = (float)((sXX * (sZZ * sY - sZ * sZY) - sXZ * (sXZ * sY - sZY * sX) + sXY * (sXZ * sZ - sZZ * sX)) * inv2);
+    }
+
+    // Post-pass: scan every pair of regions for edges whose endpoints are
+    // coincident in world XZ. For each match, emit a directed portal per
+    // region (A→B and B→A), with heightDelta = (other region's Y at the
+    // midpoint) - (this region's Y at the midpoint).
+    internal static void StitchNavPortals(SceneData data)
+    {
+        if (data.NavRegions.Count < 2) return;
+
+        // World-space epsilon in Godot units. 0.05 m is tighter than a
+        // single grid cell and wider than FP12 quantization error.
+        const float Eps = 0.05f;
+        float eps2 = Eps * Eps;
+
+        // Build a per-region directed-portal bucket so we can set PortalStart
+        // contiguously once the scan finishes.
+        var perRegion = new List<NavPortalRecord>[data.NavRegions.Count];
+        for (int i = 0; i < perRegion.Length; i++) perRegion[i] = new();
+
+        int fp(float godotValue) => PSXTrig.ConvertWorldToFixed12(godotValue / data.GteScaling);
+
+        for (int i = 0; i < data.NavRegions.Count; i++)
+        {
+            var ri = data.NavRegions[i];
+            var wi = ri.WorldVerts;
+            if (wi == null || wi.Length < 2) continue;
+
+            for (int j = i + 1; j < data.NavRegions.Count; j++)
+            {
+                var rj = data.NavRegions[j];
+                var wj = rj.WorldVerts;
+                if (wj == null || wj.Length < 2) continue;
+
+                int niEdges = wi.Length, njEdges = wj.Length;
+                for (int e = 0; e < niEdges; e++)
+                {
+                    Vector3 a0 = wi[e];
+                    Vector3 a1 = wi[(e + 1) % niEdges];
+
+                    for (int f = 0; f < njEdges; f++)
+                    {
+                        Vector3 b0 = wj[f];
+                        Vector3 b1 = wj[(f + 1) % njEdges];
+
+                        // Adjacent CCW polygons share an edge with reversed
+                        // winding: A's (a0 → a1) ≈ B's (b1 → b0).
+                        if (DistXZSq(a0, b1) < eps2 && DistXZSq(a1, b0) < eps2)
+                        {
+                            // Midpoint on the shared edge (world XZ).
+                            float midX = 0.5f * (a0.X + a1.X);
+                            float midZ = 0.5f * (a0.Z + a1.Z);
+                            float yI = PlaneY(ri, midX, midZ);
+                            float yJ = PlaneY(rj, midX, midZ);
+
+                            // PSX Y is Godot's -Y, so flip sign when quantizing.
+                            int hdIJ = fp(-(yJ - yI));
+                            int hdJI = fp(-(yI - yJ));
+                            perRegion[i].Add(new NavPortalRecord
+                            {
+                                Ax = fp(a0.X), Az = fp(a0.Z),
+                                Bx = fp(a1.X), Bz = fp(a1.Z),
+                                NeighborRegion = (ushort)j,
+                                HeightDelta = (short)System.Math.Clamp(hdIJ, short.MinValue, short.MaxValue),
+                            });
+                            perRegion[j].Add(new NavPortalRecord
+                            {
+                                Ax = fp(b0.X), Az = fp(b0.Z),
+                                Bx = fp(b1.X), Bz = fp(b1.Z),
+                                NeighborRegion = (ushort)i,
+                                HeightDelta = (short)System.Math.Clamp(hdJI, short.MinValue, short.MaxValue),
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        // Flatten portals into data.NavPortals in region order, stamping
+        // PortalStart / PortalCount on each region as we go.
+        int total = 0;
+        for (int i = 0; i < data.NavRegions.Count; i++)
+        {
+            var ri = data.NavRegions[i];
+            ri.PortalStart = (ushort)total;
+            ri.PortalCount = (byte)System.Math.Min(perRegion[i].Count, 255);
+            foreach (var p in perRegion[i]) data.NavPortals.Add(p);
+            total += perRegion[i].Count;
+        }
+        if (total > 0)
+        {
+            GD.Print($"[PS1Godot] Nav: stitched {total} portals across {data.NavRegions.Count} regions.");
+        }
+    }
+
+    private static float DistXZSq(Vector3 a, Vector3 b)
+    {
+        float dx = a.X - b.X, dz = a.Z - b.Z;
+        return dx * dx + dz * dz;
+    }
+
+    // Evaluate the fitted plane at (x, z) in world space. The stored
+    // PlaneA/B/D are negated + quantized for PSX; reconstruct an
+    // approximate world-Y from WorldVerts centroid for now by solving the
+    // same Y = A·x + B·z + D with un-negated coefficients.
+    private static float PlaneY(NavRegionRecord r, float x, float z)
+    {
+        var w = r.WorldVerts;
+        if (w == null || w.Length == 0) return 0f;
+        // Re-fit on the spot — cheaper than tracking both quantized and raw
+        // coefficients, and runs once per portal during export.
+        FitPlane(w, out float a, out float b, out float d);
+        return a * x + b * z + d;
     }
 
     // Returns an index into data.Textures, or -1 if this surface has no

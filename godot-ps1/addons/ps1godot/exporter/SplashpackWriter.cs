@@ -127,16 +127,20 @@ public static class SplashpackWriter
         if (navRegionCount > 0)
         {
             AlignTo4(w);
+            int navPortalCount = scene.NavPortals.Count;
             // NavDataHeader
             w.Write((ushort)navRegionCount);
-            w.Write((ushort)0);           // portalCount (no multi-region yet)
+            w.Write((ushort)navPortalCount);
             w.Write((ushort)0);           // startRegion (player spawns in region 0)
             w.Write((ushort)0);           // pad
             foreach (var nr in scene.NavRegions)
             {
                 WriteNavRegion(w, nr);
             }
-            // 0 portals — nothing to write.
+            foreach (var p in scene.NavPortals)
+            {
+                WriteNavPortal(w, p);
+            }
         }
 
         // ── Atlas metadata (12 B each) ──
@@ -1020,17 +1024,33 @@ public static class SplashpackWriter
         w.Write(nr.PlaneB);             // int32
         w.Write(nr.PlaneD);             // int32
 
-        w.Write((ushort)0);             // portalStart
-        w.Write((byte)0);               // portalCount
+        w.Write(nr.PortalStart);         // ushort
+        w.Write(nr.PortalCount);         // byte
         w.Write((byte)nr.VertsX.Length); // vertCount
-        w.Write((byte)0);               // surfaceType 0 = FLAT
-        w.Write((byte)0xFF);            // roomIndex 0xFF = exterior
-        w.Write((byte)0);               // flags
-        w.Write((byte)0);               // walkoffEdgeMask
+        w.Write(nr.SurfaceType);         // byte
+        w.Write(nr.RoomIndex);           // byte
+        w.Write(nr.Flags);               // byte
+        w.Write(nr.WalkoffEdgeMask);     // byte
 
         long written = w.BaseStream.Position - entryStart;
         if (written != 84)
             throw new InvalidOperationException($"NavRegion size mismatch: {written} vs 84.");
+    }
+
+    // ─── NavPortal (20 bytes) ────────────────────────────────────────────
+    private static void WriteNavPortal(BinaryWriter w, NavPortalRecord p)
+    {
+        long entryStart = w.BaseStream.Position;
+        w.Write(p.Ax);                  // int32
+        w.Write(p.Az);                  // int32
+        w.Write(p.Bx);                  // int32
+        w.Write(p.Bz);                  // int32
+        w.Write(p.NeighborRegion);      // ushort
+        w.Write(p.HeightDelta);         // short
+
+        long written = w.BaseStream.Position - entryStart;
+        if (written != 20)
+            throw new InvalidOperationException($"NavPortal size mismatch: {written} vs 20.");
     }
 
     // ─── GameObject entry (92 bytes) ─────────────────────────────────────

@@ -192,9 +192,10 @@ public sealed class ColliderRecord
     public required ushort GameObjectIndex { get; init; } // index into SceneData.Objects
 }
 
-// Single convex nav region (the v20 walkable-surface primitive). For our
-// current "flat floor" path this is always a 4-vertex rectangle with a flat
-// plane equation. More complex decompositions wait for a real nav builder.
+// Single convex nav region. For flat-slab auto-emit this is a 4-vertex
+// rectangle with a zero-slope plane; for authored PS1NavRegion nodes the
+// verts / plane are fit to whatever convex polygon the author drew.
+// Portal connectivity is populated by a post-pass in SceneCollector.
 public sealed class NavRegionRecord
 {
     // Verts in XZ plane, PSX-space fp12 (int32). Stored CCW per the runtime's
@@ -204,6 +205,34 @@ public sealed class NavRegionRecord
     public required int PlaneA { get; init; }   // floor plane Y = A·x + B·z + D (fp12)
     public required int PlaneB { get; init; }
     public required int PlaneD { get; init; }
+
+    public byte SurfaceType { get; set; } = 0;      // NAV_SURFACE_FLAT
+    public byte RoomIndex { get; set; } = 0xFF;     // exterior / unknown
+    public byte Flags { get; set; } = 0;            // bit 0 = platform
+    public byte WalkoffEdgeMask { get; set; } = 0;
+
+    // Populated by the portal-stitch pass in SceneCollector. Writer picks
+    // these up when emitting the NavDataHeader + NavPortal block.
+    public ushort PortalStart { get; set; } = 0;
+    public byte PortalCount { get; set; } = 0;
+
+    // World-space verts in Godot units — kept alongside the fp12 copies so
+    // the portal stitcher can compare coincident endpoints in world space
+    // before quantization. Empty on records produced before the collector
+    // stitch pass is relevant (legacy paths).
+    public Vector3[]? WorldVerts { get; set; }
+}
+
+// Runtime NavPortal entry (20 bytes). One per directed portal — if region A
+// neighbours region B, we emit two entries (A→B and B→A).
+public sealed class NavPortalRecord
+{
+    public required int Ax { get; init; }   // portal edge start (fp12, world/gteScaling)
+    public required int Az { get; init; }
+    public required int Bx { get; init; }   // portal edge end
+    public required int Bz { get; init; }
+    public required ushort NeighborRegion { get; init; }
+    public required short HeightDelta { get; init; }  // fp12 (at portal midpoint)
 }
 
 public sealed class SceneData
@@ -224,6 +253,7 @@ public sealed class SceneData
     // physics engagement.
     public List<ColliderRecord> Colliders { get; } = new();
     public List<NavRegionRecord> NavRegions { get; } = new();
+    public List<NavPortalRecord> NavPortals { get; } = new();
     public List<TriggerBoxRecord> TriggerBoxes { get; } = new();
     public List<InteractableRecord> Interactables { get; } = new();
 

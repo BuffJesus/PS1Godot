@@ -220,10 +220,11 @@ Work in roughly the order the binary format is laid out, not in order of "what
 feels fun". Each sub-milestone should produce a splashpack that psxsplash loads
 without crashing, even if features are stubbed.
 
-**Status (2026-04-20):** bullets 1–6 ✅, 7 ❌, 8 ✅ (+ `\n` runtime wrap,
-dialog ownership), 9 ✅, 10 ✅ (MVP — position/rotation/UI tracks on the
-runtime roadmap), 11 ✅ (staged end-to-end 2026-04-20), 12 ❌. Format at
-**v21** (bumped for editor-driven player rigs).
+**Status (2026-04-20):** bullets 1–6 ✅, 7 🟡 (authored regions +
+auto-portals + ramps; DotRecast auto-gen deferred), 8 ✅ (+ `\n` runtime
+wrap, dialog ownership), 9 ✅, 10 ✅ (MVP — position/rotation/UI tracks on
+the runtime roadmap), 11 ✅ (staged end-to-end 2026-04-20), 12 ❌. Format
+at **v21** (bumped for editor-driven player rigs).
 
 1. **Writer skeleton + 3-file split.** Port `PSXSceneWriter.Write()` structure
    and offset bookkeeping. Emit an empty but valid splashpack (current format
@@ -240,8 +241,12 @@ runtime roadmap), 11 ✅ (staged end-to-end 2026-04-20), 12 ❌. Format at
 6. **Audio.** Port ADPCM conversion, `PSXAudioClip`, `PSXAudioEvent`.
    Follow-up in Phase 2.5: per-area SPU budget + `Residency` flag on
    `PS1AudioClip` (`REF-GAP-9`).
-7. **Nav regions.** Port `PSXNavRegionBuilder` (it wraps DotRecast — check if a
-   .NET port is usable from Godot C# directly).
+7. **Nav regions.** Authored-region path landed 2026-04-20: `PS1NavRegion`
+   node (convex polygon, Y-per-vert for ramps), auto plane-fit, auto
+   portal-stitching between adjacent region edges. Ramps + stairs inferred
+   from slope. Still unchecked: DotRecast auto-generation from floor
+   geometry (the "drop your meshes, get a navmesh" SplashEdit flow) —
+   tracked below the main list.
 8. **UI canvases + fonts.** Port `PSXCanvas*`, `PSXFontAsset`, `PSXUI*`.
    **Amendment (`REF-GAP-8`):** canvases + fonts must carry a `Residency`
    property from day one — `Gameplay | MenuOnly | LoadOnDemand`. Exporter
@@ -546,20 +551,21 @@ modern, beautiful) — see `docs/ui-ux-plan.md` § UI authoring.
       `Dialog.Start(treeName)`, `Dialog.Choose(choiceIdx)`,
       `onDialogEnd(treeName)`. Replaces every game's hand-rolled
       state machine over `UI.SetText + Input.IsPressed`.
-- [ ] **PS1 UI prefab templates.** Ship common building blocks
+- [x] **PS1 UI prefab templates.** Ship common building blocks
       (`addons/ps1godot/ui_templates/`):
-        - `dialog_box.tscn` — 9-patch border, text area, optional
-          portrait slot, optional name-tag slot.
-        - `menu_list.tscn` — vertical list of selectable items, cursor
-          sprite, input-driven highlight.
-        - `hud_bar.tscn` — labelled progress bar for HP/MP/stamina.
-        - `toast.tscn` — floating auto-expiring notification.
+        - `dialog_box.tscn` — background + body text + name tag.
+        - `menu_list.tscn` — title + 4 items + cursor.
+        - `hud_bar.tscn` — label + fill bar + background.
+        - `toast.tscn` — floating notification.
       Authors drop one onto a canvas, tweak strings, done.
-- [ ] **PS1 UI theme resource (`PS1Theme.tres`).** Central colors
-      (accent / text / shadow), default text alignment, reference
-      font. Each element opts in (checkbox `UseTheme`). Change theme
-      once → every element restyles. Supports "options → dark mode"
-      type features.
+      **Landed 2026-04-20.** 9-patch-bordered dialog + portrait slot
+      deferred to the 9-patch bullet below.
+- [x] **PS1 UI theme resource (`PS1Theme.tres`).** Central 8-slot
+      palette (Text / Accent / Bg / BgBorder / Highlight / Warning /
+      Danger / Neutral). Each element opts in via `PS1UIThemeSlot`
+      enum (`Custom` keeps authored color). Change theme once →
+      every opted-in element restyles. Resolution happens at export
+      time, so no runtime format change. **Landed 2026-04-20.**
 - [ ] **9-patch border UI element.** A new `PS1UIElementType.Border`
       that takes corner + edge texture references and renders a
       scalable panel. Dialog boxes + HUD frames stop requiring manual
