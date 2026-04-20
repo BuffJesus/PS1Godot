@@ -226,7 +226,7 @@ Interactable = true
 InteractionRadiusMeters = 2.0
 
 [node name="Cube2" type="MeshInstance3D" parent="." unique_id=750822538]
-transform = Transform3D(0.707, 0, 0.707, 0, 1, 0, -0.707, 0, 0.707, 4, 0.5, -3)
+transform = Transform3D(0.707, 0, 0.707, 0, 1, 0, -0.707, 0, 0.707, 4, 1, -3)
 material_override = SubResource("mat_checker")
 extra_cull_margin = 2.0
 mesh = SubResource("BoxMesh_cube")
@@ -320,30 +320,30 @@ TargetObjectName = "Cube2"
 
 [node name="Kf0" type="Node" parent="BounceAnim" unique_id=1397606559]
 script = ExtResource("13_kf")
-Value = Vector3(4, 0.5, -3)
+Value = Vector3(4, 1, -3)
 
 [node name="Kf1" type="Node" parent="BounceAnim" unique_id=893314091]
 script = ExtResource("13_kf")
 Frame = 15
-Value = Vector3(4, 1.1, -3)
+Value = Vector3(4, 1.5, -3)
 Interp = 3
 
 [node name="Kf2" type="Node" parent="BounceAnim" unique_id=235744392]
 script = ExtResource("13_kf")
 Frame = 30
-Value = Vector3(4, 0.5, -3)
+Value = Vector3(4, 1, -3)
 Interp = 2
 
 [node name="Kf3" type="Node" parent="BounceAnim" unique_id=1353620163]
 script = ExtResource("13_kf")
 Frame = 45
-Value = Vector3(4, 1.1, -3)
+Value = Vector3(4, 1.5, -3)
 Interp = 3
 
 [node name="Kf4" type="Node" parent="BounceAnim" unique_id=1144429089]
 script = ExtResource("13_kf")
 Frame = 59
-Value = Vector3(4, 0.5, -3)
+Value = Vector3(4, 1, -3)
 Interp = 2
 
 [node name="SpinAnim" type="Node" parent="." unique_id=445708699]
@@ -455,6 +455,6 @@ Frame = 200
 ClipName = "system_we_think"
 
 [node name="PS1Player" type="Node3D" parent="." unique_id=1681451007]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5, 8)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 8)
 script = ExtResource("13_tdg64")
 metadata/_custom_type_script = "uid://cfdlp12g2rtct"
