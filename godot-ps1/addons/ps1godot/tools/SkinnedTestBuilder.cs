@@ -90,19 +90,27 @@ public static class SkinnedTestBuilder
             }
         }
 
-        // Triangulate: each (r, s) quad → two triangles. Counter-clockwise
-        // when viewed from outside the cylinder.
+        // Triangulate: each (r, s) quad → two triangles. Godot uses
+        // CCW-from-the-front-face with default back-face culling, so
+        // winding matters. From the viewer OUTSIDE the cylinder at
+        // side s, the quad corners are (looking inward):
+        //   bottom-left  = (s,   r)
+        //   bottom-right = (s+1, r)          (+θ points to viewer's right)
+        //   top-left     = (s,   r+1)
+        //   top-right    = (s+1, r+1)
+        // CCW from that POV: bottom-left → bottom-right → top-right → top-left.
         for (int r = 0; r < Rings - 1; r++)
         {
             for (int s = 0; s < Sides; s++)
             {
                 int s1 = (s + 1) % Sides;
-                int i0 = r * Sides + s;
-                int i1 = r * Sides + s1;
-                int i2 = (r + 1) * Sides + s;
-                int i3 = (r + 1) * Sides + s1;
-                st.AddIndex(i0); st.AddIndex(i2); st.AddIndex(i1);
-                st.AddIndex(i1); st.AddIndex(i2); st.AddIndex(i3);
+                int i0 = r * Sides + s;            // bottom-left
+                int i1 = r * Sides + s1;           // bottom-right
+                int i2 = (r + 1) * Sides + s;      // top-left
+                int i3 = (r + 1) * Sides + s1;     // top-right
+                // Tri A: BL → BR → TR. Tri B: BL → TR → TL.
+                st.AddIndex(i0); st.AddIndex(i1); st.AddIndex(i3);
+                st.AddIndex(i0); st.AddIndex(i3); st.AddIndex(i2);
             }
         }
 
@@ -118,11 +126,23 @@ public static class SkinnedTestBuilder
         // PS1SkinnedMesh inherits from PS1MeshInstance (and thus from
         // MeshInstance3D). New() instantiates the C# type so the
         // exporter's `is PS1SkinnedMesh` check picks it up.
+        //
+        // MaterialOverride with CullMode=Disabled keeps the whole
+        // cylinder visible regardless of which direction the triangle
+        // winding considers "front" — this is a test asset, not a
+        // shipped mesh, so the 2× fill-rate hit doesn't matter.
+        var mat = new StandardMaterial3D
+        {
+            AlbedoColor = new Color(0.80f, 0.55f, 0.90f),
+            CullMode = BaseMaterial3D.CullModeEnum.Disabled,
+            ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+        };
         var meshInst = new PS1SkinnedMesh
         {
             Name = "SkinnedMesh",
             Mesh = mesh,
             Skin = skin,
+            MaterialOverride = mat,
             // NodePath is resolved relative to this node once we're in the tree.
             // Setting before AddChild works because Godot stores the path
             // verbatim; resolution happens lazily.
