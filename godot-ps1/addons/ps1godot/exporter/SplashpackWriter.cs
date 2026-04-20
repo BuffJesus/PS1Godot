@@ -250,6 +250,127 @@ public static class SplashpackWriter
         {
             WriteUISection(w, scene, headerOffsets.UiTableOffsetPos);
         }
+
+        // ── Animation section ──
+        // Per splashpack.cpp:378 the table at animationTableOffset is an
+        // array of 12 B SPLASHPACKAnimationEntry. Each entry's dataOffset
+        // points to a 16 B SPLASHPACKAnimation block which in turn points
+        // to a track array (12 B / track, MVP: 1 track) and each track
+        // points to a keyframe array (8 B / keyframe).
+        if (scene.Animations.Count > 0)
+        {
+            WriteAnimationSection(w, scene, headerOffsets.AnimationTableOffsetPos);
+        }
+    }
+
+    // ─── Animation section ──────────────────────────────────────────────
+    //
+    // Three levels of backfill:
+    //   1. Table entries point at animation data blocks.
+    //   2. Animation data blocks point at track arrays.
+    //   3. Track entries point at keyframe arrays + object-name strings.
+    // All offsets are absolute into the splashpack; align to 4 between
+    // each block since the runtime reads 32-bit fields directly.
+    private static void WriteAnimationSection(BinaryWriter w, SceneData scene, long animTableOffsetPos)
+    {
+        AlignTo4(w);
+        long tableStart = w.BaseStream.Position;
+        BackfillUInt32(w, animTableOffsetPos, (uint)tableStart);
+
+        int count = scene.Animations.Count;
+
+        // Reserve 12 B × count for SPLASHPACKAnimationEntry. Backfill
+        // positions for dataOffset and nameOffset.
+        var dataOffPos  = new long[count];
+        var nameOffPos  = new long[count];
+        for (int i = 0; i < count; i++)
+        {
+            var a = scene.Animations[i];
+            dataOffPos[i] = w.BaseStream.Position;
+            w.Write((uint)0);                                        // dataOffset (backfilled)
+            byte nameLen = (byte)Math.Min(Encoding.UTF8.GetByteCount(a.Name ?? ""), 255);
+            w.Write(nameLen);
+            w.Write((byte)0); w.Write((byte)0); w.Write((byte)0);    // 3 B pad
+            nameOffPos[i]  = w.BaseStream.Position;
+            w.Write((uint)0);                                        // nameOffset (backfilled)
+        }
+
+        // Per-animation data blocks (16 B each). Plus its track array.
+        // MVP: one ObjectPosition track per animation.
+        var trackObjNameOffPositions = new long[count]; // track.objNameOff
+        var trackKfOffPositions      = new long[count]; // track.kfOff
+        for (int i = 0; i < count; i++)
+        {
+            var a = scene.Animations[i];
+            AlignTo4(w);
+            long blockStart = w.BaseStream.Position;
+            BackfillUInt32(w, dataOffPos[i], (uint)blockStart);
+
+            // SPLASHPACKAnimation: 16 B.
+            w.Write(a.TotalFrames);            // u16
+            w.Write((byte)1);                  // trackCount = 1 (MVP)
+            w.Write((byte)0);                  // pad
+            long trackArrOffPos = w.BaseStream.Position;
+            w.Write((uint)0);                  // tracksOff (backfilled below)
+            // v19 skin anim fields — none in MVP.
+            w.Write((byte)0);                  // skinAnimEventCount
+            w.Write((byte)0); w.Write((byte)0); w.Write((byte)0); // 3 B pad
+            w.Write((uint)0);                  // skinAnimOff
+
+            // Write the single track (12 B) immediately after. Backfill
+            // the tracksOff in the animation block above.
+            AlignTo4(w);
+            long trackStart = w.BaseStream.Position;
+            BackfillUInt32(w, trackArrOffPos, (uint)trackStart);
+
+            w.Write((byte)2);                  // trackType = ObjectPosition
+            w.Write((byte)a.Keyframes.Count);  // keyframeCount
+            byte objNameLen = (byte)Math.Min(Encoding.UTF8.GetByteCount(a.TargetObjectName ?? ""), 255);
+            w.Write(objNameLen);               // objNameLen
+            w.Write((byte)0);                  // pad
+            trackObjNameOffPositions[i] = w.BaseStream.Position;
+            w.Write((uint)0);                  // objNameOff (backfilled)
+            trackKfOffPositions[i]      = w.BaseStream.Position;
+            w.Write((uint)0);                  // kfOff (backfilled)
+        }
+
+        // Keyframe arrays per animation (8 B each).
+        for (int i = 0; i < count; i++)
+        {
+            var a = scene.Animations[i];
+            AlignTo4(w);
+            long kfStart = w.BaseStream.Position;
+            BackfillUInt32(w, trackKfOffPositions[i], (uint)kfStart);
+            foreach (var kf in a.Keyframes)
+            {
+                // frameAndInterp: upper 3 bits interp, lower 13 bits frame.
+                ushort fai = (ushort)((kf.Frame & 0x1FFF) | (((uint)kf.Interp & 0x7) << 13));
+                w.Write(fai);
+                w.Write(kf.V0);
+                w.Write(kf.V1);
+                w.Write(kf.V2);
+            }
+        }
+
+        // Strings — animation names + target object names.
+        for (int i = 0; i < count; i++)
+        {
+            var a = scene.Animations[i];
+            if (!string.IsNullOrEmpty(a.Name))
+            {
+                long off = w.BaseStream.Position;
+                w.Write(Encoding.UTF8.GetBytes(a.Name));
+                w.Write((byte)0);
+                BackfillUInt32(w, nameOffPos[i], (uint)off);
+            }
+            if (!string.IsNullOrEmpty(a.TargetObjectName))
+            {
+                long off = w.BaseStream.Position;
+                w.Write(Encoding.UTF8.GetBytes(a.TargetObjectName));
+                w.Write((byte)0);
+                BackfillUInt32(w, trackObjNameOffPositions[i], (uint)off);
+            }
+        }
     }
 
     // Emit UI table + element arrays + strings. Runtime's parser starts at
@@ -509,10 +630,10 @@ public static class SplashpackWriter
         offsets.PixelDataOffsetPos = w.BaseStream.Position;
         w.Write((uint)0);              // pixelDataOffset (0 = v20 split)
 
-        w.Write((ushort)0);            // animationCount
+        w.Write((ushort)scene.Animations.Count); // animationCount
         w.Write((ushort)0);            // roomPortalRefCount
         offsets.AnimationTableOffsetPos = w.BaseStream.Position;
-        w.Write((uint)0);              // animationTableOffset
+        w.Write((uint)0);              // animationTableOffset (backfilled)
 
         w.Write((ushort)0);            // skinnedMeshCount
         w.Write((ushort)0);            // pad_skin

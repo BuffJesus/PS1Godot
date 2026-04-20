@@ -107,6 +107,11 @@ public static class SceneCollector
             // Canvas children are consumed here, not re-walked as siblings.
             return;
         }
+        else if (n is PS1Animation anim)
+        {
+            EmitAnimation(anim, data);
+            return;
+        }
         foreach (var child in n.GetChildren())
         {
             WalkAddMeshes(child, data, textureCache, luaCache);
@@ -156,6 +161,64 @@ public static class SceneCollector
             Elements = elements,
         });
         GD.Print($"[PS1Godot] UICanvas '{name}': residency={canvas.Residency}, {elements.Count} elements");
+    }
+
+    // Walk a PS1Animation node's children for keyframes, convert to PSX
+    // fp12 (same scaling + Y-flip as static geometry), and append an
+    // AnimationRecord. Target resolution (name → GameObject) happens at
+    // runtime via the object name table, so the exporter just stamps the
+    // target name as-is.
+    private static void EmitAnimation(PS1Animation anim, SceneData data)
+    {
+        string name = string.IsNullOrWhiteSpace(anim.AnimationName)
+            ? anim.Name
+            : anim.AnimationName;
+        string target = anim.TargetObjectName ?? "";
+        if (string.IsNullOrEmpty(target))
+        {
+            GD.PushWarning($"[PS1Godot] Animation '{name}' has no TargetObjectName — runtime won't resolve a GameObject. Skipping.");
+            return;
+        }
+
+        var kfs = new System.Collections.Generic.List<KeyframeRecord>();
+        foreach (var child in anim.GetChildren())
+        {
+            if (child is not PS1AnimationKeyframe kf) continue;
+            // Godot → PSX: divide by GteScaling, negate Y, convert to fp12
+            // int16 for storage in the keyframe.values[3] triple.
+            float s = Mathf.Max(data.GteScaling, 0.0001f);
+            int vx = Mathf.RoundToInt(kf.Position.X / s * 4096f);
+            int vy = Mathf.RoundToInt(-kf.Position.Y / s * 4096f);
+            int vz = Mathf.RoundToInt(kf.Position.Z / s * 4096f);
+            kfs.Add(new KeyframeRecord
+            {
+                Frame = (ushort)Mathf.Clamp(kf.Frame, 0, 8191),
+                Interp = kf.Interp,
+                V0 = (short)Mathf.Clamp(vx, short.MinValue, short.MaxValue),
+                V1 = (short)Mathf.Clamp(vy, short.MinValue, short.MaxValue),
+                V2 = (short)Mathf.Clamp(vz, short.MinValue, short.MaxValue),
+            });
+        }
+
+        if (kfs.Count == 0)
+        {
+            GD.PushWarning($"[PS1Godot] Animation '{name}' has no PS1AnimationKeyframe children — skipping.");
+            return;
+        }
+
+        // Keyframes must be monotonically increasing in frame number for
+        // the runtime's linear walk. Sort defensively so authors can
+        // rearrange the scene tree without worrying about order.
+        kfs.Sort((a, b) => a.Frame.CompareTo(b.Frame));
+
+        data.Animations.Add(new AnimationRecord
+        {
+            Name = name,
+            TargetObjectName = target,
+            TotalFrames = (ushort)Mathf.Clamp(anim.TotalFrames, 1, 8191),
+            Keyframes = kfs,
+        });
+        GD.Print($"[PS1Godot] Animation '{name}': target='{target}' frames={anim.TotalFrames} keyframes={kfs.Count}");
     }
 
     // Compute world AABB for a PS1TriggerBox by baking its GlobalTransform

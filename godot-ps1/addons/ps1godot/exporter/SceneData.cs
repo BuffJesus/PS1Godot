@@ -66,6 +66,28 @@ public sealed class InteractableRecord
     public required string PromptCanvasName { get; init; } // max 15 chars + null
 }
 
+// A single keyframe on an animation track. Linear-interpolated by default;
+// the runtime honors all InterpMode values set here.
+public sealed class KeyframeRecord
+{
+    public required ushort Frame { get; init; }          // 0..8191
+    public required PS1InterpMode Interp { get; init; }
+    public required short V0 { get; init; }              // e.g. pos.X in fp12
+    public required short V1 { get; init; }
+    public required short V2 { get; init; }
+}
+
+// One animation: a named timeline targeting a single GameObject by name,
+// carrying a single ObjectPosition track in MVP. Serialized as a 12-byte
+// table entry pointing at a 16-byte data block + track + keyframe arrays.
+public sealed class AnimationRecord
+{
+    public required string Name { get; init; }
+    public required string TargetObjectName { get; init; }
+    public required ushort TotalFrames { get; init; }
+    public required System.Collections.Generic.List<KeyframeRecord> Keyframes { get; init; }
+}
+
 // UI canvas + its widgets. Serialized as a 12-byte descriptor in the UI
 // table plus a per-canvas element array elsewhere in the splashpack.
 public sealed class UICanvasRecord
@@ -151,6 +173,10 @@ public sealed class SceneData
     // UI canvases gathered from PS1UICanvas nodes + their PS1UIElement
     // children. Lua resolves by name via UI.FindCanvas.
     public List<UICanvasRecord> UICanvases { get; } = new();
+
+    // Animations gathered from PS1Animation nodes + their PS1AnimationKeyframe
+    // children. Lua plays by name via Animation.Play.
+    public List<AnimationRecord> Animations { get; } = new();
 
     // Index into LuaFiles for a script attached to the PS1Scene root; -1 if
     // no root script. Runtime dispatches scene-level events (onSceneCreationStart
