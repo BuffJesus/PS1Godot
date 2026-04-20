@@ -66,6 +66,34 @@ public sealed class InteractableRecord
     public required string PromptCanvasName { get; init; } // max 15 chars + null
 }
 
+// UI canvas + its widgets. Serialized as a 12-byte descriptor in the UI
+// table plus a per-canvas element array elsewhere in the splashpack.
+public sealed class UICanvasRecord
+{
+    public required string Name { get; init; }
+    public required PS1UIResidency Residency { get; init; }
+    public required bool VisibleOnLoad { get; init; }
+    public required byte SortOrder { get; init; }
+    public required System.Collections.Generic.List<UIElementRecord> Elements { get; init; }
+}
+
+// A single widget inside a UICanvasRecord. Serialized as 48 bytes per
+// the runtime's UIElement parse layout in uisystem.cpp:loadFromSplashpack.
+public sealed class UIElementRecord
+{
+    public required string Name { get; init; }
+    public required PS1UIElementType Type { get; init; }
+    public required bool VisibleOnLoad { get; init; }
+    public required short X { get; init; }
+    public required short Y { get; init; }
+    public required short W { get; init; }
+    public required short H { get; init; }
+    public required byte ColorR { get; init; }
+    public required byte ColorG { get; init; }
+    public required byte ColorB { get; init; }
+    public required string Text { get; init; }  // empty for non-Text types
+}
+
 // Per-object AABB collider written as SPLASHPACKCollider (32 bytes).
 // Runtime uses these for X/Z push-back against walls and props — floor/ground
 // goes through NavRegion instead.
@@ -119,6 +147,10 @@ public sealed class SceneData
     // Audio clips authored on PS1Scene.AudioClips, already ADPCM-encoded.
     // Parallel name table lets Lua resolve `Audio.Play("name")` at runtime.
     public List<AudioClipRecord> AudioClips { get; } = new();
+
+    // UI canvases gathered from PS1UICanvas nodes + their PS1UIElement
+    // children. Lua resolves by name via UI.FindCanvas.
+    public List<UICanvasRecord> UICanvases { get; } = new();
 
     // Index into LuaFiles for a script attached to the PS1Scene root; -1 if
     // no root script. Runtime dispatches scene-level events (onSceneCreationStart

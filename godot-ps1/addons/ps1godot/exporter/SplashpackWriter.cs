@@ -237,6 +237,148 @@ public static class SplashpackWriter
                 BackfillUInt32(w, nameOffsetPositions[i], (uint)nameStart);
             }
         }
+
+        // ── UI section ──
+        // Layout (matching uisystem.cpp:loadFromSplashpack):
+        //   [uiTableOffset]
+        //   [Font descriptors — 112 B each × fontCount (MVP: 0)]
+        //   [Canvas descriptors — 12 B each × canvasCount]
+        //   [Element arrays (48 B/elem), canvas names, element names,
+        //    text bodies — all elsewhere in the file, referenced by
+        //    offset]
+        if (scene.UICanvases.Count > 0)
+        {
+            WriteUISection(w, scene, headerOffsets.UiTableOffsetPos);
+        }
+    }
+
+    // Emit UI table + element arrays + strings. Runtime's parser starts at
+    // uiTableOffset, walks fontCount×112 B font descriptors (zero in MVP),
+    // then canvasCount×12 B canvas descriptors. Element arrays and string
+    // data live at arbitrary offsets referenced by those descriptors.
+    private static void WriteUISection(BinaryWriter w, SceneData scene, long uiTableOffsetPos)
+    {
+        AlignTo4(w);
+        long uiTableStart = w.BaseStream.Position;
+        BackfillUInt32(w, uiTableOffsetPos, (uint)uiTableStart);
+
+        // MVP: fontCount = 0, so no font descriptors here.
+
+        int canvasCount = scene.UICanvases.Count;
+
+        // Canvas descriptor table (12 B each). Offsets backfilled after the
+        // element arrays / strings are placed.
+        var canvasDataOffPositions = new long[canvasCount];
+        var canvasNameOffPositions = new long[canvasCount];
+        for (int ci = 0; ci < canvasCount; ci++)
+        {
+            var c = scene.UICanvases[ci];
+            canvasDataOffPositions[ci] = w.BaseStream.Position;
+            w.Write((uint)0);                             // dataOffset (backfilled)
+            byte nameLen = (byte)Math.Min(Encoding.UTF8.GetByteCount(c.Name ?? ""), 255);
+            w.Write(nameLen);
+            w.Write(c.SortOrder);
+            w.Write((byte)c.Elements.Count);
+            // flags: bit 0 visible; bits 1–2 reserved for residency
+            // (runtime ignores today; writer stamps for future upgrade).
+            byte flags = (byte)((c.VisibleOnLoad ? 1 : 0) | (((byte)c.Residency & 0x3) << 1));
+            w.Write(flags);
+            canvasNameOffPositions[ci] = w.BaseStream.Position;
+            w.Write((uint)0);                             // nameOffset (backfilled)
+        }
+
+        // Element arrays per canvas. Each element is 48 B. Record
+        // per-element backfill positions for name + text offsets.
+        var elementNameOffPositions = new long[canvasCount][];
+        var elementTextOffPositions = new long[canvasCount][];
+        for (int ci = 0; ci < canvasCount; ci++)
+        {
+            var c = scene.UICanvases[ci];
+            AlignTo4(w);
+            long arrStart = w.BaseStream.Position;
+            BackfillUInt32(w, canvasDataOffPositions[ci], (uint)arrStart);
+
+            elementNameOffPositions[ci] = new long[c.Elements.Count];
+            elementTextOffPositions[ci] = new long[c.Elements.Count];
+            for (int ei = 0; ei < c.Elements.Count; ei++)
+            {
+                var el = c.Elements[ei];
+                long elStart = w.BaseStream.Position;
+
+                // Identity (8 B)
+                w.Write((byte)el.Type);
+                w.Write((byte)(el.VisibleOnLoad ? 1 : 0));   // flags
+                byte elNameLen = (byte)Math.Min(Encoding.UTF8.GetByteCount(el.Name ?? ""), 255);
+                w.Write(elNameLen);
+                w.Write((byte)0);                            // pad0
+                elementNameOffPositions[ci][ei] = w.BaseStream.Position;
+                w.Write((uint)0);                            // nameOffset (backfilled)
+
+                // Layout (8 B)
+                w.Write(el.X); w.Write(el.Y); w.Write(el.W); w.Write(el.H);
+
+                // Anchors (4 B) — MVP: top-left absolute positioning.
+                w.Write((byte)0); w.Write((byte)0);
+                w.Write((byte)0); w.Write((byte)0);
+
+                // Color (4 B)
+                w.Write(el.ColorR); w.Write(el.ColorG); w.Write(el.ColorB);
+                w.Write((byte)0);                            // pad1
+
+                // Type-specific (16 B). Text = fontIndex (0 = system) +
+                // 15 pad; Box = all zeros.
+                if (el.Type == PS1UIElementType.Text)
+                {
+                    w.Write((byte)0);                        // fontIndex (system)
+                    for (int k = 0; k < 15; k++) w.Write((byte)0);
+                }
+                else
+                {
+                    for (int k = 0; k < 16; k++) w.Write((byte)0);
+                }
+
+                // Text body pointer (4 B) + pad (4 B)
+                elementTextOffPositions[ci][ei] = w.BaseStream.Position;
+                w.Write((uint)0);                            // textOffset (backfilled)
+                w.Write((uint)0);                            // pad2
+
+                long written = w.BaseStream.Position - elStart;
+                if (written != 48)
+                    throw new InvalidOperationException($"UI element size mismatch: {written} vs 48.");
+            }
+        }
+
+        // Strings — canvas names, element names, text bodies. Placed after
+        // element arrays, backfilled into the descriptors above.
+        for (int ci = 0; ci < canvasCount; ci++)
+        {
+            var c = scene.UICanvases[ci];
+            if (!string.IsNullOrEmpty(c.Name))
+            {
+                long off = w.BaseStream.Position;
+                w.Write(Encoding.UTF8.GetBytes(c.Name));
+                w.Write((byte)0);
+                BackfillUInt32(w, canvasNameOffPositions[ci], (uint)off);
+            }
+            for (int ei = 0; ei < c.Elements.Count; ei++)
+            {
+                var el = c.Elements[ei];
+                if (!string.IsNullOrEmpty(el.Name))
+                {
+                    long off = w.BaseStream.Position;
+                    w.Write(Encoding.UTF8.GetBytes(el.Name));
+                    w.Write((byte)0);
+                    BackfillUInt32(w, elementNameOffPositions[ci][ei], (uint)off);
+                }
+                if (el.Type == PS1UIElementType.Text && !string.IsNullOrEmpty(el.Text))
+                {
+                    long off = w.BaseStream.Position;
+                    w.Write(Encoding.UTF8.GetBytes(el.Text));
+                    w.Write((byte)0);
+                    BackfillUInt32(w, elementTextOffPositions[ci][ei], (uint)off);
+                }
+            }
+        }
     }
 
     // ─── Header (120 bytes) ──────────────────────────────────────────────
@@ -358,11 +500,11 @@ public static class SplashpackWriter
         offsets.CutsceneTableOffsetPos = w.BaseStream.Position;
         w.Write((uint)0);              // cutsceneTableOffset
 
-        w.Write((ushort)0);            // uiCanvasCount
-        w.Write((byte)0);              // uiFontCount
+        w.Write((ushort)scene.UICanvases.Count); // uiCanvasCount
+        w.Write((byte)0);              // uiFontCount (MVP: system font only)
         w.Write((byte)0);              // uiPad5
         offsets.UiTableOffsetPos = w.BaseStream.Position;
-        w.Write((uint)0);              // uiTableOffset
+        w.Write((uint)0);              // uiTableOffset (backfilled)
 
         offsets.PixelDataOffsetPos = w.BaseStream.Position;
         w.Write((uint)0);              // pixelDataOffset (0 = v20 split)

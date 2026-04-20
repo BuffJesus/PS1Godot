@@ -101,10 +101,61 @@ public static class SceneCollector
         {
             EmitTriggerBox(tb, data, luaCache);
         }
+        else if (n is PS1UICanvas canvas)
+        {
+            EmitUICanvas(canvas, data);
+            // Canvas children are consumed here, not re-walked as siblings.
+            return;
+        }
         foreach (var child in n.GetChildren())
         {
             WalkAddMeshes(child, data, textureCache, luaCache);
         }
+    }
+
+    // Collect a canvas and its immediate PS1UIElement children. Nested
+    // canvases / non-PS1UIElement children are ignored with a warning so
+    // the scene tree stays honest.
+    private static void EmitUICanvas(PS1UICanvas canvas, SceneData data)
+    {
+        string name = string.IsNullOrWhiteSpace(canvas.CanvasName)
+            ? canvas.Name
+            : canvas.CanvasName;
+
+        var elements = new System.Collections.Generic.List<UIElementRecord>();
+        foreach (var child in canvas.GetChildren())
+        {
+            if (child is not PS1UIElement el)
+            {
+                GD.PushWarning($"[PS1Godot] Canvas '{name}' has non-UI child '{child.Name}' — ignored.");
+                continue;
+            }
+            string elName = string.IsNullOrWhiteSpace(el.ElementName) ? el.Name : el.ElementName;
+            elements.Add(new UIElementRecord
+            {
+                Name = elName,
+                Type = el.Type,
+                VisibleOnLoad = el.VisibleOnLoad,
+                X = (short)Mathf.Clamp(el.X, short.MinValue, short.MaxValue),
+                Y = (short)Mathf.Clamp(el.Y, short.MinValue, short.MaxValue),
+                W = (short)Mathf.Clamp(el.Width, short.MinValue, short.MaxValue),
+                H = (short)Mathf.Clamp(el.Height, short.MinValue, short.MaxValue),
+                ColorR = (byte)Mathf.Clamp((int)(el.Color.R * 255f), 0, 255),
+                ColorG = (byte)Mathf.Clamp((int)(el.Color.G * 255f), 0, 255),
+                ColorB = (byte)Mathf.Clamp((int)(el.Color.B * 255f), 0, 255),
+                Text = el.Text ?? "",
+            });
+        }
+
+        data.UICanvases.Add(new UICanvasRecord
+        {
+            Name = name,
+            Residency = canvas.Residency,
+            VisibleOnLoad = canvas.VisibleOnLoad,
+            SortOrder = (byte)Mathf.Clamp(canvas.SortOrder, 0, 255),
+            Elements = elements,
+        });
+        GD.Print($"[PS1Godot] UICanvas '{name}': residency={canvas.Residency}, {elements.Count} elements");
     }
 
     // Compute world AABB for a PS1TriggerBox by baking its GlobalTransform
