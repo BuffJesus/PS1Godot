@@ -17,6 +17,8 @@ public partial class PS1GodotPlugin : EditorPlugin
     private const string LaunchEmulatorMenuLabel = "PS1Godot: Launch in PCSX-Redux";
     private const string RunOnPsxMenuLabel = "PS1Godot: Run on PSX (export + build + launch)";
 
+    private PS1TriggerBoxGizmo? _triggerBoxGizmo;
+
     public override void _EnterTree()
     {
         AddToolMenuItem(SubdivideMenuLabel, Callable.From(OnSubdivide));
@@ -26,6 +28,9 @@ public partial class PS1GodotPlugin : EditorPlugin
         AddToolMenuItem(BuildPsxsplashMenuLabel, Callable.From(OnBuildPsxsplash));
         AddToolMenuItem(LaunchEmulatorMenuLabel, Callable.From(OnLaunchEmulator));
         AddToolMenuItem(RunOnPsxMenuLabel, Callable.From(OnRunOnPsx));
+
+        _triggerBoxGizmo = new PS1TriggerBoxGizmo();
+        AddNode3DGizmoPlugin(_triggerBoxGizmo);
 
         GD.Print("[PS1Godot] Plugin enabled.");
     }
@@ -39,6 +44,13 @@ public partial class PS1GodotPlugin : EditorPlugin
         RemoveToolMenuItem(BuildPsxsplashMenuLabel);
         RemoveToolMenuItem(LaunchEmulatorMenuLabel);
         RemoveToolMenuItem(RunOnPsxMenuLabel);
+
+        if (_triggerBoxGizmo != null)
+        {
+            RemoveNode3DGizmoPlugin(_triggerBoxGizmo);
+            _triggerBoxGizmo = null;
+        }
+
         GD.Print("[PS1Godot] Plugin disabled.");
     }
 

@@ -15,10 +15,24 @@ namespace PS1Godot;
 [GlobalClass]
 public partial class PS1TriggerBox : Node3D
 {
+    private Vector3 _halfExtents = new Vector3(1, 1, 1);
+
     // Local half-extents. World AABB is computed at export by baking the
     // node's GlobalTransform into the 8 corners and taking the axis-aligned
     // extent — same approach colliders use.
-    [Export] public Vector3 HalfExtents { get; set; } = new Vector3(1, 1, 1);
+    //
+    // Setter calls UpdateGizmos so the wireframe in the viewport tracks
+    // inspector changes live.
+    [Export]
+    public Vector3 HalfExtents
+    {
+        get => _halfExtents;
+        set
+        {
+            _halfExtents = value;
+            UpdateGizmos();
+        }
+    }
 
     // Trigger-level Lua script. The runtime calls onTriggerEnter(index) /
     // onTriggerExit(index) as top-level functions in this script (no self,
