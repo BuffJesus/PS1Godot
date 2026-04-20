@@ -23,7 +23,10 @@ public partial class PS1GodotDock : VBoxContainer
     // PS1 red — the branded accent from docs/ui-ux-plan.md § Visual language.
     private static readonly Color AccentRed = new(0xCE / 255f, 0x21 / 255f, 0x27 / 255f);
 
-    private Label? _sceneLabel;
+    private Label? _sceneNameLabel;
+    private Label? _sceneStatsLabel;
+    private ProgressBar? _triBar;
+    private Label? _triBarLabel;
 
     public PS1GodotDock()
     {
@@ -85,15 +88,43 @@ public partial class PS1GodotDock : VBoxContainer
         analyze.Pressed += () => EmitSignal(SignalName.AnalyzeTexturesRequested);
         actions.AddChild(analyze);
 
-        // ── Scene section (placeholder until dry-run stats land) ────────
+        // ── Scene section ───────────────────────────────────────────────
         AddSectionHeader(inner, "Scene");
-        _sceneLabel = new Label
+
+        _sceneNameLabel = new Label
+        {
+            Text = "— no scene open —",
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+        };
+        _sceneNameLabel.AddThemeColorOverride("font_color", new Color(1, 1, 1, 0.85f));
+        inner.AddChild(_sceneNameLabel);
+
+        _sceneStatsLabel = new Label
         {
             Text = "Open a scene with a PS1Scene node to see budgets here.",
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
         };
-        _sceneLabel.AddThemeColorOverride("font_color", new Color(1, 1, 1, 0.55f));
-        inner.AddChild(_sceneLabel);
+        _sceneStatsLabel.AddThemeColorOverride("font_color", new Color(1, 1, 1, 0.55f));
+        inner.AddChild(_sceneStatsLabel);
+
+        // Triangle budget bar — first concrete budget readout. VRAM / SPU
+        // bars will follow the same pattern once we have quick estimators
+        // for them (Phase 3 VRAM viewer work).
+        _triBarLabel = new Label { Text = "Triangles" };
+        _triBarLabel.AddThemeColorOverride("font_color", new Color(1, 1, 1, 0.65f));
+        _triBarLabel.Visible = false;
+        inner.AddChild(_triBarLabel);
+
+        _triBar = new ProgressBar
+        {
+            MinValue = 0,
+            MaxValue = 100,
+            Value = 0,
+            ShowPercentage = false,
+            CustomMinimumSize = new Vector2(0, 10),
+            Visible = false,
+        };
+        inner.AddChild(_triBar);
 
         // ── Setup section (placeholder until Phase 0.5 detection lands) ─
         AddSectionHeader(inner, "Setup");
@@ -110,14 +141,51 @@ public partial class PS1GodotDock : VBoxContainer
         inner.AddChild(spacer);
     }
 
-    // Hook for future wiring — plugin will call this with scene stats
-    // after an export dry-run so the Scene section shows budgets.
-    public void SetSceneInfo(string text)
+    // Called by the plugin on scene-change or manual refresh.
+    // When the scene lacks a PS1Scene node, the stats section reverts
+    // to a hint so the author knows what's missing.
+    public void ApplySceneStats(SceneStats.Result stats)
     {
-        if (_sceneLabel != null)
+        if (_sceneNameLabel == null || _sceneStatsLabel == null ||
+            _triBar == null || _triBarLabel == null) return;
+
+        if (!stats.HasPS1Scene)
         {
-            _sceneLabel.Text = text;
+            _sceneNameLabel.Text = "— no PS1Scene —";
+            _sceneStatsLabel.Text = "Add a PS1Scene node to see budgets here.";
+            _triBar.Visible = false;
+            _triBarLabel.Visible = false;
+            return;
         }
+
+        _sceneNameLabel.Text = stats.SceneName ?? "scene";
+        _sceneStatsLabel.Text = $"{stats.MeshCount} meshes · {stats.AudioClipCount} audio clips";
+
+        if (stats.TargetTriangles > 0)
+        {
+            double ratio = (double)stats.TriangleCount / stats.TargetTriangles;
+            _triBar.MaxValue = stats.TargetTriangles;
+            _triBar.Value = stats.TriangleCount;
+            _triBar.SelfModulate = BudgetColor(ratio);
+            _triBar.Visible = true;
+            _triBarLabel.Text = $"Triangles {stats.TriangleCount} / {stats.TargetTriangles}";
+            _triBarLabel.Visible = true;
+        }
+        else
+        {
+            _triBar.Visible = false;
+            _triBarLabel.Text = $"Triangles {stats.TriangleCount} (no budget set)";
+            _triBarLabel.Visible = true;
+        }
+    }
+
+    // Green up to 80 %, amber to 95 %, red above. Matches the palette
+    // the docs/ui-ux-plan.md § B dock sketch calls out.
+    private static Color BudgetColor(double ratio)
+    {
+        if (ratio < 0.80) return new Color(0.35f, 0.80f, 0.40f);
+        if (ratio < 0.95) return new Color(0.95f, 0.75f, 0.25f);
+        return new Color(0.90f, 0.25f, 0.25f);
     }
 
     private static Button MakeSecondary(string text, string tooltip)

@@ -47,7 +47,19 @@ public partial class PS1GodotPlugin : EditorPlugin
         _dock.ExportOnlyRequested += OnExportEmptySplashpack;
         AddControlToDock(DockSlot.RightBr, _dock);
 
+        // Refresh dock stats whenever the edited scene changes. Also
+        // push an initial read so the dock isn't blank on startup.
+        SceneChanged += OnSceneChanged;
+        OnSceneChanged(EditorInterface.Singleton.GetEditedSceneRoot());
+
         GD.Print("[PS1Godot] Plugin enabled.");
+    }
+
+    private void OnSceneChanged(Node sceneRoot)
+    {
+        if (_dock == null) return;
+        var stats = UI.SceneStats.Compute(sceneRoot);
+        _dock.ApplySceneStats(stats);
     }
 
     public override void _ExitTree()
@@ -60,6 +72,8 @@ public partial class PS1GodotPlugin : EditorPlugin
         RemoveToolMenuItem(LaunchEmulatorMenuLabel);
         RemoveToolMenuItem(RunOnPsxMenuLabel);
         RemoveToolMenuItem(ConvertMeshToPS1MenuLabel);
+
+        SceneChanged -= OnSceneChanged;
 
         if (_dock != null)
         {
