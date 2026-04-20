@@ -144,6 +144,11 @@ public static class SceneCollector
             EmitAnimation(anim, data);
             return;
         }
+        else if (n is PS1Cutscene cs)
+        {
+            EmitCutscene(cs, data);
+            return;
+        }
         foreach (var child in n.GetChildren())
         {
             WalkAddMeshes(child, data, textureCache, luaCache);
@@ -298,6 +303,56 @@ public static class SceneCollector
             Keyframes = kfs,
         });
         GD.Print($"[PS1Godot] Animation '{name}': track={anim.TrackType} target='{target}' frames={anim.TotalFrames} keyframes={kfs.Count}");
+    }
+
+    // Walk a PS1Cutscene's PS1AnimationTrack children, encode each track's
+    // keyframes per its track type, and append a CutsceneRecord. Skips
+    // tracks with no keyframes silently — they'd be no-ops at runtime.
+    private static void EmitCutscene(PS1Cutscene cs, SceneData data)
+    {
+        string name = string.IsNullOrWhiteSpace(cs.CutsceneName) ? cs.Name : cs.CutsceneName;
+
+        var tracks = new System.Collections.Generic.List<CutsceneTrackRecord>();
+        foreach (var child in cs.GetChildren())
+        {
+            if (child is not PS1AnimationTrack tr) continue;
+
+            var kfs = new System.Collections.Generic.List<KeyframeRecord>();
+            foreach (var kfChild in tr.GetChildren())
+            {
+                if (kfChild is not PS1AnimationKeyframe kf) continue;
+                (short v0, short v1, short v2) = EncodeKeyframeValue(kf.Value, tr.TrackType, data.GteScaling);
+                kfs.Add(new KeyframeRecord
+                {
+                    Frame = (ushort)Mathf.Clamp(kf.Frame, 0, 8191),
+                    Interp = kf.Interp,
+                    V0 = v0, V1 = v1, V2 = v2,
+                });
+            }
+            if (kfs.Count == 0) continue;
+            kfs.Sort((a, b) => a.Frame.CompareTo(b.Frame));
+
+            tracks.Add(new CutsceneTrackRecord
+            {
+                TargetObjectName = tr.TargetObjectName ?? "",
+                TrackType = tr.TrackType,
+                Keyframes = kfs,
+            });
+        }
+
+        if (tracks.Count == 0)
+        {
+            GD.PushWarning($"[PS1Godot] Cutscene '{name}' has no PS1AnimationTrack children with keyframes — skipping.");
+            return;
+        }
+
+        data.Cutscenes.Add(new CutsceneRecord
+        {
+            Name = name,
+            TotalFrames = (ushort)Mathf.Clamp(cs.TotalFrames, 1, 8191),
+            Tracks = tracks,
+        });
+        GD.Print($"[PS1Godot] Cutscene '{name}': frames={cs.TotalFrames} tracks={tracks.Count}");
     }
 
     // Encode a Godot-space triple into the runtime's fp12 / fp10 values

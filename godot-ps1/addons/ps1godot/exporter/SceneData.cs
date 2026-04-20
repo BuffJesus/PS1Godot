@@ -89,6 +89,25 @@ public sealed class AnimationRecord
     public required System.Collections.Generic.List<KeyframeRecord> Keyframes { get; init; }
 }
 
+// One track inside a CutsceneRecord. Same wire format (12 B
+// SPLASHPACKCutsceneTrack) as the single track an AnimationRecord carries.
+public sealed class CutsceneTrackRecord
+{
+    public required string TargetObjectName { get; init; } // empty = no target (e.g. camera tracks)
+    public required PS1AnimationTrackType TrackType { get; init; }
+    public required System.Collections.Generic.List<KeyframeRecord> Keyframes { get; init; }
+}
+
+// One cutscene: a named multi-track timeline. Serialized as a 12-byte
+// SPLASHPACKCutsceneEntry → 16-byte SPLASHPACKCutscene block → tracks
+// → keyframes. Audio + skin-anim events are placeholders for B.2/B.3.
+public sealed class CutsceneRecord
+{
+    public required string Name { get; init; }
+    public required ushort TotalFrames { get; init; }
+    public required System.Collections.Generic.List<CutsceneTrackRecord> Tracks { get; init; }
+}
+
 // UI canvas + its widgets. Serialized as a 12-byte descriptor in the UI
 // table plus a per-canvas element array elsewhere in the splashpack.
 public sealed class UICanvasRecord
@@ -178,6 +197,10 @@ public sealed class SceneData
     // Animations gathered from PS1Animation nodes + their PS1AnimationKeyframe
     // children. Lua plays by name via Animation.Play.
     public List<AnimationRecord> Animations { get; } = new();
+
+    // Cutscenes gathered from PS1Cutscene nodes + their PS1AnimationTrack
+    // children. Lua plays by name via Cutscene.Play.
+    public List<CutsceneRecord> Cutscenes { get; } = new();
 
     // Index into LuaFiles for a script attached to the PS1Scene root; -1 if
     // no root script. Runtime dispatches scene-level events (onSceneCreationStart

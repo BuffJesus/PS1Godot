@@ -261,6 +261,138 @@ public static class SplashpackWriter
         {
             WriteAnimationSection(w, scene, headerOffsets.AnimationTableOffsetPos);
         }
+
+        // ── Cutscene section ──
+        // Same shape as animations but multi-track + audio events. Audio
+        // and skin-anim events are stubbed (count=0, off=0) for B.2
+        // Phase 1 — Phase 2/3 wires camera tracks and audio cues.
+        if (scene.Cutscenes.Count > 0)
+        {
+            WriteCutsceneSection(w, scene, headerOffsets.CutsceneTableOffsetPos);
+        }
+    }
+
+    // ─── Cutscene section ───────────────────────────────────────────────
+    //
+    // Layout per splashpack.cpp:267:
+    //   12 B SPLASHPACKCutsceneEntry × cutsceneCount (table)
+    //   16 B SPLASHPACKCutscene per cutscene (data block)
+    //   12 B SPLASHPACKCutsceneTrack × trackCount (per cutscene)
+    //   8 B CutsceneKeyframe × keyframeCount (per track)
+    //   Audio events + skin anim events (zero in B.2 Phase 1).
+    //   Strings — cutscene names + track target object names.
+    private static void WriteCutsceneSection(BinaryWriter w, SceneData scene, long cutsceneTableOffsetPos)
+    {
+        AlignTo4(w);
+        long tableStart = w.BaseStream.Position;
+        BackfillUInt32(w, cutsceneTableOffsetPos, (uint)tableStart);
+
+        int count = scene.Cutscenes.Count;
+
+        // Table entries (12 B each). Backfill positions for dataOffset + nameOffset.
+        var dataOffPos = new long[count];
+        var nameOffPos = new long[count];
+        for (int i = 0; i < count; i++)
+        {
+            var c = scene.Cutscenes[i];
+            dataOffPos[i] = w.BaseStream.Position;
+            w.Write((uint)0);                                         // dataOffset (backfilled)
+            byte nameLen = (byte)Math.Min(Encoding.UTF8.GetByteCount(c.Name ?? ""), 255);
+            w.Write(nameLen);
+            w.Write((byte)0); w.Write((byte)0); w.Write((byte)0);     // 3 B pad
+            nameOffPos[i] = w.BaseStream.Position;
+            w.Write((uint)0);                                         // nameOffset (backfilled)
+        }
+
+        // Per-cutscene data blocks + their track arrays.
+        // Per-track backfill positions: objNameOff + kfOff.
+        var trackObjNameOffPositions = new long[count][];
+        var trackKfOffPositions      = new long[count][];
+        for (int i = 0; i < count; i++)
+        {
+            var c = scene.Cutscenes[i];
+            AlignTo4(w);
+            long blockStart = w.BaseStream.Position;
+            BackfillUInt32(w, dataOffPos[i], (uint)blockStart);
+
+            // SPLASHPACKCutscene (16 B for v19+ layout).
+            w.Write(c.TotalFrames);                  // u16
+            w.Write((byte)c.Tracks.Count);           // trackCount
+            w.Write((byte)0);                        // audioEventCount (B.2 Phase 1: none)
+            long tracksOffPos = w.BaseStream.Position;
+            w.Write((uint)0);                        // tracksOff (backfilled)
+            w.Write((uint)0);                        // audioOff (none)
+            // v19 skin anim event fields — stubbed in B.2 Phase 1.
+            w.Write((byte)0);                        // skinAnimEventCount
+            w.Write((byte)0); w.Write((byte)0); w.Write((byte)0); // 3 B pad
+            w.Write((uint)0);                        // skinAnimOff
+
+            // Track array — 12 B per track, immediately after the data block.
+            AlignTo4(w);
+            long tracksStart = w.BaseStream.Position;
+            BackfillUInt32(w, tracksOffPos, (uint)tracksStart);
+
+            trackObjNameOffPositions[i] = new long[c.Tracks.Count];
+            trackKfOffPositions[i]      = new long[c.Tracks.Count];
+            for (int ti = 0; ti < c.Tracks.Count; ti++)
+            {
+                var tr = c.Tracks[ti];
+                w.Write((byte)tr.TrackType);
+                w.Write((byte)tr.Keyframes.Count);
+                byte objNameLen = (byte)Math.Min(Encoding.UTF8.GetByteCount(tr.TargetObjectName ?? ""), 255);
+                w.Write(objNameLen);
+                w.Write((byte)0);                    // pad
+                trackObjNameOffPositions[i][ti] = w.BaseStream.Position;
+                w.Write((uint)0);                    // objNameOff (backfilled)
+                trackKfOffPositions[i][ti] = w.BaseStream.Position;
+                w.Write((uint)0);                    // kfOff (backfilled)
+            }
+        }
+
+        // Keyframe arrays per cutscene per track.
+        for (int i = 0; i < count; i++)
+        {
+            var c = scene.Cutscenes[i];
+            for (int ti = 0; ti < c.Tracks.Count; ti++)
+            {
+                var tr = c.Tracks[ti];
+                AlignTo4(w);
+                long kfStart = w.BaseStream.Position;
+                BackfillUInt32(w, trackKfOffPositions[i][ti], (uint)kfStart);
+                foreach (var kf in tr.Keyframes)
+                {
+                    ushort fai = (ushort)(((uint)kf.Frame & 0x1FFFu) | (((uint)kf.Interp & 0x7u) << 13));
+                    w.Write(fai);
+                    w.Write(kf.V0);
+                    w.Write(kf.V1);
+                    w.Write(kf.V2);
+                }
+            }
+        }
+
+        // Strings — cutscene names + per-track object names.
+        for (int i = 0; i < count; i++)
+        {
+            var c = scene.Cutscenes[i];
+            if (!string.IsNullOrEmpty(c.Name))
+            {
+                long off = w.BaseStream.Position;
+                w.Write(Encoding.UTF8.GetBytes(c.Name));
+                w.Write((byte)0);
+                BackfillUInt32(w, nameOffPos[i], (uint)off);
+            }
+            for (int ti = 0; ti < c.Tracks.Count; ti++)
+            {
+                var tr = c.Tracks[ti];
+                if (!string.IsNullOrEmpty(tr.TargetObjectName))
+                {
+                    long off = w.BaseStream.Position;
+                    w.Write(Encoding.UTF8.GetBytes(tr.TargetObjectName));
+                    w.Write((byte)0);
+                    BackfillUInt32(w, trackObjNameOffPositions[i][ti], (uint)off);
+                }
+            }
+        }
     }
 
     // ─── Animation section ──────────────────────────────────────────────
@@ -616,10 +748,10 @@ public static class SplashpackWriter
         w.Write((ushort)0);            // portalCount
         w.Write((ushort)0);            // roomTriRefCount
 
-        w.Write((ushort)0);            // cutsceneCount
+        w.Write((ushort)scene.Cutscenes.Count); // cutsceneCount
         w.Write((ushort)0);            // roomCellCount
         offsets.CutsceneTableOffsetPos = w.BaseStream.Position;
-        w.Write((uint)0);              // cutsceneTableOffset
+        w.Write((uint)0);              // cutsceneTableOffset (backfilled)
 
         w.Write((ushort)scene.UICanvases.Count); // uiCanvasCount
         w.Write((byte)0);              // uiFontCount (MVP: system font only)
