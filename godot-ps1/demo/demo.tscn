@@ -3,7 +3,6 @@
 [ext_resource type="Script" uid="uid://b8ogc8krip2k" path="res://addons/ps1godot/nodes/PS1Scene.cs" id="1_scene"]
 [ext_resource type="Script" uid="uid://dng0iofdw3dk7" path="res://addons/ps1godot/nodes/PS1MeshInstance.cs" id="2_mesh"]
 [ext_resource type="Script" uid="uid://cgk0vce50p3ph" path="res://addons/ps1godot/nodes/PS1AudioClip.cs" id="2_onvmd"]
-[ext_resource type="Script" uid="uid://bp3inh2eiwm3o" path="res://addons/ps1godot/nodes/PS1Camera.cs" id="3_cam"]
 [ext_resource type="AudioStream" uid="uid://bowpax1q1f18v" path="res://demo/audio/testsound.wav" id="3_oeqrt"]
 [ext_resource type="Material" uid="uid://begli571e2oqy" path="res://addons/ps1godot/shaders/ps1_default.tres" id="4_mat"]
 [ext_resource type="Material" path="res://demo/materials/ps1_green.tres" id="5_green"]
@@ -13,6 +12,7 @@
 [ext_resource type="Script" uid="uid://c01mt2tth0oll" path="res://addons/ps1godot/nodes/PS1UIElement.cs" id="11_uiel"]
 [ext_resource type="Script" uid="uid://dqtfgfu4x00ke" path="res://addons/ps1godot/nodes/PS1Animation.cs" id="12_anim"]
 [ext_resource type="Script" uid="uid://bg1ih72kp4c3g" path="res://addons/ps1godot/nodes/PS1AnimationKeyframe.cs" id="13_kf"]
+[ext_resource type="Script" uid="uid://cfdlp12g2rtct" path="res://addons/ps1godot/nodes/PS1Player.cs" id="13_tdg64"]
 
 [sub_resource type="Resource" id="Resource_ykvhj"]
 script = ExtResource("2_onvmd")
@@ -75,13 +75,6 @@ extra_cull_margin = 2.0
 mesh = SubResource("BoxMesh_cube")
 script = ExtResource("2_mesh")
 Collision = 1
-
-[node name="Camera" type="Camera3D" parent="." unique_id=1343913716]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4, 5)
-fov = 72.0
-near = 0.2
-far = 80.0
-script = ExtResource("3_cam")
 
 [node name="PS1TriggerBox" type="Node3D" parent="." unique_id=710725990]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.1003563, 1, 2.5)
@@ -174,3 +167,8 @@ script = ExtResource("13_kf")
 script = ExtResource("13_kf")
 Frame = 89
 Value = Vector3(0, 360, 0)
+
+[node name="PS1Player" type="Node3D" parent="." unique_id=1681451007]
+transform = Transform3D(-0.50056714, 0, 0.86569774, 0, 1, 0, -0.86569774, 0, -0.50056714, -8.617312, 12.140091, 7.6345844)
+script = ExtResource("13_tdg64")
+metadata/_custom_type_script = "uid://cfdlp12g2rtct"

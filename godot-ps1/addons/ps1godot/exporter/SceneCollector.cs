@@ -195,6 +195,26 @@ public static class SceneCollector
         GD.Print($"[PS1Godot] UICanvas '{name}': residency={canvas.Residency}, {elements.Count} elements");
     }
 
+    // Pull the albedo Texture2D out of either a StandardMaterial3D or a
+    // ShaderMaterial carrying an `albedo_tex` shader parameter (our
+    // ps1_default.tres uses that parameter name — see ps1.gdshader).
+    // Returns null if the material type isn't recognized or has no
+    // texture set.
+    private static Texture2D? ExtractAlbedoTexture(Material? mat)
+    {
+        if (mat == null) return null;
+        if (mat is StandardMaterial3D std) return std.AlbedoTexture;
+        if (mat is ShaderMaterial sm)
+        {
+            var val = sm.GetShaderParameter("albedo_tex");
+            if (val.VariantType == Variant.Type.Object)
+            {
+                return val.As<Texture2D>();
+            }
+        }
+        return null;
+    }
+
     // Resolve a mesh's effective flat color for untextured export.
     // Precedence:
     //   1. ShaderMaterial "tint_color" parameter (our ps1_default / ps1_green
@@ -623,9 +643,8 @@ public static class SceneCollector
         Material? mat = pmi.MaterialOverride;
         if (mat == null) mat = pmi.GetSurfaceOverrideMaterial(surfaceIdx);
         if (mat == null && pmi.Mesh != null) mat = pmi.Mesh.SurfaceGetMaterial(surfaceIdx);
-        if (mat is not StandardMaterial3D std) return -1;
 
-        var tex = std.AlbedoTexture;
+        var tex = ExtractAlbedoTexture(mat);
         if (tex == null) return -1;
 
         string path = tex.ResourcePath ?? "";
