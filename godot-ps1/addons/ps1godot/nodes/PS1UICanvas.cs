@@ -39,4 +39,11 @@ public partial class PS1UICanvas : Node
     // higher). 8-bit to match the runtime's UICanvas.sortOrder.
     [Export(PropertyHint.Range, "0,255,1")]
     public int SortOrder { get; set; } = 0;
+
+    // Palette source for this canvas's elements. When set, each
+    // PS1UIElement child with a non-Custom ThemeSlot pulls its color
+    // from the theme. Leave null for "authored colors only" (current
+    // behavior). Shipped default is addons/ps1godot/themes/PS1Theme.tres —
+    // duplicate + edit to customise without mutating the plugin copy.
+    [Export] public PS1Theme? Theme { get; set; }
 }

@@ -254,6 +254,7 @@ public static class SceneCollector
             ? canvas.Name
             : canvas.CanvasName;
 
+        var theme = canvas.Theme;
         var elements = new System.Collections.Generic.List<UIElementRecord>();
         foreach (var child in canvas.GetChildren())
         {
@@ -263,6 +264,7 @@ public static class SceneCollector
                 continue;
             }
             string elName = string.IsNullOrWhiteSpace(el.ElementName) ? el.Name : el.ElementName;
+            Color color = ResolveElementColor(el, theme);
             elements.Add(new UIElementRecord
             {
                 Name = elName,
@@ -272,9 +274,9 @@ public static class SceneCollector
                 Y = (short)Mathf.Clamp(el.Y, short.MinValue, short.MaxValue),
                 W = (short)Mathf.Clamp(el.Width, short.MinValue, short.MaxValue),
                 H = (short)Mathf.Clamp(el.Height, short.MinValue, short.MaxValue),
-                ColorR = (byte)Mathf.Clamp((int)(el.Color.R * 255f), 0, 255),
-                ColorG = (byte)Mathf.Clamp((int)(el.Color.G * 255f), 0, 255),
-                ColorB = (byte)Mathf.Clamp((int)(el.Color.B * 255f), 0, 255),
+                ColorR = (byte)Mathf.Clamp((int)(color.R * 255f), 0, 255),
+                ColorG = (byte)Mathf.Clamp((int)(color.G * 255f), 0, 255),
+                ColorB = (byte)Mathf.Clamp((int)(color.B * 255f), 0, 255),
                 Text = el.Text ?? "",
             });
         }
@@ -288,6 +290,29 @@ public static class SceneCollector
             Elements = elements,
         });
         GD.Print($"[PS1Godot] UICanvas '{name}': residency={canvas.Residency}, {elements.Count} elements");
+    }
+
+    // Apply the canvas's theme to an element's color at export time.
+    // ThemeSlot.Custom or no theme → the authored Color passes through;
+    // any other slot pulls from the matching PS1Theme field. Resolution
+    // is static: the splashpack's UI element bytes look identical to
+    // what they'd be if the author typed the theme's colors by hand,
+    // so no runtime format change.
+    private static Color ResolveElementColor(PS1UIElement el, PS1Theme? theme)
+    {
+        if (theme == null || el.ThemeSlot == PS1UIThemeSlot.Custom) return el.Color;
+        return el.ThemeSlot switch
+        {
+            PS1UIThemeSlot.Text      => theme.TextColor,
+            PS1UIThemeSlot.Accent    => theme.AccentColor,
+            PS1UIThemeSlot.Bg        => theme.BgColor,
+            PS1UIThemeSlot.BgBorder  => theme.BgBorderColor,
+            PS1UIThemeSlot.Highlight => theme.HighlightColor,
+            PS1UIThemeSlot.Warning   => theme.WarningColor,
+            PS1UIThemeSlot.Danger    => theme.DangerColor,
+            PS1UIThemeSlot.Neutral   => theme.NeutralColor,
+            _                        => el.Color,
+        };
     }
 
     // Pull the albedo Texture2D out of either a StandardMaterial3D or a

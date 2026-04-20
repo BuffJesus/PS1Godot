@@ -20,6 +20,23 @@ public enum PS1UIElementType
     Text = 2,
 }
 
+// Which `PS1Theme` slot this element should pull its color from at
+// export time. `Custom` (the default, 0) means "use the authored
+// Color field verbatim" — backward-compatible behavior for scenes
+// that don't have a theme yet.
+public enum PS1UIThemeSlot
+{
+    Custom = 0,
+    Text,
+    Accent,
+    Bg,
+    BgBorder,
+    Highlight,
+    Warning,
+    Danger,
+    Neutral,
+}
+
 [Tool]
 [GlobalClass]
 public partial class PS1UIElement : Node
@@ -46,6 +63,12 @@ public partial class PS1UIElement : Node
 
     // Tint. Text = foreground color, Box = fill color.
     [Export] public Color Color { get; set; } = new Color(1f, 1f, 1f, 1f);
+
+    // When non-Custom AND the owning PS1UICanvas has a Theme assigned,
+    // the exporter uses `theme.<Slot>Color` instead of `Color`. If the
+    // slot has no match (or no theme), falls back to `Color`. Change the
+    // theme → every opted-in element restyles.
+    [Export] public PS1UIThemeSlot ThemeSlot { get; set; } = PS1UIThemeSlot.Custom;
 
     // Text body (Type == Text). UTF-8 bytes; runtime buffer is 64 B,
     // so authored text should stay under ~60 visible characters.

@@ -1,7 +1,8 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=4 format=3]
 
 [ext_resource type="Script" uid="uid://bp1p1kqop2wwy" path="res://addons/ps1godot/nodes/PS1UICanvas.cs" id="1_canvas"]
 [ext_resource type="Script" uid="uid://c01mt2tth0oll" path="res://addons/ps1godot/nodes/PS1UIElement.cs" id="2_element"]
+[ext_resource type="Resource" path="res://addons/ps1godot/themes/PS1Theme.tres" id="3_theme"]
 
 ; Floating mid-screen notification. Hidden by default; show via
 ; UI.SetCanvasVisible(handle, true), set text with UI.SetText, and
@@ -13,6 +14,7 @@ script = ExtResource("1_canvas")
 CanvasName = "toast"
 VisibleOnLoad = false
 SortOrder = 50
+Theme = ExtResource("3_theme")
 
 [node name="Background" type="Node" parent="."]
 script = ExtResource("2_element")
@@ -23,6 +25,7 @@ Y = 96
 Width = 180
 Height = 24
 Color = Color(0, 0, 0, 0.9)
+ThemeSlot = 8
 
 [node name="Text" type="Node" parent="."]
 script = ExtResource("2_element")
@@ -32,4 +35,5 @@ Y = 104
 Width = 160
 Height = 16
 Color = Color(1, 1, 1, 1)
+ThemeSlot = 1
 Text = "Toast message"
