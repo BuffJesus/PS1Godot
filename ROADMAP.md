@@ -223,7 +223,8 @@ without crashing, even if features are stubbed.
 **Status (2026-04-20):** bullets 1–6 ✅, 7 🟡 (authored regions +
 auto-portals + ramps; DotRecast auto-gen deferred), 8 ✅ (+ `\n` runtime
 wrap, dialog ownership), 9 ✅, 10 ✅ (MVP — position/rotation/UI tracks on
-the runtime roadmap), 11 ✅ (staged end-to-end 2026-04-20), 12 ❌. Format
+the runtime roadmap), 11 ✅ (staged end-to-end 2026-04-20), 12 🟡 (rooms
++ portals + tri-ref assignment; cells + portal-refs deferred). Format
 at **v21** (bumped for editor-driven player rigs).
 
 1. **Writer skeleton + 3-file split.** Port `PSXSceneWriter.Write()` structure
@@ -259,7 +260,14 @@ at **v21** (bumped for editor-driven player rigs).
     only currently-active-area animations resident.
 11. **Skinned meshes.** Port `PSXSkinnedMeshExporter`, `PSXSkinnedObjectExporter`.
     **Amendment (`REF-GAP-7`):** same residency flag applies to skeletons.
-12. **Rooms / portals (interior scenes).** Port `PSXRoom`, `PSXPortalLink`.
+12. **Rooms / portals (interior scenes).** MVP landed 2026-04-20:
+    `PS1Room` (volume size + offset) and `PS1PortalLink` (RoomA/RoomB
+    NodePaths + portal size). Exporter assigns triangles to rooms by
+    vertex-majority containment with a 0.5 m boundary expand; resolves
+    portal rooms; auto-corrects portal normal to point RoomA → RoomB.
+    Catch-all room appended for unassigned triangles. Cell subdivision
+    + per-room portal-ref lists deferred — runtime falls back cleanly
+    (renders all of a room's tri-refs / scans all portals) without them.
 
 **Parity test:** take three reference scenes that ship with SplashEdit, rebuild
 them in Godot, and byte-diff the resulting splashpacks against the Unity output.

@@ -72,11 +72,17 @@ public static class SplashpackWriter
 
         int colliderCount = scene.Colliders.Count;
         int navRegionCount = scene.NavRegions.Count;
+        int navPortalCount = scene.NavPortals.Count;
         int luaFileCount = scene.LuaFiles.Count;
         int triggerBoxCount = scene.TriggerBoxes.Count;
         int interactableCount = scene.Interactables.Count;
+        int roomCount = scene.Rooms.Count;
+        int portalCount = scene.Portals.Count;
+        int roomTriRefCount = scene.RoomTriRefs.Count;
 
-        var headerOffsets = WriteHeader(w, scene, atlasCount, clutCount, colliderCount, navRegionCount, luaFileCount, triggerBoxCount, interactableCount);
+        var headerOffsets = WriteHeader(w, scene, atlasCount, clutCount, colliderCount,
+            navRegionCount, navPortalCount, luaFileCount, triggerBoxCount, interactableCount,
+            roomCount, portalCount, roomTriRefCount);
 
         // ── LuaFile entries (8 bytes each, cursor-walked first after header) ──
         // luaCodeOffset is backfilled later when we know where each source
@@ -127,7 +133,6 @@ public static class SplashpackWriter
         if (navRegionCount > 0)
         {
             AlignTo4(w);
-            int navPortalCount = scene.NavPortals.Count;
             // NavDataHeader
             w.Write((ushort)navRegionCount);
             w.Write((ushort)navPortalCount);
@@ -140,6 +145,29 @@ public static class SplashpackWriter
             foreach (var p in scene.NavPortals)
             {
                 WriteNavPortal(w, p);
+            }
+        }
+
+        // ── Room block: RoomData[R]*36 + PortalData[P]*40 + TriangleRef[T]*4.
+        //    Written only when the scene authors rooms; the loader aligns
+        //    its cursor to 4 bytes before reading RoomData, so do the same.
+        //    Room cells + per-room portal refs are TODO — runtime falls
+        //    back cleanly when their counts are 0.
+        if (roomCount > 0)
+        {
+            AlignTo4(w);
+            foreach (var r in scene.Rooms)
+            {
+                WriteRoom(w, r, scene.GteScaling);
+            }
+            foreach (var p in scene.Portals)
+            {
+                WritePortal(w, p, scene.GteScaling);
+            }
+            foreach (var tr in scene.RoomTriRefs)
+            {
+                w.Write(tr.ObjectIndex);
+                w.Write(tr.TriangleIndex);
             }
         }
 
@@ -769,7 +797,9 @@ public static class SplashpackWriter
         public long SkinTableOffsetPos;
     }
 
-    private static HeaderOffsets WriteHeader(BinaryWriter w, SceneData scene, int atlasCount, int clutCount, int colliderCount, int navRegionCount, int luaFileCount, int triggerBoxCount, int interactableCount)
+    private static HeaderOffsets WriteHeader(BinaryWriter w, SceneData scene, int atlasCount, int clutCount, int colliderCount,
+        int navRegionCount, int navPortalCount, int luaFileCount, int triggerBoxCount, int interactableCount,
+        int roomCount, int portalCount, int roomTriRefCount)
     {
         long headerStart = w.BaseStream.Position;
         var offsets = new HeaderOffsets();
@@ -822,7 +852,7 @@ public static class SplashpackWriter
         w.Write((ushort)0);            // collisionMeshCount (legacy)
         w.Write((ushort)0);            // collisionTriCount (legacy)
         w.Write((ushort)navRegionCount); // navRegionCount
-        w.Write((ushort)0);            // navPortalCount
+        w.Write((ushort)navPortalCount); // navPortalCount
 
         // Movement parameters (12 bytes).
         //   moveSpeed/sprintSpeed are PER-FRAME fp12 PSX-units: runtime does
@@ -867,9 +897,9 @@ public static class SplashpackWriter
         w.Write((byte)0);              // pad3
 
         // Room system counts
-        w.Write((ushort)0);            // roomCount
-        w.Write((ushort)0);            // portalCount
-        w.Write((ushort)0);            // roomTriRefCount
+        w.Write((ushort)roomCount);       // roomCount
+        w.Write((ushort)portalCount);     // portalCount
+        w.Write((ushort)roomTriRefCount); // roomTriRefCount
 
         w.Write((ushort)scene.Cutscenes.Count); // cutsceneCount
         w.Write((ushort)0);            // roomCellCount
@@ -1035,6 +1065,70 @@ public static class SplashpackWriter
         long written = w.BaseStream.Position - entryStart;
         if (written != 84)
             throw new InvalidOperationException($"NavRegion size mismatch: {written} vs 84.");
+    }
+
+    // ─── RoomData (36 bytes) ─────────────────────────────────────────────
+    // World-space AABB in PS1 coords (Y negated, swap min/max Y), then the
+    // tri-ref / cell / portal-ref slice indices.
+    private static void WriteRoom(BinaryWriter w, RoomRecord r, float gteScaling)
+    {
+        long entryStart = w.BaseStream.Position;
+        w.Write(PSXTrig.ConvertWorldToFixed12(r.WorldMin.X / gteScaling));
+        w.Write(PSXTrig.ConvertWorldToFixed12(-r.WorldMax.Y / gteScaling));
+        w.Write(PSXTrig.ConvertWorldToFixed12(r.WorldMin.Z / gteScaling));
+        w.Write(PSXTrig.ConvertWorldToFixed12(r.WorldMax.X / gteScaling));
+        w.Write(PSXTrig.ConvertWorldToFixed12(-r.WorldMin.Y / gteScaling));
+        w.Write(PSXTrig.ConvertWorldToFixed12(r.WorldMax.Z / gteScaling));
+
+        w.Write(r.FirstTriRef);
+        w.Write(r.TriRefCount);
+        w.Write(r.FirstCell);
+        w.Write(r.CellCount);
+        w.Write(r.PortalRefCount);
+        w.Write(r.FirstPortalRef);
+        w.Write((ushort)0);            // pad
+
+        long written = w.BaseStream.Position - entryStart;
+        if (written != 36)
+            throw new InvalidOperationException($"RoomData size mismatch: {written} vs 36.");
+    }
+
+    // ─── PortalData (40 bytes) ───────────────────────────────────────────
+    // Centre is in world fp12 (Y negated). half-W/H + axis vectors are in
+    // 4.12 fp (multiply by 4096 then int16-clamp). Y components of the
+    // axis vectors flip sign for the PSX Y-down convention.
+    private static void WritePortal(BinaryWriter w, PortalRecord p, float gteScaling)
+    {
+        long entryStart = w.BaseStream.Position;
+        w.Write(p.RoomA);
+        w.Write(p.RoomB);
+
+        w.Write(PSXTrig.ConvertWorldToFixed12(p.WorldCenter.X / gteScaling));
+        w.Write(PSXTrig.ConvertWorldToFixed12(-p.WorldCenter.Y / gteScaling));
+        w.Write(PSXTrig.ConvertWorldToFixed12(p.WorldCenter.Z / gteScaling));
+
+        short halfW = (short)Mathf.Clamp(Mathf.RoundToInt(p.PortalSize.X * 0.5f / gteScaling * 4096f), 1, short.MaxValue);
+        short halfH = (short)Mathf.Clamp(Mathf.RoundToInt(p.PortalSize.Y * 0.5f / gteScaling * 4096f), 1, short.MaxValue);
+        w.Write(halfW);
+        w.Write(halfH);
+
+        short Pack(float v) => (short)Mathf.Clamp(Mathf.RoundToInt(v * 4096f), short.MinValue, short.MaxValue);
+        w.Write(Pack( p.Normal.X));
+        w.Write(Pack(-p.Normal.Y));
+        w.Write(Pack( p.Normal.Z));
+        w.Write((short)0);            // pad
+
+        w.Write(Pack( p.Right.X));
+        w.Write(Pack(-p.Right.Y));
+        w.Write(Pack( p.Right.Z));
+
+        w.Write(Pack( p.Up.X));
+        w.Write(Pack(-p.Up.Y));
+        w.Write(Pack( p.Up.Z));
+
+        long written = w.BaseStream.Position - entryStart;
+        if (written != 40)
+            throw new InvalidOperationException($"PortalData size mismatch: {written} vs 40.");
     }
 
     // ─── NavPortal (20 bytes) ────────────────────────────────────────────

@@ -73,6 +73,13 @@ public static class SceneCollector
         // runtime can walk between them.
         StitchNavPortals(data);
 
+        // Interior room/portal culling: assign every exported triangle to a
+        // PS1Room volume (or the catch-all), then capture PS1PortalLink
+        // connectivity. Runtime uses this when sceneType=Interior. For
+        // exterior scenes with no PS1Room nodes, the lists stay empty and
+        // the renderer falls back to BVH culling.
+        CollectRooms(root, data);
+
         // Player spawn: prefer an explicit PS1Player node; fall back to the
         // first Camera3D so scenes authored before PS1Player existed keep
         // working. A Camera3D child of PS1Player supplies the initial
@@ -1381,6 +1388,256 @@ public static class SceneCollector
         FitPlane(w, out float a, out float b, out float d);
         return a * x + b * z + d;
     }
+
+    // Walk the tree for PS1Room + PS1PortalLink nodes, compute per-room
+    // AABBs, assign every exported triangle to a room (or the catch-all),
+    // and capture portal connectivity. No-op when there are no PS1Room
+    // nodes — exterior scenes keep relying on BVH culling.
+    internal static void CollectRooms(Node root, SceneData data)
+    {
+        var rooms = new List<PS1Room>();
+        var portals = new List<PS1PortalLink>();
+        CollectRoomNodes(root, rooms, portals);
+
+        if (rooms.Count == 0 && portals.Count == 0) return;
+
+        if (portals.Count > 0 && rooms.Count == 0)
+        {
+            GD.PushWarning(
+                "[PS1Godot] Scene has PS1PortalLink nodes but no PS1Room — portals skipped. " +
+                "Add PS1Room nodes first so portals can point at them.");
+            return;
+        }
+
+        // Room bounds in world space — same matrix-the-8-corners pattern
+        // we use for colliders and trigger boxes so scaling / rotating the
+        // PS1Room node reshapes the volume before we AABB-it.
+        const float RoomMargin = 0.5f;  // matches SplashEdit's triangle-majority expand
+        var roomBounds = new (Vector3 min, Vector3 max)[rooms.Count];
+        for (int i = 0; i < rooms.Count; i++)
+        {
+            roomBounds[i] = ComputeRoomWorldBounds(rooms[i], RoomMargin);
+        }
+
+        // Bucket triangles per room + catch-all. Ordering inside a bucket
+        // matches the object iteration order (rooms[r] = list of (objIdx,
+        // triIdx)); the writer flattens into data.RoomTriRefs room-by-room
+        // so each room's slice is contiguous.
+        var perRoom = new List<RoomTriRefRecord>[rooms.Count + 1];
+        for (int i = 0; i < perRoom.Length; i++) perRoom[i] = new();
+        int catchAllIdx = rooms.Count;
+
+        for (int objIdx = 0; objIdx < data.Objects.Count; objIdx++)
+        {
+            var obj = data.Objects[objIdx];
+            if (obj.Mesh == null) continue;
+
+            // Triangles in data.Objects[*].Mesh are already baked to world
+            // space and stored in PS1 fp12 — but we need world-space XYZ in
+            // Godot units for the per-triangle room test. Walk the source
+            // MeshInstance3D to get the positions at export-time precision.
+            var pmi = obj.Node as PS1MeshInstance;
+            if (pmi == null || pmi.Mesh == null) continue;
+
+            var xform = pmi.GlobalTransform;
+            var nodeScale = pmi.Scale;
+            var godotMesh = pmi.Mesh;
+            int surfaceCount = godotMesh.GetSurfaceCount();
+
+            int triGlobal = 0;
+            for (int s = 0; s < surfaceCount; s++)
+            {
+                var arrays = godotMesh.SurfaceGetArrays(s);
+                var verts = arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array();
+                var idx = arrays[(int)Mesh.ArrayType.Index].AsInt32Array();
+
+                int triCount = idx.Length > 0 ? idx.Length / 3 : verts.Length / 3;
+
+                for (int t = 0; t < triCount; t++)
+                {
+                    int i0 = idx.Length > 0 ? idx[t * 3] : t * 3;
+                    int i1 = idx.Length > 0 ? idx[t * 3 + 1] : t * 3 + 1;
+                    int i2 = idx.Length > 0 ? idx[t * 3 + 2] : t * 3 + 2;
+
+                    Vector3 v0 = xform * (verts[i0] * nodeScale);
+                    Vector3 v1 = xform * (verts[i1] * nodeScale);
+                    Vector3 v2 = xform * (verts[i2] * nodeScale);
+
+                    int best = -1;
+                    int bestHits = 0;
+                    float bestDistSq = float.MaxValue;
+                    Vector3 centroid = (v0 + v1 + v2) / 3f;
+
+                    for (int r = 0; r < rooms.Count; r++)
+                    {
+                        var (rmin, rmax) = roomBounds[r];
+                        int hits = 0;
+                        if (PointInAabb(v0, rmin, rmax)) hits++;
+                        if (PointInAabb(v1, rmin, rmax)) hits++;
+                        if (PointInAabb(v2, rmin, rmax)) hits++;
+                        if (hits == 0) continue;
+
+                        Vector3 rc = (rmin + rmax) * 0.5f;
+                        float d = (rc - centroid).LengthSquared();
+                        if (hits > bestHits || (hits == bestHits && d < bestDistSq))
+                        {
+                            bestHits = hits;
+                            bestDistSq = d;
+                            best = r;
+                        }
+                    }
+
+                    int bucket = best >= 0 ? best : catchAllIdx;
+                    perRoom[bucket].Add(new RoomTriRefRecord
+                    {
+                        ObjectIndex = (ushort)objIdx,
+                        TriangleIndex = (ushort)triGlobal,
+                    });
+                    triGlobal++;
+                }
+            }
+        }
+
+        // Flatten into data.RoomTriRefs, stamping FirstTriRef / TriRefCount
+        // on each RoomRecord as we go. The writer appends a catch-all
+        // RoomRecord with a loose world-bounds box after the authored ones.
+        int running = 0;
+        for (int r = 0; r < rooms.Count; r++)
+        {
+            var (rmin, rmax) = ComputeRoomWorldBounds(rooms[r], 0f);
+            var rec = new RoomRecord
+            {
+                WorldMin = rmin,
+                WorldMax = rmax,
+                Name = rooms[r].RoomName,
+                FirstTriRef = (ushort)running,
+                TriRefCount = (ushort)perRoom[r].Count,
+            };
+            data.Rooms.Add(rec);
+            foreach (var tr in perRoom[r]) data.RoomTriRefs.Add(tr);
+            running += perRoom[r].Count;
+        }
+        // Catch-all room entry — loose ±1000-unit box in Godot space; the
+        // writer quantizes per usual. Runtime always renders this room's
+        // tri-refs regardless of camera position.
+        {
+            var rec = new RoomRecord
+            {
+                WorldMin = new Vector3(-1000, -1000, -1000),
+                WorldMax = new Vector3( 1000,  1000,  1000),
+                Name = "_catchall",
+                FirstTriRef = (ushort)running,
+                TriRefCount = (ushort)perRoom[catchAllIdx].Count,
+            };
+            data.Rooms.Add(rec);
+            foreach (var tr in perRoom[catchAllIdx]) data.RoomTriRefs.Add(tr);
+            running += perRoom[catchAllIdx].Count;
+        }
+
+        // Resolve PS1PortalLink nodes: RoomA/RoomB NodePaths → room indices.
+        // Auto-correct the normal so it points RoomA → RoomB.
+        var roomToIndex = new Dictionary<PS1Room, int>();
+        for (int i = 0; i < rooms.Count; i++) roomToIndex[rooms[i]] = i;
+
+        int droppedPortals = 0;
+        foreach (var link in portals)
+        {
+            var nodeA = link.GetNodeOrNull(link.RoomA) as PS1Room;
+            var nodeB = link.GetNodeOrNull(link.RoomB) as PS1Room;
+            if (nodeA == null || nodeB == null)
+            {
+                GD.PushWarning($"[PS1Godot] PS1PortalLink '{link.Name}' has unresolved / non-PS1Room RoomA/RoomB — skipped.");
+                droppedPortals++;
+                continue;
+            }
+            if (nodeA == nodeB)
+            {
+                GD.PushWarning($"[PS1Godot] PS1PortalLink '{link.Name}' points at the same room twice — skipped.");
+                droppedPortals++;
+                continue;
+            }
+            if (!roomToIndex.TryGetValue(nodeA, out int idxA) ||
+                !roomToIndex.TryGetValue(nodeB, out int idxB))
+            {
+                GD.PushWarning($"[PS1Godot] PS1PortalLink '{link.Name}': one of its rooms is not in the collected room list — skipped.");
+                droppedPortals++;
+                continue;
+            }
+
+            var t = link.GlobalTransform;
+            var centre = t.Origin;
+            var normal = -t.Basis.Z.Normalized();   // Godot forward is -Z
+            var right  =  t.Basis.X.Normalized();
+            var up     =  t.Basis.Y.Normalized();
+
+            var centreA = nodeA.GlobalTransform * nodeA.VolumeOffset;
+            var centreB = nodeB.GlobalTransform * nodeB.VolumeOffset;
+            var aToB = (centreB - centreA).Normalized();
+            if (normal.Dot(aToB) < 0f)
+            {
+                normal = -normal;
+                right = -right;
+            }
+
+            data.Portals.Add(new PortalRecord
+            {
+                RoomA = (ushort)idxA,
+                RoomB = (ushort)idxB,
+                WorldCenter = centre,
+                PortalSize = link.PortalSize,
+                Normal = normal,
+                Right = right,
+                Up = up,
+            });
+        }
+
+        GD.Print($"[PS1Godot] Rooms: {rooms.Count} authored + 1 catch-all, " +
+                 $"{data.Portals.Count} portals ({droppedPortals} dropped), " +
+                 $"{data.RoomTriRefs.Count} tri-refs " +
+                 $"({perRoom[catchAllIdx].Count} catch-all).");
+    }
+
+    private static void CollectRoomNodes(Node n, List<PS1Room> rooms, List<PS1PortalLink> portals)
+    {
+        if (n is PS1Room r) rooms.Add(r);
+        if (n is PS1PortalLink pl) portals.Add(pl);
+        foreach (var child in n.GetChildren())
+            CollectRoomNodes(child, rooms, portals);
+    }
+
+    // Transform the 8 corners of (VolumeSize, VolumeOffset) by the room's
+    // GlobalTransform, then AABB them. `margin` expands the box outward by
+    // that many world units on every axis (SplashEdit uses this to catch
+    // doorway geometry on the room boundary).
+    private static (Vector3 min, Vector3 max) ComputeRoomWorldBounds(PS1Room room, float margin)
+    {
+        Vector3 half = room.VolumeSize * 0.5f;
+        var xform = room.GlobalTransform;
+        Vector3 min = new(float.MaxValue, float.MaxValue, float.MaxValue);
+        Vector3 max = new(float.MinValue, float.MinValue, float.MinValue);
+        for (int i = 0; i < 8; i++)
+        {
+            var corner = room.VolumeOffset + new Vector3(
+                (i & 1) != 0 ? half.X : -half.X,
+                (i & 2) != 0 ? half.Y : -half.Y,
+                (i & 4) != 0 ? half.Z : -half.Z);
+            var w = xform * corner;
+            min = new Vector3(Mathf.Min(min.X, w.X), Mathf.Min(min.Y, w.Y), Mathf.Min(min.Z, w.Z));
+            max = new Vector3(Mathf.Max(max.X, w.X), Mathf.Max(max.Y, w.Y), Mathf.Max(max.Z, w.Z));
+        }
+        if (margin > 0f)
+        {
+            var m = new Vector3(margin, margin, margin);
+            min -= m;
+            max += m;
+        }
+        return (min, max);
+    }
+
+    private static bool PointInAabb(Vector3 p, Vector3 min, Vector3 max)
+        => p.X >= min.X && p.X <= max.X
+        && p.Y >= min.Y && p.Y <= max.Y
+        && p.Z >= min.Z && p.Z <= max.Z;
 
     // Returns an index into data.Textures, or -1 if this surface has no
     // export-time texture (untextured → FlatColor path in PSXMesh).

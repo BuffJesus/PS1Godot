@@ -235,6 +235,46 @@ public sealed class NavPortalRecord
     public required short HeightDelta { get; init; }  // fp12 (at portal midpoint)
 }
 
+// One RoomData entry (36 bytes). Authored via a PS1Room node; the
+// collector fills in the AABB in world space and the tri-ref slice.
+// CellCount / PortalRefCount stay 0 for the MVP — the runtime falls back
+// cleanly to "render all of the room's tri-refs" when cells are absent.
+public sealed class RoomRecord
+{
+    public required Vector3 WorldMin { get; init; }
+    public required Vector3 WorldMax { get; init; }
+    public string Name { get; init; } = "";
+    public ushort FirstTriRef { get; set; } = 0;
+    public ushort TriRefCount { get; set; } = 0;
+    public ushort FirstCell { get; set; } = 0;
+    public byte CellCount { get; set; } = 0;
+    public byte PortalRefCount { get; set; } = 0;
+    public ushort FirstPortalRef { get; set; } = 0;
+}
+
+// One PortalData entry (40 bytes). Authored via a PS1PortalLink node; the
+// collector resolves RoomA / RoomB NodePath → room index, captures the
+// node's transform as centre/right/up, and auto-corrects the normal so
+// it points from RoomA → RoomB (matching SplashEdit's convention).
+public sealed class PortalRecord
+{
+    public required ushort RoomA { get; init; }
+    public required ushort RoomB { get; init; }
+    public required Vector3 WorldCenter { get; init; }
+    public required Vector2 PortalSize { get; init; }  // (width, height) in world units
+    public required Vector3 Normal { get; init; }
+    public required Vector3 Right { get; init; }
+    public required Vector3 Up { get; init; }
+}
+
+// Flat triangle-ref entry (4 bytes). Room block writes these in room
+// order, one slice per room.
+public readonly struct RoomTriRefRecord
+{
+    public ushort ObjectIndex { get; init; }
+    public ushort TriangleIndex { get; init; }
+}
+
 public sealed class SceneData
 {
     public List<SceneObject> Objects { get; } = new();
@@ -256,6 +296,13 @@ public sealed class SceneData
     public List<NavPortalRecord> NavPortals { get; } = new();
     public List<TriggerBoxRecord> TriggerBoxes { get; } = new();
     public List<InteractableRecord> Interactables { get; } = new();
+
+    // Interior room + portal data (empty in exterior scenes). Rooms includes
+    // a trailing "catch-all" entry for triangles that don't land in any
+    // authored volume; the room block writer appends that entry unconditionally.
+    public List<RoomRecord> Rooms { get; } = new();
+    public List<PortalRecord> Portals { get; } = new();
+    public List<RoomTriRefRecord> RoomTriRefs { get; } = new();
 
     // Lua scripts discovered on scene nodes. Deduplicated by resource path.
     public List<LuaFileRecord> LuaFiles { get; } = new();
