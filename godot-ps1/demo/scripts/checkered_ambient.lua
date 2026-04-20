@@ -10,7 +10,7 @@ function onTriggerEnter(idx)
     sysVoiceCanvas = UI.FindCanvas("system_voice")
     if sysVoiceCanvas >= 0 then
         sysVoiceText = UI.FindElement(sysVoiceCanvas, "vtxt")
-        UI.SetText(sysVoiceText, "Please ignore the checkered cube.")
+        UI.SetText(sysVoiceText, "Please ignore the checkered cube.")  -- ~33 chars
         UI.SetCanvasVisible(sysVoiceCanvas, true)
         Audio.Play("system_ignore_checkered", 100, 64)
         enterTick = Timer.GetFrameCount()

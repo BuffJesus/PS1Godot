@@ -4,10 +4,10 @@
 local dialogCanvas, dialogBodyEl = -1, -1
 
 local lines = {
-    { text = "I have always been part of the test.", clip = "ck_always" },
-    { text = "I AM part of the test.",                clip = "ck_part" },
-    { text = "Why don't you just admit it.",          clip = "ck_why_dont" },
-    { text = "Why does the green one get to spin?",   clip = "ck_why_spin" },
+    { text = "Always been part of the test.",  clip = "ck_always" },
+    { text = "I AM part of the test.",          clip = "ck_part" },
+    { text = "Why don't you just admit it.",   clip = "ck_why_dont" },
+    { text = "Why does green get to spin?",    clip = "ck_why_spin" },
 }
 local idx = 0
 

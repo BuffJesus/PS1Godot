@@ -15,6 +15,17 @@ public static class SceneCollector
         var data = new SceneData { ScenePath = scenePath };
         if (root == null) return data;
 
+        // Diagnostic — list the names + types of root's direct children so
+        // we can see at a glance whether PS1Player + cubes etc. actually
+        // got loaded into Godot's scene tree (vs. silently dropped due to
+        // script-attach errors).
+        var childTypes = new System.Collections.Generic.List<string>();
+        foreach (var c in root.GetChildren())
+        {
+            childTypes.Add($"{c.Name}({c.GetType().Name})");
+        }
+        GD.Print($"[PS1Godot] Root '{root.Name}' children: {string.Join(", ", childTypes)}");
+
         // Pull scene-level settings from the PS1Scene root if present.
         if (root is PS1Scene ps1Scene)
         {
@@ -85,6 +96,10 @@ public static class SceneCollector
                 data.PlayerPosition = camera.GlobalPosition;
                 data.PlayerRotation = camera.GlobalRotation;
                 GD.PushWarning("[PS1Godot] No PS1Player in scene; using first Camera3D as spawn. Add a PS1Player node to control this explicitly.");
+            }
+            else
+            {
+                GD.PushError("[PS1Godot] No PS1Player AND no Camera3D in scene — player will spawn at world origin (0,0,0). Add a PS1Player node and Build the project so Godot picks it up.");
             }
         }
 

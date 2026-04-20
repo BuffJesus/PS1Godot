@@ -253,6 +253,35 @@ Good upstream PR candidate: small change, broadly useful.
 
 ---
 
+### N+5. UI text has no word-wrap; overflows right edge
+
+**Problem.** `UISystem::renderProportionalText()` and the system-font
+chainprintf path both walk the string linearly and advance cursorX
+off the right edge of the element when the text is longer than the
+author-declared width. Newlines in the text buffer aren't handled
+either.
+
+**Why we care.** Authors write natural dialog lines that blow past the
+~28 char budget of a typical dialog box and have to manually break
+them into multiple UI elements or truncate at the source. Makes
+localization actively painful.
+
+**Proposed direction.** Word-break the string at glyph boundaries when
+cursorX + glyph.advance > x + w: insert an implicit newline, reset
+cursorX, advance cursorY by font line height. Honor explicit `\n` in
+the text buffer the same way. Optional authoring field: overflow
+mode (Truncate / Wrap / Scroll).
+
+**Status.** Unfiled. Purely a renderer change; no schema impact.
+
+**Evidence.**
+- `2026-04-20` — Demo dialog lines ("Did the camera finish moving?
+  It never tells me.") overflowed off the right edge of a 224 px
+  body element. Workaround: authors shorten on-screen text and let
+  the voice clip carry the full phrasing.
+
+---
+
 ### N+4. Background / sky color tied to fog color
 
 **Problem.** `Renderer::SetFog()` does:

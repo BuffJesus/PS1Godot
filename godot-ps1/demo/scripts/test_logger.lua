@@ -21,12 +21,14 @@ local cutsceneFrame = 0
 local narrationIdx = 1
 local cutsceneRanThisSession = false
 local narrationHidden = false
+-- Note: text length ~36 chars max for the SystemVoice text element
+-- (288 px wide, ~8 px/char). Voice clip plays the full long-form line.
 local narration = {
-    { 5,   "Welcome to the Interactive Demonstration Environment(TM).", "system_welcome"          },
-    { 130, "Please do not be alarmed by the cube.",                     "system_not_alarmed"      },
-    { 220, "It is perfectly stable.",                                   "system_perfectly_stable" },
-    { 320, "The other cube is also intentional.",                       "system_other_cube"       },
-    { 420, "We think.",                                                 "system_we_think"         },
+    { 5,   "Welcome to the Demo Environment.",  "system_welcome"          },
+    { 130, "Do not be alarmed by the cube.",    "system_not_alarmed"      },
+    { 220, "It is perfectly stable.",            "system_perfectly_stable" },
+    { 320, "The other cube is also intentional.","system_other_cube"       },
+    { 420, "We think.",                          "system_we_think"         },
 }
 
 -- ── Green cube dialog sequences ──
@@ -35,20 +37,22 @@ local narration = {
 -- Press 3+: cycles three extras one per press
 -- Durations are in onUpdate ticks (~60 fps), longer than the audio so
 -- there's a beat of "text held" silence after each line plays.
+-- Dialog body element is 224 px wide (~28 chars at 8 px/char). Lines
+-- shortened to fit; voice clip carries the full original phrasing.
 local INTERACTIONS = {
     {
-        { text = "Hey.",                                              clip = "sc_hey",        dur = 110 },
-        { text = "...You're not supposed to be here yet.",            clip = "sc_not_yet",    dur = 200 },
-        { text = "Did the camera finish moving? It never tells me.", clip = "sc_camera",     dur = 240 },
+        { text = "Hey.",                          clip = "sc_hey",       dur = 110 },
+        { text = "Not supposed to be here yet.",  clip = "sc_not_yet",   dur = 200 },
+        { text = "Did the camera stop moving?",   clip = "sc_camera",    dur = 240 },
     },
     {
-        { text = "Okay, good talk.",                                  clip = "sc_good_talk",  dur = 160 },
+        { text = "Okay, good talk.",              clip = "sc_good_talk", dur = 160 },
     },
 }
 local EXTRAS = {
-    { text = "I spin because it gives me purpose.",                   clip = "sc_purpose",        dur = 200 },
-    { text = "The checkered one thinks it's better than me.",         clip = "sc_thinks_better",  dur = 220 },
-    { text = "Don't trust anything that bobs.",                       clip = "sc_bobbing",        dur = 180 },
+    { text = "I spin. Gives me purpose.",         clip = "sc_purpose",       dur = 200 },
+    { text = "Checkered thinks it's better.",     clip = "sc_thinks_better", dur = 220 },
+    { text = "Don't trust things that bob.",      clip = "sc_bobbing",       dur = 180 },
 }
 
 local activeSeq, activeIdx, activeFrame = nil, 0, 0
@@ -163,14 +167,14 @@ function onUpdate(self, dt)
         elseif idleStep == 0 then
             idleFrames = idleFrames + 1
             if idleFrames > IDLE_THRESHOLD then
-                showSysVoice("You appear to be standing still.", "system_idle_detected")
+                showSysVoice("You're standing still.", "system_idle_detected")
                 idleStep = 1
                 idleStepFrame = 0
             end
         elseif idleStep == 1 then
             idleStepFrame = idleStepFrame + 1
             if idleStepFrame > IDLE_BEAT_PAUSE then
-                showSysVoice("This is either intentional... or deeply concerning.", "system_deeply_concerning")
+                showSysVoice("Intentional? Or concerning?", "system_deeply_concerning")
                 idleStep = 2
                 idleStepFrame = 0
             end
