@@ -419,6 +419,24 @@ PS1 BIOS has memory-card syscalls; nothing in psxsplash surfaces them today.
 - [ ] `Entity.GetScale/SetScale` iff the renderer supports non-uniform scale
       (may be no-op on vertex-baked meshes; check before promising).
 
+### Camera modes (1st/3rd/Orbit)
+
+`PS1Player.CameraMode` already ships as an authoring-side enum, but the
+runtime hardcodes a single third-person rig. Wire the mode into the
+runtime so first-person / orbit actually take effect.
+
+- [ ] Splashpack header carries the chosen mode (one u8 byte).
+- [ ] `Camera.SetMode(mode)` Lua API so the options menu can switch at
+      runtime. **[runtime]**
+- [ ] First-person mode: camera locked at player head height
+      (`playerPosition + (0, playerHeight, 0)`), forward = player facing,
+      player mesh hidden. **[runtime]**
+- [ ] Third-person mode: camera trails at an authored offset (default
+      `(0, playerHeight * 1.2, 3.0)`). PS1Player's Camera3D child
+      supplies the offset when present. **[runtime]**
+- [ ] Orbit mode: right-stick rotates camera around player pivot, radius
+      authored on PS1Player. **[runtime]**
+
 ### UI / HUD from Lua
 
 Canvas assets export; runtime mutation doesn't.

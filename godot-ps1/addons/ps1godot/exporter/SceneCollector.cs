@@ -54,18 +54,49 @@ public static class SceneCollector
 
         WalkAddMeshes(root, data, textureCache, luaCache);
 
-        // First Camera3D we find supplies the player start pose. Without this,
-        // psxsplash's player spawns at world origin facing default direction
-        // and the demo cubes (clustered around origin) end up behind the camera
-        // or inside it — black screen.
-        var camera = FindFirstCamera(root);
-        if (camera != null)
+        // Player spawn: prefer an explicit PS1Player node; fall back to the
+        // first Camera3D so scenes authored before PS1Player existed keep
+        // working. A Camera3D child of PS1Player supplies the initial
+        // camera rig offset (behind/above for 3rd person, at head for
+        // 1st person). If no Camera3D child, the runtime's default rig is
+        // used.
+        var player = FindFirstOfType<PS1Player>(root);
+        if (player != null)
         {
-            data.PlayerPosition = camera.GlobalPosition;
-            data.PlayerRotation = camera.GlobalRotation; // radians
+            data.PlayerPosition = player.GlobalPosition;
+            data.PlayerRotation = player.GlobalRotation;
+            var rig = FindFirstOfType<Camera3D>(player);
+            string rigInfo = rig != null
+                ? $"rig offset={rig.Position}"
+                : "no Camera3D child (runtime default rig)";
+            GD.Print($"[PS1Godot] Player spawn from PS1Player '{player.Name}' at {player.GlobalPosition}, mode={player.CameraMode}, {rigInfo}");
+            // NOTE: CameraMode is not yet stamped into the splashpack —
+            // runtime only supports a single hardcoded third-person rig.
+            // Phase 2.5 `Camera.SetMode()` will pick this up.
+        }
+        else
+        {
+            var camera = FindFirstCamera(root);
+            if (camera != null)
+            {
+                data.PlayerPosition = camera.GlobalPosition;
+                data.PlayerRotation = camera.GlobalRotation;
+                GD.PushWarning("[PS1Godot] No PS1Player in scene; using first Camera3D as spawn. Add a PS1Player node to control this explicitly.");
+            }
         }
 
         return data;
+    }
+
+    private static T? FindFirstOfType<T>(Node n) where T : Node
+    {
+        if (n is T t) return t;
+        foreach (var child in n.GetChildren())
+        {
+            var found = FindFirstOfType<T>(child);
+            if (found != null) return found;
+        }
+        return null;
     }
 
     private static void WalkAddMeshes(Node n, SceneData data,
@@ -547,11 +578,18 @@ public static class SceneCollector
             GameObjectIndex = objectIndex,
         });
 
-        // For a PlaneMesh flagged Static, also emit a flat nav region so the
-        // player can walk on it. Reuse the world AABB we just computed above.
-        if (pmi.Collision == PS1MeshInstance.CollisionKind.Static && pmi.Mesh is PlaneMesh)
+        // Emit a flat nav region for any Static mesh whose world AABB is
+        // effectively flat on Y (PlaneMesh, subdivided plane → ArrayMesh,
+        // or an intentionally flat slab). The 0.1 m threshold keeps walls
+        // and props out of the nav system while letting floors in
+        // regardless of mesh class.
+        if (pmi.Collision == PS1MeshInstance.CollisionKind.Static)
         {
-            EmitFlatNavRegion(wMin, wMax, data);
+            float yExtent = Mathf.Abs(wMax.Y - wMin.Y);
+            if (yExtent < 0.1f)
+            {
+                EmitFlatNavRegion(wMin, wMax, data);
+            }
         }
     }
 

@@ -1,10 +1,13 @@
-[gd_resource type="ShaderMaterial" load_steps=2 format=3]
+[gd_resource type="ShaderMaterial" format=3 uid="uid://begli571e2oqy"]
 
-[ext_resource type="Shader" path="res://addons/ps1godot/shaders/ps1.gdshader" id="1"]
+[ext_resource type="Shader" uid="uid://lnrxmrercuvn" path="res://addons/ps1godot/shaders/ps1.gdshader" id="1"]
+[ext_resource type="Texture2D" uid="uid://d36cpae4rgbmd" path="res://demo/textures/grass.png" id="2_p81s5"]
 
 [resource]
 render_priority = 0
 shader = ExtResource("1")
+shader_parameter/albedo_tex = ExtResource("2_p81s5")
+shader_parameter/tint_color = Color(1, 1, 1, 1)
 shader_parameter/snap_enabled = true
 shader_parameter/snap_resolution = Vector2(320, 240)
 shader_parameter/modulate_scale = 2.0
