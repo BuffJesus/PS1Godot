@@ -3,12 +3,16 @@ using Godot;
 using PS1Godot.Effects;
 using PS1Godot.Exporter;
 using PS1Godot.Tools;
+using PS1Godot.UI;
 
 namespace PS1Godot;
 
 [Tool]
 public partial class PS1GodotPlugin : EditorPlugin
 {
+    // The dock panel is the canonical surface for these actions. The
+    // Project > Tools menu entries are mirrors — kept for keyboard-driven
+    // users and discoverability via Godot's command palette.
     private const string SubdivideMenuLabel = "PS1Godot: Subdivide Selected Mesh (×4 tris)";
     private const string AnalyzeTexturesMenuLabel = "PS1Godot: Analyze Texture Compliance";
     private const string ToggleCompositorMenuLabel = "PS1Godot: Toggle PS1 Preview on Selected Camera";
@@ -19,6 +23,7 @@ public partial class PS1GodotPlugin : EditorPlugin
     private const string ConvertMeshToPS1MenuLabel = "PS1Godot: Convert selected MeshInstance3D to PS1MeshInstance";
 
     private PS1TriggerBoxGizmo? _triggerBoxGizmo;
+    private PS1GodotDock? _dock;
 
     public override void _EnterTree()
     {
@@ -34,6 +39,14 @@ public partial class PS1GodotPlugin : EditorPlugin
         _triggerBoxGizmo = new PS1TriggerBoxGizmo();
         AddNode3DGizmoPlugin(_triggerBoxGizmo);
 
+        _dock = new PS1GodotDock();
+        _dock.RunOnPsxRequested += OnRunOnPsx;
+        _dock.BuildPsxsplashRequested += OnBuildPsxsplash;
+        _dock.LaunchEmulatorRequested += OnLaunchEmulator;
+        _dock.AnalyzeTexturesRequested += OnAnalyzeTextures;
+        _dock.ExportOnlyRequested += OnExportEmptySplashpack;
+        AddControlToDock(DockSlot.RightBr, _dock);
+
         GD.Print("[PS1Godot] Plugin enabled.");
     }
 
@@ -47,6 +60,13 @@ public partial class PS1GodotPlugin : EditorPlugin
         RemoveToolMenuItem(LaunchEmulatorMenuLabel);
         RemoveToolMenuItem(RunOnPsxMenuLabel);
         RemoveToolMenuItem(ConvertMeshToPS1MenuLabel);
+
+        if (_dock != null)
+        {
+            RemoveControlFromDocks(_dock);
+            _dock.QueueFree();
+            _dock = null;
+        }
 
         if (_triggerBoxGizmo != null)
         {
