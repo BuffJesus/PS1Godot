@@ -34,7 +34,7 @@ function onUpdate(self, dt)
 end
 
 function onInteract(self)
-    Debug.Log("test_logger: onInteract (pressed X near cube)")
+    Debug.Log("test_logger: onInteract (pressed Triangle near cube)")
     -- Toggle the MenuOnly dialog canvas so the interactable demos both
     -- the onInteract event and the MenuOnly residency path.
     if dialogCanvas >= 0 then
