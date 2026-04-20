@@ -15,12 +15,166 @@
 [ext_resource type="Script" uid="uid://cfdlp12g2rtct" path="res://addons/ps1godot/nodes/PS1Player.cs" id="13_tdg64"]
 [ext_resource type="Script" uid="uid://bwafnk42jueor" path="res://addons/ps1godot/nodes/PS1Cutscene.cs" id="14_cs"]
 [ext_resource type="Script" uid="uid://bmwv0x052a03l" path="res://addons/ps1godot/nodes/PS1AnimationTrack.cs" id="15_tr"]
+[ext_resource type="Script" path="res://addons/ps1godot/nodes/PS1AudioEvent.cs" id="16_ae"]
+[ext_resource type="AudioStream" path="res://demo/audio/dialogue/SystemVoice/system_welcome.wav" id="ea_welcome"]
+[ext_resource type="AudioStream" path="res://demo/audio/dialogue/SystemVoice/system_not_alarmed.wav" id="ea_not_alarmed"]
+[ext_resource type="AudioStream" path="res://demo/audio/dialogue/SystemVoice/system_perfectly_stable.wav" id="ea_stable"]
+[ext_resource type="AudioStream" path="res://demo/audio/dialogue/SystemVoice/system_other_cube.wav" id="ea_other_cube"]
+[ext_resource type="AudioStream" path="res://demo/audio/dialogue/SystemVoice/system_we_think.wav" id="ea_we_think"]
+[ext_resource type="AudioStream" path="res://demo/audio/dialogue/SystemVoice/system_ignore_checkered.wav" id="ea_ignore_checkered"]
+[ext_resource type="AudioStream" path="res://demo/audio/dialogue/SystemVoice/system_not_part_of_test.wav" id="ea_not_part"]
+[ext_resource type="AudioStream" path="res://demo/audio/dialogue/SystemVoice/system_idle_detected.wav" id="ea_idle"]
+[ext_resource type="AudioStream" path="res://demo/audio/dialogue/SystemVoice/system_deeply_concerning.wav" id="ea_concerning"]
+[ext_resource type="AudioStream" path="res://demo/audio/dialogue/SpinningCube/spinningcube_hey.wav" id="ea_sc_hey"]
+[ext_resource type="AudioStream" path="res://demo/audio/dialogue/SpinningCube/spinningcube_not_supposed_to_be_here.wav" id="ea_sc_not_yet"]
+[ext_resource type="AudioStream" path="res://demo/audio/dialogue/SpinningCube/spinningcube_camera_finished.wav" id="ea_sc_camera"]
+[ext_resource type="AudioStream" path="res://demo/audio/dialogue/SpinningCube/spinningcube_good_talk.wav" id="ea_sc_good_talk"]
+[ext_resource type="AudioStream" path="res://demo/audio/dialogue/SpinningCube/spinningcube_purpose.wav" id="ea_sc_purpose"]
+[ext_resource type="AudioStream" path="res://demo/audio/dialogue/SpinningCube/spinningcube_checkered_thinks_better.wav" id="ea_sc_thinks_better"]
+[ext_resource type="AudioStream" path="res://demo/audio/dialogue/SpinningCube/spinningcube_dont_trust_bobbing.wav" id="ea_sc_bobbing"]
+[ext_resource type="AudioStream" path="res://demo/audio/dialogue/Checkered/checkered_part_test.wav" id="ea_ck_part"]
+[ext_resource type="AudioStream" path="res://demo/audio/dialogue/Checkered/checkered_always_part_test.wav" id="ea_ck_always"]
+[ext_resource type="AudioStream" path="res://demo/audio/dialogue/Checkered/checkered_why_dont_you.wav" id="ea_ck_why_dont"]
+[ext_resource type="AudioStream" path="res://demo/audio/dialogue/Checkered/checkered_why_spin.wav" id="ea_ck_why_spin"]
 
-[sub_resource type="Resource" id="Resource_ykvhj"]
+[sub_resource type="Resource" id="Clip_welcome"]
 script = ExtResource("2_onvmd")
-Stream = ExtResource("3_oeqrt")
-ClipName = "test"
-Loop = true
+Stream = ExtResource("ea_welcome")
+ClipName = "system_welcome"
+Loop = false
+metadata/_custom_type_script = "uid://cgk0vce50p3ph"
+
+[sub_resource type="Resource" id="Clip_not_alarmed"]
+script = ExtResource("2_onvmd")
+Stream = ExtResource("ea_not_alarmed")
+ClipName = "system_not_alarmed"
+Loop = false
+metadata/_custom_type_script = "uid://cgk0vce50p3ph"
+
+[sub_resource type="Resource" id="Clip_stable"]
+script = ExtResource("2_onvmd")
+Stream = ExtResource("ea_stable")
+ClipName = "system_perfectly_stable"
+Loop = false
+metadata/_custom_type_script = "uid://cgk0vce50p3ph"
+
+[sub_resource type="Resource" id="Clip_other_cube"]
+script = ExtResource("2_onvmd")
+Stream = ExtResource("ea_other_cube")
+ClipName = "system_other_cube"
+Loop = false
+metadata/_custom_type_script = "uid://cgk0vce50p3ph"
+
+[sub_resource type="Resource" id="Clip_we_think"]
+script = ExtResource("2_onvmd")
+Stream = ExtResource("ea_we_think")
+ClipName = "system_we_think"
+Loop = false
+metadata/_custom_type_script = "uid://cgk0vce50p3ph"
+
+[sub_resource type="Resource" id="Clip_ignore_checkered"]
+script = ExtResource("2_onvmd")
+Stream = ExtResource("ea_ignore_checkered")
+ClipName = "system_ignore_checkered"
+Loop = false
+metadata/_custom_type_script = "uid://cgk0vce50p3ph"
+
+[sub_resource type="Resource" id="Clip_not_part"]
+script = ExtResource("2_onvmd")
+Stream = ExtResource("ea_not_part")
+ClipName = "system_not_part_of_test"
+Loop = false
+metadata/_custom_type_script = "uid://cgk0vce50p3ph"
+
+[sub_resource type="Resource" id="Clip_idle"]
+script = ExtResource("2_onvmd")
+Stream = ExtResource("ea_idle")
+ClipName = "system_idle_detected"
+Loop = false
+metadata/_custom_type_script = "uid://cgk0vce50p3ph"
+
+[sub_resource type="Resource" id="Clip_concerning"]
+script = ExtResource("2_onvmd")
+Stream = ExtResource("ea_concerning")
+ClipName = "system_deeply_concerning"
+Loop = false
+metadata/_custom_type_script = "uid://cgk0vce50p3ph"
+
+[sub_resource type="Resource" id="Clip_sc_hey"]
+script = ExtResource("2_onvmd")
+Stream = ExtResource("ea_sc_hey")
+ClipName = "sc_hey"
+Loop = false
+metadata/_custom_type_script = "uid://cgk0vce50p3ph"
+
+[sub_resource type="Resource" id="Clip_sc_not_yet"]
+script = ExtResource("2_onvmd")
+Stream = ExtResource("ea_sc_not_yet")
+ClipName = "sc_not_yet"
+Loop = false
+metadata/_custom_type_script = "uid://cgk0vce50p3ph"
+
+[sub_resource type="Resource" id="Clip_sc_camera"]
+script = ExtResource("2_onvmd")
+Stream = ExtResource("ea_sc_camera")
+ClipName = "sc_camera"
+Loop = false
+metadata/_custom_type_script = "uid://cgk0vce50p3ph"
+
+[sub_resource type="Resource" id="Clip_sc_good_talk"]
+script = ExtResource("2_onvmd")
+Stream = ExtResource("ea_sc_good_talk")
+ClipName = "sc_good_talk"
+Loop = false
+metadata/_custom_type_script = "uid://cgk0vce50p3ph"
+
+[sub_resource type="Resource" id="Clip_sc_purpose"]
+script = ExtResource("2_onvmd")
+Stream = ExtResource("ea_sc_purpose")
+ClipName = "sc_purpose"
+Loop = false
+metadata/_custom_type_script = "uid://cgk0vce50p3ph"
+
+[sub_resource type="Resource" id="Clip_sc_thinks_better"]
+script = ExtResource("2_onvmd")
+Stream = ExtResource("ea_sc_thinks_better")
+ClipName = "sc_thinks_better"
+Loop = false
+metadata/_custom_type_script = "uid://cgk0vce50p3ph"
+
+[sub_resource type="Resource" id="Clip_sc_bobbing"]
+script = ExtResource("2_onvmd")
+Stream = ExtResource("ea_sc_bobbing")
+ClipName = "sc_bobbing"
+Loop = false
+metadata/_custom_type_script = "uid://cgk0vce50p3ph"
+
+[sub_resource type="Resource" id="Clip_ck_part"]
+script = ExtResource("2_onvmd")
+Stream = ExtResource("ea_ck_part")
+ClipName = "ck_part"
+Loop = false
+metadata/_custom_type_script = "uid://cgk0vce50p3ph"
+
+[sub_resource type="Resource" id="Clip_ck_always"]
+script = ExtResource("2_onvmd")
+Stream = ExtResource("ea_ck_always")
+ClipName = "ck_always"
+Loop = false
+metadata/_custom_type_script = "uid://cgk0vce50p3ph"
+
+[sub_resource type="Resource" id="Clip_ck_why_dont"]
+script = ExtResource("2_onvmd")
+Stream = ExtResource("ea_ck_why_dont")
+ClipName = "ck_why_dont"
+Loop = false
+metadata/_custom_type_script = "uid://cgk0vce50p3ph"
+
+[sub_resource type="Resource" id="Clip_ck_why_spin"]
+script = ExtResource("2_onvmd")
+Stream = ExtResource("ea_ck_why_spin")
+ClipName = "ck_why_spin"
+Loop = false
 metadata/_custom_type_script = "uid://cgk0vce50p3ph"
 
 [sub_resource type="ArrayMesh" id="ArrayMesh_tdg64"]
@@ -49,7 +203,7 @@ JumpHeight = 1.8
 Gravity = 20.0
 FogEnabled = true
 FogColor = Color(0, 0.62352943, 0.12941177, 0.5372549)
-AudioClips = Array[ExtResource("2_onvmd")]([SubResource("Resource_ykvhj")])
+AudioClips = Array[ExtResource("2_onvmd")]([SubResource("Clip_welcome"), SubResource("Clip_not_alarmed"), SubResource("Clip_stable"), SubResource("Clip_other_cube"), SubResource("Clip_we_think"), SubResource("Clip_ignore_checkered"), SubResource("Clip_not_part"), SubResource("Clip_idle"), SubResource("Clip_concerning"), SubResource("Clip_sc_hey"), SubResource("Clip_sc_not_yet"), SubResource("Clip_sc_camera"), SubResource("Clip_sc_good_talk"), SubResource("Clip_sc_purpose"), SubResource("Clip_sc_thinks_better"), SubResource("Clip_sc_bobbing"), SubResource("Clip_ck_part"), SubResource("Clip_ck_always"), SubResource("Clip_ck_why_dont"), SubResource("Clip_ck_why_spin")])
 
 [node name="Floor" type="MeshInstance3D" parent="." unique_id=1239192714]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.021661758, -0.016098976, 0.006843567)
@@ -77,6 +231,9 @@ extra_cull_margin = 2.0
 mesh = SubResource("BoxMesh_cube")
 script = ExtResource("2_mesh")
 Collision = 1
+ScriptFile = "res://demo/scripts/checkered_dialog.lua"
+Interactable = true
+InteractionRadiusMeters = 2.5
 
 [node name="PS1TriggerBox" type="Node3D" parent="." unique_id=710725990]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.1003563, 1, 2.5)
@@ -167,7 +324,7 @@ Value = Vector3(4, 0.5, -3)
 [node name="Kf1" type="Node" parent="BounceAnim" unique_id=893314091]
 script = ExtResource("13_kf")
 Frame = 15
-Value = Vector3(4, 2.5, -3)
+Value = Vector3(4, 1.1, -3)
 Interp = 3
 
 [node name="Kf2" type="Node" parent="BounceAnim" unique_id=235744392]
@@ -179,7 +336,7 @@ Interp = 2
 [node name="Kf3" type="Node" parent="BounceAnim" unique_id=1353620163]
 script = ExtResource("13_kf")
 Frame = 45
-Value = Vector3(4, 2.5, -3)
+Value = Vector3(4, 1.1, -3)
 Interp = 3
 
 [node name="Kf4" type="Node" parent="BounceAnim" unique_id=1144429089]
@@ -270,6 +427,31 @@ Interp = 4
 script = ExtResource("13_kf")
 Frame = 239
 Interp = 4
+
+[node name="VE_welcome" type="Node" parent="IntroCutscene"]
+script = ExtResource("16_ae")
+Frame = 5
+ClipName = "system_welcome"
+
+[node name="VE_not_alarmed" type="Node" parent="IntroCutscene"]
+script = ExtResource("16_ae")
+Frame = 60
+ClipName = "system_not_alarmed"
+
+[node name="VE_stable" type="Node" parent="IntroCutscene"]
+script = ExtResource("16_ae")
+Frame = 100
+ClipName = "system_perfectly_stable"
+
+[node name="VE_other_cube" type="Node" parent="IntroCutscene"]
+script = ExtResource("16_ae")
+Frame = 150
+ClipName = "system_other_cube"
+
+[node name="VE_we_think" type="Node" parent="IntroCutscene"]
+script = ExtResource("16_ae")
+Frame = 200
+ClipName = "system_we_think"
 
 [node name="PS1Player" type="Node3D" parent="." unique_id=1681451007]
 transform = Transform3D(-0.50056714, 0, 0.86569774, 0, 1, 0, -0.86569774, 0, -0.50056714, -8.617312, 12.140091, 7.6345844)

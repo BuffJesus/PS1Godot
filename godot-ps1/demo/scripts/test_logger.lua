@@ -33,16 +33,17 @@ local IDLE_THRESHOLD = 150  -- frames at 30 fps ≈ 5 s
 local IDLE_GUARD_FRAME = 280  -- only start checking after intro narration clears
 
 -- Green cube dialog. First four lines are the canonical first
--- conversation, then we loop through the extras.
+-- conversation, then we loop through the extras. Each entry pairs the
+-- on-screen text with the matching SpinningCube voice clip.
 local dialogLines = {
-    "Hey.",
-    "...You're not supposed to be here yet.",
-    "Did the camera finish moving? It never tells me.",
-    "Okay, good talk.",
+    { text = "Hey.",                                              clip = "sc_hey" },
+    { text = "...You're not supposed to be here yet.",            clip = "sc_not_yet" },
+    { text = "Did the camera finish moving? It never tells me.",  clip = "sc_camera" },
+    { text = "Okay, good talk.",                                  clip = "sc_good_talk" },
     -- cycling extras start here (index 5+)
-    "I spin because it gives me purpose.",
-    "The checkered one thinks it's better than me.",
-    "Don't trust anything that bobs.",
+    { text = "I spin because it gives me purpose.",               clip = "sc_purpose" },
+    { text = "The checkered one thinks it's better than me.",     clip = "sc_thinks_better" },
+    { text = "Don't trust anything that bobs.",                   clip = "sc_bobbing" },
 }
 local dialogIdx = 0
 
@@ -106,6 +107,7 @@ function onUpdate(self, dt)
             if not idleShown and idleFrames > IDLE_THRESHOLD then
                 UI.SetText(sysVoiceText, "You appear to be standing still. This is either intentional... or deeply concerning.")
                 UI.SetCanvasVisible(sysVoiceCanvas, true)
+                Audio.Play("system_idle_detected", 100, 64)
                 idleShown = true
             end
         end
@@ -118,9 +120,11 @@ function onInteract(self)
     -- loop back into the cycling extras (indices 5..end).
     dialogIdx = dialogIdx + 1
     if dialogIdx > #dialogLines then dialogIdx = 5 end
+    local line = dialogLines[dialogIdx]
     if dialogBodyEl >= 0 then
-        UI.SetText(dialogBodyEl, dialogLines[dialogIdx])
+        UI.SetText(dialogBodyEl, line.text)
         UI.SetCanvasVisible(dialogCanvas, true)
     end
-    Debug.Log("test_logger: dialog[" .. dialogIdx .. "] = " .. dialogLines[dialogIdx])
+    Audio.Play(line.clip, 100, 64)
+    Debug.Log("test_logger: dialog[" .. dialogIdx .. "] = " .. line.text)
 end

@@ -12,6 +12,7 @@ function onTriggerEnter(idx)
         sysVoiceText = UI.FindElement(sysVoiceCanvas, "vtxt")
         UI.SetText(sysVoiceText, "Please ignore the checkered cube.")
         UI.SetCanvasVisible(sysVoiceCanvas, true)
+        Audio.Play("system_ignore_checkered", 100, 64)
         enterTick = Timer.GetFrameCount()
     end
 end
@@ -23,6 +24,7 @@ function onTriggerExit(idx)
         local stayed = Timer.GetFrameCount() - enterTick
         if stayed > 90 and sysVoiceText >= 0 then
             UI.SetText(sysVoiceText, "It is not part of the test.")
+            Audio.Play("system_not_part_of_test", 100, 64)
         else
             UI.SetCanvasVisible(sysVoiceCanvas, false)
         end
