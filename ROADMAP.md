@@ -36,6 +36,14 @@ not parity. Concretely:
 When a feature sounds like "SplashEdit had it, let's port it", also ask "what
 would the Godot-native version look like?"
 
+**Design constraint document.** `docs/ps1_large_rpg_optimization_reference.md`
+is the scoreboard for design decisions against PS1 hardware limits — VRAM,
+texture-page churn, ordering-table pressure, disc streaming, chunk structure.
+Its "Integration with PS1Godot" section maps the reference onto this repo with
+numbered gaps (`REF-GAP-1` … `REF-GAP-10`). Amendments below cite those tags.
+When a recommendation here conflicts with the reference, the reference wins
+by default — note the override in the PR description.
+
 ---
 
 ## Phase 0 — Environment (est. 1–2 days)
@@ -191,6 +199,11 @@ Value: you can design and iterate on look & feel without waiting on the emulator
       `PS1LuaResourceFormatSaver` handle `.lua` persistence. PS1Lua appears
       in the Create Script dropdown alongside GDScript and C#, and creates
       template `.lua` files on disk. Build via `scons` from the addon dir.
+- [x] **Scene categorization + budgets (`REF-GAP-4`).** `PS1Scene.SceneType`
+      expanded to the reference's 7 categories (ExplorationOutdoor,
+      TownSquare, Interior, DungeonCorridor, Combat, Menu, CutsceneCloseup).
+      Authored budget fields `TargetTriangles`, `MaxActors`, `MaxEffects`,
+      `MaxTexturePages` on `PS1Scene` feed the future overlay.
 
 **Done when:** author opens Godot, drops meshes into a `PS1Scene`, and the
 viewport looks recognizably PS1 (jitter, low-res, 15-bit color, affine warp).
@@ -220,12 +233,22 @@ without crashing, even if features are stubbed.
 5. **Lua scripting path.** Wire `luac_psx` into the export pipeline; Godot
    scripts-as-lua or separate `.lua` assets — decide in Phase 2.5.
 6. **Audio.** Port ADPCM conversion, `PSXAudioClip`, `PSXAudioEvent`.
+   Follow-up in Phase 2.5: per-area SPU budget + `Residency` flag on
+   `PS1AudioClip` (`REF-GAP-9`).
 7. **Nav regions.** Port `PSXNavRegionBuilder` (it wraps DotRecast — check if a
    .NET port is usable from Godot C# directly).
 8. **UI canvases + fonts.** Port `PSXCanvas*`, `PSXFontAsset`, `PSXUI*`.
+   **Amendment (`REF-GAP-8`):** canvases + fonts must carry a `Residency`
+   property from day one — `Gameplay | MenuOnly | LoadOnDemand`. Exporter
+   keeps menu-only art out of the gameplay resident set; runtime swaps it
+   in on `UI.LoadCanvas(name)`. UI VRAM counts against the same budget
+   line as environment / character textures (no separate dock).
 9. **Trigger boxes, interactables.** Port `PSXTriggerBox`, `PSXInteractable`.
 10. **Cutscenes + animations.** Port `PSXCutscene*`, `PSXAnimation*`.
+    **Amendment (`REF-GAP-7`):** animation assets carry a residency flag;
+    only currently-active-area animations resident.
 11. **Skinned meshes.** Port `PSXSkinnedMeshExporter`, `PSXSkinnedObjectExporter`.
+    **Amendment (`REF-GAP-7`):** same residency flag applies to skeletons.
 12. **Rooms / portals (interior scenes).** Port `PSXRoom`, `PSXPortalLink`.
 
 **Parity test:** take three reference scenes that ship with SplashEdit, rebuild
@@ -284,6 +307,11 @@ bullets, pickups, particles, enemy waves, and voxel-style worlds.
 - [ ] `Scene.LoadChunk(index, origin)` / `Scene.UnloadChunk(id)` — partial
       scene overlay for streaming worlds. Current `requestSceneLoad` does
       full-scene swaps; needs a parallel sub-scene path. **[runtime]**
+- [ ] **`PS1Chunk` authoring node (`REF-GAP-5`).** Editor-side container for a
+      single streamable chunk: geometry set + resident texture pages + NPC
+      set + script set + audio profile + effect budget. One struct, not six.
+      Exporter emits a `chunk_N.splashpack` per chunk. Pairs with
+      `Scene.LoadChunk` above.
 
 ### Performance / culling / scheduling
 
@@ -344,6 +372,9 @@ Assets pack via Phase 2 bullet 6; Lua can't trigger them yet.
 
 - [ ] `Audio.Play(clipIdx, vol, pitch)` / `Audio.Stop(handle)`.
 - [ ] `Audio.Play3D(clipIdx, worldPos)` — positional via SPU per-voice volume.
+- [ ] **Per-area SPU accounting + `Residency` on `PS1AudioClip` (`REF-GAP-9`).**
+      "Ambient loop resident across chunk" vs "event cue streamed in on
+      trigger." Counts SPU-RAM per area; warns on overflow.
 - [ ] `Music.PlayXA(track)` / `Music.Stop()` / `Music.SetVolume(v)`.
 
 ### Save / load
@@ -589,7 +620,16 @@ matters, and do better where it's cheap.
       PCSX-Redux with PCdrv → attach C# debugger → tail `printf` output in
       the Godot Output dock.
 - [ ] **VRAM viewer** as a dockable panel (not a separate window like SplashEdit).
+      **Amendment (`REF-GAP-1` / `REF-GAP-2` / `REF-GAP-3`):** framed around
+      *per-scene residency* (environment / character / UI / effects broken
+      out), not project totals. Includes texture-page grouping view and
+      OT-pressure readout (object count vs `PS1Scene.MaxActors`,
+      texture-page switches per frame vs `MaxTexturePages`).
 - [ ] **SPU / memory / BVH budget bars** in the viewport overlay.
+- [ ] **Texture reuse auditor (`REF-GAP-6`).** Warn on one-off textures,
+      near-duplicate CLUTs that could merge, and meshes that each drag in a
+      unique atlas. Powered by the data `SceneCollector` + `VRAMPacker`
+      already have.
 - [ ] Quantized texture preview in the inspector for any PS1Texture asset.
 - [ ] EmmyLua stub generation from `luaapi.hh` on plugin load; dropped into
       `.godot/ps1godot/lua-stubs/` for Rider/VSCode to pick up.
@@ -612,6 +652,9 @@ matters, and do better where it's cheap.
       re-uploads only that bytecode via PCdrv.
 - [ ] Project template (`PS1 Game`) installable into Godot's project manager.
 - [ ] ISO build path via `mkpsxiso` for real-hardware testing.
+      **Amendment (`REF-GAP-10`):** disc-layout-aware. Place adjacent-chunk
+      archives physically close on the disc to reduce seeks. Only matters
+      once Phase 2.5 chunk streaming is real.
 - [ ] Loading screens (uses existing PSXCanvas path; just a convention).
 
 **Done when:** someone who's never seen the project can open Godot, select the
