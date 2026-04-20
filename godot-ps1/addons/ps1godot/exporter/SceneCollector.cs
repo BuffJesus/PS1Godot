@@ -664,6 +664,15 @@ public static class SceneCollector
             return -1;
         }
 
+        // Godot 4.4+ imports many textures in a VRAM-compressed format
+        // (S3TC / BPTC / etc). GetPixel and Resize fail on those. Decompress
+        // to RGBA so the rest of the export path can read pixels and
+        // resample if needed.
+        if (img.IsCompressed())
+        {
+            img.Decompress();
+        }
+
         // PSX texture pages are 64/128/256 pixels wide depending on bpp and
         // 256 tall. Auto-downscale anything bigger so authors don't have
         // to re-export source assets at PSX-friendly sizes — but warn so
