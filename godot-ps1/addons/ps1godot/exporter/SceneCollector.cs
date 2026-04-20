@@ -349,44 +349,19 @@ public static class SceneCollector
                 // bone indices line up with the emitted triangle vertices.
                 (i1, i2) = (i2, i1);
 
-                byte triBone = 0;
-                bool anyWeight = false;
-                if (hasSkin)
-                {
-                    // Sum weights by bone across the three vertices; pick max.
-                    var sums = new System.Collections.Generic.Dictionary<int, float>();
-                    foreach (int vi in new[] { i0, i1, i2 })
-                    {
-                        int baseIdx = vi * perVert;
-                        for (int k = 0; k < perVert; k++)
-                        {
-                            int bone = bonesArr[baseIdx + k];
-                            float w = weightsArr[baseIdx + k];
-                            if (w <= 0f) continue;
-                            anyWeight = true;
-                            sums.TryGetValue(bone, out float acc);
-                            sums[bone] = acc + w;
-                        }
-                    }
-                    int bestBone = 0;
-                    float bestWeight = -1f;
-                    foreach (var kv in sums)
-                    {
-                        if (kv.Value > bestWeight)
-                        {
-                            bestWeight = kv.Value;
-                            bestBone = kv.Key;
-                        }
-                    }
-                    if (bestBone >= boneCount) bestBone = 0;    // guard against stale indices
-                    if (bestBone >= 64) bestBone = 63;          // runtime cap
-                    triBone = (byte)bestBone;
-                }
-                if (!anyWeight) unweightedTris++;
-                // Per-vertex bytes: same bone for all three verts of the
-                // triangle (per-triangle rigid). Matches the layout the
-                // runtime expects (3 bytes per triangle).
-                result.Add(triBone); result.Add(triBone); result.Add(triBone);
+                // Per-VERTEX rigid skinning: each vertex gets its own
+                // dominant bone (the one with the highest weight in its
+                // 4-slot skin entry). The PSX runtime transforms each
+                // vertex of a triangle by its own bone's matrix, so
+                // neighbouring triangles that share a vertex agree on its
+                // position (no seam). Per-triangle dominance would tear.
+                byte b0 = PickDominantBone(i0, perVert, bonesArr, weightsArr, boneCount, out bool v0Weighted);
+                byte b1 = PickDominantBone(i1, perVert, bonesArr, weightsArr, boneCount, out bool v1Weighted);
+                byte b2 = PickDominantBone(i2, perVert, bonesArr, weightsArr, boneCount, out bool v2Weighted);
+
+                if (!v0Weighted && !v1Weighted && !v2Weighted) unweightedTris++;
+
+                result.Add(b0); result.Add(b1); result.Add(b2);
             }
         }
 
@@ -402,6 +377,34 @@ public static class SceneCollector
         }
 
         return result.ToArray();
+    }
+
+    // Pick the bone with the highest weight for a single vertex. Guards
+    // against bones outside the skeleton range and the 64-bone runtime
+    // cap, both falling through to bone 0. `anyWeight` is false only
+    // when every slot's weight is ≤ 0 (truly unrigged vertex).
+    private static byte PickDominantBone(int vi, int perVert, int[] bones, float[] weights,
+                                         int boneCount, out bool anyWeight)
+    {
+        anyWeight = false;
+        if (perVert == 0) return 0;
+        int best = 0;
+        float bestW = -1f;
+        int baseIdx = vi * perVert;
+        for (int k = 0; k < perVert; k++)
+        {
+            float w = weights[baseIdx + k];
+            if (w <= 0f) continue;
+            anyWeight = true;
+            if (w > bestW)
+            {
+                bestW = w;
+                best = bones[baseIdx + k];
+            }
+        }
+        if (best >= boneCount) best = 0;
+        if (best >= 64) best = 63;
+        return (byte)best;
     }
 
     // Resolve the AnimationPlayer for a PS1SkinnedMesh. Explicit path
