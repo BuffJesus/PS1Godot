@@ -23,6 +23,15 @@ local narration = {
 local narrationIdx = 1
 local narrationDoneFrame = 240  -- hide the canvas at the end of the cutscene
 
+-- Idle detection. After the intro ends, watch the player's X/Z. If
+-- they don't change for ~5 s, drop the meta line. Reset when the
+-- player moves so the line can re-fire later.
+local lastX, lastZ = 0, 0
+local idleFrames = 0
+local idleShown = false
+local IDLE_THRESHOLD = 150  -- frames at 30 fps ≈ 5 s
+local IDLE_GUARD_FRAME = 280  -- only start checking after intro narration clears
+
 -- Green cube dialog. First four lines are the canonical first
 -- conversation, then we loop through the extras.
 local dialogLines = {
@@ -75,9 +84,32 @@ function onUpdate(self, dt)
             UI.SetText(sysVoiceText, narration[narrationIdx][2])
             UI.SetCanvasVisible(sysVoiceCanvas, true)
             narrationIdx = narrationIdx + 1
-        elseif narrationIdx > #narration and tick >= narrationDoneFrame then
+        elseif narrationIdx > #narration and tick == narrationDoneFrame then
             UI.SetCanvasVisible(sysVoiceCanvas, false)
         end
+    end
+
+    -- Idle meta line. Only kicks in after the intro narration has
+    -- cleared. Triggers once per "stand still" episode; resets when
+    -- the player moves.
+    if tick > IDLE_GUARD_FRAME and sysVoiceCanvas >= 0 then
+        local p = Player.GetPosition()
+        local moved = (p.x ~= lastX) or (p.z ~= lastZ)
+        if moved then
+            idleFrames = 0
+            if idleShown then
+                idleShown = false
+                UI.SetCanvasVisible(sysVoiceCanvas, false)
+            end
+        else
+            idleFrames = idleFrames + 1
+            if not idleShown and idleFrames > IDLE_THRESHOLD then
+                UI.SetText(sysVoiceText, "You appear to be standing still. This is either intentional... or deeply concerning.")
+                UI.SetCanvasVisible(sysVoiceCanvas, true)
+                idleShown = true
+            end
+        end
+        lastX, lastZ = p.x, p.z
     end
 end
 

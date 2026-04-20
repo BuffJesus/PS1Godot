@@ -85,6 +85,13 @@ HalfExtents = Vector3(1.5, 1.5, 1)
 ScriptFile = "res://demo/scripts/test_trigger.lua"
 metadata/_custom_type_script = "uid://bbl6b0g2qjisp"
 
+[node name="CheckeredZone" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 1, -3)
+script = ExtResource("9_oeqrt")
+HalfExtents = Vector3(2.5, 2, 2.5)
+ScriptFile = "res://demo/scripts/checkered_ambient.lua"
+metadata/_custom_type_script = "uid://bbl6b0g2qjisp"
+
 [node name="HUD" type="Node" parent="." unique_id=1821183015]
 script = ExtResource("10_uican")
 CanvasName = "hud"
