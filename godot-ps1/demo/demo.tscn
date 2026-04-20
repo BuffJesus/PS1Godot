@@ -1,0 +1,66 @@
+[gd_scene format=3 uid="uid://du1f0yvdm7v5t"]
+
+[ext_resource type="Script" uid="uid://b8ogc8krip2k" path="res://addons/ps1godot/nodes/PS1Scene.cs" id="1_scene"]
+[ext_resource type="Script" uid="uid://dng0iofdw3dk7" path="res://addons/ps1godot/nodes/PS1MeshInstance.cs" id="2_mesh"]
+[ext_resource type="Script" uid="uid://cgk0vce50p3ph" path="res://addons/ps1godot/nodes/PS1AudioClip.cs" id="2_onvmd"]
+[ext_resource type="Script" uid="uid://bp3inh2eiwm3o" path="res://addons/ps1godot/nodes/PS1Camera.cs" id="3_cam"]
+[ext_resource type="AudioStream" uid="uid://bowpax1q1f18v" path="res://demo/audio/testsound.wav" id="3_oeqrt"]
+[ext_resource type="Material" path="res://addons/ps1godot/shaders/ps1_default.tres" id="4_mat"]
+[ext_resource type="Material" path="res://demo/materials/ps1_green.tres" id="5_green"]
+[ext_resource type="Texture2D" uid="uid://cul6k2s7n8ysj" path="res://demo/textures/test_checker.png" id="6_checker"]
+
+[sub_resource type="Resource" id="Resource_ykvhj"]
+script = ExtResource("2_onvmd")
+Stream = ExtResource("3_oeqrt")
+ClipName = "test"
+Loop = true
+metadata/_custom_type_script = "uid://cgk0vce50p3ph"
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_floor"]
+size = Vector2(30, 30)
+
+[sub_resource type="BoxMesh" id="BoxMesh_cube"]
+size = Vector3(2, 2, 2)
+
+[sub_resource type="StandardMaterial3D" id="mat_checker"]
+albedo_texture = ExtResource("6_checker")
+texture_filter = 0
+
+[node name="Scene" type="Node3D" unique_id=1345701053]
+script = ExtResource("1_scene")
+JumpHeight = 1.8
+Gravity = 20.0
+FogEnabled = true
+FogColor = Color(0, 0.62173104, 0.12987605, 1)
+AudioClips = Array[ExtResource("2_onvmd")]([SubResource("Resource_ykvhj")])
+
+[node name="Floor" type="MeshInstance3D" parent="." unique_id=1239192714]
+material_override = ExtResource("4_mat")
+extra_cull_margin = 2.0
+mesh = SubResource("PlaneMesh_floor")
+script = ExtResource("2_mesh")
+Collision = 1
+
+[node name="Cube" type="MeshInstance3D" parent="." unique_id=991113702]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
+material_override = ExtResource("5_green")
+extra_cull_margin = 2.0
+mesh = SubResource("BoxMesh_cube")
+script = ExtResource("2_mesh")
+Collision = 1
+ScriptFile = "res://demo/scripts/test_logger.lua"
+
+[node name="Cube2" type="MeshInstance3D" parent="." unique_id=750822538]
+transform = Transform3D(0.707, 0, 0.707, 0, 1, 0, -0.707, 0, 0.707, 4, 0.5, -3)
+material_override = SubResource("mat_checker")
+extra_cull_margin = 2.0
+mesh = SubResource("BoxMesh_cube")
+script = ExtResource("2_mesh")
+Collision = 1
+
+[node name="Camera" type="Camera3D" parent="." unique_id=1343913716]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4, 5)
+fov = 72.0
+near = 0.2
+far = 80.0
+script = ExtResource("3_cam")

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="VcsDirectoryMappings">
+    <mapping directory="$PROJECT_DIR$/godot-ps1/addons/ps1godot/scripting/lib/godot-cpp" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/psxsplash-main/third_party/nugget" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/psxsplash-main/third_party/nugget/third_party/psxlua" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/psxsplash-main/third_party/nugget/third_party/uC-sdk" vcs="Git" />
+  </component>
+</project>

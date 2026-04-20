@@ -1,0 +1,18 @@
+#!/usr/bin/env python
+import os
+
+env = SConscript("lib/godot-cpp/SConstruct").Clone()
+
+env.Append(CPPPATH=["src/"])
+
+# MSVC needs /EHsc for C++ exception handling and modern C++ standard.
+if env.get("is_msvc", False):
+    env.Append(CXXFLAGS=["/EHsc"])
+
+sources = Glob("src/*.cpp")
+
+target_path = "build/libps1lua{}{}".format(env["suffix"], env["SHLIBSUFFIX"])
+
+library = env.SharedLibrary(target=target_path, source=sources)
+
+Default(library)

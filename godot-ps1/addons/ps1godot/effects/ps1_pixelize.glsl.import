@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://dso3wn45iarn0"
+path="res://.godot/imported/ps1_pixelize.glsl-fb3ea7067eaa517f2ba474247f51bbc1.res"
+
+[deps]
+
+source_file="res://addons/ps1godot/effects/ps1_pixelize.glsl"
+dest_files=["res://.godot/imported/ps1_pixelize.glsl-fb3ea7067eaa517f2ba474247f51bbc1.res"]
+
+[params]
+

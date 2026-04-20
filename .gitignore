@@ -1,0 +1,76 @@
+# ── Vendored reference trees (read-only, clone separately per SETUP.md) ──
+# godot-master / pcsx-redux-main / splashedit-main are reference sources we
+# don't modify. Users who need them clone from their upstream repos.
+# psxsplash-main is tracked — we carry local patches there (see
+# docs/psxsplash-improvements.md). Future: extract to patches/psxsplash/.
+godot-master/
+pcsx-redux-main/
+splashedit-main/
+lua-gdextension-main/
+
+# ── Godot 4.x (.NET) ──
+godot-ps1/.godot/
+godot-ps1/.import/
+godot-ps1/export.cfg
+godot-ps1/export_presets.cfg
+godot-ps1/.mono/
+godot-ps1/bin/
+godot-ps1/obj/
+godot-ps1/*.csproj.user
+godot-ps1/*.sln.DotSettings.user
+
+# ── Splashpack build output (authored scene → PSX binary) ──
+godot-ps1/build/
+*.splashpack
+*.vram
+*.spu
+*.iso
+*.cue
+
+# ── GDExtension (PS1Lua script language) build artifacts ──
+godot-ps1/addons/ps1godot/scripting/build/
+godot-ps1/addons/ps1godot/scripting/lib/godot-cpp/
+godot-ps1/addons/ps1godot/scripting/.sconsign.dblite
+godot-ps1/addons/ps1godot/scripting/**/*.o
+godot-ps1/addons/ps1godot/scripting/**/*.obj
+
+# ── psxsplash runtime build artifacts ──
+# Keep source + our patches; ignore compiled outputs.
+psxsplash-main/psxsplash.elf
+psxsplash-main/psxsplash.ps-exe
+psxsplash-main/psxsplash.map
+psxsplash-main/**/*.o
+psxsplash-main/**/*.d
+psxsplash-main/**/*.dep
+psxsplash-main/**/*.bin
+psxsplash-main/**/*.cpe
+psxsplash-main/third_party/**/*.a
+
+# ── JetBrains Rider / IntelliJ ──
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/usage.statistics.xml
+.idea/shelf/
+.idea/**/contentModel.xml
+*.iml
+
+# ── Visual Studio / VS Code ──
+.vs/
+.vscode/
+*.user
+
+# ── Claude Code workspace files ──
+.claude/
+.sentry-native/
+
+# ── OS cruft ──
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+$RECYCLE.BIN/
+
+# ── Local-only config ──
+.env
+.env.local
+*.local.json
