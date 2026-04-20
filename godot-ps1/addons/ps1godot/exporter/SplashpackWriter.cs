@@ -73,8 +73,10 @@ public static class SplashpackWriter
         int colliderCount = scene.Colliders.Count;
         int navRegionCount = scene.NavRegions.Count;
         int luaFileCount = scene.LuaFiles.Count;
+        int triggerBoxCount = scene.TriggerBoxes.Count;
+        int interactableCount = scene.Interactables.Count;
 
-        var headerOffsets = WriteHeader(w, scene, atlasCount, clutCount, colliderCount, navRegionCount, luaFileCount);
+        var headerOffsets = WriteHeader(w, scene, atlasCount, clutCount, colliderCount, navRegionCount, luaFileCount, triggerBoxCount, interactableCount);
 
         // ── LuaFile entries (8 bytes each, cursor-walked first after header) ──
         // luaCodeOffset is backfilled later when we know where each source
@@ -102,8 +104,23 @@ public static class SplashpackWriter
             WriteCollider(w, c, scene.GteScaling);
         }
 
-        // ── [empty sections]: trigger boxes, BVH, interactables, legacy world
-        //    collision. Cursor iterates past them by count (all 0).
+        // ── Trigger box section: 32 bytes per entry (matches cursor order). ──
+        // World-AABB + lua file index for onTriggerEnter/Exit dispatch.
+        foreach (var t in scene.TriggerBoxes)
+        {
+            WriteTriggerBox(w, t, scene.GteScaling);
+        }
+
+        // ── [empty sections]: BVH (bvhNodeCount=0 so skipped). ──
+
+        // ── Interactable section: 28 bytes per entry. ──
+        // Runtime iterates these independent of GameObject iteration.
+        foreach (var ia in scene.Interactables)
+        {
+            WriteInteractable(w, ia, scene.GteScaling);
+        }
+
+        // ── [empty sections]: legacy world collision (count=0). ──
 
         // ── NavRegion block: NavDataHeader(8) + NavRegion[N]*84 + NavPortal[M]*20.
         //    Aligned to 4 bytes per the loader's pre-align.
@@ -235,7 +252,7 @@ public static class SplashpackWriter
         public long SkinTableOffsetPos;
     }
 
-    private static HeaderOffsets WriteHeader(BinaryWriter w, SceneData scene, int atlasCount, int clutCount, int colliderCount, int navRegionCount, int luaFileCount)
+    private static HeaderOffsets WriteHeader(BinaryWriter w, SceneData scene, int atlasCount, int clutCount, int colliderCount, int navRegionCount, int luaFileCount, int triggerBoxCount, int interactableCount)
     {
         long headerStart = w.BaseStream.Position;
         var offsets = new HeaderOffsets();
@@ -252,7 +269,7 @@ public static class SplashpackWriter
         w.Write((ushort)atlasCount);         // atlasCount
         w.Write((ushort)clutCount);          // clutCount
         w.Write((ushort)colliderCount);      // colliderCount
-        w.Write((ushort)0);                  // interactableCount
+        w.Write((ushort)interactableCount);  // interactableCount
 
         // Player start position + rotation (PackedVec3 each = 3 × int16 = 6 bytes).
         var pp = scene.PlayerPosition;
@@ -276,7 +293,7 @@ public static class SplashpackWriter
         w.Write((ushort)0);            // bvhNodeCount
         w.Write((ushort)0);            // bvhTriRefCount
         w.Write((ushort)0);            // sceneType (0 = exterior)
-        w.Write((ushort)0);            // triggerBoxCount
+        w.Write((ushort)triggerBoxCount); // triggerBoxCount
         w.Write((ushort)0);            // collisionMeshCount (legacy)
         w.Write((ushort)0);            // collisionTriCount (legacy)
         w.Write((ushort)navRegionCount); // navRegionCount
@@ -394,6 +411,59 @@ public static class SplashpackWriter
         long written = w.BaseStream.Position - entryStart;
         if (written != 32)
             throw new InvalidOperationException($"Collider size mismatch: {written} vs 32.");
+    }
+
+    // ─── SPLASHPACKTriggerBox (32 bytes) ────────────────────────────────
+    //   int32[6] min/max XYZ + int16 luaFileIndex + u16 pad + u32 pad2.
+    //   Same Godot→PSX convention as colliders: negate Y, swap min/max.Y.
+    private static void WriteTriggerBox(BinaryWriter w, TriggerBoxRecord t, float gteScaling)
+    {
+        long entryStart = w.BaseStream.Position;
+        w.Write(PSXTrig.ConvertWorldToFixed12(t.WorldMin.X / gteScaling));
+        w.Write(PSXTrig.ConvertWorldToFixed12(-t.WorldMax.Y / gteScaling));
+        w.Write(PSXTrig.ConvertWorldToFixed12(t.WorldMin.Z / gteScaling));
+        w.Write(PSXTrig.ConvertWorldToFixed12(t.WorldMax.X / gteScaling));
+        w.Write(PSXTrig.ConvertWorldToFixed12(-t.WorldMin.Y / gteScaling));
+        w.Write(PSXTrig.ConvertWorldToFixed12(t.WorldMax.Z / gteScaling));
+        w.Write(t.LuaFileIndex);        // int16
+        w.Write((ushort)0);             // padding
+        w.Write((uint)0);               // padding2
+        long written = w.BaseStream.Position - entryStart;
+        if (written != 32)
+            throw new InvalidOperationException($"TriggerBox size mismatch: {written} vs 32.");
+    }
+
+    // ─── Interactable (28 bytes) ─────────────────────────────────────────
+    //   fp12 radiusSquared + u8 button + u8 flags + u16 cooldown +
+    //   u16 currentCooldown + u16 gameObjectIndex + char[16] promptCanvasName.
+    //   Runtime computes radiusSquared at bake-time here so the hot path
+    //   can dist-squared compare without a sqrt.
+    private static void WriteInteractable(BinaryWriter w, InteractableRecord ia, float gteScaling)
+    {
+        long entryStart = w.BaseStream.Position;
+        float radiusPsx = ia.RadiusMeters / Mathf.Max(gteScaling, 0.0001f);
+        float radiusSqPsx = radiusPsx * radiusPsx;
+        int radiusSqFp12 = Mathf.RoundToInt(radiusSqPsx * 4096f);
+        w.Write(radiusSqFp12);                      // int32 fp12 radius squared
+        w.Write(ia.InteractButton);                 // u8
+        byte flags = 0;
+        if (ia.Repeatable) flags |= 0x01;
+        if (ia.ShowPrompt) flags |= 0x02;
+        // bit 2 (requireLineOfSight) + bit 3 (disabled) — defaults off.
+        w.Write(flags);                              // u8
+        w.Write(ia.CooldownFrames);                 // u16
+        w.Write((ushort)0);                         // currentCooldown (runtime state)
+        w.Write(ia.GameObjectIndex);                // u16
+
+        // promptCanvasName is a 16-byte inline char array. Pad with zeros.
+        byte[] nameBytes = Encoding.UTF8.GetBytes(ia.PromptCanvasName);
+        int nameLen = Mathf.Min(nameBytes.Length, 15); // reserve last byte for null
+        for (int i = 0; i < nameLen; i++) w.Write(nameBytes[i]);
+        for (int i = nameLen; i < 16; i++) w.Write((byte)0);
+
+        long written = w.BaseStream.Position - entryStart;
+        if (written != 28)
+            throw new InvalidOperationException($"Interactable size mismatch: {written} vs 28.");
     }
 
     // ─── NavRegion (84 bytes) ────────────────────────────────────────────

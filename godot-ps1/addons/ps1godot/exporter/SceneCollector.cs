@@ -94,11 +94,77 @@ public static class SceneCollector
             });
 
             EmitCollisionFor(pmi, objectIndex, data);
+            EmitInteractableFor(pmi, objectIndex, data);
+        }
+        else if (n is PS1TriggerBox tb && tb.Visible)
+        {
+            EmitTriggerBox(tb, data, luaCache);
         }
         foreach (var child in n.GetChildren())
         {
             WalkAddMeshes(child, data, textureCache, luaCache);
         }
+    }
+
+    // Compute world AABB for a PS1TriggerBox by baking its GlobalTransform
+    // into the 8 corners of the local half-extent box, same approach the
+    // collider path uses (runtime never calls updateCollider). Resolve the
+    // attached Lua script to an index, or -1 if none.
+    private static void EmitTriggerBox(PS1TriggerBox tb, SceneData data,
+        Dictionary<string, int> luaCache)
+    {
+        Vector3 he = tb.HalfExtents;
+        Vector3 lMin = -he;
+        Vector3 lMax = he;
+        Transform3D xform = tb.GlobalTransform;
+        Vector3 wMin = new(float.MaxValue, float.MaxValue, float.MaxValue);
+        Vector3 wMax = new(float.MinValue, float.MinValue, float.MinValue);
+        for (int i = 0; i < 8; i++)
+        {
+            var corner = new Vector3(
+                (i & 1) != 0 ? lMax.X : lMin.X,
+                (i & 2) != 0 ? lMax.Y : lMin.Y,
+                (i & 4) != 0 ? lMax.Z : lMin.Z);
+            Vector3 world = xform * corner;
+            wMin = new Vector3(Mathf.Min(wMin.X, world.X), Mathf.Min(wMin.Y, world.Y), Mathf.Min(wMin.Z, world.Z));
+            wMax = new Vector3(Mathf.Max(wMax.X, world.X), Mathf.Max(wMax.Y, world.Y), Mathf.Max(wMax.Z, world.Z));
+        }
+
+        int luaIdx = ResolveLuaScript(tb.Name, tb.ScriptFile, data, luaCache);
+        data.TriggerBoxes.Add(new TriggerBoxRecord
+        {
+            WorldMin = wMin,
+            WorldMax = wMax,
+            LuaFileIndex = (short)luaIdx,
+        });
+        GD.Print($"[PS1Godot] Trigger '{tb.Name}': AABB=[{wMin}..{wMax}] luaIdx={luaIdx}");
+    }
+
+    // Emit an Interactable record for a PS1MeshInstance marked interactable.
+    // The runtime pairs this with the GameObject by objectIndex — the
+    // object's attached script gets its onInteract called when the player
+    // is in range and presses the configured button.
+    private static void EmitInteractableFor(PS1MeshInstance pmi, ushort objectIndex, SceneData data)
+    {
+        if (!pmi.Interactable) return;
+
+        string prompt = pmi.InteractionPromptCanvas ?? "";
+        if (prompt.Length > 15)
+        {
+            GD.PushWarning($"[PS1Godot] {pmi.Name}: InteractionPromptCanvas '{prompt}' > 15 chars — truncating.");
+            prompt = prompt[..15];
+        }
+
+        data.Interactables.Add(new InteractableRecord
+        {
+            GameObjectIndex = objectIndex,
+            RadiusMeters = pmi.InteractionRadiusMeters,
+            InteractButton = (byte)Mathf.Clamp(pmi.InteractButton, 0, 15),
+            Repeatable = pmi.InteractionRepeatable,
+            ShowPrompt = !string.IsNullOrEmpty(prompt),
+            CooldownFrames = (ushort)Mathf.Clamp(pmi.InteractionCooldownFrames, 0, 65535),
+            PromptCanvasName = prompt,
+        });
     }
 
     private static void CollectAudioClips(PS1Scene scene, SceneData data)

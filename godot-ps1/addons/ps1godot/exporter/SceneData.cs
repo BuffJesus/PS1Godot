@@ -110,6 +110,8 @@ public sealed class SceneData
     // physics engagement.
     public List<ColliderRecord> Colliders { get; } = new();
     public List<NavRegionRecord> NavRegions { get; } = new();
+    public List<TriggerBoxRecord> TriggerBoxes { get; } = new();
+    public List<InteractableRecord> Interactables { get; } = new();
 
     // Lua scripts discovered on scene nodes. Deduplicated by resource path.
     public List<LuaFileRecord> LuaFiles { get; } = new();
