@@ -81,8 +81,9 @@ public static class SceneCollector
                 surfaceTextureIndices[s] = ResolveSurfaceTexture(pmi, s, data, textureCache);
             }
 
+            Color effectiveFlat = ResolveEffectiveFlatColor(pmi);
             var psxMesh = PSXMesh.FromGodotMesh(
-                pmi, data.GteScaling, pmi.VertexColorMode, pmi.FlatColor,
+                pmi, data.GteScaling, pmi.VertexColorMode, effectiveFlat,
                 surfaceTextureIndices, data.Textures);
 
             ushort objectIndex = (ushort)data.Objects.Count;
@@ -161,6 +162,39 @@ public static class SceneCollector
             Elements = elements,
         });
         GD.Print($"[PS1Godot] UICanvas '{name}': residency={canvas.Residency}, {elements.Count} elements");
+    }
+
+    // Resolve a mesh's effective flat color for untextured export.
+    // Precedence:
+    //   1. ShaderMaterial "tint_color" parameter (our ps1_default / ps1_green
+    //      materials expose this — most meshes in practice).
+    //   2. StandardMaterial3D AlbedoColor.
+    //   3. PS1MeshInstance.FlatColor node property (fallback / override).
+    // If the author wants to override a material-provided color, they can
+    // either swap to a StandardMaterial3D with AlbedoTexture (textured
+    // path) or remove the material and set FlatColor on the node.
+    private static Color ResolveEffectiveFlatColor(PS1MeshInstance pmi)
+    {
+        Material? mat = pmi.MaterialOverride;
+        if (mat == null && pmi.Mesh != null)
+        {
+            for (int s = 0; s < pmi.Mesh.GetSurfaceCount(); s++)
+            {
+                mat = pmi.GetSurfaceOverrideMaterial(s) ?? pmi.Mesh.SurfaceGetMaterial(s);
+                if (mat != null) break;
+            }
+        }
+
+        if (mat is ShaderMaterial sm)
+        {
+            var tint = sm.GetShaderParameter("tint_color");
+            if (tint.VariantType == Variant.Type.Color) return tint.AsColor();
+        }
+        if (mat is StandardMaterial3D std)
+        {
+            return std.AlbedoColor;
+        }
+        return pmi.FlatColor;
     }
 
     // Walk a PS1Animation node's children for keyframes, convert to PSX
