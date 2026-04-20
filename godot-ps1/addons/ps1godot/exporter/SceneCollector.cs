@@ -644,14 +644,8 @@ public static class SceneCollector
         if (mat == null) mat = pmi.GetSurfaceOverrideMaterial(surfaceIdx);
         if (mat == null && pmi.Mesh != null) mat = pmi.Mesh.SurfaceGetMaterial(surfaceIdx);
 
-        GD.Print($"[PS1Godot tex] {pmi.Name}/surf{surfaceIdx}: material={(mat == null ? "null" : mat.GetType().Name)}");
         var tex = ExtractAlbedoTexture(mat);
-        if (tex == null)
-        {
-            GD.Print($"[PS1Godot tex] {pmi.Name}/surf{surfaceIdx}: no albedo texture found → untextured");
-            return -1;
-        }
-        GD.Print($"[PS1Godot tex] {pmi.Name}/surf{surfaceIdx}: tex='{tex.ResourcePath}'");
+        if (tex == null) return -1;
 
         string path = tex.ResourcePath ?? "";
         if (string.IsNullOrEmpty(path))
@@ -671,18 +665,20 @@ public static class SceneCollector
         }
 
         // PSX texture pages are 64/128/256 pixels wide depending on bpp and
-        // 256 tall. Reject oversize textures here with a clear message.
-        int maxWidth = pmi.BitDepth switch
+        // 256 tall. Auto-downscale anything bigger so authors don't have
+        // to re-export source assets at PSX-friendly sizes — but warn so
+        // they know quality was lost.
+        const int MaxDim = 256;
+        if (img.GetWidth() > MaxDim || img.GetHeight() > MaxDim)
         {
-            PSXBPP.TEX_16BIT => 256,
-            PSXBPP.TEX_8BIT => 256,  // but stored as 128 "quantized" words
-            PSXBPP.TEX_4BIT => 256,
-            _ => 256,
-        };
-        if (img.GetWidth() > maxWidth || img.GetHeight() > 256)
-        {
-            GD.PushError($"[PS1Godot] {pmi.Name}: texture '{path}' is {img.GetWidth()}×{img.GetHeight()}; PSX max is 256×256 per page. Downscale or split.");
-            return -1;
+            int srcW = img.GetWidth();
+            int srcH = img.GetHeight();
+            int newW = Mathf.Min(srcW, MaxDim);
+            int newH = Mathf.Min(srcH, MaxDim);
+            // Nearest filter preserves the chunky PS1 look; bilinear would
+            // add blur the GPU can't afford on hardware anyway.
+            img.Resize(newW, newH, Image.Interpolation.Nearest);
+            GD.PushWarning($"[PS1Godot] {pmi.Name}: texture '{path}' was {srcW}×{srcH}; auto-downscaled to {newW}×{newH} (PSX VRAM page max). Author at {MaxDim}×{MaxDim} or smaller for predictable results.");
         }
 
         // 4bpp requires width divisible by 4, 8bpp by 2.
