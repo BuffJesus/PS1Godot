@@ -644,8 +644,14 @@ public static class SceneCollector
         if (mat == null) mat = pmi.GetSurfaceOverrideMaterial(surfaceIdx);
         if (mat == null && pmi.Mesh != null) mat = pmi.Mesh.SurfaceGetMaterial(surfaceIdx);
 
+        GD.Print($"[PS1Godot tex] {pmi.Name}/surf{surfaceIdx}: material={(mat == null ? "null" : mat.GetType().Name)}");
         var tex = ExtractAlbedoTexture(mat);
-        if (tex == null) return -1;
+        if (tex == null)
+        {
+            GD.Print($"[PS1Godot tex] {pmi.Name}/surf{surfaceIdx}: no albedo texture found → untextured");
+            return -1;
+        }
+        GD.Print($"[PS1Godot tex] {pmi.Name}/surf{surfaceIdx}: tex='{tex.ResourcePath}'");
 
         string path = tex.ResourcePath ?? "";
         if (string.IsNullOrEmpty(path))
