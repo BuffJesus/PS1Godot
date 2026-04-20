@@ -308,6 +308,7 @@ public static class SplashpackWriter
         // Per-track backfill positions: objNameOff + kfOff.
         var trackObjNameOffPositions = new long[count][];
         var trackKfOffPositions      = new long[count][];
+        var audioOffPositions        = new long[count];
         for (int i = 0; i < count; i++)
         {
             var c = scene.Cutscenes[i];
@@ -318,11 +319,12 @@ public static class SplashpackWriter
             // SPLASHPACKCutscene (16 B for v19+ layout).
             w.Write(c.TotalFrames);                  // u16
             w.Write((byte)c.Tracks.Count);           // trackCount
-            w.Write((byte)0);                        // audioEventCount (B.2 Phase 1: none)
+            w.Write((byte)c.AudioEvents.Count);      // audioEventCount
             long tracksOffPos = w.BaseStream.Position;
             w.Write((uint)0);                        // tracksOff (backfilled)
-            w.Write((uint)0);                        // audioOff (none)
-            // v19 skin anim event fields — stubbed in B.2 Phase 1.
+            audioOffPositions[i] = w.BaseStream.Position;
+            w.Write((uint)0);                        // audioOff (backfilled if events > 0)
+            // v19 skin anim event fields — still stubbed (bullet 11 work).
             w.Write((byte)0);                        // skinAnimEventCount
             w.Write((byte)0); w.Write((byte)0); w.Write((byte)0); // 3 B pad
             w.Write((uint)0);                        // skinAnimOff
@@ -367,6 +369,27 @@ public static class SplashpackWriter
                     w.Write(kf.V1);
                     w.Write(kf.V2);
                 }
+            }
+        }
+
+        // Audio event arrays per cutscene (8 B per event). Skip cutscenes
+        // with no events — leave audioOff at 0 (runtime treats as null).
+        for (int i = 0; i < count; i++)
+        {
+            var c = scene.Cutscenes[i];
+            if (c.AudioEvents.Count == 0) continue;
+            AlignTo4(w);
+            long aeStart = w.BaseStream.Position;
+            BackfillUInt32(w, audioOffPositions[i], (uint)aeStart);
+            foreach (var ae in c.AudioEvents)
+            {
+                w.Write(ae.Frame);              // u16
+                w.Write(ae.ClipIndex);          // u8
+                w.Write(ae.Volume);             // u8
+                w.Write(ae.Pan);                // u8
+                w.Write((byte)0);               // 3 B pad
+                w.Write((byte)0);
+                w.Write((byte)0);
             }
         }
 

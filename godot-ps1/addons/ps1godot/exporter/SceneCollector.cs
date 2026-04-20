@@ -343,6 +343,38 @@ public static class SceneCollector
             });
         }
 
+        // Audio events — children of the cutscene typed PS1AudioEvent.
+        // Resolve ClipName → audio clip index using the already-collected
+        // SceneData.AudioClips list (the audio walk happens before the
+        // cutscene walk because it's on PS1Scene).
+        var audioEvents = new System.Collections.Generic.List<CutsceneAudioEventRecord>();
+        foreach (var child in cs.GetChildren())
+        {
+            if (child is not PS1AudioEvent ae) continue;
+            int clipIdx = -1;
+            if (!string.IsNullOrEmpty(ae.ClipName))
+            {
+                for (int i = 0; i < data.AudioClips.Count; i++)
+                {
+                    if (data.AudioClips[i].Name == ae.ClipName) { clipIdx = i; break; }
+                }
+            }
+            if (clipIdx < 0)
+            {
+                GD.PushWarning($"[PS1Godot] Cutscene '{name}' audio event at frame {ae.Frame}: clip '{ae.ClipName}' not found in PS1Scene.AudioClips — skipping.");
+                continue;
+            }
+            audioEvents.Add(new CutsceneAudioEventRecord
+            {
+                Frame = (ushort)Mathf.Clamp(ae.Frame, 0, 8191),
+                ClipIndex = (byte)Mathf.Clamp(clipIdx, 0, 255),
+                Volume = (byte)Mathf.Clamp(ae.Volume, 0, 127),
+                Pan = (byte)Mathf.Clamp(ae.Pan, 0, 127),
+            });
+        }
+        // Runtime walks audio events linearly by frame; sort defensively.
+        audioEvents.Sort((a, b) => a.Frame.CompareTo(b.Frame));
+
         if (tracks.Count == 0)
         {
             GD.PushWarning($"[PS1Godot] Cutscene '{name}' has no PS1AnimationTrack children with keyframes — skipping.");
@@ -354,8 +386,9 @@ public static class SceneCollector
             Name = name,
             TotalFrames = (ushort)Mathf.Clamp(cs.TotalFrames, 1, 8191),
             Tracks = tracks,
+            AudioEvents = audioEvents,
         });
-        GD.Print($"[PS1Godot] Cutscene '{name}': frames={cs.TotalFrames} tracks={tracks.Count}");
+        GD.Print($"[PS1Godot] Cutscene '{name}': frames={cs.TotalFrames} tracks={tracks.Count} audioEvents={audioEvents.Count}");
     }
 
     // Encode a Godot-space triple into the runtime's fp12 / fp10 values

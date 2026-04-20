@@ -98,14 +98,25 @@ public sealed class CutsceneTrackRecord
     public required System.Collections.Generic.List<KeyframeRecord> Keyframes { get; init; }
 }
 
+// One audio cue inside a CutsceneRecord. Serialized as 8 B
+// CutsceneAudioEvent (cutscene.hh).
+public sealed class CutsceneAudioEventRecord
+{
+    public required ushort Frame { get; init; }
+    public required byte ClipIndex { get; init; } // resolved at collect time
+    public required byte Volume { get; init; }    // 0–127
+    public required byte Pan { get; init; }       // 0–127, 64 = centered
+}
+
 // One cutscene: a named multi-track timeline. Serialized as a 12-byte
 // SPLASHPACKCutsceneEntry → 16-byte SPLASHPACKCutscene block → tracks
-// → keyframes. Audio + skin-anim events are placeholders for B.2/B.3.
+// → keyframes + (B.2 Phase 3) audio events.
 public sealed class CutsceneRecord
 {
     public required string Name { get; init; }
     public required ushort TotalFrames { get; init; }
     public required System.Collections.Generic.List<CutsceneTrackRecord> Tracks { get; init; }
+    public required System.Collections.Generic.List<CutsceneAudioEventRecord> AudioEvents { get; init; }
 }
 
 // UI canvas + its widgets. Serialized as a 12-byte descriptor in the UI
