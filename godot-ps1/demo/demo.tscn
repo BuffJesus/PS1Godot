@@ -364,7 +364,7 @@ Value = Vector3(0, 360, 0)
 [node name="IntroCutscene" type="Node" parent="." unique_id=1594376134]
 script = ExtResource("14_cs")
 CutsceneName = "intro"
-TotalFrames = 240
+TotalFrames = 600
 
 [node name="CamPosTrack" type="Node" parent="IntroCutscene" unique_id=1136654869]
 script = ExtResource("15_tr")
@@ -376,25 +376,25 @@ Value = Vector3(0, 8, 6)
 
 [node name="CamPosKf1" type="Node" parent="IntroCutscene/CamPosTrack"]
 script = ExtResource("13_kf")
-Frame = 60
+Frame = 150
 Value = Vector3(5, 6, 4)
 Interp = 4
 
 [node name="CamPosKf2" type="Node" parent="IntroCutscene/CamPosTrack"]
 script = ExtResource("13_kf")
-Frame = 120
+Frame = 300
 Value = Vector3(5, 5, -1)
 Interp = 4
 
 [node name="CamPosKf3" type="Node" parent="IntroCutscene/CamPosTrack"]
 script = ExtResource("13_kf")
-Frame = 180
+Frame = 450
 Value = Vector3(4, 5, 3)
 Interp = 4
 
 [node name="CamPosKf4" type="Node" parent="IntroCutscene/CamPosTrack" unique_id=560384909]
 script = ExtResource("13_kf")
-Frame = 239
+Frame = 599
 Value = Vector3(0, 4, 5)
 Interp = 4
 
@@ -408,25 +408,25 @@ Value = Vector3(-40, 0, 0)
 
 [node name="CamRotKf1" type="Node" parent="IntroCutscene/CamRotTrack"]
 script = ExtResource("13_kf")
-Frame = 60
+Frame = 150
 Value = Vector3(-30, -45, 0)
 Interp = 4
 
 [node name="CamRotKf2" type="Node" parent="IntroCutscene/CamRotTrack"]
 script = ExtResource("13_kf")
-Frame = 120
+Frame = 300
 Value = Vector3(-20, -120, 0)
 Interp = 4
 
 [node name="CamRotKf3" type="Node" parent="IntroCutscene/CamRotTrack"]
 script = ExtResource("13_kf")
-Frame = 180
+Frame = 450
 Value = Vector3(-15, -30, 0)
 Interp = 4
 
 [node name="CamRotKf4" type="Node" parent="IntroCutscene/CamRotTrack" unique_id=1322462890]
 script = ExtResource("13_kf")
-Frame = 239
+Frame = 599
 Interp = 4
 
 [node name="PS1Player" type="Node3D" parent="." unique_id=1681451007]

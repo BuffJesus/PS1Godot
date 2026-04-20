@@ -23,12 +23,18 @@ local cutsceneRanThisSession = false
 local narrationHidden = false
 -- Note: text length ~36 chars max for the SystemVoice text element
 -- (288 px wide, ~8 px/char). Voice clip plays the full long-form line.
+--
+-- Frames are in Lua-tick units (~60 fps onUpdate). Each line waits
+-- for the previous audio to finish + a real pause before firing.
+-- Audio clip durations (approx): welcome 3.2 s, not_alarmed 2.1 s,
+-- stable 1.5 s, other_cube 2.2 s, we_think 1.0 s. Gaps sized to
+-- give each line ≥1 s of silence after audio finishes.
 local narration = {
     { 5,   "Welcome to the Demo Environment.",  "system_welcome"          },
-    { 130, "Do not be alarmed by the cube.",    "system_not_alarmed"      },
-    { 220, "It is perfectly stable.",            "system_perfectly_stable" },
-    { 320, "The other cube is also intentional.","system_other_cube"       },
-    { 420, "We think.",                          "system_we_think"         },
+    { 260, "Do not be alarmed by the cube.",    "system_not_alarmed"      },
+    { 500, "It is perfectly stable.",            "system_perfectly_stable" },
+    { 720, "The other cube is also intentional.","system_other_cube"       },
+    { 980, "We think.",                          "system_we_think"         },
 }
 
 -- ── Green cube dialog sequences ──
