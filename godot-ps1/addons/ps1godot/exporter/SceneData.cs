@@ -119,6 +119,24 @@ public sealed class CutsceneRecord
     public required System.Collections.Generic.List<CutsceneAudioEventRecord> AudioEvents { get; init; }
 }
 
+// Skinned mesh metadata. The mesh itself is an entry in SceneData.Objects
+// (exported as a normal mesh at its bind pose); this record describes the
+// skin-side data the runtime needs: which GameObject to skin, the bone
+// count, and one bone index per triangle vertex (3 bytes per triangle).
+// Stage 1 ships with Clips empty; stage 2 populates it with baked
+// BakedBoneMatrix[] per clip.
+public sealed class SkinnedMeshRecord
+{
+    public required string Name { get; init; }
+    public required ushort GameObjectIndex { get; init; }
+    public required byte BoneCount { get; init; }
+    // BoneIndices has length = triangleCount * 3, one byte per triangle
+    // vertex. Order matches the post-winding-swap vertex order the
+    // PSXMesh writer emits so the runtime's skinned render path can
+    // walk them in lockstep with the Tri[] array.
+    public required byte[] BoneIndices { get; init; }
+}
+
 // UI canvas + its widgets. Serialized as a 12-byte descriptor in the UI
 // table plus a per-canvas element array elsewhere in the splashpack.
 public sealed class UICanvasRecord
@@ -212,6 +230,13 @@ public sealed class SceneData
     // Cutscenes gathered from PS1Cutscene nodes + their PS1AnimationTrack
     // children. Lua plays by name via Cutscene.Play.
     public List<CutsceneRecord> Cutscenes { get; } = new();
+
+    // Skinned meshes — PS1SkinnedMesh nodes in the scene. The mesh itself
+    // lives in Objects (exported as a normal mesh in bind pose); this
+    // entry carries the skin-side data: per-triangle bone assignments
+    // and animation clips. Stage 1 lands with ClipCount = 0 (rest pose
+    // only); stage 2 adds baked clips.
+    public List<SkinnedMeshRecord> SkinnedMeshes { get; } = new();
 
     // Index into LuaFiles for a script attached to the PS1Scene root; -1 if
     // no root script. Runtime dispatches scene-level events (onSceneCreationStart

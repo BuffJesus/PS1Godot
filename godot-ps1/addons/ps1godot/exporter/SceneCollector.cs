@@ -176,20 +176,42 @@ public static class SceneCollector
             EmitCollisionFor(pmi, objectIndex, data);
             EmitInteractableFor(pmi, objectIndex, data);
 
-            // Stage 0 skinned-mesh detection: if this is a PS1SkinnedMesh,
-            // log enough that the author can tell the exporter "saw" it.
-            // Splashpack emission + bone matrix baking land in Phase 2
-            // bullet 11 stages 1+. Until then the mesh still exports as a
-            // static PS1MeshInstance (bind-pose only; animations ignored).
+            // Stage 1 skinned-mesh export: if this is a PS1SkinnedMesh,
+            // resolve its skeleton, compute per-triangle bone indices from
+            // vertex weights, and record it for SplashpackWriter to emit as
+            // a SkinTable entry + SkinData block. Clip baking (stage 2)
+            // remains pending — the emitted block has clipCount = 0, so the
+            // mesh renders at bind pose via the skinned render path without
+            // animation until we land the baker.
             if (pmi is PS1SkinnedMesh ps1Skin)
             {
                 int boneCount = DetectBoneCount(ps1Skin);
+                if (boneCount == 0)
+                {
+                    GD.PushWarning(
+                        $"[PS1Godot] PS1SkinnedMesh '{ps1Skin.Name}' has no Skeleton3D target " +
+                        $"(or an empty one). Falling back to 1 bone at the mesh origin.");
+                    boneCount = 1;
+                }
+                if (boneCount > 64)
+                {
+                    GD.PushWarning(
+                        $"[PS1Godot] PS1SkinnedMesh '{ps1Skin.Name}' has {boneCount} bones; " +
+                        $"runtime cap is 64. Bone indices >= 64 will be clamped.");
+                }
+                byte[] boneIndices = ComputeBoneIndices(ps1Skin, boneCount);
+                data.SkinnedMeshes.Add(new SkinnedMeshRecord
+                {
+                    Name = ps1Skin.Name,
+                    GameObjectIndex = objectIndex,
+                    BoneCount = (byte)System.Math.Min(boneCount, 64),
+                    BoneIndices = boneIndices,
+                });
                 int animCount = ps1Skin.ClipNames != null ? ps1Skin.ClipNames.Length : 0;
                 GD.Print(
-                    $"[PS1Godot] PS1SkinnedMesh '{ps1Skin.Name}' detected: " +
-                    $"{boneCount} bones, {animCount} authored clips, " +
-                    $"sampling @ {ps1Skin.TargetFps} fps. " +
-                    $"(stage 0 — splashpack skin-data emission pending; exporting as static mesh for now.)");
+                    $"[PS1Godot] PS1SkinnedMesh '{ps1Skin.Name}': {boneCount} bones, " +
+                    $"{boneIndices.Length / 3} triangles, {animCount} authored clips. " +
+                    $"(stage 1 — skin data emitted; clip baking pending.)");
             }
         }
         else if (n is PS1TriggerBox tb && tb.Visible)
@@ -277,6 +299,81 @@ public static class SceneCollector
         if (mesh.Skeleton == null || mesh.Skeleton.IsEmpty) return 0;
         var node = mesh.GetNodeOrNull<Skeleton3D>(mesh.Skeleton);
         return node?.GetBoneCount() ?? 0;
+    }
+
+    // One bone index byte per triangle vertex (3 bytes per tri). Order
+    // matches the post-winding-swap vertex order PSXMesh.FromGodotMesh
+    // emits: for each indexed triangle (i0, i1, i2), the swap flips to
+    // (i0, i2, i1). Stage 1 picks the dominant bone across all three
+    // vertices (per-triangle rigid skinning) — simpler than per-vertex
+    // and matches what most PS1 title skinning rigs actually did. Falls
+    // back to bone 0 when the mesh has no weight data.
+    private static byte[] ComputeBoneIndices(PS1SkinnedMesh mesh, int boneCount)
+    {
+        var result = new System.Collections.Generic.List<byte>();
+        if (mesh.Mesh == null) return result.ToArray();
+
+        int surfaceCount = mesh.Mesh.GetSurfaceCount();
+        for (int s = 0; s < surfaceCount; s++)
+        {
+            var arrays = mesh.Mesh.SurfaceGetArrays(s);
+            var indices = arrays[(int)Mesh.ArrayType.Index].AsInt32Array();
+            var bonesArr   = arrays[(int)Mesh.ArrayType.Bones].AsInt32Array();
+            var weightsArr = arrays[(int)Mesh.ArrayType.Weights].AsFloat32Array();
+
+            int vertCount = indices.Length > 0 ? 0 : arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array().Length;
+            int triCount = indices.Length > 0 ? indices.Length / 3 : vertCount / 3;
+            bool hasSkin = bonesArr.Length > 0 && weightsArr.Length == bonesArr.Length;
+            // Godot packs 4 bones + 4 weights per vertex (default skinning).
+            int perVert = hasSkin && bonesArr.Length > 0 ? 4 : 0;
+
+            for (int t = 0; t < triCount; t++)
+            {
+                int i0 = indices.Length > 0 ? indices[t * 3 + 0] : t * 3 + 0;
+                int i1 = indices.Length > 0 ? indices[t * 3 + 1] : t * 3 + 1;
+                int i2 = indices.Length > 0 ? indices[t * 3 + 2] : t * 3 + 2;
+                // PSXMesh swaps (i1, i2) for winding — mirror that here so
+                // bone indices line up with the emitted triangle vertices.
+                (i1, i2) = (i2, i1);
+
+                byte triBone = 0;
+                if (hasSkin)
+                {
+                    // Sum weights by bone across the three vertices; pick max.
+                    var sums = new System.Collections.Generic.Dictionary<int, float>();
+                    foreach (int vi in new[] { i0, i1, i2 })
+                    {
+                        int baseIdx = vi * perVert;
+                        for (int k = 0; k < perVert; k++)
+                        {
+                            int bone = bonesArr[baseIdx + k];
+                            float w = weightsArr[baseIdx + k];
+                            if (w <= 0f) continue;
+                            sums.TryGetValue(bone, out float acc);
+                            sums[bone] = acc + w;
+                        }
+                    }
+                    int bestBone = 0;
+                    float bestWeight = -1f;
+                    foreach (var kv in sums)
+                    {
+                        if (kv.Value > bestWeight)
+                        {
+                            bestWeight = kv.Value;
+                            bestBone = kv.Key;
+                        }
+                    }
+                    if (bestBone >= boneCount) bestBone = 0;    // guard against stale indices
+                    if (bestBone >= 64) bestBone = 63;          // runtime cap
+                    triBone = (byte)bestBone;
+                }
+                // Per-vertex bytes: same bone for all three verts of the
+                // triangle (per-triangle rigid). Matches the layout the
+                // runtime expects (3 bytes per triangle).
+                result.Add(triBone); result.Add(triBone); result.Add(triBone);
+            }
+        }
+        return result.ToArray();
     }
 
     private static Texture2D? ExtractAlbedoTexture(Material? mat)

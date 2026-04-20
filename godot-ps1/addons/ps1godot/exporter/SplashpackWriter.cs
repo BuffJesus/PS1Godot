@@ -270,6 +270,14 @@ public static class SplashpackWriter
         {
             WriteCutsceneSection(w, scene, headerOffsets.CutsceneTableOffsetPos);
         }
+
+        // ── Skin section (Phase 2 bullet 11, stage 1) ──
+        // Table of 12 B entries + per-mesh SkinData blocks + name strings.
+        // Clip baking lands in stage 2 — today every block writes clipCount = 0.
+        if (scene.SkinnedMeshes.Count > 0)
+        {
+            WriteSkinSection(w, scene, headerOffsets.SkinTableOffsetPos);
+        }
     }
 
     // ─── Cutscene section ───────────────────────────────────────────────
@@ -524,6 +532,76 @@ public static class SplashpackWriter
                 w.Write(Encoding.UTF8.GetBytes(a.TargetObjectName));
                 w.Write((byte)0);
                 BackfillUInt32(w, trackObjNameOffPositions[i], (uint)off);
+            }
+        }
+    }
+
+    // ─── Skin section (Phase 2 bullet 11, stage 1) ─────────────────────
+    //
+    // Layout per splashpack.cpp:470 (SkinPackLoader skinned-mesh parser):
+    //   12 B SPLASHPACKSkinEntry × skinnedMeshCount (table)
+    //   SkinData block per entry at its dataOffset:
+    //       u16 gameObjectIndex
+    //       u8  boneCount
+    //       u8  clipCount
+    //       u8[polyCount × 3] boneIndices
+    //       (4-byte align)
+    //       SkinAnimClip × clipCount  (empty in stage 1)
+    //   Name strings (null-terminated C strings) at each nameOffset.
+    //
+    // Stage 1 writes clipCount = 0 so runtime skips the clip-parse loop.
+    // Even without clips the runtime's skinned render path treats the
+    // mesh as present and renders it at bind-pose (bone-0 identity).
+    private static void WriteSkinSection(BinaryWriter w, SceneData scene, long skinTableOffsetPos)
+    {
+        AlignTo4(w);
+        long tableStart = w.BaseStream.Position;
+        BackfillUInt32(w, skinTableOffsetPos, (uint)tableStart);
+
+        int count = scene.SkinnedMeshes.Count;
+
+        var dataOffPos = new long[count];
+        var nameOffPos = new long[count];
+        for (int i = 0; i < count; i++)
+        {
+            var sm = scene.SkinnedMeshes[i];
+            dataOffPos[i] = w.BaseStream.Position;
+            w.Write((uint)0);                                        // dataOffset (backfilled)
+            byte nameLen = (byte)Math.Min(Encoding.UTF8.GetByteCount(sm.Name ?? ""), 255);
+            w.Write(nameLen);
+            w.Write((byte)0); w.Write((byte)0); w.Write((byte)0);    // 3 B pad
+            nameOffPos[i] = w.BaseStream.Position;
+            w.Write((uint)0);                                        // nameOffset (backfilled)
+        }
+
+        for (int i = 0; i < count; i++)
+        {
+            var sm = scene.SkinnedMeshes[i];
+            AlignTo4(w);
+            long blockStart = w.BaseStream.Position;
+            BackfillUInt32(w, dataOffPos[i], (uint)blockStart);
+
+            w.Write(sm.GameObjectIndex);     // u16
+            w.Write(sm.BoneCount);            // u8
+            w.Write((byte)0);                 // u8 clipCount (stage 2 will bake)
+            w.Write(sm.BoneIndices);          // polyCount × 3 bytes
+
+            // Align to 4 so the (future) clip array starts clean. Even
+            // with 0 clips the loader's parse won't read past the block,
+            // but keeping alignment stable avoids surprises in stage 2.
+            AlignTo4(w);
+        }
+
+        // Strings — mesh names.
+        for (int i = 0; i < count; i++)
+        {
+            var sm = scene.SkinnedMeshes[i];
+            if (!string.IsNullOrEmpty(sm.Name))
+            {
+                long off = w.BaseStream.Position;
+                w.Write(Encoding.UTF8.GetBytes(sm.Name));
+                w.Write((byte)0);
+                BackfillUInt32(w, nameOffPos[i], (uint)off);
             }
         }
     }
@@ -791,10 +869,10 @@ public static class SplashpackWriter
         offsets.AnimationTableOffsetPos = w.BaseStream.Position;
         w.Write((uint)0);              // animationTableOffset (backfilled)
 
-        w.Write((ushort)0);            // skinnedMeshCount
+        w.Write((ushort)scene.SkinnedMeshes.Count); // skinnedMeshCount
         w.Write((ushort)0);            // pad_skin
         offsets.SkinTableOffsetPos = w.BaseStream.Position;
-        w.Write((uint)0);              // skinTableOffset
+        w.Write((uint)0);              // skinTableOffset (backfilled by WriteSkinSection)
 
         // v21: editor-configured rig data. Offsets are PackedVec3 = 3 × int16.
         // Y is negated so Godot +Y (up) becomes PSX -Y (up in Y-down convention).
