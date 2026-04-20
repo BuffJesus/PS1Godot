@@ -425,8 +425,10 @@ second init looks like a leftover from an earlier design where
 `InitializeScene`. `InitializeScene` is called from exactly one place
 (`loadScene:967`), which already inits before upload.
 
-**Status.** Local patch applied 2026-04-19 in scenemanager.cpp. One-liner
-— excellent upstream PR candidate.
+**Status.** **Upstreamed** — fixed in psxsplash `70ada6e` (2026-04-20,
+"Fixed normal SPU audio breakage due to CDDA"). Local patch removed
+during vendor refresh on 2026-04-20; we now run the upstream behavior
+verbatim.
 
 **Evidence.**
 - `2026-04-19` — Phase 2 bullet 6 testing. `uploadSpuData` prints
@@ -446,3 +448,5 @@ second init looks like a leftover from an earlier design where
   from verbal report by psxsplash maintainer; reproduce during bullet 10.
 - `2026-04-19` — Added entry N+2 (audio clips wiped by redundant init).
   Real Phase 2 bullet 6 bisect; local one-liner patch applied.
+- `2026-04-20` — Entry N+2 upstreamed in psxsplash `70ada6e`. Vendor
+  refresh pulled upstream to latest main; local patch dropped.

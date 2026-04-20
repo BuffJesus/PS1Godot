@@ -44,12 +44,6 @@ void psxsplash::SceneManager::InitializeScene(uint8_t* splashpackData, LoadingSc
 
     L.Reset();
 
-    // NOTE (PS1Godot patch): m_audio.init() used to run here. It's already
-    // called by loadScene() before uploadSpuData(), and calling it again
-    // after upload wipes every clip's `loaded` flag (without actually
-    // clearing SPU RAM), so Audio.Play always returns -1. See
-    // docs/psxsplash-improvements.md entry N+2.
-
 #ifdef LOADER_CDROM
     m_music.setCDRomDevice(static_cast<psxsplash::FileLoaderCDRom&>(
         psxsplash::FileLoader::Get()).getCDRomDevice());
