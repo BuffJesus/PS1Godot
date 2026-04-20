@@ -3,7 +3,6 @@
 [ext_resource type="Script" uid="uid://b8ogc8krip2k" path="res://addons/ps1godot/nodes/PS1Scene.cs" id="1_scene"]
 [ext_resource type="Script" uid="uid://dng0iofdw3dk7" path="res://addons/ps1godot/nodes/PS1MeshInstance.cs" id="2_mesh"]
 [ext_resource type="Script" uid="uid://cgk0vce50p3ph" path="res://addons/ps1godot/nodes/PS1AudioClip.cs" id="2_onvmd"]
-[ext_resource type="Material" uid="uid://begli571e2oqy" path="res://addons/ps1godot/shaders/ps1_default.tres" id="4_mat"]
 [ext_resource type="Material" path="res://demo/materials/ps1_floor_grass.tres" id="4_floor"]
 [ext_resource type="Material" path="res://demo/materials/ps1_green.tres" id="5_green"]
 [ext_resource type="Texture2D" uid="uid://cul6k2s7n8ysj" path="res://demo/textures/test_checker.png" id="6_checker"]
@@ -176,6 +175,9 @@ size = Vector3(2, 2, 2)
 [sub_resource type="StandardMaterial3D" id="mat_checker"]
 albedo_texture = ExtResource("6_checker")
 texture_filter = 0
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_u5t42"]
+albedo_texture = ExtResource("35_u5t42")
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_q83id"]
 resource_name = "Humanoid_NotOverlapping"
@@ -454,7 +456,7 @@ metadata/_custom_type_script = "uid://cfdlp12g2rtct"
 
 [node name="Player" type="MeshInstance3D" parent="." unique_id=1847191928]
 transform = Transform3D(0.01, 0, 0, 0, 0.01, 7.549789e-10, 0, -7.549789e-10, 0.01, 0.0023041964, 0, 0)
-material_override = ExtResource("4_mat")
+material_override = SubResource("StandardMaterial3D_u5t42")
 extra_cull_margin = 2.0
 mesh = SubResource("ArrayMesh_qn6ho")
 script = ExtResource("2_mesh")

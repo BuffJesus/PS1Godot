@@ -28,6 +28,49 @@ public sealed class PSXMesh
             GD.PushWarning($"[PS1Godot] {node.Name}: VertexColorMode={colorMode} not yet implemented; falling back to FlatColor.");
         }
 
+        // Bake MeshInstance3D.Scale into vertex positions. FBX/GLTF assets
+        // often import at non-1 internal scale (cm, mm, etc.) and the author
+        // compensates by setting Scale on the node so it looks correct in
+        // the Godot viewport. The exporter reads raw SurfaceGetArrays verts,
+        // which don't include that scale — so without baking, a humanoid
+        // that looks right in the editor exports at the raw asset scale.
+        // Position and rotation stay in the instance transform (runtime
+        // animates rotation); only scale gets baked in here.
+        Vector3 nodeScale = node.Scale;
+        // Use a relative tolerance large enough to ignore Godot's basis-
+        // decomposition noise (we've seen ~1.5e-4 drift on "uniform"
+        // cubes). Real non-uniform authoring is typically at least a few
+        // percent apart, so 1% is generous without being alarmist.
+        float scaleMean = (Mathf.Abs(nodeScale.X) + Mathf.Abs(nodeScale.Y) + Mathf.Abs(nodeScale.Z)) / 3f;
+        float scaleTol = Mathf.Max(scaleMean * 0.01f, 1e-4f);
+        bool nonUniformScale =
+            Mathf.Abs(nodeScale.X - nodeScale.Y) > scaleTol ||
+            Mathf.Abs(nodeScale.Y - nodeScale.Z) > scaleTol;
+        if (nonUniformScale)
+        {
+            GD.PushWarning($"[PS1Godot] {node.Name}: non-uniform Scale {nodeScale}. Combined with PSX affine texture warp this can look visibly wrong. Prefer uniform scale, or bake the scale into the mesh asset.");
+        }
+
+        // Diagnostic: print pre- and post-scale extents for the first surface
+        // so we can verify the scale bake matches authoring intent. Remove
+        // once the scale pipeline is trusted.
+        if (mesh.GetSurfaceCount() > 0)
+        {
+            var diag = mesh.SurfaceGetArrays(0)[(int)Mesh.ArrayType.Vertex].AsVector3Array();
+            if (diag.Length > 0)
+            {
+                Vector3 min = diag[0], max = diag[0];
+                for (int i = 1; i < diag.Length; i++)
+                {
+                    min = new Vector3(Mathf.Min(min.X, diag[i].X), Mathf.Min(min.Y, diag[i].Y), Mathf.Min(min.Z, diag[i].Z));
+                    max = new Vector3(Mathf.Max(max.X, diag[i].X), Mathf.Max(max.Y, diag[i].Y), Mathf.Max(max.Z, diag[i].Z));
+                }
+                Vector3 extentRaw = max - min;
+                Vector3 extentScaled = extentRaw * nodeScale;
+                GD.Print($"[PS1Godot] {node.Name} mesh extent: raw={extentRaw:F3} × scale={nodeScale:F3} → scaled={extentScaled:F3}");
+            }
+        }
+
         byte rByte = PSXTrig.ColorChannelToPSX(flatColor.R);
         byte gByte = PSXTrig.ColorChannelToPSX(flatColor.G);
         byte bByte = PSXTrig.ColorChannelToPSX(flatColor.B);
@@ -52,9 +95,21 @@ public sealed class PSXMesh
                 int i1 = indices.Length > 0 ? indices[t * 3 + 1] : t * 3 + 1;
                 int i2 = indices.Length > 0 ? indices[t * 3 + 2] : t * 3 + 2;
 
-                var p0 = verts[i0];
-                var p1 = verts[i1];
-                var p2 = verts[i2];
+                // Diagnostic: first triangle of first surface of Player. Prints
+                // pre-scale raw and post-scale-post-convert int16 the runtime
+                // actually gets. If |vx| is ~1800 → scale applied. If ~12000+
+                // or weirdly negative → scale skipped, int16 wrap in play.
+                if (s == 0 && t == 0 && node.Name.ToString() == "Player")
+                {
+                    GD.Print($"[PS1Godot] Player tri[0] pre-scale: p0={verts[i0]:F3} p1={verts[i1]:F3} p2={verts[i2]:F3}");
+                    var ps0 = verts[i0] * nodeScale;
+                    GD.Print($"[PS1Godot] Player tri[0] post-scale: p0={ps0:F4}");
+                    GD.Print($"[PS1Godot] Player tri[0] emitted int16: vx={PSXTrig.ConvertCoordinateToPSX(ps0.X, gteScaling)} vy={PSXTrig.ConvertCoordinateToPSX(-ps0.Y, gteScaling)} vz={PSXTrig.ConvertCoordinateToPSX(ps0.Z, gteScaling)}");
+                }
+
+                var p0 = verts[i0] * nodeScale;
+                var p1 = verts[i1] * nodeScale;
+                var p2 = verts[i2] * nodeScale;
 
                 // Y-negation in MakeVertex is a reflection that reverses
                 // screen-space winding. Compensate with a single unconditional
