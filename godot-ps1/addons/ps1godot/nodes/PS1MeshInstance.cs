@@ -51,10 +51,14 @@ public partial class PS1MeshInstance : MeshInstance3D
     [Export] public bool Interactable { get; set; } = false;
     [Export(PropertyHint.Range, "0.1,10.0,0.1")]
     public float InteractionRadiusMeters { get; set; } = 1.5f;
-    // PSX controller button ids (matches psyqo::AdvancedPad::Button). 0=Cross,
-    // 1=Circle, 2=Triangle, 3=Square are the common interact choices.
+    // PSX controller button ids — must match psyqo::AdvancedPad::Button:
+    //   0=Select  1=L3       2=R3       3=Start
+    //   4=Up      5=Right    6=Down     7=Left
+    //   8=L2      9=R2      10=L1      11=R1
+    //   12=Triangle 13=Circle 14=Cross 15=Square
+    // Cross (14) is the conventional "interact" button; default to that.
     [Export(PropertyHint.Range, "0,15,1")]
-    public int InteractButton { get; set; } = 0;
+    public int InteractButton { get; set; } = 14;
     // Repeatable = fires every time within cooldown. Non-repeatable = once, then locked.
     [Export] public bool InteractionRepeatable { get; set; } = true;
     [Export(PropertyHint.Range, "0,600,1")]
