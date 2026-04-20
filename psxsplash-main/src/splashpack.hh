@@ -72,6 +72,12 @@ struct SplashpackSceneSetup {
     psyqo::GTE::PackedVec3 playerStartRotation;
     psyqo::FixedPoint<12, uint16_t> playerHeight;
 
+    // v21+: editor-driven rig data from PS1Player child nodes.
+    // Offsets in PSX units, player-local space (runtime rotates by yaw).
+    psyqo::GTE::PackedVec3 cameraRigOffset;
+    psyqo::GTE::PackedVec3 playerAvatarOffset;
+    uint16_t playerAvatarObjectIndex = 0xFFFF;  // 0xFFFF = no avatar
+
     // Scene type: 0=exterior (BVH culling), 1=interior (room/portal culling)
     uint16_t sceneType = 0;
 

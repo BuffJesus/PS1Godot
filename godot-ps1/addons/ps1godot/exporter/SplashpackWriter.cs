@@ -28,8 +28,8 @@ namespace PS1Godot.Exporter;
 //                  Name table — referenced by header.nameTableOffset.
 public static class SplashpackWriter
 {
-    public const ushort SplashpackVersion = 20;
-    public const int HeaderSize = 120;
+    public const ushort SplashpackVersion = 21;
+    public const int HeaderSize = 136;
     public const int GameObjectSize = 92;
     public const int TriSize = 52;
     public const int LuaFileSize = 8; // luaCodeOffset (u32) + length (u32)
@@ -795,6 +795,20 @@ public static class SplashpackWriter
         w.Write((ushort)0);            // pad_skin
         offsets.SkinTableOffsetPos = w.BaseStream.Position;
         w.Write((uint)0);              // skinTableOffset
+
+        // v21: editor-configured rig data. Offsets are PackedVec3 = 3 × int16.
+        // Y is negated so Godot +Y (up) becomes PSX -Y (up in Y-down convention).
+        // Player-local space; runtime rotates by player yaw each frame.
+        var camOff = scene.CameraRigOffset;
+        w.Write(PSXTrig.ConvertCoordinateToPSX(camOff.X, scene.GteScaling));
+        w.Write(PSXTrig.ConvertCoordinateToPSX(-camOff.Y, scene.GteScaling));
+        w.Write(PSXTrig.ConvertCoordinateToPSX(camOff.Z, scene.GteScaling));
+        var avOff = scene.PlayerAvatarOffset;
+        w.Write(PSXTrig.ConvertCoordinateToPSX(avOff.X, scene.GteScaling));
+        w.Write(PSXTrig.ConvertCoordinateToPSX(-avOff.Y, scene.GteScaling));
+        w.Write(PSXTrig.ConvertCoordinateToPSX(avOff.Z, scene.GteScaling));
+        w.Write((ushort)(scene.PlayerAvatarObjectIndex < 0 ? 0xFFFF : scene.PlayerAvatarObjectIndex));
+        w.Write((ushort)0);            // pad_rig
 
         long written = w.BaseStream.Position - headerStart;
         if (written != HeaderSize)

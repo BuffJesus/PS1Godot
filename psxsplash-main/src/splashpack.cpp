@@ -70,8 +70,18 @@ struct SPLASHPACKFileHeader {
     uint16_t skinnedMeshCount;
     uint16_t pad_skin;
     uint32_t skinTableOffset;
+    // v21+: editor-driven player rig data. cameraRigOffset and
+    // playerAvatarOffset are in PSX units (Y already negated at export),
+    // player-local: +X = right, +Y = down, +Z = behind the facing
+    // direction. Runtime rotates them by playerRotationY each frame.
+    // playerAvatarObjectIndex points to the GameObject that should
+    // follow the player (0xFFFF = no avatar tracking).
+    psyqo::GTE::PackedVec3 cameraRigOffset;
+    psyqo::GTE::PackedVec3 playerAvatarOffset;
+    uint16_t playerAvatarObjectIndex;
+    uint16_t pad_rig;
 };
-static_assert(sizeof(SPLASHPACKFileHeader) == 120, "SPLASHPACKFileHeader must be 120 bytes");
+static_assert(sizeof(SPLASHPACKFileHeader) == 136, "SPLASHPACKFileHeader must be 136 bytes");
 
 struct SPLASHPACKTextureAtlas {
     uint32_t polygonsOffset;
@@ -91,11 +101,16 @@ void SplashPackLoader::LoadSplashpack(uint8_t *data, SplashpackSceneSetup &setup
     psyqo::Kernel::assert(data != nullptr, "Splashpack loading data pointer is null");
     psxsplash::SPLASHPACKFileHeader *header = reinterpret_cast<psxsplash::SPLASHPACKFileHeader *>(data);
     psyqo::Kernel::assert(__builtin_memcmp(header->magic, "SP", 2) == 0, "Splashpack has incorrect magic");
-    psyqo::Kernel::assert(header->version >= 20, "Splashpack version too old (need v20+): re-export from SplashEdit");
+    psyqo::Kernel::assert(header->version >= 21, "Splashpack version too old (need v21+): re-export from PS1Godot");
 
     setup.playerStartPosition = header->playerStartPos;
     setup.playerStartRotation = header->playerStartRot;
     setup.playerHeight = header->playerHeight;
+
+    // v21+: editor-configured rig offsets and optional avatar link
+    setup.cameraRigOffset = header->cameraRigOffset;
+    setup.playerAvatarOffset = header->playerAvatarOffset;
+    setup.playerAvatarObjectIndex = header->playerAvatarObjectIndex;
     
     setup.moveSpeed.value = header->moveSpeed;
     setup.sprintSpeed.value = header->sprintSpeed;

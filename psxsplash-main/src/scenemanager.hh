@@ -192,10 +192,24 @@ class SceneManager {
 
     psxsplash::Camera m_currentCamera;
 
+    // Sin/cos lookup for computing camera offset direction from player yaw.
+    // Matches the table in Controls; duplicated rather than plumbed through
+    // a getter because Trig is cheap and scenemanager is the only other
+    // consumer that needs it.
+    psyqo::Trig<> m_trig;
+
     psyqo::Vec3 m_playerPosition;
     psyqo::Angle playerRotationX, playerRotationY, playerRotationZ;
 
     psyqo::FixedPoint<12, uint16_t> m_playerHeight;
+
+    // v21: rig offsets captured at export time from PS1Player's editor
+    // children (Camera3D → cameraRigOffset; MeshInstance3D → avatar).
+    // Player-local space: +X right, +Y down (PSX), +Z behind facing.
+    // Runtime rotates these by playerRotationY each frame.
+    psyqo::Vec3 m_cameraRigOffset;
+    psyqo::Vec3 m_playerAvatarOffset;
+    uint16_t m_playerAvatarObjectIndex = 0xFFFF;
     
     int32_t m_playerRadius;          
     int32_t m_velocityY;             

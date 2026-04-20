@@ -79,14 +79,43 @@ public static class SceneCollector
         {
             data.PlayerPosition = player.GlobalPosition;
             data.PlayerRotation = player.GlobalRotation;
+
+            // Camera3D child → editor-configurable third-person rig offset.
+            // Local position is relative to PS1Player. Runtime rotates it
+            // by player yaw each frame. Falls back to the SceneData default
+            // (3 m behind, 1 m above) if none authored.
             var rig = FindFirstOfType<Camera3D>(player);
+            if (rig != null)
+            {
+                data.CameraRigOffset = rig.Position;
+            }
+
+            // MeshInstance3D child (typically a PS1MeshInstance) → player
+            // avatar. Its local position is the offset from player origin;
+            // runtime tracks and rotates it each frame (no Lua needed).
+            // The mesh itself is picked up by WalkAddMeshes above, so we
+            // just resolve its index here.
+            var avatar = FindFirstOfType<MeshInstance3D>(player);
+            if (avatar != null)
+            {
+                data.PlayerAvatarOffset = avatar.Position;
+                for (int i = 0; i < data.Objects.Count; i++)
+                {
+                    if (ReferenceEquals(data.Objects[i].Node, avatar))
+                    {
+                        data.PlayerAvatarObjectIndex = i;
+                        break;
+                    }
+                }
+            }
+
             string rigInfo = rig != null
-                ? $"rig offset={rig.Position}"
-                : "no Camera3D child (runtime default rig)";
-            GD.Print($"[PS1Godot] Player spawn from PS1Player '{player.Name}' at {player.GlobalPosition}, mode={player.CameraMode}, {rigInfo}");
-            // NOTE: CameraMode is not yet stamped into the splashpack —
-            // runtime only supports a single hardcoded third-person rig.
-            // Phase 2.5 `Camera.SetMode()` will pick this up.
+                ? $"rig offset={data.CameraRigOffset:F2}"
+                : $"default rig offset={data.CameraRigOffset:F2}";
+            string avatarInfo = data.PlayerAvatarObjectIndex >= 0
+                ? $"avatar='{avatar!.Name}' idx={data.PlayerAvatarObjectIndex} offset={data.PlayerAvatarOffset:F2}"
+                : "no avatar mesh";
+            GD.Print($"[PS1Godot] Player spawn from PS1Player '{player.Name}' at {player.GlobalPosition}, mode={player.CameraMode}, {rigInfo}, {avatarInfo}");
         }
         else
         {

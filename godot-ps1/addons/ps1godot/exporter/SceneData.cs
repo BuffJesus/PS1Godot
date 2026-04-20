@@ -240,6 +240,15 @@ public sealed class SceneData
     public Vector3 PlayerRotation { get; set; } = Vector3.Zero;
     public float PlayerHeightMeters { get; set; } = 1.7f;
     public float PlayerRadiusMeters { get; set; } = 0.3f;
+
+    // v21: editor-configured rig offsets captured from PS1Player children.
+    // Values are in Godot local coords (relative to PS1Player). Exporter
+    // converts to PSX units + Y-flip at write time. Defaults: camera 3 m
+    // behind + 1 m above the player's eye; avatar offset zero (assumes
+    // child mesh authored with its own feet at origin — scene overrides).
+    public Vector3 CameraRigOffset { get; set; } = new Vector3(0, 1, 3);
+    public Vector3 PlayerAvatarOffset { get; set; } = Vector3.Zero;
+    public int PlayerAvatarObjectIndex { get; set; } = -1;  // -1 → 0xFFFF (none)
     public float MoveSpeedMps { get; set; } = 3.0f;
     public float SprintSpeedMps { get; set; } = 6.0f;
     public float JumpHeightMeters { get; set; } = 1.2f;

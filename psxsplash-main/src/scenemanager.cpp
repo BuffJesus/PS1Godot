@@ -3,12 +3,15 @@
 #include <utility>
 
 #include "collision.hh"
+#include "gtemath.hh"
 #include "profiler.hh"
 #include "renderer.hh"
 #include "splashpack.hh"
 #include "streq.hh"
 #include "luaapi.hh"
 #include "loadingscreen.hh"
+
+#include <psyqo/soft-math.hh>
 
 #include <psyqo/primitives/misc.hh>
 #include <psyqo/trigonometry.hh>
@@ -68,10 +71,25 @@ void psxsplash::SceneManager::InitializeScene(uint8_t* splashpackData, LoadingSc
     m_navRegions = sceneSetup.navRegions;          // Nav region system (v7+)
     m_playerNavRegion = m_navRegions.isLoaded() ? m_navRegions.getStartRegion() : NAV_NO_REGION;
 
-    // If nav regions are loaded, camera follows the player. Otherwise the
-    // scene is in "free camera" mode where cutscenes and Lua drive the camera.
-    m_cameraFollowsPlayer = m_navRegions.isLoaded();
+    // Enable camera-follow by default. Lua can disable with
+    // Camera.FollowPsxPlayer(false) for cutscene-driven scenes.
+    // (Historically this was gated on nav regions, but the PS1Godot
+    // demos use static colliders for ground, not nav regions, and still
+    // want a player-tracking camera.)
+    m_cameraFollowsPlayer = true;
     m_controlsEnabled = true;
+
+    // v21: editor-configured rig offsets (from PS1Player's Camera3D / mesh
+    // children). Stored player-local; rotated by yaw at runtime.
+    // PackedVec3 components are FixedPoint<12, int16> (GTE::Short); our
+    // members are FixedPoint<12, int32> (Vec3). Copy the raw .value through.
+    m_cameraRigOffset.x.value = sceneSetup.cameraRigOffset.x.value;
+    m_cameraRigOffset.y.value = sceneSetup.cameraRigOffset.y.value;
+    m_cameraRigOffset.z.value = sceneSetup.cameraRigOffset.z.value;
+    m_playerAvatarOffset.x.value = sceneSetup.playerAvatarOffset.x.value;
+    m_playerAvatarOffset.y.value = sceneSetup.playerAvatarOffset.y.value;
+    m_playerAvatarOffset.z.value = sceneSetup.playerAvatarOffset.z.value;
+    m_playerAvatarObjectIndex = sceneSetup.playerAvatarObjectIndex;
 
     // Scene type and render path
     m_sceneType = sceneSetup.sceneType;
@@ -636,10 +654,60 @@ void psxsplash::SceneManager::GameTick(psyqo::GPU &gpu) {
     // by cutscenes and Lua. After a cutscene ends in free mode, the
     // camera stays at the last cutscene position.
     if (m_cameraFollowsPlayer && !(m_cutscenePlayer.isPlaying() && m_cutscenePlayer.hasCameraTracks())) {
-        m_currentCamera.SetPosition(static_cast<psyqo::FixedPoint<12>>(m_playerPosition.x),
-                                    static_cast<psyqo::FixedPoint<12>>(m_playerPosition.y),
-                                    static_cast<psyqo::FixedPoint<12>>(m_playerPosition.z));
+        // Third-person camera rig. Offset is captured at export time from
+        // the Camera3D child of PS1Player (editor-tunable), in PSX units,
+        // player-local: +X right, +Y down, +Z behind facing. Runtime
+        // rotates by playerRotationY so the camera stays behind regardless
+        // of which way the player turns. Rotation around Y:
+        //   dx = cosY*offsetX - sinY*offsetZ
+        //   dz = -sinY*offsetX - cosY*offsetZ
+        //   dy = offsetY (Y is the rotation axis)
+        auto sinY = m_trig.sin(playerRotationY);
+        auto cosY = m_trig.cos(playerRotationY);
+
+        auto camX = static_cast<psyqo::FixedPoint<12>>(m_playerPosition.x)
+                  + cosY * m_cameraRigOffset.x - sinY * m_cameraRigOffset.z;
+        auto camY = static_cast<psyqo::FixedPoint<12>>(m_playerPosition.y)
+                  + m_cameraRigOffset.y;
+        auto camZ = static_cast<psyqo::FixedPoint<12>>(m_playerPosition.z)
+                  - sinY * m_cameraRigOffset.x - cosY * m_cameraRigOffset.z;
+
+        m_currentCamera.SetPosition(camX, camY, camZ);
         m_currentCamera.SetRotation(playerRotationX, playerRotationY, playerRotationZ);
+    }
+
+    // v21: auto-track the player avatar mesh (if PS1Player has a child
+    // MeshInstance3D). Replaces the Lua tracking that demos used before.
+    // The avatar offset is in player-local space (e.g., mesh origin =
+    // feet, player pos = eye → offset y = +playerHeight to drop mesh to
+    // ground). Rotated by yaw so the mesh faces where the player faces.
+    if (m_playerAvatarObjectIndex < m_gameObjects.size()) {
+        GameObject* avatar = m_gameObjects[m_playerAvatarObjectIndex];
+        if (avatar) {
+            auto sinY = m_trig.sin(playerRotationY);
+            auto cosY = m_trig.cos(playerRotationY);
+
+            auto newX = static_cast<psyqo::FixedPoint<12>>(m_playerPosition.x)
+                      + cosY * m_playerAvatarOffset.x - sinY * m_playerAvatarOffset.z;
+            auto newY = static_cast<psyqo::FixedPoint<12>>(m_playerPosition.y)
+                      + m_playerAvatarOffset.y;
+            auto newZ = static_cast<psyqo::FixedPoint<12>>(m_playerPosition.z)
+                      - sinY * m_playerAvatarOffset.x - cosY * m_playerAvatarOffset.z;
+
+            int32_t dx = newX.value - avatar->position.x.value;
+            int32_t dy = newY.value - avatar->position.y.value;
+            int32_t dz = newZ.value - avatar->position.z.value;
+            avatar->position.x = newX;
+            avatar->position.y = newY;
+            avatar->position.z = newZ;
+            avatar->aabbMinX += dx; avatar->aabbMaxX += dx;
+            avatar->aabbMinY += dy; avatar->aabbMaxY += dy;
+            avatar->aabbMinZ += dz; avatar->aabbMaxZ += dz;
+            avatar->setDynamicMoved(true);
+            avatar->rotation = psxsplash::transposeMatrix33(
+                psyqo::SoftMath::generateRotationMatrix33(
+                    playerRotationY, psyqo::SoftMath::Axis::Y, m_trig));
+        }
     }
 
     // Process pending scene transitions (at end of frame)
