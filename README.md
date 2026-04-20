@@ -19,30 +19,47 @@ landed too: subdivision tool, texture compliance analyzer, low-res
 compositor preview, PS1Lua as a first-class Godot script language via
 GDExtension.
 
-**Phase 2 (splashpack exporter MVP): in progress, bullets 1–6 running on
-PSX.** The Godot demo scene exports to a valid splashpack, boots in
-PCSX-Redux, and plays: player falls, walks with D-pad, jumps, collides
-with cubes on static floor, Lua `onUpdate` fires every frame, and audio
-plays via `Audio.Play("clip_name")`. Remaining: nav beyond flat floors,
-UI canvases, trigger boxes + interactables, cutscenes, skinned meshes,
-rooms/portals. See `ROADMAP.md`.
+**Phase 2 (splashpack exporter MVP): in progress, bullets 1–6, 8, 9, 10
+(MVP), and 11 running on PSX.** The Godot demo scene exports to a valid
+splashpack, boots in PCSX-Redux, and plays: intro cutscene with narrator,
+third-person camera follows the player, humanoid avatar tracks + turns
+with player input, interactive cubes with branching dialog, animated
+skinned mesh, audio with per-clip residency, in-editor dock with live
+scene-budget bars. Remaining Phase 2 bullets: 7 (nav beyond flat) and
+12 (rooms/portals). See `ROADMAP.md`.
 
 **What works right now**
 - PS1 spatial shader + default material, vertex jitter, fog
-- Custom nodes: `PS1Scene`, `PS1MeshInstance`, `PS1Camera`, `PS1AudioClip`,
-  `PS1TriggerBox`
-- Splashpack v20 exporter (meshes, textures with CLUT quantization,
-  per-object colliders, flat nav regions, source-text Lua scripts, ADPCM
-  audio)
+- Custom nodes: `PS1Scene`, `PS1MeshInstance`, `PS1SkinnedMesh`,
+  `PS1Camera`, `PS1Player`, `PS1AudioClip`, `PS1TriggerBox`,
+  `PS1UICanvas`, `PS1UIElement`, `PS1Animation`, `PS1Cutscene`
+- Splashpack **v21** exporter (meshes with bone weights, textures with
+  CLUT quantization, per-object colliders, flat nav regions,
+  source-text Lua scripts, ADPCM audio with Residency flags,
+  editor-driven camera + avatar rigs from `PS1Player` child nodes)
+- Skinned meshes with per-vertex rigid bone assignment + baked
+  animation clips sampled at author-set FPS
+- First-person / third-person camera mode switching via
+  `Camera.SetMode()` Lua API
+- Runtime `\n` word-wrap for dialog and narrator text
+- Dockable **PS1Godot** panel with triangle/VRAM/SPU budget bars,
+  dependency-detection setup section, and primary Run-on-PSX CTA
+- PS1 UI prefab templates (`dialog_box`, `menu_list`, `hud_bar`,
+  `toast`) authored as drop-in `.tscn` scenes
 - One-click **PS1Godot: Run on PSX** (export + launch PCSX-Redux)
 - PS1Lua script language in Godot's Create Script dropdown
 
 **What doesn't yet**
-- Non-trivial nav regions (DotRecast port, Phase 2 bullet 7)
-- UI canvases + fonts (Phase 2 bullet 8)
-- Trigger boxes + interactables (Phase 2 bullet 9, in flight)
-- Cutscenes, skinned meshes, rooms/portals (Phase 2 bullets 10-12)
-- F5-to-play / VRAM viewer / budget overlays (Phase 3)
+- Non-trivial nav regions (DotRecast port or manual polygon auth,
+  Phase 2 bullet 7)
+- Rooms / portals for interior-scene culling (Phase 2 bullet 12)
+- Cutscenes polish beyond MVP (rotation/scale tracks, camera-bug
+  reproduction — Phase 2 bullet 10 option B)
+- WYSIWYG UI canvas editor, dialog tree editor, `PS1Theme.tres`
+  (Phase 3 § UI authoring experience)
+- F5-to-play binding, VRAM viewer dock, project templates
+  (Phase 3)
+- Phase 0.5 install-buttons on the setup dock
 - Zero-setup `PS1Godot.zip` drop (Phase 4)
 
 ## Getting started

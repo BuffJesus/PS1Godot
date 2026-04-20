@@ -240,48 +240,78 @@ _surfaces = [{
 blend_shape_mode = 0
 shadow_mesh = SubResource("ArrayMesh_akdjo")
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_h5sl1"]
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_5de16"]
 cull_mode = 2
 shading_mode = 0
 albedo_color = Color(0.8, 0.55, 0.9, 1)
 
-[sub_resource type="ArrayMesh" id="ArrayMesh_norpd"]
+[sub_resource type="ArrayMesh" id="ArrayMesh_h5sl1"]
 _surfaces = [{
 "aabb": AABB(-0.25, 0, -0.25, 0.5, 2, 0.5),
 "attribute_data": PackedByteArray("AAAAAAAAAAAAAAA+AAAAAAAAgD4AAAAAAADAPgAAAAAAAAA/AAAAAAAAID8AAAAAAABAPwAAAAAAAGA/AAAAAAAAAAAAAIA+AAAAPgAAgD4AAIA+AACAPgAAwD4AAIA+AAAAPwAAgD4AACA/AACAPgAAQD8AAIA+AABgPwAAgD4AAAAAAAAAPwAAAD4AAAA/AACAPgAAAD8AAMA+AAAAPwAAAD8AAAA/AAAgPwAAAD8AAEA/AAAAPwAAYD8AAAA/AAAAAAAAQD8AAAA+AABAPwAAgD4AAEA/AADAPgAAQD8AAAA/AABAPwAAID8AAEA/AABAPwAAQD8AAGA/AABAPwAAAAAAAIA/AAAAPgAAgD8AAIA+AACAPwAAwD4AAIA/AAAAPwAAgD8AACA/AACAPwAAQD8AAIA/AABgPwAAgD8="),
-"bone_aabbs": [AABB(-0.25, 0, -0.25, 0.50001, 1.5, 0.5), AABB(-0.25, 0.5, -0.25, 0.50001, 1.5, 0.5)],
+"bone_aabbs": [AABB(-0.25, 0, -0.25, 0.50001, 1e-05, 0.5), AABB(-0.25, 0.5, -0.25, 0.50001, 1.001358e-05, 0.5), AABB(-0.25, 1, -0.25, 0.50001, 1.001358e-05, 0.5), AABB(-0.25, 1.5, -0.25, 0.50001, 1.001358e-05, 0.5), AABB(-0.25, 2, -0.25, 0.50001, 1.001358e-05, 0.5)],
 "format": 34359745559,
 "index_count": 192,
 "index_data": PackedByteArray("AAABAAkAAAAJAAgAAQACAAoAAQAKAAkAAgADAAsAAgALAAoAAwAEAAwAAwAMAAsABAAFAA0ABAANAAwABQAGAA4ABQAOAA0ABgAHAA8ABgAPAA4ABwAAAAgABwAIAA8ACAAJABEACAARABAACQAKABIACQASABEACgALABMACgATABIACwAMABQACwAUABMADAANABUADAAVABQADQAOABYADQAWABUADgAPABcADgAXABYADwAIABAADwAQABcAEAARABkAEAAZABgAEQASABoAEQAaABkAEgATABsAEgAbABoAEwAUABwAEwAcABsAFAAVAB0AFAAdABwAFQAWAB4AFQAeAB0AFgAXAB8AFgAfAB4AFwAQABgAFwAYAB8AGAAZACEAGAAhACAAGQAaACIAGQAiACEAGgAbACMAGgAjACIAGwAcACQAGwAkACMAHAAdACUAHAAlACQAHQAeACYAHQAmACUAHgAfACcAHgAnACYAHwAYACAAHwAgACcA"),
 "primitive": 3,
-"skin_data": PackedByteArray("AAABAAAAAAD//wAAAAAAAAAAAQAAAAAA//8AAAAAAAAAAAEAAAAAAP//AAAAAAAAAAABAAAAAAD//wAAAAAAAAAAAQAAAAAA//8AAAAAAAAAAAEAAAAAAP//AAAAAAAAAAABAAAAAAD//wAAAAAAAAAAAQAAAAAA//8AAAAAAAAAAAEAAAAAAP+//z8AAAAAAAABAAAAAAD/v/8/AAAAAAAAAQAAAAAA/7//PwAAAAAAAAEAAAAAAP+//z8AAAAAAAABAAAAAAD/v/8/AAAAAAAAAQAAAAAA/7//PwAAAAAAAAEAAAAAAP+//z8AAAAAAAABAAAAAAD/v/8/AAAAAAAAAQAAAAAA/3//fwAAAAAAAAEAAAAAAP9//38AAAAAAAABAAAAAAD/f/9/AAAAAAAAAQAAAAAA/3//fwAAAAAAAAEAAAAAAP9//38AAAAAAAABAAAAAAD/f/9/AAAAAAAAAQAAAAAA/3//fwAAAAAAAAEAAAAAAP9//38AAAAAAAABAAAAAAD/P/+/AAAAAAAAAQAAAAAA/z//vwAAAAAAAAEAAAAAAP8//78AAAAAAAABAAAAAAD/P/+/AAAAAAAAAQAAAAAA/z//vwAAAAAAAAEAAAAAAP8//78AAAAAAAABAAAAAAD/P/+/AAAAAAAAAQAAAAAA/z//vwAAAAAAAAEAAAAAAAAA//8AAAAAAAABAAAAAAAAAP//AAAAAAAAAQAAAAAAAAD//wAAAAAAAAEAAAAAAAAA//8AAAAAAAABAAAAAAAAAP//AAAAAAAAAQAAAAAAAAD//wAAAAAAAAEAAAAAAAAA//8AAAAAAAABAAAAAAAAAP//AAAAAA=="),
+"skin_data": PackedByteArray("AAAAAAAAAAD//wAAAAAAAAAAAAAAAAAA//8AAAAAAAAAAAAAAAAAAP//AAAAAAAAAAAAAAAAAAD//wAAAAAAAAAAAAAAAAAA//8AAAAAAAAAAAAAAAAAAP//AAAAAAAAAAAAAAAAAAD//wAAAAAAAAAAAAAAAAAA//8AAAAAAAABAAAAAAAAAP//AAAAAAAAAQAAAAAAAAD//wAAAAAAAAEAAAAAAAAA//8AAAAAAAABAAAAAAAAAP//AAAAAAAAAQAAAAAAAAD//wAAAAAAAAEAAAAAAAAA//8AAAAAAAABAAAAAAAAAP//AAAAAAAAAQAAAAAAAAD//wAAAAAAAAIAAAAAAAAA//8AAAAAAAACAAAAAAAAAP//AAAAAAAAAgAAAAAAAAD//wAAAAAAAAIAAAAAAAAA//8AAAAAAAACAAAAAAAAAP//AAAAAAAAAgAAAAAAAAD//wAAAAAAAAIAAAAAAAAA//8AAAAAAAACAAAAAAAAAP//AAAAAAAAAwAAAAAAAAD//wAAAAAAAAMAAAAAAAAA//8AAAAAAAADAAAAAAAAAP//AAAAAAAAAwAAAAAAAAD//wAAAAAAAAMAAAAAAAAA//8AAAAAAAADAAAAAAAAAP//AAAAAAAAAwAAAAAAAAD//wAAAAAAAAMAAAAAAAAA//8AAAAAAAAEAAAAAAAAAP//AAAAAAAABAAAAAAAAAD//wAAAAAAAAQAAAAAAAAA//8AAAAAAAAEAAAAAAAAAP//AAAAAAAABAAAAAAAAAD//wAAAAAAAAQAAAAAAAAA//8AAAAAAAAEAAAAAAAAAP//AAAAAAAABAAAAAAAAAD//wAAAAAAAA=="),
 "uv_scale": Vector4(0, 0, 0, 0),
 "vertex_count": 40,
 "vertex_data": PackedByteArray("AACAPgAAAAAAAAAA8wQ1PgAAAADzBDU+Lr07sgAAAAAAAIA+8wQ1vgAAAADzBDU+AACAvgAAAAAuvbuy8QQ1vgAAAAD1BDW+Lt5MMQAAAAAAAIC+9wQ1PgAAAADvBDW+AACAPgAAAD8AAAAA8wQ1PgAAAD/zBDU+Lr07sgAAAD8AAIA+8wQ1vgAAAD/zBDU+AACAvgAAAD8uvbuy8QQ1vgAAAD/1BDW+Lt5MMQAAAD8AAIC+9wQ1PgAAAD/vBDW+AACAPgAAgD8AAAAA8wQ1PgAAgD/zBDU+Lr07sgAAgD8AAIA+8wQ1vgAAgD/zBDU+AACAvgAAgD8uvbuy8QQ1vgAAgD/1BDW+Lt5MMQAAgD8AAIC+9wQ1PgAAgD/vBDW+AACAPgAAwD8AAAAA8wQ1PgAAwD/zBDU+Lr07sgAAwD8AAIA+8wQ1vgAAwD/zBDU+AACAvgAAwD8uvbuy8QQ1vgAAwD/1BDW+Lt5MMQAAwD8AAIC+9wQ1PgAAwD/vBDW+AACAPgAAAEAAAAAA8wQ1PgAAAEDzBDU+Lr07sgAAAEAAAIA+8wQ1vgAAAEDzBDU+AACAvgAAAEAuvbuy8QQ1vgAAAED1BDW+Lt5MMQAAAEAAAIC+9wQ1PgAAAEDvBDW+////f/9//7//v/9/VFWpqv9//3//fwCA/z//f6qqqaoAAP9//3//vwAA/79VVamq//////9/AID///+/qaqqqv///3//f/+//7//f1RVqar/f/9//38AgP8//3+qqqmqAAD/f/9//78AAP+/VVWpqv//////fwCA////v6mqqqr///9//3//v/+//39UVamq/3//f/9/AID/P/9/qqqpqgAA/3//f/+/AAD/v1VVqar//////38AgP///7+pqqqq////f/9//7//v/9/VFWpqv9//3//fwCA/z//f6qqqaoAAP9//3//vwAA/79VVamq//////9/AID///+/qaqqqv///3//f/+//7//f1RVqar/f/9//38AgP8//3+qqqmqAAD/f/9//78AAP+/VVWpqv//////fwCA////v6mqqqo=")
 }]
 
-[sub_resource type="Skin" id="Skin_7eb7w"]
-bind_count = 2
+[sub_resource type="Skin" id="Skin_norpd"]
+bind_count = 5
 bind/0/name = &""
 bind/0/bone = 0
 bind/0/pose = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
 bind/1/name = &""
 bind/1/bone = 1
-bind/1/pose = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -2, 0)
+bind/1/pose = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
+bind/2/name = &""
+bind/2/bone = 2
+bind/2/pose = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -1, 0)
+bind/3/name = &""
+bind/3/bone = 3
+bind/3/pose = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -1.5, 0)
+bind/4/name = &""
+bind/4/bone = 4
+bind/4/pose = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -2, 0)
 
-[sub_resource type="Animation" id="Animation_ntps4"]
+[sub_resource type="Animation" id="Animation_7eb7w"]
 loop_mode = 1
 tracks/0/type = "rotation_3d"
 tracks/0/imported = false
 tracks/0/enabled = true
-tracks/0/path = NodePath("Skeleton3D:Tip")
+tracks/0/path = NodePath("Skeleton3D:Ring1")
 tracks/0/interp = 1
 tracks/0/loop_wrap = true
-tracks/0/keys = PackedFloat32Array(0, 1, 0, 0, 0, 1, 0.5, 1, 0, 0, 0.25881904, 0.9659258, 1, 1, 0, 0, 0, 1)
+tracks/0/keys = PackedFloat32Array(0, 1, 0, 0, 0, 1, 0.5, 1, 0, 0, 0.06540313, 0.99785894, 1, 1, 0, 0, 0, 1)
+tracks/1/type = "rotation_3d"
+tracks/1/imported = false
+tracks/1/enabled = true
+tracks/1/path = NodePath("Skeleton3D:Ring2")
+tracks/1/interp = 1
+tracks/1/loop_wrap = true
+tracks/1/keys = PackedFloat32Array(0, 1, 0, 0, 0, 1, 0.5, 1, 0, 0, 0.06540313, 0.99785894, 1, 1, 0, 0, 0, 1)
+tracks/2/type = "rotation_3d"
+tracks/2/imported = false
+tracks/2/enabled = true
+tracks/2/path = NodePath("Skeleton3D:Ring3")
+tracks/2/interp = 1
+tracks/2/loop_wrap = true
+tracks/2/keys = PackedFloat32Array(0, 1, 0, 0, 0, 1, 0.5, 1, 0, 0, 0.06540313, 0.99785894, 1, 1, 0, 0, 0, 1)
+tracks/3/type = "rotation_3d"
+tracks/3/imported = false
+tracks/3/enabled = true
+tracks/3/path = NodePath("Skeleton3D:Ring4")
+tracks/3/interp = 1
+tracks/3/loop_wrap = true
+tracks/3/keys = PackedFloat32Array(0, 1, 0, 0, 0, 1, 0.5, 1, 0, 0, 0.06540313, 0.99785894, 1, 1, 0, 0, 0, 1)
 
-[sub_resource type="AnimationLibrary" id="AnimationLibrary_urb6m"]
+[sub_resource type="AnimationLibrary" id="AnimationLibrary_ntps4"]
 _data = {
-&"wave": SubResource("Animation_ntps4")
+&"wave": SubResource("Animation_7eb7w")
 }
 
 [node name="Scene" type="Node3D" unique_id=1345701053]
@@ -520,40 +550,60 @@ script = ExtResource("13_tdg64")
 metadata/_custom_type_script = "uid://cfdlp12g2rtct"
 
 [node name="Player" type="MeshInstance3D" parent="." unique_id=1847191928]
-transform = Transform3D(0.01, 0, 0, 0, 0.01, 7.549789e-10, 0, -7.549789e-10, 0.01, 0.0023041964, 0, 0)
+transform = Transform3D(0.01, 0, 0, 0, 0.01, 7.549789e-10, 0, -7.549789e-10, 0.01, 0.0023041964, -2.1878455, 0)
 material_override = SubResource("StandardMaterial3D_u5t42")
 extra_cull_margin = 2.0
 mesh = SubResource("ArrayMesh_qn6ho")
 script = ExtResource("2_mesh")
 
-[node name="SkinnedTest" type="Node3D" parent="." unique_id=1690347852]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.7901335, 0, 0)
+[node name="SkinnedTest" type="Node3D" parent="." unique_id=1968248045]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.17803478, -1.8593073)
 
-[node name="Skeleton3D" type="Skeleton3D" parent="SkinnedTest" unique_id=1371947841]
-bones/0/name = "Root"
+[node name="Skeleton3D" type="Skeleton3D" parent="SkinnedTest" unique_id=1060739395]
+bones/0/name = "Ring0"
 bones/0/parent = -1
 bones/0/rest = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
 bones/0/enabled = true
 bones/0/position = Vector3(0, 0, 0)
 bones/0/rotation = Quaternion(0, 0, 0, 1)
 bones/0/scale = Vector3(1, 1, 1)
-bones/1/name = "Tip"
+bones/1/name = "Ring1"
 bones/1/parent = 0
-bones/1/rest = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 0)
+bones/1/rest = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
 bones/1/enabled = true
-bones/1/position = Vector3(0, 2, 0)
+bones/1/position = Vector3(0, 0.5, 0)
 bones/1/rotation = Quaternion(0, 0, 0, 1)
 bones/1/scale = Vector3(1, 1, 1)
+bones/2/name = "Ring2"
+bones/2/parent = 1
+bones/2/rest = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
+bones/2/enabled = true
+bones/2/position = Vector3(0, 0.5, 0)
+bones/2/rotation = Quaternion(0, 0, 0, 1)
+bones/2/scale = Vector3(1, 1, 1)
+bones/3/name = "Ring3"
+bones/3/parent = 2
+bones/3/rest = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
+bones/3/enabled = true
+bones/3/position = Vector3(0, 0.5, 0)
+bones/3/rotation = Quaternion(0, 0, 0, 1)
+bones/3/scale = Vector3(1, 1, 1)
+bones/4/name = "Ring4"
+bones/4/parent = 3
+bones/4/rest = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
+bones/4/enabled = true
+bones/4/position = Vector3(0, 0.5, 0)
+bones/4/rotation = Quaternion(0, 0, 0, 1)
+bones/4/scale = Vector3(1, 1, 1)
 
-[node name="SkinnedMesh" type="MeshInstance3D" parent="SkinnedTest" unique_id=755670949]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.5392904, 0, -4.8812256)
-material_override = SubResource("StandardMaterial3D_h5sl1")
+[node name="SkinnedMesh" type="MeshInstance3D" parent="SkinnedTest" unique_id=1169154486]
+material_override = SubResource("StandardMaterial3D_5de16")
 extra_cull_margin = 2.0
-mesh = SubResource("ArrayMesh_norpd")
-skin = SubResource("Skin_7eb7w")
+mesh = SubResource("ArrayMesh_h5sl1")
+skin = SubResource("Skin_norpd")
 skeleton = NodePath("../Skeleton3D")
 script = ExtResource("36_5de16")
 ClipNames = PackedStringArray("wave")
 
-[node name="AnimationPlayer" type="AnimationPlayer" parent="SkinnedTest" unique_id=120924239]
-libraries/ = SubResource("AnimationLibrary_urb6m")
+[node name="AnimationPlayer" type="AnimationPlayer" parent="SkinnedTest" unique_id=106166795]
+libraries/ = SubResource("AnimationLibrary_ntps4")

@@ -1,0 +1,47 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" uid="uid://bp1p1kqop2wwy" path="res://addons/ps1godot/nodes/PS1UICanvas.cs" id="1_canvas"]
+[ext_resource type="Script" uid="uid://c01mt2tth0oll" path="res://addons/ps1godot/nodes/PS1UIElement.cs" id="2_element"]
+
+; Bottom-of-screen dialog box. Stack: Background → Body text → optional
+; NameTag above the box. Canvas name is "dialog" to match the existing
+; convention; Residency=1 (MenuOnly) keeps its VRAM out of the gameplay
+; resident set. Make Local after instantiating to customize.
+
+[node name="DialogBox" type="Node"]
+script = ExtResource("1_canvas")
+CanvasName = "dialog"
+Residency = 1
+VisibleOnLoad = false
+SortOrder = 20
+
+[node name="Background" type="Node" parent="."]
+script = ExtResource("2_element")
+ElementName = "bg"
+Type = 1
+X = 40
+Y = 160
+Width = 240
+Height = 64
+Color = Color(0, 0, 0.4, 1)
+
+[node name="Body" type="Node" parent="."]
+script = ExtResource("2_element")
+ElementName = "body"
+X = 48
+Y = 172
+Width = 224
+Height = 48
+Color = Color(1, 1, 1, 1)
+Text = "Write your dialog here.
+Use \\n for line breaks."
+
+[node name="NameTag" type="Node" parent="."]
+script = ExtResource("2_element")
+ElementName = "name"
+X = 44
+Y = 150
+Width = 96
+Height = 10
+Color = Color(1, 0.85, 0.3, 1)
+Text = "Narrator"

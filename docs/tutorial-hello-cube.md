@@ -7,10 +7,11 @@ characteristic punch.
 
 **What you need first:** complete [`SETUP.md`](../SETUP.md) through Phase 0.
 
-**What you *won't* do (yet):** run it on a real PS1 or in PCSX-Redux. The
-splashpack exporter is Phase 2. This tutorial ends at a preview-quality scene
-in the Godot viewport. Every step here is still useful: authoring doesn't
-change when export arrives, just adds a build step.
+**Scope:** this tutorial ends at a preview-quality scene in the Godot
+viewport. Exporting the scene to PSX is a separate workflow — once the
+plugin's dock is visible, the **▶ Run on PSX** button builds a
+splashpack and launches PCSX-Redux for you. Everything you author here
+ends up in the splashpack unchanged.
 
 **Time budget:** ~20 minutes.
 

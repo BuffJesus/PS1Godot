@@ -220,10 +220,15 @@ Work in roughly the order the binary format is laid out, not in order of "what
 feels fun". Each sub-milestone should produce a splashpack that psxsplash loads
 without crashing, even if features are stubbed.
 
+**Status (2026-04-20):** bullets 1–6 ✅, 7 ❌, 8 ✅ (+ `\n` runtime wrap,
+dialog ownership), 9 ✅, 10 ✅ (MVP — position/rotation/UI tracks on the
+runtime roadmap), 11 ✅ (staged end-to-end 2026-04-20), 12 ❌. Format at
+**v21** (bumped for editor-driven player rigs).
+
 1. **Writer skeleton + 3-file split.** Port `PSXSceneWriter.Write()` structure
-   and offset bookkeeping. Emit an empty but valid v20 splashpack plus its empty
-   `.vram` and `.spu` sidecar files. Confirm psxsplash boots into an empty
-   scene. *(port from `PSXSceneWriter.cs`)*
+   and offset bookkeeping. Emit an empty but valid splashpack (current format
+   is v21) plus its empty `.vram` and `.spu` sidecar files. Confirm psxsplash
+   boots into an empty scene. *(port from `PSXSceneWriter.cs`)*
 2. **Static meshes + VRAM textures.** Port `PSXObjectExporter`, `TexturePacker`,
    `ImageProcessing`, `PSXMesh`. Get one textured cube rendering in PCSX-Redux.
 3. **Collision + BVH.** Port `PSXCollisionExporter`, `BVH`. Player can walk on

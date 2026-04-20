@@ -29,14 +29,19 @@ project with our plugin at `godot-ps1/addons/ps1godot/`.
 ```
 
 The **splashpack binary format** is the integration contract. Current version is
-**v20** (see `splashedit-main/Runtime/PSXSceneWriter.cs` and `psxsplash-main/src/splashpack.{hh,cpp}`).
-The loader hard-asserts `version >= 20`; older exports won't load.
+**v21** (bumped 2026-04-20 from v20; see
+`godot-ps1/addons/ps1godot/exporter/SplashpackWriter.cs` and
+`psxsplash-main/src/splashpack.{hh,cpp}`). The loader hard-asserts
+`version >= 21`; older exports won't load. We are the sole consumer — the
+upstream SplashEdit Unity project still emits v20, but we've diverged. If
+bumping again, maintain the "add at the end, bump the version" discipline
+rather than reshuffling existing fields.
 
-**v20 splits the export into three files**, all written alongside each other:
+**v21 splits the export into three files**, all written alongside each other:
 
 | File | Contents |
 |------|----------|
-| `scene.splashpack` | Header + live scene structures (meshes, colliders, BVH, nav, Lua, UI, cutscenes) |
+| `scene.splashpack` | Header + live scene structures (meshes, colliders, BVH, nav, Lua, UI, cutscenes, skin data) |
 | `scene.splashpack.vram` | Texture atlas pixels + CLUTs + UI font pixels (uploaded to PS1 VRAM) |
 | `scene.splashpack.spu` | Audio ADPCM bulk data (uploaded to PS1 SPU RAM) |
 
@@ -44,10 +49,12 @@ Splitting by destination lets the runtime DMA each blob into the right memory
 region without parsing. The `.splashpack` file references offsets into the other
 two.
 
-Magic bytes are `"SP"`, header is **120 bytes** (see `SPLASHPACKFileHeader` in
+Magic bytes are `"SP"`, header is **136 bytes** (see `SPLASHPACKFileHeader` in
 `splashpack.cpp`). Struct layouts are load-bearing — `static_assert` sizes in
 `splashpack.hh` are the source of truth, and the Godot writer must match them
-bit-for-bit.
+bit-for-bit. v21 added `cameraRigOffset` + `playerAvatarOffset` +
+`playerAvatarObjectIndex` at the end (+16 bytes) for editor-driven
+third-person rig + auto-tracked avatar.
 
 A human-readable extract of the format lives in `docs/splashpack-format.md`.
 
@@ -117,7 +124,11 @@ A human-readable extract of the format lives in `docs/splashpack-format.md`.
 
 ## Current status
 
-Phase 1 scaffold complete: Godot .NET project, plugin skeleton, PS1 spatial shader,
-custom nodes, demo scene, launch scripts. Awaiting Godot install to verify and
-move on to the preview polish (low-res subviewport, import presets) and Phase 2
-(exporter). See `ROADMAP.md` for the full plan and `SETUP.md` for env setup.
+Phase 1 complete. Phase 2 near-complete: bullets 1–6, 8, 9, 10 (MVP), and
+11 all running on PSX — full demo pipeline exports + boots + plays. Phase
+2 remaining: bullet 7 (non-flat nav regions) and bullet 12 (rooms /
+portals), both substantial. Format at v21. Phase 3 has landed a dockable
+plugin panel with live scene-budget bars + dependency detection; most
+other Phase 3 items (WYSIWYG UI editor, F5 to play, VRAM viewer dock)
+still pending. See `ROADMAP.md` for the full plan, `docs/ui-ux-plan.md`
+for the editor-experience vision, and `SETUP.md` for env setup.
