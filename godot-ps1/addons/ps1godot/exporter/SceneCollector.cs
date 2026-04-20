@@ -131,6 +131,12 @@ public static class SceneCollector
         }
 
         int luaIdx = ResolveLuaScript(tb.Name, tb.ScriptFile, data, luaCache);
+        if (luaIdx < 0)
+        {
+            // Trigger boxes without a script do nothing at runtime —
+            // nearly always an authoring oversight rather than intentional.
+            GD.PushWarning($"[PS1Godot] Trigger '{tb.Name}' has no ScriptFile — onTriggerEnter/Exit will never fire. Set ScriptFile in the inspector.");
+        }
         data.TriggerBoxes.Add(new TriggerBoxRecord
         {
             WorldMin = wMin,

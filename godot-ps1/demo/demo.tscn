@@ -8,6 +8,7 @@
 [ext_resource type="Material" path="res://addons/ps1godot/shaders/ps1_default.tres" id="4_mat"]
 [ext_resource type="Material" path="res://demo/materials/ps1_green.tres" id="5_green"]
 [ext_resource type="Texture2D" uid="uid://cul6k2s7n8ysj" path="res://demo/textures/test_checker.png" id="6_checker"]
+[ext_resource type="Script" uid="uid://bbl6b0g2qjisp" path="res://addons/ps1godot/nodes/PS1TriggerBox.cs" id="9_oeqrt"]
 
 [sub_resource type="Resource" id="Resource_ykvhj"]
 script = ExtResource("2_onvmd")
@@ -64,3 +65,10 @@ fov = 72.0
 near = 0.2
 far = 80.0
 script = ExtResource("3_cam")
+
+[node name="PS1TriggerBox" type="Node3D" parent="." unique_id=710725990]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.4652145, 0.6982033, 0)
+script = ExtResource("9_oeqrt")
+HalfExtents = Vector3(2, 2, 2)
+ScriptFile = "res://demo/scripts/test_trigger.lua"
+metadata/_custom_type_script = "uid://bbl6b0g2qjisp"
