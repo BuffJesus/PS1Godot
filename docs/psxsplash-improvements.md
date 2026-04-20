@@ -253,6 +253,47 @@ Good upstream PR candidate: small change, broadly useful.
 
 ---
 
+### N+3. Fog near/far distance not independently authorable
+
+**Problem.** `Renderer::SetFog()` derives the fog *near* distance from
+the *far* distance with a hardcoded ratio:
+
+```cpp
+m_fog.fogFarSZ = 20000 / fog.density;
+int32_t fogNear = fogFarSZ >> 3;   // far / 8
+```
+
+So authors can only choose *how far away the fog wall is* (via the
+density byte). They can't say "no fog within 5m, full fog at 30m" —
+the start is always 1/8 of the end. Result: thick close fog when
+authors want a soft distance haze, or vice-versa.
+
+**Why we care.** Fog is the cheapest way to hide PS1 draw distance
+limits (see `docs/ps1_large_rpg_optimization_reference.md`'s "hide
+distance aggressively"). Authors hit this immediately when trying to
+match a specific look — a town with fog only at the edges, a cave
+with fog filling the room, etc. Currently they can't get either
+without modifying the runtime.
+
+**Proposed direction.** Replace the single `density` byte in
+`SPLASHPACKFileHeader` with a pair of `fogNearSZ` + `fogFarSZ`
+values (or keep density and add an explicit `fogStartRatio` byte for
+backward compat). Renderer's interpolation code already takes both —
+just stop computing one from the other.
+
+**Status.** Unfiled. Needs a header field addition + version bump,
+which is straightforward but a public schema change.
+
+**Evidence.**
+- `2026-04-19` — Phase 2 bullet 8 / 10 / fog-fix testing. Author set
+  density=5 expecting "fog past mid-distance"; got dense fog wall
+  starting at ~500 sz units. Workaround: bumped density range from
+  1–10 to 1–100 in PS1Scene so density=1 (fogFar≈20000) gives the
+  faintest possible fog. Independent near/far would skip the
+  workaround.
+
+---
+
 ### N+1. Cutscene camera movement bug (reported upstream)
 
 **Problem.** The psxsplash author has stated the cutscene system produces

@@ -63,8 +63,14 @@ public partial class PS1Scene : Node3D
     [ExportGroup("Fog")]
     [Export] public bool FogEnabled { get; set; } = false;
     [Export] public Color FogColor { get; set; } = new Color(0.5f, 0.5f, 0.6f);
-    [Export(PropertyHint.Range, "1,10,1")]
-    public int FogDensity { get; set; } = 5;
+    // Higher = thicker / closer fog wall. Lower = fog starts farther
+    // away and is fainter. Runtime maps this to fogFarSZ = 20000 /
+    // density (so density 1 → fogFar ≈ 20000 GTE-Z, density 100 →
+    // ≈200). Fog start is hardcoded by the runtime to fogFar/8 — true
+    // independent near/far range is tracked in docs/psxsplash-
+    // improvements.md (entry N+3) as a runtime feature request.
+    [Export(PropertyHint.Range, "1,100,1")]
+    public int FogDensity { get; set; } = 1;
 
     [ExportGroup("Scripting")]
     [Export(PropertyHint.File, "*.lua")]

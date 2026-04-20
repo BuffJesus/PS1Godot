@@ -28,7 +28,7 @@ public static class SceneCollector
             data.SceneType = ps1Scene.SceneType;
             data.FogEnabled = ps1Scene.FogEnabled;
             data.FogColor = ps1Scene.FogColor;
-            data.FogDensity = (byte)Mathf.Clamp(ps1Scene.FogDensity, 1, 10);
+            data.FogDensity = (byte)Mathf.Clamp(ps1Scene.FogDensity, 1, 255);
             GD.Print($"[PS1Godot] Scene params: move={ps1Scene.MoveSpeed}, jump={ps1Scene.JumpHeight}, gravity={ps1Scene.Gravity}, gteScaling={ps1Scene.GteScaling}");
         }
         else
