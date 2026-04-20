@@ -341,6 +341,30 @@ World-gen basics Lua stdlib doesn't provide.
 - [ ] `Math.Hash(x, y, z)` — fast stable cell hash.
 - [ ] `Math.Lerp/Clamp/SmoothStep` / `Math.Fixed.*` convenience.
 
+### Procedural world primitives
+
+Small layer on top of the procedural/math + dynamic content items above.
+Gives authors a "roguelite dungeon" starting point without hand-rolling
+graph/BSP algorithms in Lua. Target: one dungeon generated at scene load
+from a seed in under 100 ms on hardware.
+
+- [ ] `Layout.RoomsAndCorridors(seed, bounds, roomCount)` → graph of
+      rooms + connections. Deterministic from seed.
+- [ ] `Layout.BSP(seed, bounds, minLeafSize)` → binary-space-partitioned
+      layout for more cave-like shapes.
+- [ ] `Kit.PlaceTiles(layout, kit)` — walks a generated layout and emits
+      floor/wall/door/pillar meshes from an authored modular kit. Uses
+      `Mesh.Submit` per-tile or merges into one `VoxelMesh` call for
+      perf. Shares the authored atlas, no new VRAM cost.
+- [ ] `Nav.GenerateFromLayout(layout)` — auto-emit one nav region per
+      room interior + portals at doors. No DotRecast dependency for
+      grid-aligned procedural content.
+- [ ] `Collider.GenerateFromLayout(layout)` — one AABB per wall segment.
+- [ ] `Pop.Sprinkle(layout, seed, density, templateIds)` — populate with
+      enemies / loot / props, respecting per-scene `MaxActors` budget.
+- [ ] Save integration: serialize seed + visited-rooms bitmap + chest
+      states, **not** the generated grid. Regenerate identically on load.
+
 ### Physics & spatial queries
 
 The runtime already has a collider grid and nav regions — bind them to Lua.

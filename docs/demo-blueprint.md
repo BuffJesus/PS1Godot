@@ -181,6 +181,73 @@ exporter. Suggested order once bullet 8 MVP lands:
 Each step is a shippable demo state — the blueprint is not a "all-or-nothing"
 gate.
 
+## Procedural dungeon extension
+
+Once Phase 2.5 dynamic content lands (`Mesh.Submit`, `VoxelMesh.Build`, chunk
+streaming, seeded RNG), the dungeon scene grows a procedural variant. Not a
+replacement for the authored dungeon — a second entry point alongside it.
+
+### What makes this PS1-feasible
+
+The reference doc's "the PS1 can present large-feeling games, but only when
+built around these limits" framing applies hard here. Procedural doesn't mean
+unconstrained:
+
+- **Layout is tiny.** 8–12 rooms per dungeon, connected by a graph. BSP or
+  simple rooms-and-corridors. Generation runs at load time (~100 ms on
+  hardware for that scale) from a seed.
+- **Geometry is kit-based.** Rooms assemble from a fixed modular kit
+  (floor / wall / door / pillar meshes) placed on a grid. Same atlas as the
+  authored dungeon — procedural doesn't double our VRAM footprint.
+- **Colliders + nav regions regenerate.** One AABB per wall segment, one
+  flat nav region per room interior. Emitted through the same splashpack-
+  like path the authored scenes use, just produced by the generator instead
+  of an author.
+- **Save the seed, not the grid.** On save, we persist the seed + visited
+  rooms + chest states, not the full generated geometry. Load regenerates
+  identically. The reference's "save compact symbolic state, not whole
+  runtime object graphs" rule stated literally.
+
+### Generator stages
+
+1. **Graph layout (deterministic from seed)** — place N rooms in a
+   bounded 2D grid, connect with minimum spanning tree + 1–2 extra loops
+   for variety.
+2. **Geometry emit** — walk the graph, place floor tiles + wall segments
+   from the kit. Corridors are two-tile-wide slices.
+3. **Collider + nav emit** — one AABB per wall, one nav region per room,
+   portals at doors. Runtime registers them the same way authored
+   splashpacks do.
+4. **Population** — sprinkle enemies, loot chests, lore signposts based on
+   a second seed. Enemy density respects the scene's `MaxActors` budget.
+5. **Persistent state pass** — for a regenerated dungeon the player has
+   visited before, apply the save delta (killed enemies, opened chests,
+   revealed rooms).
+
+### Demo slot
+
+Once implemented, procedural dungeons live at `scene_5` in the blueprint:
+
+- Start menu gains a **New Run** entry next to **Start** — launches a fresh
+  seed.
+- Dungeon entrance in the hub has a second door labelled "Deeper" that
+  leads to the procedural scene.
+- HUD shows current seed so bugs are reproducible ("seed=4242, room 3,
+  enemy won't despawn" → author reloads that seed).
+
+### What this demo answers for authors
+
+- "Can I generate content at runtime on PS1?" → yes, within these limits.
+- "How do colliders + nav work when geometry isn't authored?" → same path
+  as authored, just produced by generator code.
+- "How do saves handle procedural content?" → seed + deltas, not grids.
+
+### Scope note
+
+Procedural dungeon is **not** a Phase 2 bullet. It's a demo-time showcase of
+Phase 2.5 primitives once those land. Build-up order stays the same — land
+the primitives as Phase 2.5 items, then the demo slot follows for free.
+
 ## Scope guardrails
 
 - Demo content is authored by us; the goal is **show, not impress**. Assets
