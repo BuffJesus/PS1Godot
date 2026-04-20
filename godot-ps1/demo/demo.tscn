@@ -50,6 +50,8 @@ mesh = SubResource("BoxMesh_cube")
 script = ExtResource("2_mesh")
 Collision = 1
 ScriptFile = "res://demo/scripts/test_logger.lua"
+Interactable = true
+InteractionRadiusMeters = 2.0
 
 [node name="Cube2" type="MeshInstance3D" parent="." unique_id=750822538]
 transform = Transform3D(0.707, 0, 0.707, 0, 1, 0, -0.707, 0, 0.707, 4, 0.5, -3)

@@ -24,3 +24,7 @@ function onUpdate(self, dt)
         Debug.Log("test_logger: onUpdate tick=" .. tick)
     end
 end
+
+function onInteract(self)
+    Debug.Log("test_logger: onInteract (pressed X near cube)")
+end
