@@ -378,8 +378,12 @@ ScriptFile = "res://demo/scripts/test_logger.lua"
 Interactable = true
 InteractionRadiusMeters = 2.0
 
+; Checkered cube tucked inside RoomB so the player has a reason to walk
+; through the rooms + portal to reach it. Position lines up with RoomB's
+; interior (15 ± 2.5 wide); rotation kept as 45° around Y for the
+; spinning visual.
 [node name="Cube2" type="MeshInstance3D" parent="." unique_id=750822538]
-transform = Transform3D(0.707, 0, 0.707, 0, 1, 0, -0.707, 0, 0.707, 4, 1, -3)
+transform = Transform3D(0.707, 0, 0.707, 0, 1, 0, -0.707, 0, 0.707, 16, 1, 1)
 material_override = SubResource("mat_checker")
 extra_cull_margin = 2.0
 mesh = SubResource("BoxMesh_cube")
@@ -394,13 +398,6 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 4)
 script = ExtResource("9_oeqrt")
 HalfExtents = Vector3(3, 2, 1)
 ScriptFile = "res://demo/scripts/test_trigger.lua"
-metadata/_custom_type_script = "uid://bbl6b0g2qjisp"
-
-[node name="CheckeredZone" type="Node3D" parent="." unique_id=516128164]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 1, -3)
-script = ExtResource("9_oeqrt")
-HalfExtents = Vector3(2.5, 2, 2.5)
-ScriptFile = "res://demo/scripts/checkered_ambient.lua"
 metadata/_custom_type_script = "uid://bbl6b0g2qjisp"
 
 [node name="Dialog" type="Node" parent="." unique_id=817879986]
@@ -652,19 +649,22 @@ libraries/ = SubResource("AnimationLibrary_ntps4")
 ; the assignment is clean. The shared face at x=12.5 is left open — the
 ; PS1PortalLink is the doorway.
 
+; Room floors are visual-only (Collision=None) so they don't auto-emit
+; nav regions. The existing Floor's nav region already covers x=±15
+; including the room footprint; emitting overlapping mini-regions
+; trapped the player inside the room (no portal stitched between
+; overlapping regions). Player walks on Floor's nav region throughout.
 [node name="RoomFloorA" type="MeshInstance3D" parent="." unique_id=2004180001]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0.01, 0)
 material_override = SubResource("mat_room_floor_a")
 mesh = SubResource("PlaneMesh_room_half")
 script = ExtResource("2_mesh")
-Collision = 1
 
 [node name="RoomFloorB" type="MeshInstance3D" parent="." unique_id=2004180002]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 15, 0, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 15, 0.01, 0)
 material_override = SubResource("mat_room_floor_b")
 mesh = SubResource("PlaneMesh_room_half")
 script = ExtResource("2_mesh")
-Collision = 1
 
 [node name="RoomCubeA" type="MeshInstance3D" parent="." unique_id=2004180003]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 1, 0)

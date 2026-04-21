@@ -141,6 +141,12 @@ function onCreate(self)
     -- returns silently if there's no mesh called "SkinnedMesh" in the scene,
     -- so this no-ops for scenes without the test asset.
     SkinnedAnim.Play("SkinnedMesh", "wave", { loop = true })
+    -- Lock the player in place for the intro cutscene; otherwise pad input
+    -- moves the character around while the camera is on its track and the
+    -- player ends up wherever they wandered (instead of at PS1Player's
+    -- authored spawn) when control returns. Re-enabled in onUpdate when
+    -- Cutscene.IsPlaying() drops to false.
+    Controls.SetEnabled(false)
     Cutscene.Play("intro")
 end
 
@@ -213,6 +219,9 @@ function onUpdate(self, dt)
     elseif cutsceneRanThisSession and not narrationHidden then
         hideSysVoice()
         narrationHidden = true
+        -- Cutscene just finished — give the player back their input. Pairs
+        -- with the SetEnabled(false) at the bottom of onCreate.
+        Controls.SetEnabled(true)
     end
 
     -- ── Active dialog sequence advancement ──

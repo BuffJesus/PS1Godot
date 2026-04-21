@@ -1463,25 +1463,29 @@ public static class SceneCollector
                     Vector3 v1 = xform * (verts[i1] * nodeScale);
                     Vector3 v2 = xform * (verts[i2] * nodeScale);
 
+                    // Require ALL THREE verts inside a room before assigning
+                    // the triangle to it. Partial-overlap triangles (e.g. a
+                    // wide ground plane that crosses a room AABB) stay in
+                    // catch-all so they remain visible from outside the
+                    // room — otherwise authors get a "hole in the floor"
+                    // wherever a room sits on top of a larger mesh.
+                    // When multiple rooms wholly contain the triangle,
+                    // pick the closest centroid.
                     int best = -1;
-                    int bestHits = 0;
                     float bestDistSq = float.MaxValue;
                     Vector3 centroid = (v0 + v1 + v2) / 3f;
 
                     for (int r = 0; r < rooms.Count; r++)
                     {
                         var (rmin, rmax) = roomBounds[r];
-                        int hits = 0;
-                        if (PointInAabb(v0, rmin, rmax)) hits++;
-                        if (PointInAabb(v1, rmin, rmax)) hits++;
-                        if (PointInAabb(v2, rmin, rmax)) hits++;
-                        if (hits == 0) continue;
+                        if (!PointInAabb(v0, rmin, rmax)) continue;
+                        if (!PointInAabb(v1, rmin, rmax)) continue;
+                        if (!PointInAabb(v2, rmin, rmax)) continue;
 
                         Vector3 rc = (rmin + rmax) * 0.5f;
                         float d = (rc - centroid).LengthSquared();
-                        if (hits > bestHits || (hits == bestHits && d < bestDistSq))
+                        if (d < bestDistSq)
                         {
-                            bestHits = hits;
                             bestDistSq = d;
                             best = r;
                         }
