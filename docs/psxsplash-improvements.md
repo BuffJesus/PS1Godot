@@ -402,12 +402,39 @@ which is straightforward but a public schema change.
 
 ---
 
-### N+1. Cutscene camera movement bug (reported upstream)
+### N+1. Cutscene camera rotation track ignores the player's facing convention
 
-**Problem.** The psxsplash author has stated the cutscene system produces
-incorrect camera movement at times. Specifics (which track type, which
-keyframe interpolation, which easing) are not yet captured here — we heard
-this from the project maintainer in conversation, not from a bug ticket.
+**Problem.** The cutscene's camera-rotation track sets the camera to raw
+PSX angles (the runtime's `Camera::SetRotation` consumes
+`psyqo::Angle` triples and builds a Y·X·Z rotation matrix from them).
+Authors writing keyframes naturally think "rotation 0 = camera at rest /
+looking at the scene the same way the player does" — but the player rig
+runs at `playerRotationY = 1.0_pi` (180°), and a keyframe of (0, 0, 0)
+makes the camera face the OPPOSITE direction (PSX +Z, away from a
+Godot-authored scene whose forward is -Z).
+
+The result: every cutscene authored with naïve "0 yaw" keyframes looks
+the wrong way for the entire shot, and the handoff at the end snaps
+180° because the player rig immediately re-applies playerRotationY.
+Symptom: the first thing on screen at cutscene start is the back wall
+of the scene; the moment control hands back, the camera spins around.
+
+**Why we care.** Phase 2 bullet 10 ships cutscenes; this convention
+mismatch is the first thing every author hits. Workaround on our side
+is to write `Vector3(pitch, 180, 0)` everywhere, but that's exactly the
+kind of "you have to know the secret" papercut we want the editor to
+hide.
+
+**Proposed direction.**
+- Quick: have the cutscene's camera-rotation track interpret keyframes
+  as *deltas from playerRotationY* (so 0 yaw = "match the player's
+  facing"). Keeps existing splashpacks working if we gate on a header
+  flag or version bump.
+- Better: an explicit `LookAt` track type (`TrackType::CameraLookAt`)
+  that takes a world-space target and orients the camera at it each
+  frame. Authors author intent, runtime computes angles. Dovetails
+  with future PS1Cutscene UX in the editor (drag a target, draw a
+  line in the viewport).
 
 **Why we care.** Cutscenes are Phase 2 bullet 10 on our side. If the runtime
 is already known to mis-interpolate camera tracks, we either (a) wait for
@@ -424,12 +451,17 @@ upstream so the fix lands sooner.
   mismatch (same family of bug as entry N)?
 - File upstream with a minimal `.splashpack` that reproduces.
 
-**Status.** Unreproduced on our side; parked until Phase 2 bullet 10.
+**Status.** Reproduced 2026-04-20 in the demo's intro cutscene. Author
+workaround in `godot-ps1/demo/demo.tscn`: every CamRotKf has
+`Vector3(pitch, 180, 0)` instead of just `Vector3(pitch, 0, 0)`.
 
 **Evidence.**
 - _(verbal, no paste yet)_ — psxsplash maintainer reported cutscene camera
-  movement sometimes incorrect. Capture specifics when we hit it in bullet
-  10 testing.
+  movement sometimes incorrect.
+- `2026-04-20` — naïve `Vector3(-50, 0, 0)` keyframes made the demo
+  intro look at the back wall the entire shot, then snap 180° at
+  handoff. Switched all keyframes to `(pitch, 180, 0)` and the camera
+  now looks where authored.
 
 ---
 

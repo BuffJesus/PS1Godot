@@ -490,10 +490,6 @@ TotalFrames = 600
 script = ExtResource("15_tr")
 TrackType = 0
 
-; Camera path: wide overview → sweep down to the spinning green cube
-; (Cube at -4, 1, -2) for the middle narration beats → pull back and
-; settle behind the player at spawn. Final keyframe matches the
-; third-person rig (player + offset) for a seamless control handoff.
 [node name="CamPosKf0" type="Node" parent="IntroCutscene/CamPosTrack" unique_id=1293512181]
 script = ExtResource("13_kf")
 Value = Vector3(0, 12, 15)
@@ -526,35 +522,40 @@ Interp = 4
 script = ExtResource("15_tr")
 TrackType = 1
 
-; Rotation track follows the position path: strong downward pitch at
-; overview → tilt back up as the camera approaches the green cube →
-; level out by the handoff. Yaw goes slightly negative (looking left)
-; while close to the cube, then zeros out for the behind-player handoff.
+; Yaw is 180° on every keyframe because the runtime's natural camera
+; at rotation 0 looks +Z (away from a Godot-authored scene where
+; forward is -Z). The player's third-person rig also runs with
+; playerRotationY=180° — so keeping cutscene yaw at 180° throughout
+; means the cutscene looks "into" the scene the same direction the
+; player will after handoff. Pitch eases from -45° (overhead) to 0°
+; (level with player at end). Pure-pitch motion = no jarring sideways
+; swings.
 [node name="CamRotKf0" type="Node" parent="IntroCutscene/CamRotTrack" unique_id=1515879523]
 script = ExtResource("13_kf")
-Value = Vector3(-45, 0, 0)
+Value = Vector3(-45, 180, 0)
 
 [node name="CamRotKf1" type="Node" parent="IntroCutscene/CamRotTrack" unique_id=1661118081]
 script = ExtResource("13_kf")
 Frame = 180
-Value = Vector3(-25, -10, 0)
+Value = Vector3(-25, 180, 0)
 Interp = 4
 
 [node name="CamRotKf2" type="Node" parent="IntroCutscene/CamRotTrack" unique_id=320274732]
 script = ExtResource("13_kf")
 Frame = 345
-Value = Vector3(-15, 0, 0)
+Value = Vector3(-15, 180, 0)
 Interp = 4
 
 [node name="CamRotKf3" type="Node" parent="IntroCutscene/CamRotTrack" unique_id=624521851]
 script = ExtResource("13_kf")
 Frame = 500
-Value = Vector3(-15, 10, 0)
+Value = Vector3(-10, 180, 0)
 Interp = 4
 
 [node name="CamRotKf4" type="Node" parent="IntroCutscene/CamRotTrack" unique_id=1322462890]
 script = ExtResource("13_kf")
 Frame = 599
+Value = Vector3(0, 180, 0)
 Interp = 4
 
 [node name="PS1Player" type="Node3D" parent="." unique_id=1681451007]
@@ -562,14 +563,8 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 8)
 script = ExtResource("13_tdg64")
 metadata/_custom_type_script = "uid://cfdlp12g2rtct"
 
-; Parented under PS1Player so the editor shows the humanoid visibly at
-; the player's authored spawn, and the exporter's auto-avatar lookup
-; (first MeshInstance3D child of PS1Player) picks it up — runtime then
-; tracks the avatar's position + yaw automatically. Local Y = -1.7 puts
-; the mesh's feet at the player's feet while PS1Player's origin is
-; camera/eye height.
 [node name="Player" type="MeshInstance3D" parent="PS1Player" unique_id=1847191928]
-transform = Transform3D(0.01, 0, 0, 0, 0.01, 7.549789e-10, 0, -7.549789e-10, 0.01, 0, -1.7, 0)
+transform = Transform3D(-0.01, 0, -8.7422775e-10, 0, 0.01, 0, 8.7422775e-10, 0, -0.01, 0, -1.7, 0)
 material_override = SubResource("StandardMaterial3D_u5t42")
 extra_cull_margin = 2.0
 mesh = SubResource("ArrayMesh_qn6ho")
@@ -628,21 +623,21 @@ ClipNames = PackedStringArray("wave")
 libraries/ = SubResource("AnimationLibrary_ntps4")
 
 [node name="RoomFloorA" type="MeshInstance3D" parent="." unique_id=2004180001]
-transform = Transform3D(0.54610294, 0, -0.83771807, 0, 1, 0, 0.83771807, 0, 0.54610294, 9.630753, 0.00999999, 5.8966084)
+transform = Transform3D(0.5277644, 0, 0.84939086, 0, 1, 0, -0.84939086, 0, 0.5277644, 9.665914, -0.12117696, -6.094227)
 material_override = SubResource("mat_room_floor_a")
 extra_cull_margin = 2.0
 mesh = SubResource("PlaneMesh_room_half")
 script = ExtResource("2_mesh")
 
 [node name="RoomFloorB" type="MeshInstance3D" parent="." unique_id=2004180002]
-transform = Transform3D(0.54610294, 0, -0.83771807, 0, 1, 0, 0.83771807, 0, 0.54610294, 12.361267, 0.00999999, 10.085199)
+transform = Transform3D(0.5277644, 0, 0.84939086, 0, 1, 0, -0.84939086, 0, 0.5277644, 12.304736, -0.12117696, -10.341181)
 material_override = SubResource("mat_room_floor_b")
 extra_cull_margin = 2.0
 mesh = SubResource("PlaneMesh_room_half")
 script = ExtResource("2_mesh")
 
 [node name="RoomA_WallN" type="MeshInstance3D" parent="." unique_id=2004180011]
-transform = Transform3D(0.54610294, 0, -0.83771807, 0, 1, 0, 0.83771807, 0, 0.54610294, 11.662219, 1.5, 4.5723085)
+transform = Transform3D(0.5277644, 0, 0.84939086, 0, 1, 0, -0.84939086, 0, 0.5277644, 7.6061406, 1.368823, -7.374056)
 material_override = SubResource("mat_room_blue")
 extra_cull_margin = 2.0
 mesh = SubResource("BoxMesh_wall_side")
@@ -650,7 +645,7 @@ script = ExtResource("2_mesh")
 Collision = 1
 
 [node name="RoomA_WallS" type="MeshInstance3D" parent="." unique_id=2004180012]
-transform = Transform3D(0.54610294, 0, -0.83771807, 0, 1, 0, 0.83771807, 0, 0.54610294, 7.599286, 1.5, 7.2209077)
+transform = Transform3D(0.5277644, 0, 0.84939086, 0, 1, 0, -0.84939086, 0, 0.5277644, 11.725686, 1.368823, -4.814398)
 material_override = SubResource("mat_room_blue")
 extra_cull_margin = 2.0
 mesh = SubResource("BoxMesh_wall_side")
@@ -658,7 +653,7 @@ script = ExtResource("2_mesh")
 Collision = 1
 
 [node name="RoomB_WallE" type="MeshInstance3D" parent="." unique_id=2004180020]
-transform = Transform3D(0.54610294, 0, -0.83771807, 0, 1, 0, 0.83771807, 0, 0.54610294, 13.685568, 1.5, 12.116664)
+transform = Transform3D(0.5277644, 0, 0.84939086, 0, 1, 0, -0.84939086, 0, 0.5277644, 13.584562, 1.368823, -12.400954)
 material_override = SubResource("mat_room_magenta")
 extra_cull_margin = 2.0
 mesh = SubResource("BoxMesh_wall_end")
@@ -666,14 +661,14 @@ script = ExtResource("2_mesh")
 Collision = 1
 
 [node name="TeleportToRealm" type="Node3D" parent="." unique_id=2004180040]
-transform = Transform3D(0.54610294, 0, -0.83771807, 0, 1, 0, 0.83771807, 0, 0.54610294, 13.453473, 1, 11.760633)
+transform = Transform3D(0.5277644, 0, 0.84939086, 0, 1, 0, -0.84939086, 0, 0.5277644, 13.360264, 0.86882305, -12.039963)
 script = ExtResource("9_oeqrt")
 HalfExtents = Vector3(0.3, 1.5, 2.25)
 ScriptFile = "res://demo/scripts/teleport_to_realm.lua"
 metadata/_custom_type_script = "uid://bbl6b0g2qjisp"
 
 [node name="RoomB_WallN" type="MeshInstance3D" parent="." unique_id=2004180021]
-transform = Transform3D(0.54610294, 0, -0.83771807, 0, 1, 0, 0.83771807, 0, 0.54610294, 14.392734, 1.5, 8.760899)
+transform = Transform3D(0.5277644, 0, 0.84939086, 0, 1, 0, -0.84939086, 0, 0.5277644, 10.244963, 1.368823, -11.62101)
 material_override = SubResource("mat_room_magenta")
 extra_cull_margin = 2.0
 mesh = SubResource("BoxMesh_wall_side")
@@ -681,7 +676,7 @@ script = ExtResource("2_mesh")
 Collision = 1
 
 [node name="RoomB_WallS" type="MeshInstance3D" parent="." unique_id=2004180022]
-transform = Transform3D(0.54610294, 0, -0.83771807, 0, 1, 0, 0.83771807, 0, 0.54610294, 10.329801, 1.5, 11.409498)
+transform = Transform3D(0.5277644, 0, 0.84939086, 0, 1, 0, -0.84939086, 0, 0.5277644, 14.364509, 1.368823, -9.061352)
 material_override = SubResource("mat_room_magenta")
 extra_cull_margin = 2.0
 mesh = SubResource("BoxMesh_wall_side")
@@ -689,7 +684,7 @@ script = ExtResource("2_mesh")
 Collision = 1
 
 [node name="ApproachPillarN" type="MeshInstance3D" parent="." unique_id=2004180030]
-transform = Transform3D(0.54610294, 0, -0.83771807, 0, 1, 0, 0.83771807, 0, 0.54610294, 8.86729, 3, -0.7680092)
+transform = Transform3D(0.5277644, 0, 0.84939086, 0, 1, 0, -0.84939086, 0, 0.5277644, 3.9511547, 2.868823, -2.5811753)
 material_override = SubResource("mat_pillar")
 extra_cull_margin = 2.0
 mesh = SubResource("BoxMesh_pillar")
@@ -697,7 +692,7 @@ script = ExtResource("2_mesh")
 Collision = 1
 
 [node name="ApproachPillarS" type="MeshInstance3D" parent="." unique_id=2004180031]
-transform = Transform3D(0.54610294, 0, -0.83771807, 0, 1, 0, 0.83771807, 0, 0.54610294, 3.8409805, 3, 2.5086088)
+transform = Transform3D(0.5277644, 0, 0.84939086, 0, 1, 0, -0.84939086, 0, 0.5277644, 9.047501, 2.868823, 0.5854111)
 material_override = SubResource("mat_pillar")
 extra_cull_margin = 2.0
 mesh = SubResource("BoxMesh_pillar")
@@ -705,19 +700,19 @@ script = ExtResource("2_mesh")
 Collision = 1
 
 [node name="PS1Room_A" type="Node3D" parent="." unique_id=2004180005]
-transform = Transform3D(0.54610294, 0, -0.83771807, 0, 1, 0, 0.83771807, 0, 0.54610294, 9.630753, 1.5, 5.8966084)
+transform = Transform3D(0.5277644, 0, 0.84939086, 0, 1, 0, -0.84939086, 0, 0.5277644, 9.665914, 1.368823, -6.094227)
 script = ExtResource("12_room")
 RoomName = "RoomA_Blue"
 VolumeSize = Vector3(5, 3, 5)
 
 [node name="PS1Room_B" type="Node3D" parent="." unique_id=2004180006]
-transform = Transform3D(0.54610294, 0, -0.83771807, 0, 1, 0, 0.83771807, 0, 0.54610294, 12.361267, 1.5, 10.085199)
+transform = Transform3D(0.5277644, 0, 0.84939086, 0, 1, 0, -0.84939086, 0, 0.5277644, 12.304736, 1.368823, -10.341181)
 script = ExtResource("12_room")
 RoomName = "RoomB_Magenta"
 VolumeSize = Vector3(5, 3, 5)
 
 [node name="PS1PortalLink_AB" type="Node3D" parent="." unique_id=2004180007]
-transform = Transform3D(-0.83771807, 0, -0.54610294, 0, 1, 0, 0.54610294, 0, -0.83771807, 10.996011, 1.5, 7.990903)
+transform = Transform3D(0.84939086, 0, -0.5277644, 0, 1, 0, 0.5277644, 0, 0.84939086, 10.985324, 1.368823, -8.217705)
 script = ExtResource("12_portal")
 RoomA = NodePath("../PS1Room_A")
 RoomB = NodePath("../PS1Room_B")
