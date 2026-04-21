@@ -39,7 +39,26 @@ files. Contributions welcome.)
 - **[PCSX-Redux](https://distrib.app/pub/org/pcsx-redux/project/dev-win-x64)**.
   Extract to `C:\tools\pcsx-redux\`.
 
-### 2. Clone the repo
+### 2. Get the code
+
+**Two paths depending on what you want to do:**
+
+**Path A — "I just want to use the plugin in my own Godot project":**
+grab the latest zips from the
+[Releases page](https://github.com/BuffJesus/PS1Godot/releases):
+
+1. Download `PS1Godot-plugin-<version>.zip`, extract into your Godot
+   project's `addons/` folder, and enable **PS1Godot** in
+   **Project → Project Settings → Plugins**.
+2. Download `psxsplash-runtime-<version>.zip` and drop `psxsplash.ps-exe`
+   into your project's `build/` folder so the Run-on-PSX button has a
+   runtime to launch.
+
+You can skip straight to step 5 with this path. The MIPS toolchain is
+only needed if you want to modify the PS1-side runtime yourself.
+
+**Path B — "I want to clone the full repo with the demo, tests, and
+tools":**
 
 ```bash
 git clone --recursive https://github.com/BuffJesus/PS1Godot.git
