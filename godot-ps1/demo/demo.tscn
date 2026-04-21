@@ -403,19 +403,6 @@ HalfExtents = Vector3(2.5, 2, 2.5)
 ScriptFile = "res://demo/scripts/checkered_ambient.lua"
 metadata/_custom_type_script = "uid://bbl6b0g2qjisp"
 
-[node name="HUD" type="Node" parent="." unique_id=1821183015]
-script = ExtResource("10_uican")
-CanvasName = "hud"
-SortOrder = 10
-Theme = ExtResource("11_theme")
-
-[node name="TickCounter" type="Node" parent="HUD" unique_id=309336461]
-script = ExtResource("11_uiel")
-ElementName = "tick_counter"
-Width = 120
-ThemeSlot = 1
-Text = "tick=0"
-
 [node name="Dialog" type="Node" parent="." unique_id=817879986]
 script = ExtResource("10_uican")
 CanvasName = "dialog"

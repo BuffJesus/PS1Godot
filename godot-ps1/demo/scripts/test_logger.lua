@@ -15,7 +15,6 @@ local tick = 0
 local cameraMode = "third"
 
 -- UI handles, resolved once in onCreate. -1 = element absent.
-local hudCanvas, tickCounterEl = -1, -1
 local dialogCanvas, dialogBodyEl = -1, -1
 local sysVoiceCanvas, sysVoiceText = -1, -1
 
@@ -122,10 +121,6 @@ end
 function onCreate(self)
     Debug.Log("test_logger: onCreate fired")
 
-    hudCanvas = UI.FindCanvas("hud")
-    if hudCanvas >= 0 then
-        tickCounterEl = UI.FindElement(hudCanvas, "tick_counter")
-    end
     dialogCanvas = UI.FindCanvas("dialog")
     if dialogCanvas >= 0 then
         dialogBodyEl = UI.FindElement(dialogCanvas, "body")
@@ -151,16 +146,6 @@ end
 
 function onUpdate(self, dt)
     tick = tick + 1
-    -- Diagnostic HUD: show player x,z so we can verify whether the player
-    -- actually walks into RoomA's volume (x=7..13, z=-3..3) when testing
-    -- portal occlusion. Refreshes every 6 frames so it's readable while
-    -- moving without spamming UI updates.
-    if tick % 6 == 0 and tickCounterEl >= 0 then
-        local p = Player.GetPosition()
-        local x = Convert.FpToInt(p.x)
-        local z = Convert.FpToInt(p.z)
-        UI.SetText(tickCounterEl, "x=" .. x .. " z=" .. z)
-    end
 
     -- Auto-hide delayed system_voice messages. Trigger scripts (e.g.,
     -- checkered_ambient) that want to show a follow-up message then
