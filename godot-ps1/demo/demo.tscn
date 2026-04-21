@@ -5,7 +5,6 @@
 [ext_resource type="Script" uid="uid://cgk0vce50p3ph" path="res://addons/ps1godot/nodes/PS1AudioClip.cs" id="2_onvmd"]
 [ext_resource type="Material" path="res://demo/materials/ps1_floor_grass.tres" id="4_floor"]
 [ext_resource type="Material" path="res://demo/materials/ps1_green.tres" id="5_green"]
-[ext_resource type="Texture2D" uid="uid://cul6k2s7n8ysj" path="res://demo/textures/test_checker.png" id="6_checker"]
 [ext_resource type="Script" uid="uid://bbl6b0g2qjisp" path="res://addons/ps1godot/nodes/PS1TriggerBox.cs" id="9_oeqrt"]
 [ext_resource type="Script" uid="uid://bp1p1kqop2wwy" path="res://addons/ps1godot/nodes/PS1UICanvas.cs" id="10_uican"]
 [ext_resource type="Resource" path="res://addons/ps1godot/themes/PS1Theme.tres" id="11_theme"]
@@ -13,8 +12,8 @@
 [ext_resource type="Script" uid="uid://dqtfgfu4x00ke" path="res://addons/ps1godot/nodes/PS1Animation.cs" id="12_anim"]
 [ext_resource type="Script" uid="uid://jrh5nx2xvbl7" path="res://addons/ps1godot/nodes/PS1PortalLink.cs" id="12_portal"]
 [ext_resource type="Script" uid="uid://b3x6j35uenejj" path="res://addons/ps1godot/nodes/PS1Room.cs" id="12_room"]
-[ext_resource type="PackedScene" path="res://demo/checkered_realm.tscn" id="13_realm"]
 [ext_resource type="Script" uid="uid://bg1ih72kp4c3g" path="res://addons/ps1godot/nodes/PS1AnimationKeyframe.cs" id="13_kf"]
+[ext_resource type="PackedScene" uid="uid://ck3rdrm0001a" path="res://demo/checkered_realm.tscn" id="13_realm"]
 [ext_resource type="Script" uid="uid://cfdlp12g2rtct" path="res://addons/ps1godot/nodes/PS1Player.cs" id="13_tdg64"]
 [ext_resource type="Script" uid="uid://bwafnk42jueor" path="res://addons/ps1godot/nodes/PS1Cutscene.cs" id="14_cs"]
 [ext_resource type="Script" uid="uid://bmwv0x052a03l" path="res://addons/ps1godot/nodes/PS1AnimationTrack.cs" id="15_tr"]
@@ -197,10 +196,6 @@ _surfaces = [{
 [sub_resource type="BoxMesh" id="BoxMesh_cube"]
 size = Vector3(2, 2, 2)
 
-[sub_resource type="StandardMaterial3D" id="mat_checker"]
-albedo_texture = ExtResource("6_checker")
-texture_filter = 0
-
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_u5t42"]
 albedo_texture = ExtResource("35_u5t42")
 
@@ -352,8 +347,8 @@ JumpHeight = 1.8
 Gravity = 20.0
 FogEnabled = true
 FogColor = Color(0.65, 0.75, 0.85, 1)
-SubScenes = Array[PackedScene]([ExtResource("13_realm")])
 AudioClips = Array[ExtResource("2_onvmd")]([SubResource("Clip_welcome"), SubResource("Clip_not_alarmed"), SubResource("Clip_stable"), SubResource("Clip_other_cube"), SubResource("Clip_we_think"), SubResource("Clip_ignore_checkered"), SubResource("Clip_not_part"), SubResource("Clip_idle"), SubResource("Clip_concerning"), SubResource("Clip_sc_hey"), SubResource("Clip_sc_not_yet"), SubResource("Clip_sc_camera"), SubResource("Clip_sc_good_talk"), SubResource("Clip_sc_purpose"), SubResource("Clip_sc_thinks_better"), SubResource("Clip_sc_bobbing"), SubResource("Clip_ck_part"), SubResource("Clip_ck_always"), SubResource("Clip_ck_why_dont"), SubResource("Clip_ck_why_spin")])
+SubScenes = Array[PackedScene]([ExtResource("13_realm")])
 
 [node name="Floor" type="MeshInstance3D" parent="." unique_id=1239192714]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.021661758, -0.016098976, 0.006843567)
@@ -373,17 +368,6 @@ Collision = 1
 ScriptFile = "res://demo/scripts/test_logger.lua"
 Interactable = true
 InteractionRadiusMeters = 2.0
-
-[node name="Cube2" type="MeshInstance3D" parent="." unique_id=750822538]
-transform = Transform3D(0.707, 0, 0.707, 0, 1, 0, -0.707, 0, 0.707, 14.722351, 1, 0.14348507)
-material_override = SubResource("mat_checker")
-extra_cull_margin = 2.0
-mesh = SubResource("BoxMesh_cube")
-script = ExtResource("2_mesh")
-Collision = 1
-ScriptFile = "res://demo/scripts/checkered_dialog.lua"
-Interactable = true
-InteractionRadiusMeters = 2.5
 
 [node name="PS1TriggerBox" type="Node3D" parent="." unique_id=710725990]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 4)
@@ -506,30 +490,30 @@ TotalFrames = 600
 script = ExtResource("15_tr")
 TrackType = 0
 
-; Overhead → eye-level descent along x=0 so the camera never pans
-; laterally. Smooth, predictable, non-disorienting. Last keyframe
-; lines up with the third-person rig (Kf4 matches player pos +
-; rig offset at spawn) so control handoff is seamless.
+; Camera path: wide overview → sweep down to the spinning green cube
+; (Cube at -4, 1, -2) for the middle narration beats → pull back and
+; settle behind the player at spawn. Final keyframe matches the
+; third-person rig (player + offset) for a seamless control handoff.
 [node name="CamPosKf0" type="Node" parent="IntroCutscene/CamPosTrack" unique_id=1293512181]
 script = ExtResource("13_kf")
-Value = Vector3(0, 15, 18)
+Value = Vector3(0, 12, 15)
 
 [node name="CamPosKf1" type="Node" parent="IntroCutscene/CamPosTrack" unique_id=859689584]
 script = ExtResource("13_kf")
-Frame = 150
-Value = Vector3(0, 12, 15)
+Frame = 180
+Value = Vector3(-2, 6, 6)
 Interp = 4
 
 [node name="CamPosKf2" type="Node" parent="IntroCutscene/CamPosTrack" unique_id=777955848]
 script = ExtResource("13_kf")
-Frame = 300
-Value = Vector3(0, 8, 13)
+Frame = 345
+Value = Vector3(-4, 2, 1)
 Interp = 4
 
 [node name="CamPosKf3" type="Node" parent="IntroCutscene/CamPosTrack" unique_id=31898244]
 script = ExtResource("13_kf")
-Frame = 450
-Value = Vector3(0, 5, 12)
+Frame = 500
+Value = Vector3(-1, 4, 6)
 Interp = 4
 
 [node name="CamPosKf4" type="Node" parent="IntroCutscene/CamPosTrack" unique_id=560384909]
@@ -542,30 +526,30 @@ Interp = 4
 script = ExtResource("15_tr")
 TrackType = 1
 
-; Matching pitch descent: starts looking steeply downward (overhead
-; view of the scene) and smoothly levels out to the same heading as the
-; third-person rig (0° all axes) by frame 599. No yaw or roll, so the
-; camera never jerks sideways.
+; Rotation track follows the position path: strong downward pitch at
+; overview → tilt back up as the camera approaches the green cube →
+; level out by the handoff. Yaw goes slightly negative (looking left)
+; while close to the cube, then zeros out for the behind-player handoff.
 [node name="CamRotKf0" type="Node" parent="IntroCutscene/CamRotTrack" unique_id=1515879523]
 script = ExtResource("13_kf")
-Value = Vector3(-50, 0, 0)
+Value = Vector3(-45, 0, 0)
 
 [node name="CamRotKf1" type="Node" parent="IntroCutscene/CamRotTrack" unique_id=1661118081]
 script = ExtResource("13_kf")
-Frame = 150
-Value = Vector3(-40, 0, 0)
+Frame = 180
+Value = Vector3(-25, -10, 0)
 Interp = 4
 
 [node name="CamRotKf2" type="Node" parent="IntroCutscene/CamRotTrack" unique_id=320274732]
 script = ExtResource("13_kf")
-Frame = 300
-Value = Vector3(-25, 0, 0)
+Frame = 345
+Value = Vector3(-15, 0, 0)
 Interp = 4
 
 [node name="CamRotKf3" type="Node" parent="IntroCutscene/CamRotTrack" unique_id=624521851]
 script = ExtResource("13_kf")
-Frame = 450
-Value = Vector3(-10, 0, 0)
+Frame = 500
+Value = Vector3(-15, 10, 0)
 Interp = 4
 
 [node name="CamRotKf4" type="Node" parent="IntroCutscene/CamRotTrack" unique_id=1322462890]
@@ -578,8 +562,14 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 8)
 script = ExtResource("13_tdg64")
 metadata/_custom_type_script = "uid://cfdlp12g2rtct"
 
-[node name="Player" type="MeshInstance3D" parent="." unique_id=1847191928]
-transform = Transform3D(0.01, 0, 0, 0, 0.01, 7.549789e-10, 0, -7.549789e-10, 0.01, 0.0023041964, -2.1878455, 0)
+; Parented under PS1Player so the editor shows the humanoid visibly at
+; the player's authored spawn, and the exporter's auto-avatar lookup
+; (first MeshInstance3D child of PS1Player) picks it up — runtime then
+; tracks the avatar's position + yaw automatically. Local Y = -1.7 puts
+; the mesh's feet at the player's feet while PS1Player's origin is
+; camera/eye height.
+[node name="Player" type="MeshInstance3D" parent="PS1Player" unique_id=1847191928]
+transform = Transform3D(0.01, 0, 0, 0, 0.01, 7.549789e-10, 0, -7.549789e-10, 0.01, 0, -1.7, 0)
 material_override = SubResource("StandardMaterial3D_u5t42")
 extra_cull_margin = 2.0
 mesh = SubResource("ArrayMesh_qn6ho")
@@ -638,21 +628,21 @@ ClipNames = PackedStringArray("wave")
 libraries/ = SubResource("AnimationLibrary_ntps4")
 
 [node name="RoomFloorA" type="MeshInstance3D" parent="." unique_id=2004180001]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0.01, 0)
+transform = Transform3D(0.54610294, 0, -0.83771807, 0, 1, 0, 0.83771807, 0, 0.54610294, 9.630753, 0.00999999, 5.8966084)
 material_override = SubResource("mat_room_floor_a")
 extra_cull_margin = 2.0
 mesh = SubResource("PlaneMesh_room_half")
 script = ExtResource("2_mesh")
 
 [node name="RoomFloorB" type="MeshInstance3D" parent="." unique_id=2004180002]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 15, 0.01, 0)
+transform = Transform3D(0.54610294, 0, -0.83771807, 0, 1, 0, 0.83771807, 0, 0.54610294, 12.361267, 0.00999999, 10.085199)
 material_override = SubResource("mat_room_floor_b")
 extra_cull_margin = 2.0
 mesh = SubResource("PlaneMesh_room_half")
 script = ExtResource("2_mesh")
 
 [node name="RoomA_WallN" type="MeshInstance3D" parent="." unique_id=2004180011]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 1.5, -2.425)
+transform = Transform3D(0.54610294, 0, -0.83771807, 0, 1, 0, 0.83771807, 0, 0.54610294, 11.662219, 1.5, 4.5723085)
 material_override = SubResource("mat_room_blue")
 extra_cull_margin = 2.0
 mesh = SubResource("BoxMesh_wall_side")
@@ -660,7 +650,7 @@ script = ExtResource("2_mesh")
 Collision = 1
 
 [node name="RoomA_WallS" type="MeshInstance3D" parent="." unique_id=2004180012]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 1.5, 2.425)
+transform = Transform3D(0.54610294, 0, -0.83771807, 0, 1, 0, 0.83771807, 0, 0.54610294, 7.599286, 1.5, 7.2209077)
 material_override = SubResource("mat_room_blue")
 extra_cull_margin = 2.0
 mesh = SubResource("BoxMesh_wall_side")
@@ -668,26 +658,22 @@ script = ExtResource("2_mesh")
 Collision = 1
 
 [node name="RoomB_WallE" type="MeshInstance3D" parent="." unique_id=2004180020]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 17.425, 1.5, 0)
+transform = Transform3D(0.54610294, 0, -0.83771807, 0, 1, 0, 0.83771807, 0, 0.54610294, 13.685568, 1.5, 12.116664)
 material_override = SubResource("mat_room_magenta")
 extra_cull_margin = 2.0
 mesh = SubResource("BoxMesh_wall_end")
 script = ExtResource("2_mesh")
 Collision = 1
 
-; Teleport trigger in front of RoomB's east wall. Stepping into this
-; volume calls Scene.Load(1) → the checkered realm sub-scene. Sits just
-; inside the wall so the player has to walk deliberately past the
-; checkered cube to reach it.
 [node name="TeleportToRealm" type="Node3D" parent="." unique_id=2004180040]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 17, 1, 0)
+transform = Transform3D(0.54610294, 0, -0.83771807, 0, 1, 0, 0.83771807, 0, 0.54610294, 13.453473, 1, 11.760633)
 script = ExtResource("9_oeqrt")
 HalfExtents = Vector3(0.3, 1.5, 2.25)
 ScriptFile = "res://demo/scripts/teleport_to_realm.lua"
 metadata/_custom_type_script = "uid://bbl6b0g2qjisp"
 
 [node name="RoomB_WallN" type="MeshInstance3D" parent="." unique_id=2004180021]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 15, 1.5, -2.425)
+transform = Transform3D(0.54610294, 0, -0.83771807, 0, 1, 0, 0.83771807, 0, 0.54610294, 14.392734, 1.5, 8.760899)
 material_override = SubResource("mat_room_magenta")
 extra_cull_margin = 2.0
 mesh = SubResource("BoxMesh_wall_side")
@@ -695,7 +681,7 @@ script = ExtResource("2_mesh")
 Collision = 1
 
 [node name="RoomB_WallS" type="MeshInstance3D" parent="." unique_id=2004180022]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 15, 1.5, 2.425)
+transform = Transform3D(0.54610294, 0, -0.83771807, 0, 1, 0, 0.83771807, 0, 0.54610294, 10.329801, 1.5, 11.409498)
 material_override = SubResource("mat_room_magenta")
 extra_cull_margin = 2.0
 mesh = SubResource("BoxMesh_wall_side")
@@ -703,7 +689,7 @@ script = ExtResource("2_mesh")
 Collision = 1
 
 [node name="ApproachPillarN" type="MeshInstance3D" parent="." unique_id=2004180030]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 3, -3)
+transform = Transform3D(0.54610294, 0, -0.83771807, 0, 1, 0, 0.83771807, 0, 0.54610294, 8.86729, 3, -0.7680092)
 material_override = SubResource("mat_pillar")
 extra_cull_margin = 2.0
 mesh = SubResource("BoxMesh_pillar")
@@ -711,7 +697,7 @@ script = ExtResource("2_mesh")
 Collision = 1
 
 [node name="ApproachPillarS" type="MeshInstance3D" parent="." unique_id=2004180031]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 3, 3)
+transform = Transform3D(0.54610294, 0, -0.83771807, 0, 1, 0, 0.83771807, 0, 0.54610294, 3.8409805, 3, 2.5086088)
 material_override = SubResource("mat_pillar")
 extra_cull_margin = 2.0
 mesh = SubResource("BoxMesh_pillar")
@@ -719,19 +705,19 @@ script = ExtResource("2_mesh")
 Collision = 1
 
 [node name="PS1Room_A" type="Node3D" parent="." unique_id=2004180005]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 1.5, 0)
+transform = Transform3D(0.54610294, 0, -0.83771807, 0, 1, 0, 0.83771807, 0, 0.54610294, 9.630753, 1.5, 5.8966084)
 script = ExtResource("12_room")
 RoomName = "RoomA_Blue"
 VolumeSize = Vector3(5, 3, 5)
 
 [node name="PS1Room_B" type="Node3D" parent="." unique_id=2004180006]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 15, 1.5, 0)
+transform = Transform3D(0.54610294, 0, -0.83771807, 0, 1, 0, 0.83771807, 0, 0.54610294, 12.361267, 1.5, 10.085199)
 script = ExtResource("12_room")
 RoomName = "RoomB_Magenta"
 VolumeSize = Vector3(5, 3, 5)
 
 [node name="PS1PortalLink_AB" type="Node3D" parent="." unique_id=2004180007]
-transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, 12.5, 1.5, 0)
+transform = Transform3D(-0.83771807, 0, -0.54610294, 0, 1, 0, 0.54610294, 0, -0.83771807, 10.996011, 1.5, 7.990903)
 script = ExtResource("12_portal")
 RoomA = NodePath("../PS1Room_A")
 RoomB = NodePath("../PS1Room_B")

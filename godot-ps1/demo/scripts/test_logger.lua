@@ -18,11 +18,9 @@ local cameraMode = "third"
 local dialogCanvas, dialogBodyEl = -1, -1
 local sysVoiceCanvas, sysVoiceText = -1, -1
 
--- Optional "Player" PS1MeshInstance that tracks the runtime player
--- position each frame. If no such node exists, playerMesh stays nil
--- and this whole path is a no-op. Static mesh only for now — walking
--- animation needs bullet 11 (skinned meshes).
-local playerMesh = nil
+-- (Player avatar tracking moved to the runtime's v21 auto-avatar path.
+-- Kept here as a sentinel comment so anyone searching for playerMesh
+-- finds the explanation.)
 
 -- ── Narration (system voice during intro cutscene) ──
 -- Drives a Lua-side cutscene-frame counter (incremented per onUpdate
@@ -44,10 +42,10 @@ local narrationHidden = false
 -- not_alarmed 2.1 s, stable 1.5 s, other_cube 2.2 s, we_think 1.0 s.
 local narration = {
     { 5,   "Welcome to the Interactive\nDemonstration Environment.", "system_welcome"          },
-    { 200, "Please do not be alarmed\nby the cube.",                 "system_not_alarmed"      },
-    { 360, "It is perfectly stable.",                                "system_perfectly_stable" },
-    { 510, "The other cube is also\nintentional.",                   "system_other_cube"       },
-    { 680, "We think.",                                              "system_we_think"         },
+    { 210, "Please do not be alarmed\nby the cube.",                 "system_not_alarmed"      },
+    { 345, "It is perfectly stable.",                                "system_perfectly_stable" },
+    { 455, "The other cube is also\nintentional.",                   "system_other_cube"       },
+    { 600, "We think.",                                              "system_we_think"         },
 }
 
 -- ── Green cube dialog sequences ──
@@ -130,10 +128,6 @@ function onCreate(self)
         sysVoiceText = UI.FindElement(sysVoiceCanvas, "vtxt")
     end
 
-    playerMesh = Entity.Find("Player")
-    if playerMesh ~= nil then
-        Debug.Log("test_logger: found Player mesh, will track runtime position")
-    end
 
     Animation.Play("bounce", { loop = true })
     Animation.Play("spin", { loop = true })
@@ -175,36 +169,12 @@ function onUpdate(self, dt)
         Debug.Log("camera mode -> " .. cameraMode)
     end
 
-    -- Track runtime player position + facing onto the Player mesh so it
-    -- acts as the player's visible avatar. Position gets a +Y offset so
-    -- mesh feet land at player feet (PS1Player.pos is at eye height, not
-    -- feet). Rotation is driven by player yaw so the mesh turns with the
-    -- camera even when the player stands still.
-    if playerMesh ~= nil then
-        local p = Player.GetPosition()
-        -- Entity.SetPosition takes a Vec3 table as 2nd arg, NOT 3 numbers.
-        -- Runtime check: if !lua.isTable(2) return 0; — silent no-op
-        -- otherwise (which made the mesh stay glued to (0,0,0)).
-        --
-        -- PS1Player position is at the camera/eye, not the feet. Our
-        -- humanoid mesh's origin is at its feet (AABB min.Y ≈ 0 in the
-        -- authored FBX). Without offsetting, mesh feet would sit at the
-        -- player's eye level and the mesh would tower over the player.
-        -- Shift mesh origin DOWN by playerHeight so mesh feet align with
-        -- player feet on the ground. 1741 raw FP12 = 1.7m at gteScaling=4.
-        -- PSX Y-down convention: positive Y = downward, so we ADD.
-        p.y = p.y + Convert.IntToFp(1741)
-        Entity.SetPosition(playerMesh, p)
-
-        -- Mesh faces where the player faces, so the third-person camera
-        -- always sees the avatar's back. Player.GetRotation() returns a
-        -- Vec3 whose .y is the player's yaw in FP12 pi-units (1.0 = 180°);
-        -- Entity.SetRotationY expects the same unit, so pass it through.
-        -- Using player rotation (not movement delta) means the mesh still
-        -- rotates while standing still — matches what the user sees.
-        local rot = Player.GetRotation()
-        Entity.SetRotationY(playerMesh, rot.y)
-    end
+    -- Player avatar tracking now happens in the runtime (v21 auto-avatar
+    -- via PS1Player's child MeshInstance3D + playerAvatarOffset header
+    -- field). The Lua loop that used to Entity.SetPosition the Player
+    -- mesh each frame was removed — it was duplicating work and risked
+    -- fighting the runtime's own transform update. See scenemanager.cpp
+    -- "auto-track the player avatar mesh" block.
 
     -- ── Cutscene narration: text + audio co-fired ──
     local playing = Cutscene.IsPlaying()

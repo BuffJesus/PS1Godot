@@ -214,13 +214,24 @@ public partial class PS1GodotPlugin : EditorPlugin
                     GD.PushError($"[PS1Godot] SubScenes[{i}] failed to instantiate.");
                     continue;
                 }
+
+                // Sub-scenes need to live in the SceneTree before
+                // GlobalTransform / GlobalPosition return anything but
+                // identity (Godot gates them on is_inside_tree()). Park the
+                // orphan under the SceneTree's root for the duration of
+                // the export, then yank it back out — keeps the editor's
+                // own scene unchanged.
+                var tree = GetTree();
+                var tempHost = new Node { Name = $"__ps1godot_export_subscene_{i + 1}" };
+                tree.Root.AddChild(tempHost);
+                tempHost.AddChild(sub);
                 try
                 {
                     ExportOneScene(sub, i + 1);
                 }
                 finally
                 {
-                    sub.QueueFree();
+                    tempHost.QueueFree();
                 }
             }
         }
