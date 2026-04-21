@@ -33,6 +33,12 @@ project/assembly_name="PS1Godot"
 
 enabled=PackedStringArray("res://addons/ps1godot/plugin.cfg")
 
+[importer_defaults]
+
+wav={
+"compress/mode": 0
+}
+
 [rendering]
 
 textures/canvas_textures/default_texture_filter=0

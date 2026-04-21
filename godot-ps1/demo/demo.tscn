@@ -39,6 +39,14 @@
 [ext_resource type="AudioStream" uid="uid://dtrxv6wol3v3g" path="res://demo/audio/dialogue/SystemVoice/system_perfectly_stable.wav" id="ea_stable"]
 [ext_resource type="AudioStream" uid="uid://cv0dtm7xdn14l" path="res://demo/audio/dialogue/SystemVoice/system_welcome.wav" id="ea_welcome"]
 [ext_resource type="AudioStream" uid="uid://bjh364fcpwmff" path="res://demo/audio/dialogue/SystemVoice/system_we_think.wav" id="ea_we_think"]
+[ext_resource type="AudioStream" path="res://demo/audio/music/inst_bass.wav" id="ea_inst_bass"]
+[ext_resource type="AudioStream" path="res://demo/audio/music/inst_pad.wav" id="ea_inst_pad"]
+[ext_resource type="AudioStream" path="res://demo/audio/music/inst_lead.wav" id="ea_inst_lead"]
+[ext_resource type="AudioStream" path="res://demo/audio/music/inst_kick.wav" id="ea_inst_kick"]
+[ext_resource type="AudioStream" path="res://demo/audio/music/inst_snare.wav" id="ea_inst_snare"]
+[ext_resource type="AudioStream" path="res://demo/audio/music/inst_hat.wav" id="ea_inst_hat"]
+[ext_resource type="Script" uid="uid://c2oekhtvjyqlt" path="res://addons/ps1godot/nodes/PS1MusicSequence.cs" id="ms_seq_script"]
+[ext_resource type="Script" uid="uid://3bx6n5sx7krl" path="res://addons/ps1godot/nodes/PS1MusicChannel.cs" id="ms_chan_script"]
 
 [sub_resource type="Resource" id="Clip_welcome"]
 script = ExtResource("2_onvmd")
@@ -179,6 +187,135 @@ Stream = ExtResource("ea_ck_why_spin")
 ClipName = "ck_why_spin"
 Residency = 2
 metadata/_custom_type_script = "uid://cgk0vce50p3ph"
+
+[sub_resource type="Resource" id="Clip_inst_bass"]
+script = ExtResource("2_onvmd")
+Stream = ExtResource("ea_inst_bass")
+ClipName = "inst_bass"
+Residency = 0
+metadata/_custom_type_script = "uid://cgk0vce50p3ph"
+
+[sub_resource type="Resource" id="Clip_inst_pad"]
+script = ExtResource("2_onvmd")
+Stream = ExtResource("ea_inst_pad")
+ClipName = "inst_pad"
+Residency = 0
+metadata/_custom_type_script = "uid://cgk0vce50p3ph"
+
+[sub_resource type="Resource" id="Clip_inst_lead"]
+script = ExtResource("2_onvmd")
+Stream = ExtResource("ea_inst_lead")
+ClipName = "inst_lead"
+Residency = 0
+metadata/_custom_type_script = "uid://cgk0vce50p3ph"
+
+[sub_resource type="Resource" id="Clip_inst_kick"]
+script = ExtResource("2_onvmd")
+Stream = ExtResource("ea_inst_kick")
+ClipName = "inst_kick"
+Residency = 0
+metadata/_custom_type_script = "uid://cgk0vce50p3ph"
+
+[sub_resource type="Resource" id="Clip_inst_snare"]
+script = ExtResource("2_onvmd")
+Stream = ExtResource("ea_inst_snare")
+ClipName = "inst_snare"
+Residency = 0
+metadata/_custom_type_script = "uid://cgk0vce50p3ph"
+
+[sub_resource type="Resource" id="Clip_inst_hat"]
+script = ExtResource("2_onvmd")
+Stream = ExtResource("ea_inst_hat")
+ClipName = "inst_hat"
+Residency = 0
+metadata/_custom_type_script = "uid://cgk0vce50p3ph"
+
+[sub_resource type="Resource" id="Chan_kick"]
+script = ExtResource("ms_chan_script")
+MidiChannel = 9
+MidiTrackIndex = -1
+MidiNoteMin = 36
+MidiNoteMax = 36
+AudioClipName = "inst_kick"
+BaseNoteMidi = 36
+Volume = 32
+Pan = 64
+LoopSample = false
+Percussion = true
+metadata/_custom_type_script = "uid://3bx6n5sx7krl"
+
+[sub_resource type="Resource" id="Chan_snare"]
+script = ExtResource("ms_chan_script")
+MidiChannel = 9
+MidiTrackIndex = -1
+MidiNoteMin = 40
+MidiNoteMax = 40
+AudioClipName = "inst_snare"
+BaseNoteMidi = 40
+Volume = 15
+Pan = 64
+LoopSample = false
+Percussion = true
+metadata/_custom_type_script = "uid://3bx6n5sx7krl"
+
+[sub_resource type="Resource" id="Chan_hat"]
+script = ExtResource("ms_chan_script")
+MidiChannel = 9
+MidiTrackIndex = -1
+MidiNoteMin = 42
+MidiNoteMax = 42
+AudioClipName = "inst_hat"
+BaseNoteMidi = 42
+Volume = 52
+Pan = 64
+LoopSample = false
+Percussion = true
+metadata/_custom_type_script = "uid://3bx6n5sx7krl"
+
+[sub_resource type="Resource" id="Chan_bass"]
+script = ExtResource("ms_chan_script")
+MidiChannel = 1
+MidiTrackIndex = -1
+AudioClipName = "inst_bass"
+BaseNoteMidi = 45
+Volume = 127
+Pan = 64
+LoopSample = false
+Percussion = false
+metadata/_custom_type_script = "uid://3bx6n5sx7krl"
+
+[sub_resource type="Resource" id="Chan_pad"]
+script = ExtResource("ms_chan_script")
+MidiChannel = 2
+MidiTrackIndex = -1
+AudioClipName = "inst_pad"
+BaseNoteMidi = 60
+Volume = 127
+Pan = 64
+LoopSample = false
+Percussion = false
+metadata/_custom_type_script = "uid://3bx6n5sx7krl"
+
+[sub_resource type="Resource" id="Chan_lead"]
+script = ExtResource("ms_chan_script")
+MidiChannel = 3
+MidiTrackIndex = -1
+AudioClipName = "inst_lead"
+BaseNoteMidi = 69
+Volume = 127
+Pan = 64
+LoopSample = false
+Percussion = false
+metadata/_custom_type_script = "uid://3bx6n5sx7krl"
+
+[sub_resource type="Resource" id="Seq_retro"]
+script = ExtResource("ms_seq_script")
+MidiFile = "res://demo/audio/music/RetroAdventureSong.mid"
+SequenceName = "retro_adventure"
+BpmOverride = 0
+LoopStartBeat = 0
+Channels = Array[ExtResource("ms_chan_script")]([SubResource("Chan_bass"), SubResource("Chan_pad"), SubResource("Chan_lead"), SubResource("Chan_kick"), SubResource("Chan_snare"), SubResource("Chan_hat")])
+metadata/_custom_type_script = "uid://c2oekhtvjyqlt"
 
 [sub_resource type="ArrayMesh" id="ArrayMesh_tdg64"]
 _surfaces = [{
@@ -347,7 +484,8 @@ JumpHeight = 1.8
 Gravity = 20.0
 FogEnabled = true
 FogColor = Color(0.65, 0.75, 0.85, 1)
-AudioClips = Array[ExtResource("2_onvmd")]([SubResource("Clip_welcome"), SubResource("Clip_not_alarmed"), SubResource("Clip_stable"), SubResource("Clip_other_cube"), SubResource("Clip_we_think"), SubResource("Clip_ignore_checkered"), SubResource("Clip_not_part"), SubResource("Clip_idle"), SubResource("Clip_concerning"), SubResource("Clip_sc_hey"), SubResource("Clip_sc_not_yet"), SubResource("Clip_sc_camera"), SubResource("Clip_sc_good_talk"), SubResource("Clip_sc_purpose"), SubResource("Clip_sc_thinks_better"), SubResource("Clip_sc_bobbing"), SubResource("Clip_ck_part"), SubResource("Clip_ck_always"), SubResource("Clip_ck_why_dont"), SubResource("Clip_ck_why_spin")])
+AudioClips = Array[ExtResource("2_onvmd")]([SubResource("Clip_welcome"), SubResource("Clip_not_alarmed"), SubResource("Clip_stable"), SubResource("Clip_other_cube"), SubResource("Clip_we_think"), SubResource("Clip_ignore_checkered"), SubResource("Clip_not_part"), SubResource("Clip_idle"), SubResource("Clip_concerning"), SubResource("Clip_sc_hey"), SubResource("Clip_sc_not_yet"), SubResource("Clip_sc_camera"), SubResource("Clip_sc_good_talk"), SubResource("Clip_sc_purpose"), SubResource("Clip_sc_thinks_better"), SubResource("Clip_sc_bobbing"), SubResource("Clip_ck_part"), SubResource("Clip_ck_always"), SubResource("Clip_ck_why_dont"), SubResource("Clip_ck_why_spin"), SubResource("Clip_inst_bass"), SubResource("Clip_inst_pad"), SubResource("Clip_inst_lead"), SubResource("Clip_inst_kick"), SubResource("Clip_inst_snare"), SubResource("Clip_inst_hat")])
+MusicSequences = Array[ExtResource("ms_seq_script")]([SubResource("Seq_retro")])
 SubScenes = Array[PackedScene]([ExtResource("13_realm")])
 
 [node name="Floor" type="MeshInstance3D" parent="." unique_id=1239192714]

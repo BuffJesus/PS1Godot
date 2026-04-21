@@ -65,7 +65,8 @@ local DIALOG_LINES = {
 }
 local lineIdx = 0
 local hideAtTick = 0
-local LINE_HOLD = 90   -- ~1.5 s at 60 fps onUpdate
+local LINE_MIN_HOLD = 90   -- ~1.5 s at 60 fps onUpdate (used when clip is short/missing)
+local LINE_TAIL     = 30   -- ~0.5 s after audio ends before hiding
 
 -- ── Idle detection ──
 -- Two-beat sequence: "You appear to be standing still." → pause →
@@ -79,12 +80,43 @@ local IDLE_THRESHOLD   = 300   -- ~5s at 60fps onUpdate
 local IDLE_BEAT_PAUSE  = 180   -- ~3s gap between the two voice beats
 local IDLE_HOLD        = 240   -- hold beat-2 visible ~4s before hiding
 
+-- Music ducking: drop the BGM master volume while a dialog is on
+-- screen, restore on hide. Reads the global `bgmMasterVol` set by
+-- onCreate so all scripts share the same restore target — and so a
+-- script that boots later (without seeing the original volume) can
+-- still restore correctly. DUCK_VOL is the level to drop to.
+local DUCK_VOL = 18
+local function duckMusic()
+    if Music ~= nil and bgmMasterVol ~= nil then
+        Music.SetVolume(DUCK_VOL)
+    end
+end
+local function restoreMusic()
+    if Music ~= nil and bgmMasterVol ~= nil then
+        Music.SetVolume(bgmMasterVol)
+    end
+end
+
+-- Show a dialog line. Returns the tick at which the dialog should
+-- auto-hide — LINE_MIN_HOLD for silent/missing clips, or the clip's
+-- actual playback length + LINE_TAIL when audio is present. This way
+-- the player always hears the full voice clip before the box vanishes.
 local function showLine(line)
     if dialogBodyEl >= 0 then
         UI.SetText(dialogBodyEl, line.text)
         UI.SetCanvasVisible(dialogCanvas, true)
     end
-    Audio.Play(line.clip, 100, 64)
+    local hold = LINE_MIN_HOLD
+    if line.clip ~= nil then
+        duckMusic()
+        Audio.Play(line.clip, 100, 64)
+        local dur = Audio.GetClipDuration(line.clip)
+        if dur > 0 then
+            local needed = dur + LINE_TAIL
+            if needed > hold then hold = needed end
+        end
+    end
+    return tick + hold
 end
 
 local function showSysVoice(text, clip)
@@ -92,13 +124,17 @@ local function showSysVoice(text, clip)
         UI.SetText(sysVoiceText, text)
         UI.SetCanvasVisible(sysVoiceCanvas, true)
     end
-    if clip ~= nil then Audio.Play(clip, 100, 64) end
+    if clip ~= nil then
+        duckMusic()
+        Audio.Play(clip, 100, 64)
+    end
 end
 
 local function hideSysVoice()
     if sysVoiceCanvas >= 0 then
         UI.SetCanvasVisible(sysVoiceCanvas, false)
     end
+    restoreMusic()
 end
 
 local function resetIdle()
@@ -123,6 +159,15 @@ function onCreate(self)
 
     Animation.Play("bounce", { loop = true })
     Animation.Play("spin", { loop = true })
+    -- Kick off the demo BGM. Sequencer loops back to beat 0 when it
+    -- runs out of events. The "master" volume gets stashed in a global
+    -- so dialog scripts can duck and restore via Music.SetVolume(...)
+    -- — see helpers below. 40/127 keeps the BGM well under voice
+    -- dialog at full strength; tune higher per-scene if needed.
+    bgmMasterVol = 40
+    if Music ~= nil then
+        Music.Play("retro_adventure", bgmMasterVol)
+    end
     -- Start the bullet-11 test rig's wave animation if present. findSkinAnim
     -- returns silently if there's no mesh called "SkinnedMesh" in the scene,
     -- so this no-ops for scenes without the test asset.
@@ -197,6 +242,7 @@ function onUpdate(self, dt)
         if dialogCanvas >= 0 then
             UI.SetCanvasVisible(dialogCanvas, false)
         end
+        restoreMusic()
         Debug.Log("test_logger: dialog auto-hidden at tick " .. tick)
         hideAtTick = 0
     end
@@ -245,7 +291,6 @@ local MY_DIALOG_OWNER = 1
 function onInteract(self)
     currentDialogOwner = MY_DIALOG_OWNER
     lineIdx = (lineIdx % #DIALOG_LINES) + 1
-    showLine(DIALOG_LINES[lineIdx])
-    hideAtTick = tick + LINE_HOLD
+    hideAtTick = showLine(DIALOG_LINES[lineIdx])
     Debug.Log("test_logger: dialog line " .. lineIdx .. " shown")
 end
