@@ -5,6 +5,8 @@
 [ext_resource type="Script" uid="uid://cfdlp12g2rtct" path="res://addons/ps1godot/nodes/PS1Player.cs" id="3_player"]
 [ext_resource type="Script" uid="uid://bbl6b0g2qjisp" path="res://addons/ps1godot/nodes/PS1TriggerBox.cs" id="4_trigger"]
 [ext_resource type="Texture2D" uid="uid://cul6k2s7n8ysj" path="res://demo/textures/test_checker.png" id="5_checker"]
+[ext_resource type="Script" uid="uid://dqtfgfu4x00ke" path="res://addons/ps1godot/nodes/PS1Animation.cs" id="6_anim"]
+[ext_resource type="Script" uid="uid://bg1ih72kp4c3g" path="res://addons/ps1godot/nodes/PS1AnimationKeyframe.cs" id="7_kf"]
 
 ; Minimal "checkered realm" — a flat slab with the checkered cube standing
 ; alone in the void. Reachable by walking into the trigger at RoomB's
@@ -14,6 +16,8 @@
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_realm"]
 size = Vector2(20, 20)
+subdivide_width = 4
+subdivide_depth = 4
 
 [sub_resource type="StandardMaterial3D" id="mat_void_floor"]
 albedo_color = Color(0.08, 0.05, 0.18, 1)
@@ -25,6 +29,13 @@ size = Vector3(2, 2, 2)
 albedo_texture = ExtResource("5_checker")
 texture_filter = 0
 
+[sub_resource type="CapsuleMesh" id="CapsuleMesh_avatar"]
+radius = 0.4
+height = 1.7
+
+[sub_resource type="StandardMaterial3D" id="mat_avatar"]
+albedo_color = Color(0.85, 0.85, 0.95, 1)
+
 [node name="Scene" type="Node3D"]
 script = ExtResource("1_scene")
 SceneType = 0
@@ -33,6 +44,7 @@ Gravity = 20.0
 FogEnabled = true
 FogColor = Color(0.18, 0.12, 0.32, 1)
 FogDensity = 2
+SceneLuaFile = "res://demo/scripts/realm_init.lua"
 
 [node name="VoidFloor" type="MeshInstance3D" parent="."]
 material_override = SubResource("mat_void_floor")
@@ -50,9 +62,57 @@ ScriptFile = "res://demo/scripts/checkered_dialog.lua"
 Interactable = true
 InteractionRadiusMeters = 2.5
 
+; PS1Player with explicit child Camera3D (overrides default rig offset)
+; and a humanoid-ish capsule avatar parented under it so the runtime's
+; auto-avatar tracking + third-person rig both have something to lock
+; onto. Local Y on the avatar = -1.7 puts its feet at the player's feet.
 [node name="PS1Player" type="Node3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 6)
 script = ExtResource("3_player")
+
+[node name="CameraRig" type="Camera3D" parent="PS1Player"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 3)
+
+[node name="Avatar" type="MeshInstance3D" parent="PS1Player"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.85, 0)
+material_override = SubResource("mat_avatar")
+mesh = SubResource("CapsuleMesh_avatar")
+script = ExtResource("2_mesh")
+
+; Bouncing animation for the realm cube — the same up/down beat the main
+; demo's Cube2 has, but anchored at the realm cube's origin (0, 1, 0).
+[node name="RealmBounceAnim" type="Node" parent="."]
+script = ExtResource("6_anim")
+AnimationName = "realm_bounce"
+TargetObjectName = "CheckeredCube"
+
+[node name="Kf0" type="Node" parent="RealmBounceAnim"]
+script = ExtResource("7_kf")
+Value = Vector3(0, 1, 0)
+
+[node name="Kf1" type="Node" parent="RealmBounceAnim"]
+script = ExtResource("7_kf")
+Frame = 15
+Value = Vector3(0, 1.5, 0)
+Interp = 3
+
+[node name="Kf2" type="Node" parent="RealmBounceAnim"]
+script = ExtResource("7_kf")
+Frame = 30
+Value = Vector3(0, 1, 0)
+Interp = 2
+
+[node name="Kf3" type="Node" parent="RealmBounceAnim"]
+script = ExtResource("7_kf")
+Frame = 45
+Value = Vector3(0, 1.5, 0)
+Interp = 3
+
+[node name="Kf4" type="Node" parent="RealmBounceAnim"]
+script = ExtResource("7_kf")
+Frame = 59
+Value = Vector3(0, 1, 0)
+Interp = 2
 
 ; Walk back into the spawn area to return to the main demo. Player spawns
 ; at z=6; trigger sits behind them at z=8 so they have to deliberately
