@@ -75,13 +75,14 @@ local EXTRAS = {
 local activeSeq, activeIdx, activeFrame = nil, 0, 0
 local interactionCount, extraIdx = 0, 0
 
--- Absolute timeout so a sequence can never wedge the dialog on screen
--- forever. Guards against the auto-advance state-machine getting stuck
--- (one report: dialog "won't disappear" mid-conversation). 1500 frames
--- ≈ 25 s at 60 fps onUpdate, which is comfortably longer than any
--- authored sequence so it only fires when something has gone wrong.
-local activeSeqDeadline = 0
-local DIALOG_MAX_FRAMES = 1500
+-- Watchdog: if the auto-advance state-machine wedges and a line has
+-- been on screen for longer than `current.dur + DIALOG_IDLE_GRACE`
+-- frames without progressing, force-hide. Resets on every onInteract
+-- and every line advance so a normal sequence never trips it — only
+-- a stuck dialog does, and it clears within ~3 s instead of staying
+-- on screen forever.
+local lastAdvanceFrame = 0
+local DIALOG_IDLE_GRACE = 180   -- 3 s at 60 fps onUpdate
 
 -- ── Idle detection ──
 -- Two-beat sequence: "You appear to be standing still." → pause →
@@ -209,25 +210,26 @@ function onUpdate(self, dt)
     if activeSeq ~= nil then
         if currentDialogOwner ~= MY_DIALOG_OWNER then
             activeSeq = nil
-        elseif tick >= activeSeqDeadline then
-            -- Absolute timeout safety net — if a sequence's auto-advance
-            -- gets wedged for any reason, force-hide the canvas instead
-            -- of leaving the dialog stuck on screen.
-            if dialogCanvas >= 0 then UI.SetCanvasVisible(dialogCanvas, false) end
-            activeSeq = nil
-            Debug.Log("test_logger: dialog sequence timed out, forced hide")
         else
             activeFrame = activeFrame + 1
             local current = activeSeq[activeIdx]
             if activeFrame >= current.dur then
                 activeIdx = activeIdx + 1
                 activeFrame = 0
+                lastAdvanceFrame = tick
                 if activeIdx <= #activeSeq then
                     showLine(activeSeq[activeIdx])
                 else
                     if dialogCanvas >= 0 then UI.SetCanvasVisible(dialogCanvas, false) end
                     activeSeq = nil
                 end
+            elseif (tick - lastAdvanceFrame) > current.dur + DIALOG_IDLE_GRACE then
+                -- Watchdog tripped — line has been on screen for longer
+                -- than its authored duration plus a 3 s grace and still
+                -- hasn't advanced. Force-hide rather than leaving it stuck.
+                if dialogCanvas >= 0 then UI.SetCanvasVisible(dialogCanvas, false) end
+                activeSeq = nil
+                Debug.Log("test_logger: dialog watchdog fired, forced hide")
             end
         end
     end
@@ -284,7 +286,7 @@ function onInteract(self)
     end
     activeIdx = 1
     activeFrame = 0
-    activeSeqDeadline = tick + DIALOG_MAX_FRAMES
+    lastAdvanceFrame = tick
     showLine(activeSeq[activeIdx])
     Debug.Log("test_logger: dialog sequence " .. interactionCount .. " started")
 end
