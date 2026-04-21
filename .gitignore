@@ -70,6 +70,16 @@ Desktop.ini
 .DS_Store
 $RECYCLE.BIN/
 
+# ── tools/ (Python helpers) ──
+# Byte-code caches and any stray output dropped in the tools dir when a
+# script was run without an explicit output argument.
+__pycache__/
+*.pyc
+*.pyo
+tools/*.wav
+tools/*.mid
+tools/*.splashpack
+
 # ── Local-only config ──
 .env
 .env.local
