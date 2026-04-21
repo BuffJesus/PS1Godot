@@ -188,13 +188,16 @@ function onUpdate(self, dt)
 
     -- ── Single-line dialog auto-hide ──
     -- onInteract sets hideAtTick to (tick + LINE_HOLD). When tick passes
-    -- that mark, hide the canvas (assuming we still own it). Yield to
-    -- whoever currentDialogOwner now is — if they took over, they're
-    -- managing the canvas, not us.
+    -- that mark, hide the canvas unconditionally. Previous versions
+    -- gated this on currentDialogOwner == MY_DIALOG_OWNER but that was
+    -- left dialogs stuck when ownership got handed off — simpler to
+    -- always hide on our own deadline, and let whoever took over
+    -- re-show if they need to.
     if hideAtTick > 0 and tick >= hideAtTick then
-        if currentDialogOwner == MY_DIALOG_OWNER and dialogCanvas >= 0 then
+        if dialogCanvas >= 0 then
             UI.SetCanvasVisible(dialogCanvas, false)
         end
+        Debug.Log("test_logger: dialog auto-hidden at tick " .. tick)
         hideAtTick = 0
     end
 
