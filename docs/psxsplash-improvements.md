@@ -451,17 +451,42 @@ upstream so the fix lands sooner.
   mismatch (same family of bug as entry N)?
 - File upstream with a minimal `.splashpack` that reproduces.
 
-**Status.** Reproduced 2026-04-20 in the demo's intro cutscene. Author
-workaround in `godot-ps1/demo/demo.tscn`: every CamRotKf has
-`Vector3(pitch, 180, 0)` instead of just `Vector3(pitch, 0, 0)`.
+**Status.** Reproduced + diagnosed 2026-04-20. The runtime is correct;
+the surprise is purely about which Godot-space sign convention an
+author has to use.
+
+**Reading the psyqo + psxsplash sources gave the actual rules:**
+- `psyqo::Matrix33::vs[i]` is **column i** (verified against
+  `soft-math.cpp::multiplyMatrix33` indexing at line 132).
+- `Camera::SetRotation` builds `M = rotY * rotX * rotZ`
+  (`camera.cpp:33-36`).
+- `worldToCamera` (`renderer.cpp:447-458`) computes
+  `outZ = vs[2] · (world − cam)`, so `vs[2]` (column 2 of M) is the
+  **world direction the camera looks**.
+- `SceneCollector.EncodeKeyframeValue` (line 836-839) negates Godot X
+  and Y angles before writing them as PSX angles.
+
+**The papercut.** With yaw=0, positive Godot pitch (encoded as PSX
+negative pitch) makes the camera look down. With yaw=180° (which is
+what the player rig uses, so the natural choice for handoff), the
+matrix multiplication `rotY(180°) * rotX(θ_x)` flips the sign of the
+Y-component of column 2, so the **same Godot pitch sign now means UP
+instead of down**. Authors writing `Vector3(-45, 180, 0)` ("look down
+45°, facing the player") get a camera staring at the sky.
+
+**Workaround in our demo.** Every CamRotKf is `Vector3(POSITIVE pitch,
+180, 0)` — verified by deriving the matrix from psyqo's source.
 
 **Evidence.**
-- _(verbal, no paste yet)_ — psxsplash maintainer reported cutscene camera
-  movement sometimes incorrect.
-- `2026-04-20` — naïve `Vector3(-50, 0, 0)` keyframes made the demo
-  intro look at the back wall the entire shot, then snap 180° at
-  handoff. Switched all keyframes to `(pitch, 180, 0)` and the camera
-  now looks where authored.
+- _(verbal, no paste yet)_ — psxsplash maintainer reported cutscene
+  camera movement sometimes incorrect.
+- `2026-04-20` (1) — naïve `Vector3(-50, 0, 0)` keyframes pointed the
+  camera at the back wall the entire shot, then snapped 180° at
+  handoff (yaw mismatch with player rig).
+- `2026-04-20` (2) — adding yaw=180° while keeping pitch sign convention
+  (`(-45, 180, 0)`) made the camera stare at the sky (pitch sign
+  flipped through `rotY(180°) * rotX`). Final fix: `(+45, 180, 0)` with
+  the convention derived from source.
 
 ---
 

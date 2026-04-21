@@ -490,6 +490,10 @@ TotalFrames = 600
 script = ExtResource("15_tr")
 TrackType = 0
 
+; Camera positions are z>player.z (behind player) because the rotation
+; track uses yaw=180° → forward = -Z world. So looking from larger Z
+; toward smaller Z brings the scene into view. Final keyframe (0, 3, 11)
+; matches the third-person rig (player + offset) for a seamless handoff.
 [node name="CamPosKf0" type="Node" parent="IntroCutscene/CamPosTrack" unique_id=1293512181]
 script = ExtResource("13_kf")
 Value = Vector3(0, 12, 15)
@@ -522,34 +526,40 @@ Interp = 4
 script = ExtResource("15_tr")
 TrackType = 1
 
-; Yaw is 180° on every keyframe because the runtime's natural camera
-; at rotation 0 looks +Z (away from a Godot-authored scene where
-; forward is -Z). The player's third-person rig also runs with
-; playerRotationY=180° — so keeping cutscene yaw at 180° throughout
-; means the cutscene looks "into" the scene the same direction the
-; player will after handoff. Pitch eases from -45° (overhead) to 0°
-; (level with player at end). Pure-pitch motion = no jarring sideways
-; swings.
+; Derived from psyqo source (verified against soft-math.cpp +
+; camera.cpp + renderer.cpp::worldToCamera):
+;   * Camera matrix M = rotY * rotX * rotZ; vs[i] is column i.
+;   * Camera world-forward = M.column2.
+;   * Encoder negates Godot X & Y angles (SceneCollector
+;     EncodeKeyframeValue:836-839).
+;   * For yaw=180° the matrix flips the X-rotation's Y component sign,
+;     so POSITIVE Godot pitch = camera tilts DOWN toward scene (the
+;     opposite of what intuition would say with yaw=0).
+;
+; Yaw is 180° on every keyframe — same as the player rig's
+; playerRotationY=1.0_pi — so the handoff at frame 599 has zero
+; rotation discontinuity. Pitch eases from steep down (45°) at the
+; overhead establishing shot to level (0°) at the handoff.
 [node name="CamRotKf0" type="Node" parent="IntroCutscene/CamRotTrack" unique_id=1515879523]
 script = ExtResource("13_kf")
-Value = Vector3(-45, 180, 0)
+Value = Vector3(45, 180, 0)
 
 [node name="CamRotKf1" type="Node" parent="IntroCutscene/CamRotTrack" unique_id=1661118081]
 script = ExtResource("13_kf")
 Frame = 180
-Value = Vector3(-25, 180, 0)
+Value = Vector3(30, 180, 0)
 Interp = 4
 
 [node name="CamRotKf2" type="Node" parent="IntroCutscene/CamRotTrack" unique_id=320274732]
 script = ExtResource("13_kf")
 Frame = 345
-Value = Vector3(-15, 180, 0)
+Value = Vector3(15, 180, 0)
 Interp = 4
 
 [node name="CamRotKf3" type="Node" parent="IntroCutscene/CamRotTrack" unique_id=624521851]
 script = ExtResource("13_kf")
 Frame = 500
-Value = Vector3(-10, 180, 0)
+Value = Vector3(10, 180, 0)
 Interp = 4
 
 [node name="CamRotKf4" type="Node" parent="IntroCutscene/CamRotTrack" unique_id=1322462890]
