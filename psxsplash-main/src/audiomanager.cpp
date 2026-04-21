@@ -26,6 +26,17 @@ void AudioManager::init() {
   }
 }
 
+uint32_t AudioManager::getClipDurationFrames(int clipIndex) const {
+  if (clipIndex < 0 || clipIndex >= MAX_AUDIO_CLIPS) return 0;
+  const AudioClip &c = m_clips[clipIndex];
+  if (!c.loaded || c.loop || c.sampleRate == 0 || c.size == 0) return 0;
+  // ADPCM: 16 bytes per block encodes 28 samples.
+  uint32_t samples = (c.size / 16u) * 28u;
+  // frames = samples / sampleRate * 60.  Reorder to avoid losing
+  // precision on short clips: (samples * 60) / sampleRate.
+  return (samples * 60u) / c.sampleRate;
+}
+
 void AudioManager::reset() {
   stopAll();
   for (int i = 0; i < MAX_AUDIO_CLIPS; i++) {
@@ -97,12 +108,44 @@ int AudioManager::play(int clipIndex, int volume, int pan) {
     return -1;
   }
 
-  uint32_t ch = psyqo::SPU::getNextFreeChannel();
-  if (ch == psyqo::SPU::NO_FREE_CHANNEL)
+  // Scan the dialog/SFX pool for a silent voice. We can't use psyqo's
+  // helper here because it always starts at 0 and would happily hand
+  // back voices the MusicSequencer owns — the reservation only kicks
+  // in if we walk the voices ourselves starting at m_reservedForMusic.
+  int start = m_reservedForMusic;
+  if (start < 0) start = 0;
+  if (start >= MAX_VOICES) return -1;
+  int ch = -1;
+  for (int v = start; v < MAX_VOICES; v++) {
+    if (SPU_VOICES[v].currentVolume == 0) {
+      ch = v;
+      break;
+    }
+  }
+  if (ch < 0) return -1;
+
+  writeVoice(ch, m_clips[clipIndex], volume, pan);
+  return ch;
+}
+
+int AudioManager::playOnVoice(int voice, int clipIndex, int volume, int pan) {
+  if (voice < 0 || voice >= MAX_VOICES) return -1;
+  if (clipIndex < 0 || clipIndex >= MAX_AUDIO_CLIPS ||
+      !m_clips[clipIndex].loaded) {
     return -1;
+  }
+  writeVoice(voice, m_clips[clipIndex], volume, pan);
+  return voice;
+}
 
-  const AudioClip &clip = m_clips[clipIndex];
+void AudioManager::reserveVoices(int n) {
+  if (n < 0) n = 0;
+  if (n > MAX_VOICES) n = MAX_VOICES;
+  m_reservedForMusic = n;
+}
 
+void AudioManager::writeVoice(int ch, const AudioClip &clip, int volume,
+                              int pan) {
   uint16_t vol = volToHw(volume);
   uint16_t leftVol = vol;
   uint16_t rightVol = vol;
@@ -144,8 +187,6 @@ int AudioManager::play(int clipIndex, int volume, int pan) {
   } else {
     SPU_KEY_ON_LOW = 1 << ch;
   }
-
-  return static_cast<int>(ch);
 }
 
 void AudioManager::stopVoice(int channel) {

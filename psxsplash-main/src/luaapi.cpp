@@ -234,6 +234,9 @@ void LuaAPI::RegisterAll(psyqo::Lua& L, SceneManager* scene, CutscenePlayer* cut
     L.push(Audio_StopAll);
     L.setField(-2, "StopAll");
 
+    L.push(Audio_GetClipDuration);
+    L.setField(-2, "GetClipDuration");
+
     L.push(Audio_PlayCDDA);
     L.setField(-2, "PlayCDDA");
 
@@ -251,8 +254,33 @@ void LuaAPI::RegisterAll(psyqo::Lua& L, SceneManager* scene, CutscenePlayer* cut
 
     L.push(Audio_SetCDDAVolume);
     L.setField(-2, "SetCDDAVolume");
-    
+
     L.setGlobal("Audio");
+
+    // ========================================================================
+    // MUSIC API
+    // ========================================================================
+    L.newTable();
+
+    L.push(Music_Play);
+    L.setField(-2, "Play");
+
+    L.push(Music_Stop);
+    L.setField(-2, "Stop");
+
+    L.push(Music_IsPlaying);
+    L.setField(-2, "IsPlaying");
+
+    L.push(Music_SetVolume);
+    L.setField(-2, "SetVolume");
+
+    L.push(Music_GetBeat);
+    L.setField(-2, "GetBeat");
+
+    L.push(Music_Find);
+    L.setField(-2, "Find");
+
+    L.setGlobal("Music");
     
     // ========================================================================
     // DEBUG API
@@ -1641,6 +1669,30 @@ int LuaAPI::Audio_StopAll(lua_State* L) {
     return 0;
 }
 
+int LuaAPI::Audio_GetClipDuration(lua_State* L) {
+    psyqo::Lua lua(L);
+    if (!s_sceneManager) {
+        lua.pushNumber(0);
+        return 1;
+    }
+
+    int clip = -1;
+    // Prefer the number check — Lua numbers satisfy isString too.
+    if (lua.isNumber(1)) {
+        clip = static_cast<int>(lua.toNumber(1));
+    } else if (lua.isString(1)) {
+        clip = s_sceneManager->findAudioClipByName(lua.toString(1));
+    }
+
+    if (clip < 0) {
+        lua.pushNumber(0);
+    } else {
+        uint32_t frames = s_sceneManager->getAudio().getClipDurationFrames(clip);
+        lua.pushNumber(static_cast<lua_Number>(frames));
+    }
+    return 1;
+}
+
 int LuaAPI::Audio_PlayCDDA(lua_State *L) {
     psyqo::Lua lua(L);
     if (!s_sceneManager) return 0;
@@ -1680,6 +1732,88 @@ int LuaAPI::Audio_SetCDDAVolume(lua_State *L) {
     if (!s_sceneManager) return 0;
     s_sceneManager->getMusic().setCDDAVolume(static_cast<int>(lua.toNumber(1)), static_cast<int>(lua.toNumber(2)));
     return 0;
+}
+
+// ============================================================================
+// MUSIC API IMPLEMENTATION
+// ============================================================================
+
+int LuaAPI::Music_Play(lua_State* L) {
+    psyqo::Lua lua(L);
+    if (!s_sceneManager) {
+        lua.push(false);
+        return 1;
+    }
+
+    int index = -1;
+    if (lua.isNumber(1)) {
+        index = static_cast<int>(lua.toNumber(1));
+    } else if (lua.isString(1)) {
+        index = s_sceneManager->findMusicSequenceByName(lua.toString(1));
+    }
+    if (index < 0) {
+        lua.push(false);
+        return 1;
+    }
+
+    int volume = static_cast<int>(lua.optNumber(2, 100));
+    if (volume < 0) volume = 0;
+    if (volume > 127) volume = 127;
+
+    bool ok = s_sceneManager->getMusicSequencer().playByIndex(index, static_cast<uint8_t>(volume));
+    lua.push(ok);
+    return 1;
+}
+
+int LuaAPI::Music_Stop(lua_State* /*L*/) {
+    if (!s_sceneManager) return 0;
+    s_sceneManager->getMusicSequencer().stop();
+    return 0;
+}
+
+int LuaAPI::Music_IsPlaying(lua_State* L) {
+    psyqo::Lua lua(L);
+    if (!s_sceneManager) {
+        lua.push(false);
+        return 1;
+    }
+    lua.push(s_sceneManager->getMusicSequencer().isPlaying());
+    return 1;
+}
+
+int LuaAPI::Music_SetVolume(lua_State* L) {
+    psyqo::Lua lua(L);
+    if (!s_sceneManager) return 0;
+    int v = static_cast<int>(lua.toNumber(1));
+    if (v < 0) v = 0;
+    if (v > 127) v = 127;
+    s_sceneManager->getMusicSequencer().setMasterVolume(static_cast<uint8_t>(v));
+    return 0;
+}
+
+int LuaAPI::Music_GetBeat(lua_State* L) {
+    psyqo::Lua lua(L);
+    if (!s_sceneManager) {
+        lua.pushNumber(0);
+        return 1;
+    }
+    lua.pushNumber(static_cast<lua_Number>(s_sceneManager->getMusicSequencer().getBeat()));
+    return 1;
+}
+
+int LuaAPI::Music_Find(lua_State* L) {
+    psyqo::Lua lua(L);
+    if (!s_sceneManager || !lua.isString(1)) {
+        lua.push();  // nil
+        return 1;
+    }
+    int idx = s_sceneManager->findMusicSequenceByName(lua.toString(1));
+    if (idx < 0) {
+        lua.push();  // nil
+    } else {
+        lua.pushNumber(static_cast<lua_Number>(idx));
+    }
+    return 1;
 }
 
 // ============================================================================

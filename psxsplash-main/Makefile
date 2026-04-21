@@ -26,6 +26,7 @@ src/uisystem.cpp \
 src/loadingscreen.cpp \
 src/memoverlay.cpp \
 src/musicmanager.cpp \
+src/musicsequencer.cpp \
 src/skinmesh.cpp \
 src/loadbuffer_patch.cpp
 

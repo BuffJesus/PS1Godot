@@ -115,6 +115,18 @@ struct SplashpackSceneSetup {
     uint16_t uiCanvasCount = 0;
     uint8_t  uiFontCount = 0;
     uint32_t uiTableOffset = 0;
+
+    // v22+: sequenced music. Up to 8 tracks per scene. Each entry holds
+    // a pointer into the splashpack data plus its byte count, ready for
+    // MusicSequencer::registerSequence().
+    static constexpr int MAX_MUSIC_SEQUENCES = 8;
+    struct MusicSequenceSetup {
+        const uint8_t *data;
+        uint32_t sizeBytes;
+        const char *name; // null-terminated, lives inside the splashpack
+    };
+    MusicSequenceSetup musicSequences[MAX_MUSIC_SEQUENCES];
+    uint16_t musicSequenceCount = 0;
 };
 
 class SplashPackLoader {

@@ -17,6 +17,7 @@
 #include "navregion.hh"
 #include "audiomanager.hh"
 #include "musicmanager.hh"
+#include "musicsequencer.hh"
 #include "interactable.hh"
 #include "luaapi.hh"
 #include "fileloader.hh"
@@ -83,6 +84,10 @@ class SceneManager {
         return nullptr;
     }
 
+    // Music sequence lookup by name (returns -1 if not found). Names
+    // come from the splashpack music table and are stored at load time.
+    int findMusicSequenceByName(const char* name) const;
+
     // Skinned mesh accessors (for Lua API and renderer)
     int findSkinAnimByObjectName(const char* name) const;
     SkinAnimSet& getSkinAnimSet(int index) { return m_skinAnimSets[index]; }
@@ -101,6 +106,7 @@ class SceneManager {
     Camera& getCamera() { return m_currentCamera; }
     Lua& getLua() { return L; }
     AudioManager& getAudio() { return m_audio; }
+    MusicSequencer& getMusicSequencer() { return m_musicSequencer; }
     MusicManager& getMusic() { return m_music; }
 
     // Controls enable/disable (Lua-driven)
@@ -174,12 +180,18 @@ class SceneManager {
     
     // Audio clip name table (v10+): parallel to audio clips, points into splashpack data
     eastl::vector<const char*> m_audioClipNames;
+
+    // Music sequence name table (v22+). Parallel to the sequencer's
+    // registered sequences. Populated from the splashpack music table
+    // in InitializeScene().
+    eastl::vector<const char*> m_musicSequenceNames;
     
     // Component arrays
     eastl::vector<Interactable*> m_interactables;
     
     // Audio system
     AudioManager m_audio;
+    MusicSequencer m_musicSequencer;
     MusicManager m_music;
     
     // Cutscene playback

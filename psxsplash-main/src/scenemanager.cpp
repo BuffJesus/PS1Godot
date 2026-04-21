@@ -123,6 +123,20 @@ void psxsplash::SceneManager::InitializeScene(uint8_t* splashpackData, LoadingSc
 
     if (loading && loading->isActive()) loading->updateProgress(gpu, 55);
 
+    // v22+: sequenced music. Bind each sequence blob to the
+    // MusicSequencer. MusicManager keeps ADPCM samples already loaded
+    // in SPU RAM; the sequencer references clip indices directly.
+    m_musicSequencer.init(&m_audio);
+    m_musicSequenceNames.clear();
+    m_musicSequenceNames.reserve(sceneSetup.musicSequenceCount);
+    for (int i = 0; i < sceneSetup.musicSequenceCount && i < 8; i++) {
+        const auto &ms = sceneSetup.musicSequences[i];
+        if (ms.data && ms.sizeBytes > 0) {
+            m_musicSequencer.registerSequence(i, ms.data, ms.sizeBytes);
+        }
+        m_musicSequenceNames.push_back(ms.name);
+    }
+
     // Copy cutscene data into scene manager storage (sceneSetup is stack-local)
     m_cutsceneCount = sceneSetup.cutsceneCount;
     for (int i = 0; i < m_cutsceneCount; i++) {
@@ -395,6 +409,7 @@ void psxsplash::SceneManager::GameTick(psyqo::GPU &gpu) {
 
     m_cutscenePlayer.tick(m_dt12);
     m_animationPlayer.tick(m_dt12);
+    m_musicSequencer.tick(m_dt12);
 
     // Tick skinned mesh animations
     for (int i = 0; i < m_skinnedMeshCount; i++) {
@@ -1179,9 +1194,11 @@ void psxsplash::SceneManager::clearScene() {
     { eastl::vector<LuaFile*>       tmp; tmp.swap(m_luaFiles);       }
     { eastl::vector<const char*>    tmp; tmp.swap(m_objectNames);    }
     { eastl::vector<const char*>    tmp; tmp.swap(m_audioClipNames); }
+    { eastl::vector<const char*>    tmp; tmp.swap(m_musicSequenceNames); }
     { eastl::vector<Interactable*>  tmp; tmp.swap(m_interactables);  }
 
     // 3. Reset hardware / subsystems
+    m_musicSequencer.stop();   // Key-off any held notes before SPU reset
     m_audio.reset();           // Free SPU RAM and stop all voices
     m_collisionSystem.init();  // Re-init collision system
     m_cutsceneCount = 0;
@@ -1229,6 +1246,16 @@ int psxsplash::SceneManager::findAudioClipByName(const char* name) const {
     if (!name || m_audioClipNames.empty()) return -1;
     for (size_t i = 0; i < m_audioClipNames.size(); i++) {
         if (m_audioClipNames[i] && streq(m_audioClipNames[i], name)) {
+            return static_cast<int>(i);
+        }
+    }
+    return -1;
+}
+
+int psxsplash::SceneManager::findMusicSequenceByName(const char* name) const {
+    if (!name || m_musicSequenceNames.empty()) return -1;
+    for (size_t i = 0; i < m_musicSequenceNames.size(); i++) {
+        if (m_musicSequenceNames[i] && streq(m_musicSequenceNames[i], name)) {
             return static_cast<int>(i);
         }
     }

@@ -229,6 +229,9 @@ private:
     // Audio.StopAll()
     static int Audio_StopAll(lua_State* L);
 
+    // Audio.GetClipDuration(nameOrIndex) -> frames (60 Hz) or 0 if unknown/looped
+    static int Audio_GetClipDuration(lua_State* L);
+
     // Audio.PlayCDDA(trackNo)
     static int Audio_PlayCDDA(lua_State* L);
 
@@ -246,7 +249,30 @@ private:
 
     // Audio.SetCDDAVolume()
     static int Audio_SetCDDAVolume(lua_State* L);
-    
+
+    // ========================================================================
+    // MUSIC API - Sequenced music playback (PS1M format)
+    // ========================================================================
+
+    // Music.Play(name[, volume]) or Music.Play(index[, volume])
+    // volume defaults to 100 (0-127).
+    static int Music_Play(lua_State* L);
+
+    // Music.Stop()
+    static int Music_Stop(lua_State* L);
+
+    // Music.IsPlaying() -> boolean
+    static int Music_IsPlaying(lua_State* L);
+
+    // Music.SetVolume(v) — master volume (0-127)
+    static int Music_SetVolume(lua_State* L);
+
+    // Music.GetBeat() -> integer (beats since playback started, or 0 when idle)
+    static int Music_GetBeat(lua_State* L);
+
+    // Music.Find(name) -> index or nil
+    static int Music_Find(lua_State* L);
+
     // ========================================================================
     // DEBUG API - Development helpers
     // ========================================================================

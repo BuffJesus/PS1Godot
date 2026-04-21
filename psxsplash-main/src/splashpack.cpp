@@ -80,8 +80,21 @@ struct SPLASHPACKFileHeader {
     psyqo::GTE::PackedVec3 playerAvatarOffset;
     uint16_t playerAvatarObjectIndex;
     uint16_t pad_rig;
+    // v22+: sequenced music. musicTableOffset points at a flat array of
+    // 24-byte MusicTableEntry { u32 dataOffset, u32 dataSize, char[16] name }
+    // each pointing at a PS1M-format sequence blob elsewhere in the file.
+    uint16_t musicSequenceCount;
+    uint16_t pad_music;
+    uint32_t musicTableOffset;
 };
-static_assert(sizeof(SPLASHPACKFileHeader) == 136, "SPLASHPACKFileHeader must be 136 bytes");
+static_assert(sizeof(SPLASHPACKFileHeader) == 144, "SPLASHPACKFileHeader must be 144 bytes");
+
+struct MusicTableEntry {
+    uint32_t dataOffset;
+    uint32_t dataSize;
+    char name[16];
+};
+static_assert(sizeof(MusicTableEntry) == 24, "MusicTableEntry must be 24 bytes");
 
 struct SPLASHPACKTextureAtlas {
     uint32_t polygonsOffset;
@@ -101,7 +114,7 @@ void SplashPackLoader::LoadSplashpack(uint8_t *data, SplashpackSceneSetup &setup
     psyqo::Kernel::assert(data != nullptr, "Splashpack loading data pointer is null");
     psxsplash::SPLASHPACKFileHeader *header = reinterpret_cast<psxsplash::SPLASHPACKFileHeader *>(data);
     psyqo::Kernel::assert(__builtin_memcmp(header->magic, "SP", 2) == 0, "Splashpack has incorrect magic");
-    psyqo::Kernel::assert(header->version >= 21, "Splashpack version too old (need v21+): re-export from PS1Godot");
+    psyqo::Kernel::assert(header->version >= 22, "Splashpack version too old (need v22+): re-export from PS1Godot");
 
     setup.playerStartPosition = header->playerStartPos;
     setup.playerStartRotation = header->playerStartRot;
@@ -278,6 +291,25 @@ void SplashPackLoader::LoadSplashpack(uint8_t *data, SplashpackSceneSetup &setup
     setup.fogB = header->fogB;
     setup.fogDensity = header->fogDensity;
     setup.sceneType = header->sceneType;
+
+    // v22+: sequenced music table. Entries live at
+    // header->musicTableOffset; each is MusicTableEntry {u32 dataOff,
+    // u32 dataSize, char[16] name}. The referenced blobs are PS1M
+    // sequence data — MusicSequencer::registerSequence consumes them.
+    setup.musicSequenceCount = 0;
+    if (header->musicSequenceCount > 0 && header->musicTableOffset != 0) {
+        int count = header->musicSequenceCount;
+        if (count > (int)SplashpackSceneSetup::MAX_MUSIC_SEQUENCES) {
+            count = SplashpackSceneSetup::MAX_MUSIC_SEQUENCES;
+        }
+        const MusicTableEntry *table = reinterpret_cast<const MusicTableEntry *>(data + header->musicTableOffset);
+        for (int i = 0; i < count; i++) {
+            setup.musicSequences[i].data = data + table[i].dataOffset;
+            setup.musicSequences[i].sizeBytes = table[i].dataSize;
+            setup.musicSequences[i].name = table[i].name[0] ? table[i].name : nullptr;
+        }
+        setup.musicSequenceCount = (uint16_t)count;
+    }
 
     if (header->cutsceneCount > 0 && header->cutsceneTableOffset != 0) {
         setup.cutsceneCount = 0;
