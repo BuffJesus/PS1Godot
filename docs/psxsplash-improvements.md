@@ -206,6 +206,41 @@ Lua API, with a documented block-layout convention.
 
 ---
 
+### N+6. Portal-culling safety fallback hides the entire feature when spawn is in catch-all
+
+**Problem.** `renderer.cpp` `RenderWithRooms` has a `else { render all rooms }`
+fallback for `cameraRoom < 0`:
+
+```cpp
+} else {
+    // Camera room unknown - render ALL rooms as safety fallback.
+    for (int r = 0; r < roomCount; r++) if (r != catchAllIdx) renderRoom(r, full);
+}
+```
+
+When the player is anywhere outside the authored rooms (valid in
+partial-interior scenes — a courtyard with two buildings, a spawn in
+open space, the catch-all chunk during streaming) every room renders
+unconditionally. Portal culling becomes invisible to the user, which we
+diagnosed only after pixel-peeping screenshots and dumping the splashpack.
+
+**Evidence.**
+- `2026-04-20` — Phase 2 bullet 12 test scene (two rooms off to the side of
+  the demo) appeared to have zero culling regardless of position. Took a hex
+  dump of the splashpack to rule out a writer bug before spotting the
+  fallback.
+  Workaround: local patch (`psxsplash-main/src/renderer.cpp`) that deletes
+  the `else` branch. With it removed, stepping out of a room immediately
+  hides both rooms — matching every other portal renderer's behaviour.
+
+**Upstream direction.** Convert the fallback into an opt-in via compile flag
+(`PSXSPLASH_ROOM_SAFETY_FALLBACK`) or header field on `SplashpackSceneSetup`.
+Default to OFF. Games that need the all-rooms-render safety net can opt
+back in; portal-correct games (the common case) get the expected behaviour
+without a local patch.
+
+---
+
 ## Low priority / deferred
 
 - **Streaming scene chunks by proximity.** BVH is the right structure; the

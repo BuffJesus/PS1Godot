@@ -860,11 +860,14 @@ void psxsplash::Renderer::RenderWithRooms(eastl::vector<GameObject*>& objects,
                 }
             }
         }
-    } else {
-        // Camera room unknown - render ALL rooms as safety fallback.
-        // This guarantees no geometry disappears, at the cost of no culling.
-        for (int r = 0; r < roomCount; r++) if (r != catchAllIdx) renderRoom(r, full);
     }
+    // (Removed: safety fallback that rendered ALL rooms when cameraRoom < 0.
+    // For our PS1Godot demos the camera spends time in catch-all (open)
+    // space; the fallback made portal culling invisible there. With it gone,
+    // standing outside any authored room renders only catch-all geometry,
+    // matching how every other portal renderer works. Author your rooms to
+    // cover the navigable interior space if you don't want pop-out at the
+    // boundary.)
 
 #ifdef PSXSPLASH_ROOM_DEBUG
     // ================================================================
