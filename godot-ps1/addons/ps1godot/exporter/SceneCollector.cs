@@ -337,6 +337,39 @@ public static class SceneCollector
             var apPath = ap != null ? rawMi.GetPathTo(ap) : new NodePath();
             EmitSkinnedMeshData(rawMi, clipNames, apPath, 15, objectIndex, data);
         }
+        // Auto-detect raw non-skinned MeshInstance3D anywhere in the scene.
+        // This is what you get when the author instances an FBX scene (or
+        // drops a primitive MeshInstance3D) directly under PS1Scene without
+        // wrapping it in a PS1MeshInstance script. Export with sensible
+        // defaults (8bpp textures via ResolveSurfaceTextureRaw, no collision,
+        // FlatColor) so the mesh appears on PSX without requiring the user
+        // to know about the script attachment step. Users who need specific
+        // bit depth or collision opt into PS1MeshInstance explicitly.
+        else if (n is MeshInstance3D autoMi && autoMi is not PS1MeshInstance
+                 && autoMi.Visible && autoMi.Mesh != null
+                 && (autoMi.Skin == null || autoMi.Skeleton.IsEmpty)
+                 && FindPS1PlayerAncestor(autoMi) == null)
+        {
+            int surfaceCount = autoMi.Mesh.GetSurfaceCount();
+            var surfaceTextureIndices = new int[surfaceCount];
+            for (int s = 0; s < surfaceCount; s++)
+            {
+                surfaceTextureIndices[s] = ResolveSurfaceTextureRaw(autoMi, s, data, textureCache);
+            }
+
+            var psxMesh = PSXMesh.FromGodotMesh(
+                autoMi, data.GteScaling, PS1MeshInstance.ColorMode.FlatColor,
+                new Color(1, 1, 1, 1), surfaceTextureIndices, data.Textures);
+
+            data.Objects.Add(new SceneObject
+            {
+                Node = autoMi,
+                Mesh = psxMesh,
+                SurfaceTextureIndices = surfaceTextureIndices,
+                LuaFileIndex = -1,
+            });
+            GD.Print($"[PS1Godot]   auto-exported raw mesh '{autoMi.Name}' ({psxMesh.Triangles.Count} tris, {surfaceCount} surf)");
+        }
         else if (n is PS1TriggerBox tb && tb.Visible)
         {
             EmitTriggerBox(tb, data, luaCache);

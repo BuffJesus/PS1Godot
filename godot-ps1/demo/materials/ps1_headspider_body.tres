@@ -1,0 +1,17 @@
+[gd_resource type="ShaderMaterial" load_steps=3 format=3]
+
+[ext_resource type="Shader" path="res://addons/ps1godot/shaders/ps1.gdshader" id="1"]
+[ext_resource type="Texture2D" uid="uid://bet2lw05s6pmc" path="res://demo/meshes/HeadSpider.png" id="2"]
+
+[resource]
+render_priority = 0
+shader = ExtResource("1")
+shader_parameter/albedo_tex = ExtResource("2")
+shader_parameter/tint_color = Color(1, 1, 1, 1)
+shader_parameter/snap_enabled = true
+shader_parameter/snap_resolution = Vector2(320, 240)
+shader_parameter/modulate_scale = 2.0
+shader_parameter/fog_enabled = false
+shader_parameter/fog_color = Color(0, 0, 0, 1)
+shader_parameter/fog_near = 10.0
+shader_parameter/fog_far = 50.0

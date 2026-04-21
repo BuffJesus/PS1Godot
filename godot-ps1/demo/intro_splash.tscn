@@ -1,0 +1,187 @@
+[gd_scene load_steps=23 format=4 uid="uid://d1splashheadspider"]
+
+[ext_resource type="Script" uid="uid://b8ogc8krip2k" path="res://addons/ps1godot/nodes/PS1Scene.cs" id="1_scene"]
+[ext_resource type="Script" uid="uid://cgk0vce50p3ph" path="res://addons/ps1godot/nodes/PS1AudioClip.cs" id="2_clip"]
+[ext_resource type="Script" uid="uid://cfdlp12g2rtct" path="res://addons/ps1godot/nodes/PS1Player.cs" id="3_player"]
+[ext_resource type="Script" uid="uid://bwafnk42jueor" path="res://addons/ps1godot/nodes/PS1Cutscene.cs" id="4_cs"]
+[ext_resource type="Script" uid="uid://bmwv0x052a03l" path="res://addons/ps1godot/nodes/PS1AnimationTrack.cs" id="5_tr"]
+[ext_resource type="Script" uid="uid://bg1ih72kp4c3g" path="res://addons/ps1godot/nodes/PS1AnimationKeyframe.cs" id="6_kf"]
+[ext_resource type="Script" path="res://addons/ps1godot/nodes/PS1AudioEvent.cs" id="7_ae"]
+[ext_resource type="Script" uid="uid://bp1p1kqop2wwy" path="res://addons/ps1godot/nodes/PS1UICanvas.cs" id="8_uican"]
+[ext_resource type="Script" uid="uid://c01mt2tth0oll" path="res://addons/ps1godot/nodes/PS1UIElement.cs" id="9_uiel"]
+[ext_resource type="Resource" path="res://addons/ps1godot/themes/PS1Theme.tres" id="10_theme"]
+[ext_resource type="PackedScene" uid="uid://c5a0o3855oqr4" path="res://demo/meshes/HeadSpider.fbx" id="11_headspider"]
+[ext_resource type="Material" path="res://demo/materials/ps1_headspider_body.tres" id="12_mat_body"]
+[ext_resource type="PackedScene" uid="uid://du1f0yvdm7v5t" path="res://demo/demo.tscn" id="13_demo"]
+[ext_resource type="PackedScene" uid="uid://ck3rdrm0001a" path="res://demo/checkered_realm.tscn" id="14_realm"]
+[ext_resource type="AudioStream" uid="uid://depr0h18ed78v" path="res://demo/audio/music/inst_lead.wav" id="15_chime_stream"]
+
+[sub_resource type="Resource" id="Clip_chime"]
+script = ExtResource("2_clip")
+Stream = ExtResource("15_chime_stream")
+ClipName = "splash_chime"
+metadata/_custom_type_script = "uid://cgk0vce50p3ph"
+
+; Root PS1Scene. Scene 0 on export. SubScenes = [demo, realm] so Lua
+; calls map to: Scene.Load(1) -> main demo, Scene.Load(2) -> realm.
+; Black fog hides the edges of the scene so the HeadSpider "floats in
+; space" the way the stock PS1 boot logo floats on a black field.
+[node name="IntroSplash" type="Node3D" unique_id=9100000001]
+script = ExtResource("1_scene")
+SceneType = 6
+FogEnabled = true
+FogColor = Color(0, 0, 0, 1)
+FogDensity = 30
+SceneLuaFile = "res://demo/scripts/intro_splash.lua"
+AudioClips = Array[ExtResource("2_clip")]([SubResource("Clip_chime")])
+SubScenes = Array[PackedScene]([ExtResource("13_demo"), ExtResource("14_realm")])
+
+; PS1Player at origin — the splash doesn't use player movement (controls
+; are disabled in intro_splash.lua), but the runtime expects a player
+; spawn point and a camera rig target. Camera is driven by the cutscene's
+; CameraPosition + CameraRotation tracks below.
+[node name="PS1Player" type="Node3D" parent="." unique_id=9100000002]
+script = ExtResource("3_player")
+
+; HeadSpider FBX instance. Rendered via SceneCollector's raw-MeshInstance3D
+; auto-detect path (introduced 2026-04-21); no PS1MeshInstance wrapper
+; needed. Material override points at ps1_headspider_body.tres so it
+; renders with the HeadSpider.png texture on PSX. If the FBX has an
+; internal eyes mesh with its own surface, author a per-surface override
+; in the editor pointing at ps1_headspider_eyes.tres.
+[node name="HeadSpider" parent="." unique_id=9100000003 instance=ExtResource("11_headspider")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
+material_override = ExtResource("12_mat_body")
+
+; 5-second orbit cutscene. Camera pulls from an establishing distance
+; to a closer orbit, then back out, while the HeadSpider spins slowly
+; on Y. Chime fires at frame 0 via the PS1AudioEvent child.
+[node name="IntroCutscene" type="Node" parent="." unique_id=9100000010]
+script = ExtResource("4_cs")
+CutsceneName = "intro_splash"
+TotalFrames = 150
+
+[node name="CamPosTrack" type="Node" parent="IntroCutscene" unique_id=9100000011]
+script = ExtResource("5_tr")
+TrackType = 0
+
+[node name="CamPosKf0" type="Node" parent="IntroCutscene/CamPosTrack" unique_id=9100000012]
+script = ExtResource("6_kf")
+Frame = 0
+Value = Vector3(4, 2, 5)
+
+[node name="CamPosKf1" type="Node" parent="IntroCutscene/CamPosTrack" unique_id=9100000013]
+script = ExtResource("6_kf")
+Frame = 75
+Value = Vector3(-4, 2, 5)
+Interp = 4
+
+[node name="CamPosKf2" type="Node" parent="IntroCutscene/CamPosTrack" unique_id=9100000014]
+script = ExtResource("6_kf")
+Frame = 149
+Value = Vector3(0, 3, 6)
+Interp = 4
+
+[node name="CamRotTrack" type="Node" parent="IntroCutscene" unique_id=9100000020]
+script = ExtResource("5_tr")
+TrackType = 1
+
+[node name="CamRotKf0" type="Node" parent="IntroCutscene/CamRotTrack" unique_id=9100000021]
+script = ExtResource("6_kf")
+Frame = 0
+Value = Vector3(-10, 180, 0)
+
+[node name="CamRotKf1" type="Node" parent="IntroCutscene/CamRotTrack" unique_id=9100000022]
+script = ExtResource("6_kf")
+Frame = 75
+Value = Vector3(-10, 180, 0)
+Interp = 4
+
+[node name="CamRotKf2" type="Node" parent="IntroCutscene/CamRotTrack" unique_id=9100000023]
+script = ExtResource("6_kf")
+Frame = 149
+Value = Vector3(-15, 180, 0)
+Interp = 4
+
+[node name="SpinTrack" type="Node" parent="IntroCutscene" unique_id=9100000030]
+script = ExtResource("5_tr")
+TargetObjectName = "HeadSpider"
+TrackType = 3
+
+[node name="SpinKf0" type="Node" parent="IntroCutscene/SpinTrack" unique_id=9100000031]
+script = ExtResource("6_kf")
+Frame = 0
+Value = Vector3(0, 0, 0)
+
+[node name="SpinKf1" type="Node" parent="IntroCutscene/SpinTrack" unique_id=9100000032]
+script = ExtResource("6_kf")
+Frame = 149
+Value = Vector3(0, 360, 0)
+
+[node name="ChimeAt0" type="Node" parent="IntroCutscene" unique_id=9100000040]
+script = ExtResource("7_ae")
+Frame = 0
+ClipName = "splash_chime"
+Volume = 110
+
+; UI — "brand" at top (studio name) + "licensed" block below (small
+; legal-style text). Theme slot `Neutral` keeps both a soft grey on
+; black, evoking the stock PS1 boot logo's SCEE text without copying
+; its wording.
+[node name="BrandCanvas" type="Node" parent="." unique_id=9100000050]
+script = ExtResource("8_uican")
+CanvasName = "brand"
+VisibleOnLoad = true
+SortOrder = 10
+Theme = ExtResource("10_theme")
+
+[node name="BrandText" type="Node" parent="BrandCanvas" unique_id=9100000051]
+script = ExtResource("9_uiel")
+ElementName = "brand"
+X = 96
+Y = 32
+Width = 128
+Height = 16
+Color = Color(0.85, 0.85, 0.85, 1)
+ThemeSlot = 8
+Text = "HeadSpider Studios"
+
+[node name="LicensedCanvas" type="Node" parent="." unique_id=9100000060]
+script = ExtResource("8_uican")
+CanvasName = "licensed"
+VisibleOnLoad = true
+SortOrder = 10
+Theme = ExtResource("10_theme")
+
+[node name="LicensedLine1" type="Node" parent="LicensedCanvas" unique_id=9100000061]
+script = ExtResource("9_uiel")
+ElementName = "line1"
+X = 64
+Y = 168
+Width = 192
+Height = 16
+Color = Color(0.85, 0.85, 0.85, 1)
+ThemeSlot = 8
+Text = "Licensed by"
+
+[node name="LicensedLine2" type="Node" parent="LicensedCanvas" unique_id=9100000062]
+script = ExtResource("9_uiel")
+ElementName = "line2"
+X = 48
+Y = 184
+Width = 224
+Height = 16
+Color = Color(0.85, 0.85, 0.85, 1)
+ThemeSlot = 8
+Text = "HeadSpider Studios"
+
+[node name="MarkLine" type="Node" parent="LicensedCanvas" unique_id=9100000063]
+script = ExtResource("9_uiel")
+ElementName = "mark"
+X = 140
+Y = 208
+Width = 40
+Height = 16
+Color = Color(0.85, 0.85, 0.85, 1)
+ThemeSlot = 8
+Text = "HS(TM)"

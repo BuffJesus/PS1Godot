@@ -1,0 +1,211 @@
+[gd_scene load_steps=14 format=4 uid="uid://cps1splashtmpl01"]
+
+[ext_resource type="Script" uid="uid://b8ogc8krip2k" path="res://addons/ps1godot/nodes/PS1Scene.cs" id="1_scene"]
+[ext_resource type="Script" uid="uid://dng0iofdw3dk7" path="res://addons/ps1godot/nodes/PS1MeshInstance.cs" id="2_mesh"]
+[ext_resource type="Script" uid="uid://cgk0vce50p3ph" path="res://addons/ps1godot/nodes/PS1AudioClip.cs" id="3_clip"]
+[ext_resource type="Script" uid="uid://cfdlp12g2rtct" path="res://addons/ps1godot/nodes/PS1Player.cs" id="4_player"]
+[ext_resource type="Script" uid="uid://bwafnk42jueor" path="res://addons/ps1godot/nodes/PS1Cutscene.cs" id="5_cs"]
+[ext_resource type="Script" uid="uid://bmwv0x052a03l" path="res://addons/ps1godot/nodes/PS1AnimationTrack.cs" id="6_tr"]
+[ext_resource type="Script" uid="uid://bg1ih72kp4c3g" path="res://addons/ps1godot/nodes/PS1AnimationKeyframe.cs" id="7_kf"]
+[ext_resource type="Script" path="res://addons/ps1godot/nodes/PS1AudioEvent.cs" id="8_ae"]
+[ext_resource type="Script" uid="uid://bp1p1kqop2wwy" path="res://addons/ps1godot/nodes/PS1UICanvas.cs" id="9_uican"]
+[ext_resource type="Script" uid="uid://c01mt2tth0oll" path="res://addons/ps1godot/nodes/PS1UIElement.cs" id="10_uiel"]
+[ext_resource type="Resource" path="res://addons/ps1godot/themes/PS1Theme.tres" id="11_theme"]
+[ext_resource type="Script" uid="uid://3bx6n5sx7krl" path="res://addons/ps1godot/nodes/PS1MusicChannel.cs" id="12_chan"]
+[ext_resource type="Script" uid="uid://c2oekhtvjyqlt" path="res://addons/ps1godot/nodes/PS1MusicSequence.cs" id="13_seq"]
+
+; Splash chime clip slot. Replace Stream with your own sample (any
+; imported .wav under res://). ClipName is what the cutscene's
+; PS1AudioEvent and any Lua Audio.Play / Music channels reference —
+; keep it matching if you rename.
+[sub_resource type="Resource" id="ChimeClipSlot"]
+script = ExtResource("3_clip")
+ClipName = "splash_chime"
+metadata/_custom_type_script = "uid://cgk0vce50p3ph"
+
+; Optional MIDI-driven chime path. Leave MidiFile = "" to skip the
+; sequencer (the PS1AudioEvent on the cutscene handles the sample-
+; accurate sting). Fill MidiFile if you want a multi-note chime
+; sequence driven by a .mid; point ChannelMelody.AudioClipName at a
+; PS1AudioClip in this scene's AudioClips array.
+[sub_resource type="Resource" id="SplashChannelMelody"]
+script = ExtResource("12_chan")
+MidiChannel = 1
+AudioClipName = "splash_chime"
+BaseNoteMidi = 60
+Volume = 110
+metadata/_custom_type_script = "uid://3bx6n5sx7krl"
+
+[sub_resource type="Resource" id="SplashSequenceSlot"]
+script = ExtResource("13_seq")
+MidiFile = ""
+SequenceName = "splash_chime_seq"
+LoopStartBeat = -1
+Channels = Array[ExtResource("12_chan")]([SubResource("SplashChannelMelody")])
+metadata/_custom_type_script = "uid://c2oekhtvjyqlt"
+
+; ======================================================================
+; Root scene — this is scene 0 when exported.
+;
+;   BEFORE YOU EXPORT:
+;     1. Set SubScenes[0] to your game's main .tscn (the splash will
+;        Scene.Load(1) into it on cutscene complete).
+;     2. Assign a mesh to LogoMesh (drag an .fbx or a SubResource
+;        ArrayMesh onto the `mesh` property). FBX instances also
+;        work as direct children — they're picked up by the raw-mesh
+;        auto-detect pass in SceneCollector.
+;     3. Assign a Stream to the Clip_SplashChime sub-resource
+;        (SceneLuaFile won't fire the chime without it).
+;     4. Edit the PS1UIElement Text values below to your studio /
+;        brand / legal text.
+;     5. If you want MIDI-sequenced music, set MidiFile above.
+; ======================================================================
+[node name="IntroSplash" type="Node3D" unique_id=9200000001]
+script = ExtResource("1_scene")
+SceneType = 6
+FogEnabled = true
+FogColor = Color(0, 0, 0, 1)
+FogDensity = 30
+SceneLuaFile = "res://addons/ps1godot/templates/scripts/intro_splash.lua"
+AudioClips = Array[ExtResource("3_clip")]([SubResource("ChimeClipSlot")])
+MusicSequences = Array[ExtResource("13_seq")]([SubResource("SplashSequenceSlot")])
+SubScenes = Array[PackedScene]([])
+
+[node name="PS1Player" type="Node3D" parent="." unique_id=9200000002]
+script = ExtResource("4_player")
+
+; Swap `mesh` in the inspector for your logo mesh. FlatColor + 8bpp
+; are reasonable defaults; drop a texture-bearing ShaderMaterial into
+; MaterialOverride if you want a textured logo.
+[node name="LogoMesh" type="MeshInstance3D" parent="." unique_id=9200000003]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
+script = ExtResource("2_mesh")
+FlatColor = Color(0.9, 0.2, 0.2, 1)
+
+; 5-second orbit cutscene (150 frames @ 30fps). Camera does a wide-
+; to-narrow orbit around the origin; LogoMesh spins 360° on Y over
+; the full duration. Audio chime fires at frame 0.
+[node name="IntroCutscene" type="Node" parent="." unique_id=9200000010]
+script = ExtResource("5_cs")
+CutsceneName = "IntroSplash"
+TotalFrames = 150
+
+[node name="CamPosTrack" type="Node" parent="IntroCutscene" unique_id=9200000011]
+script = ExtResource("6_tr")
+TrackType = 0
+
+[node name="CamPosKf0" type="Node" parent="IntroCutscene/CamPosTrack" unique_id=9200000012]
+script = ExtResource("7_kf")
+Frame = 0
+Value = Vector3(4, 2, 5)
+
+[node name="CamPosKf1" type="Node" parent="IntroCutscene/CamPosTrack" unique_id=9200000013]
+script = ExtResource("7_kf")
+Frame = 75
+Value = Vector3(-4, 2, 5)
+Interp = 4
+
+[node name="CamPosKf2" type="Node" parent="IntroCutscene/CamPosTrack" unique_id=9200000014]
+script = ExtResource("7_kf")
+Frame = 149
+Value = Vector3(0, 3, 6)
+Interp = 4
+
+[node name="CamRotTrack" type="Node" parent="IntroCutscene" unique_id=9200000020]
+script = ExtResource("6_tr")
+TrackType = 1
+
+[node name="CamRotKf0" type="Node" parent="IntroCutscene/CamRotTrack" unique_id=9200000021]
+script = ExtResource("7_kf")
+Frame = 0
+Value = Vector3(-10, 180, 0)
+
+[node name="CamRotKf1" type="Node" parent="IntroCutscene/CamRotTrack" unique_id=9200000022]
+script = ExtResource("7_kf")
+Frame = 149
+Value = Vector3(-15, 180, 0)
+Interp = 4
+
+[node name="SpinTrack" type="Node" parent="IntroCutscene" unique_id=9200000030]
+script = ExtResource("6_tr")
+TargetObjectName = "LogoMesh"
+TrackType = 3
+
+[node name="SpinKf0" type="Node" parent="IntroCutscene/SpinTrack" unique_id=9200000031]
+script = ExtResource("7_kf")
+Frame = 0
+Value = Vector3(0, 0, 0)
+
+[node name="SpinKf1" type="Node" parent="IntroCutscene/SpinTrack" unique_id=9200000032]
+script = ExtResource("7_kf")
+Frame = 149
+Value = Vector3(0, 360, 0)
+
+[node name="ChimeAt0" type="Node" parent="IntroCutscene" unique_id=9200000040]
+script = ExtResource("8_ae")
+Frame = 0
+ClipName = "splash_chime"
+Volume = 110
+
+; Brand canvas — shows your studio name at top of the screen.
+[node name="BrandCanvas" type="Node" parent="." unique_id=9200000050]
+script = ExtResource("9_uican")
+CanvasName = "brand"
+VisibleOnLoad = true
+SortOrder = 10
+Theme = ExtResource("11_theme")
+
+[node name="BrandText" type="Node" parent="BrandCanvas" unique_id=9200000051]
+script = ExtResource("10_uiel")
+ElementName = "brand"
+X = 80
+Y = 32
+Width = 160
+Height = 16
+Color = Color(0.85, 0.85, 0.85, 1)
+ThemeSlot = 8
+Text = "Your Studio Name"
+
+; Licensed canvas — three-line legal block at bottom of the screen,
+; mimicking the stock PS1 boot logo's "Licensed by SCE / SCEE(TM)"
+; placement. Tweak text to your own branding / publisher / region
+; label. Do NOT copy Sony's wording verbatim.
+[node name="LicensedCanvas" type="Node" parent="." unique_id=9200000060]
+script = ExtResource("9_uican")
+CanvasName = "licensed"
+VisibleOnLoad = true
+SortOrder = 10
+Theme = ExtResource("11_theme")
+
+[node name="LicensedLine1" type="Node" parent="LicensedCanvas" unique_id=9200000061]
+script = ExtResource("10_uiel")
+ElementName = "line1"
+X = 96
+Y = 168
+Width = 128
+Height = 16
+Color = Color(0.85, 0.85, 0.85, 1)
+ThemeSlot = 8
+Text = "Licensed by"
+
+[node name="LicensedLine2" type="Node" parent="LicensedCanvas" unique_id=9200000062]
+script = ExtResource("10_uiel")
+ElementName = "line2"
+X = 64
+Y = 184
+Width = 192
+Height = 16
+Color = Color(0.85, 0.85, 0.85, 1)
+ThemeSlot = 8
+Text = "Your Studio Name"
+
+[node name="MarkLine" type="Node" parent="LicensedCanvas" unique_id=9200000063]
+script = ExtResource("10_uiel")
+ElementName = "mark"
+X = 144
+Y = 208
+Width = 32
+Height = 16
+Color = Color(0.85, 0.85, 0.85, 1)
+ThemeSlot = 8
+Text = "(TM)"

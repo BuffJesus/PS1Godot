@@ -13,8 +13,13 @@
 --   * the cube's bounce animation
 
 function onSceneCreationEnd()
-    Debug.Log("realm_init: scene_1 loaded — checkered realm")
+    Debug.Log("realm_init: scene_2 loaded — checkered realm")
     Controls.SetEnabled(true)
     Camera.SetMode("third")
     Animation.Play("realm_bounce", { loop = true })
+    -- Realm BGM — GivenUp.mid parsed by the exporter, played through
+    -- the same PS1MusicSequencer the main demo uses for
+    -- RetroAdventureSong. Volume 90 leaves headroom for the dialog
+    -- duck in realm_cube_dialog.lua.
+    Music.Play("given_up", 90)
 end

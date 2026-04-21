@@ -1,4 +1,4 @@
-[gd_scene format=3 uid="uid://ck3rdrm0001a"]
+[gd_scene load_steps=30 format=3 uid="uid://ck3rdrm0001a"]
 
 [ext_resource type="Script" uid="uid://b8ogc8krip2k" path="res://addons/ps1godot/nodes/PS1Scene.cs" id="1_scene"]
 [ext_resource type="Script" uid="uid://dng0iofdw3dk7" path="res://addons/ps1godot/nodes/PS1MeshInstance.cs" id="2_mesh"]
@@ -11,6 +11,140 @@
 [ext_resource type="Script" uid="uid://bp1p1kqop2wwy" path="res://addons/ps1godot/nodes/PS1UICanvas.cs" id="11_uican"]
 [ext_resource type="Script" uid="uid://c01mt2tth0oll" path="res://addons/ps1godot/nodes/PS1UIElement.cs" id="12_uiel"]
 [ext_resource type="Resource" path="res://addons/ps1godot/themes/PS1Theme.tres" id="13_theme"]
+[ext_resource type="Script" uid="uid://cgk0vce50p3ph" path="res://addons/ps1godot/nodes/PS1AudioClip.cs" id="14_clip"]
+[ext_resource type="Script" uid="uid://3bx6n5sx7krl" path="res://addons/ps1godot/nodes/PS1MusicChannel.cs" id="15_chan"]
+[ext_resource type="Script" uid="uid://c2oekhtvjyqlt" path="res://addons/ps1godot/nodes/PS1MusicSequence.cs" id="16_seq"]
+[ext_resource type="AudioStream" uid="uid://cpd2oxmrg55q0" path="res://demo/audio/music/inst_bass.wav" id="17_bass"]
+[ext_resource type="AudioStream" uid="uid://dumvuu5t63q36" path="res://demo/audio/music/inst_pad.wav" id="18_pad"]
+[ext_resource type="AudioStream" uid="uid://depr0h18ed78v" path="res://demo/audio/music/inst_lead.wav" id="19_lead"]
+[ext_resource type="AudioStream" uid="uid://cjipkjljub0as" path="res://demo/audio/music/inst_kick.wav" id="20_kick"]
+[ext_resource type="AudioStream" uid="uid://hfnxp0apnnru" path="res://demo/audio/music/inst_snare.wav" id="21_snare"]
+[ext_resource type="AudioStream" uid="uid://bbyg6y10lcfvi" path="res://demo/audio/music/inst_hat.wav" id="22_hat"]
+
+; --- Sequenced BGM ("GivenUp.mid") ---
+; GivenUp.mid channel map, as parsed from the file:
+;   ch1  "Brad Delson"       prog 30  (Overdriven Guitar)  notes 37-58   1726 hits
+;   ch3  "Phoenix"            prog 33  (Electric Bass)      notes 26-35    662 hits
+;   ch5  "Chester Bennington" prog 68  (Oboe)               notes 52-71    185 hits
+;   ch10 "Drumkit"            prog 0   (percussion)         notes 35-55   1140 hits
+; We reuse the same 6-voice instrument bank the main demo ships with
+; (RetroAdventureSong sample set) so the realm has BGM without
+; requiring new PS1 ADPCM authoring. Sample choice is coarse — the
+; guitar is our "lead" voice, Phoenix is "bass", Chester's vocal line
+; is the sustained "pad", and the drum bus is split into kick/snare/hat
+; by GM-standard percussion notes.
+
+[sub_resource type="Resource" id="GuClip_bass"]
+script = ExtResource("14_clip")
+Stream = ExtResource("17_bass")
+ClipName = "gu_bass"
+metadata/_custom_type_script = "uid://cgk0vce50p3ph"
+
+[sub_resource type="Resource" id="GuClip_pad"]
+script = ExtResource("14_clip")
+Stream = ExtResource("18_pad")
+ClipName = "gu_pad"
+metadata/_custom_type_script = "uid://cgk0vce50p3ph"
+
+[sub_resource type="Resource" id="GuClip_lead"]
+script = ExtResource("14_clip")
+Stream = ExtResource("19_lead")
+ClipName = "gu_lead"
+metadata/_custom_type_script = "uid://cgk0vce50p3ph"
+
+[sub_resource type="Resource" id="GuClip_kick"]
+script = ExtResource("14_clip")
+Stream = ExtResource("20_kick")
+ClipName = "gu_kick"
+metadata/_custom_type_script = "uid://cgk0vce50p3ph"
+
+[sub_resource type="Resource" id="GuClip_snare"]
+script = ExtResource("14_clip")
+Stream = ExtResource("21_snare")
+ClipName = "gu_snare"
+metadata/_custom_type_script = "uid://cgk0vce50p3ph"
+
+[sub_resource type="Resource" id="GuClip_hat"]
+script = ExtResource("14_clip")
+Stream = ExtResource("22_hat")
+ClipName = "gu_hat"
+metadata/_custom_type_script = "uid://cgk0vce50p3ph"
+
+; Guitar = rhythm lead voice. BaseNoteMidi=48 (C3) since inst_lead plays
+; at mid pitch and the guitar range 37-58 sits below that — a slight
+; downward pitch-shift sounds closer to "overdriven guitar" than a
+; higher-pitched source.
+[sub_resource type="Resource" id="GuChan_guitar"]
+script = ExtResource("15_chan")
+MidiChannel = 1
+AudioClipName = "gu_lead"
+BaseNoteMidi = 48
+Volume = 110
+metadata/_custom_type_script = "uid://3bx6n5sx7krl"
+
+; Bass = Phoenix. Notes 26-35 are LOW (D1-B1). BaseNoteMidi=36 tunes
+; the sample down by ~10 semitones at the lowest end; the PSX SPU does
+; fine below BaseNote but sample quality drops if we stretch too far.
+[sub_resource type="Resource" id="GuChan_bass"]
+script = ExtResource("15_chan")
+MidiChannel = 3
+AudioClipName = "gu_bass"
+BaseNoteMidi = 36
+Volume = 115
+metadata/_custom_type_script = "uid://3bx6n5sx7krl"
+
+; Vocals = Chester (mapped to sustained pad). Sparse, melody line.
+[sub_resource type="Resource" id="GuChan_vocal"]
+script = ExtResource("15_chan")
+MidiChannel = 5
+AudioClipName = "gu_pad"
+BaseNoteMidi = 60
+Volume = 95
+metadata/_custom_type_script = "uid://3bx6n5sx7krl"
+
+; Drums — GM percussion notes. 35-36 = kick, 38/40 = snare,
+; 42/44/46 = hat/cymbal. Wider note ranges (vs the demo's single-note
+; channels) because GivenUp's drummer hits multiple snare/kick layers.
+[sub_resource type="Resource" id="GuChan_kick"]
+script = ExtResource("15_chan")
+MidiChannel = 9
+MidiNoteMin = 35
+MidiNoteMax = 36
+AudioClipName = "gu_kick"
+BaseNoteMidi = 36
+Volume = 45
+Percussion = true
+metadata/_custom_type_script = "uid://3bx6n5sx7krl"
+
+[sub_resource type="Resource" id="GuChan_snare"]
+script = ExtResource("15_chan")
+MidiChannel = 9
+MidiNoteMin = 37
+MidiNoteMax = 41
+AudioClipName = "gu_snare"
+BaseNoteMidi = 40
+Volume = 30
+Percussion = true
+metadata/_custom_type_script = "uid://3bx6n5sx7krl"
+
+[sub_resource type="Resource" id="GuChan_hat"]
+script = ExtResource("15_chan")
+MidiChannel = 9
+MidiNoteMin = 42
+MidiNoteMax = 55
+AudioClipName = "gu_hat"
+BaseNoteMidi = 42
+Volume = 55
+Percussion = true
+metadata/_custom_type_script = "uid://3bx6n5sx7krl"
+
+[sub_resource type="Resource" id="GuSeq_givenup"]
+script = ExtResource("16_seq")
+MidiFile = "res://demo/audio/music/GivenUp.mid"
+SequenceName = "given_up"
+LoopStartBeat = 0
+Channels = Array[ExtResource("15_chan")]([SubResource("GuChan_guitar"), SubResource("GuChan_bass"), SubResource("GuChan_vocal"), SubResource("GuChan_kick"), SubResource("GuChan_snare"), SubResource("GuChan_hat")])
+metadata/_custom_type_script = "uid://c2oekhtvjyqlt"
 
 [sub_resource type="StandardMaterial3D" id="mat_void_floor"]
 albedo_color = Color(0.08, 0.05, 0.18, 1)
@@ -50,6 +184,8 @@ FogEnabled = true
 FogColor = Color(0.18, 0.12, 0.32, 1)
 FogDensity = 2
 SceneLuaFile = "res://demo/scripts/realm_init.lua"
+AudioClips = Array[ExtResource("14_clip")]([SubResource("GuClip_bass"), SubResource("GuClip_pad"), SubResource("GuClip_lead"), SubResource("GuClip_kick"), SubResource("GuClip_snare"), SubResource("GuClip_hat")])
+MusicSequences = Array[ExtResource("16_seq")]([SubResource("GuSeq_givenup")])
 
 [node name="VoidFloor" type="MeshInstance3D" parent="." unique_id=1387852488]
 material_override = SubResource("mat_void_floor")
