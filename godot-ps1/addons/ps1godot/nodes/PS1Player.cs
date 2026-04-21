@@ -33,4 +33,115 @@ public enum PS1CameraMode
 public partial class PS1Player : Node3D
 {
     [Export] public PS1CameraMode CameraMode { get; set; } = PS1CameraMode.ThirdPerson;
+
+    // Texture applied to the auto-wired avatar mesh. Lives here (not as a
+    // material_override on the nested FBX mesh) because instanced-scene
+    // overrides break the moment the FBX's internal node names change —
+    // and "Mixamo renamed my mesh" is a perennial FBX gotcha. Setting it
+    // here survives re-imports. Wired into the ps1_default shader's
+    // `albedo_tex` parameter by _EnterTree below.
+    private Texture2D? _avatarTexture;
+    [Export] public Texture2D? AvatarTexture
+    {
+        get => _avatarTexture;
+        set
+        {
+            _avatarTexture = value;
+            // Re-apply when the inspector changes this mid-session so the
+            // editor preview updates live. CallDeferred dedups with the
+            // _EnterTree call during scene load.
+            if (Engine.IsEditorHint() && IsInsideTree())
+            {
+                CallDeferred(MethodName.ApplyPS1DefaultsToAvatar);
+            }
+        }
+    }
+
+    public override void _EnterTree()
+    {
+        // Editor-only: apply the PS1 shader + a sensibly-sized cull margin to
+        // any raw MeshInstance3D descendants (e.g. the inner mesh inside an
+        // instanced Mixamo FBX character). Without this, FBX-imported avatars
+        // render in the editor with whatever StandardMaterial3D Godot's
+        // importer attached, and PS1MeshInstance._EnterTree never runs on
+        // them — so the user sees a non-PS1-looking mesh + Godot's default
+        // AABB gizmo.
+        //
+        // Runs deferred because children of instanced PackedScenes aren't
+        // reliably in the tree yet when the parent's _EnterTree fires.
+        if (Engine.IsEditorHint())
+        {
+            CallDeferred(MethodName.ApplyPS1DefaultsToAvatar);
+        }
+    }
+
+    private void ApplyPS1DefaultsToAvatar()
+    {
+        var ps1 = ResourceLoader.Load<ShaderMaterial>("res://addons/ps1godot/shaders/ps1_default.tres");
+        string avatarInfo = AvatarTexture == null
+            ? "none"
+            : $"'{AvatarTexture.ResourcePath ?? "(no path)"}'";
+        GD.Print($"[PS1Godot] PS1Player._EnterTree → ApplyPS1DefaultsToAvatar: ps1_default={(ps1 != null ? "loaded" : "NULL")}, AvatarTexture={avatarInfo}");
+        WalkAndApply(this, ps1, AvatarTexture);
+    }
+
+    private static void WalkAndApply(Node n, ShaderMaterial? ps1, Texture2D? avatarTexture)
+    {
+        foreach (var child in n.GetChildren())
+        {
+            if (child is MeshInstance3D mi && child is not PS1MeshInstance)
+            {
+                // Promote the override to a per-mesh ps1_default so the editor
+                // preview matches what the PSX runtime will render. Prefer
+                // PS1Player.AvatarTexture (discoverable, survives FBX
+                // re-imports) over whatever the existing override carries.
+                // Falls back to the StandardMaterial3D's AlbedoTexture for
+                // backwards compat with scenes that set material_override
+                // directly. Users who hand-authored a ShaderMaterial (or
+                // already applied ps1_default) are left alone, except to
+                // update the avatar texture if one is set.
+                if (ps1 != null)
+                {
+                    Texture2D? albedo = avatarTexture;
+                    Color tint = new Color(1, 1, 1, 1);
+                    if (albedo == null && mi.MaterialOverride is StandardMaterial3D std)
+                    {
+                        albedo = std.AlbedoTexture;
+                        tint = std.AlbedoColor;
+                    }
+                    if (mi.MaterialOverride is not ShaderMaterial)
+                    {
+                        var dup = (ShaderMaterial)ps1.Duplicate(true);
+                        if (albedo != null)
+                        {
+                            dup.SetShaderParameter("albedo_tex", albedo);
+                        }
+                        dup.SetShaderParameter("tint_color", tint);
+                        mi.MaterialOverride = dup;
+                    }
+                    else if (albedo != null)
+                    {
+                        // Already a ShaderMaterial — just sync the texture
+                        // (e.g., user toggled AvatarTexture at design time).
+                        ((ShaderMaterial)mi.MaterialOverride).SetShaderParameter("albedo_tex", albedo);
+                    }
+                }
+
+                // Dynamic cull margin — always apply, even if the demo.tscn
+                // has a stale 2.0 override carried over from the old constant
+                // default. Mesh-proportional pad sized to 10 % of the largest
+                // AABB edge (clamped [0.1, 2.0]) covers the PS1 vertex-snap
+                // shader's pixel-scale jitter without the giant yellow cage
+                // a constant 2 m wraps around a 0.1 m prop.
+                if (mi.Mesh != null)
+                {
+                    var size = mi.Mesh.GetAabb().Size;
+                    float maxEdge = Mathf.Max(size.X, Mathf.Max(size.Y, size.Z));
+                    float dyn = Mathf.Clamp(maxEdge * 0.1f, 0.1f, 2.0f);
+                    mi.ExtraCullMargin = dyn;
+                }
+            }
+            WalkAndApply(child, ps1, avatarTexture);
+        }
+    }
 }

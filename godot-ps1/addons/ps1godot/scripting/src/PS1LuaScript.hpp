@@ -43,6 +43,9 @@ public:
 	TypedArray<Dictionary> _get_script_method_list() const override { return TypedArray<Dictionary>(); }
 	TypedArray<Dictionary> _get_script_property_list() const override { return TypedArray<Dictionary>(); }
 	TypedArray<Dictionary> _get_script_signal_list() const override { return TypedArray<Dictionary>(); }
+	// New required virtual in Godot 4.7 — empty docs table is fine; psxsplash
+	// runs Lua on-device, Godot doesn't introspect it.
+	TypedArray<Dictionary> _get_documentation() const override { return TypedArray<Dictionary>(); }
 	Dictionary _get_constants() const override { return Dictionary(); }
 	TypedArray<StringName> _get_members() const override { return TypedArray<StringName>(); }
 	Variant _get_rpc_config() const override { return Variant(); }

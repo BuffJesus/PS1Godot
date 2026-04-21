@@ -251,7 +251,12 @@ public partial class PS1GodotPlugin : EditorPlugin
         {
             totalTris += obj.Mesh.Triangles.Count;
             var p = obj.Node.GlobalPosition;
-            GD.Print($"[PS1Godot]     - {obj.Node.Name}  pos=({p.X:F2},{p.Y:F2},{p.Z:F2})  bpp={obj.Node.BitDepth}  collide={obj.Node.Collision}  → {obj.Mesh.Triangles.Count} tris");
+            // PS1-specific fields only exist on PS1MeshInstance; auto-detected
+            // raw MeshInstance3D avatars (FBX characters under PS1Player) get
+            // 8bpp + no collision defaults, reported here as "(auto)".
+            string bpp = obj.Node is PS1MeshInstance pmi1 ? pmi1.BitDepth.ToString() : "8bit(auto)";
+            string coll = obj.Node is PS1MeshInstance pmi2 ? pmi2.Collision.ToString() : "None(auto)";
+            GD.Print($"[PS1Godot]     - {obj.Node.Name}  pos=({p.X:F2},{p.Y:F2},{p.Z:F2})  bpp={bpp}  collide={coll}  → {obj.Mesh.Triangles.Count} tris");
         }
         GD.Print($"[PS1Godot]   Total triangles: {totalTris}");
 

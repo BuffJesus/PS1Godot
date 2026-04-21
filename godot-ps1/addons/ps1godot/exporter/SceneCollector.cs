@@ -105,15 +105,22 @@ public static class SceneCollector
                 data.CameraRigOffset = rig.Position;
             }
 
-            // MeshInstance3D child (typically a PS1MeshInstance) → player
-            // avatar. Its local position is the offset from player origin;
-            // runtime tracks and rotates it each frame (no Lua needed).
-            // The mesh itself is picked up by WalkAddMeshes above, so we
-            // just resolve its index here.
+            // MeshInstance3D descendant → player avatar. Runtime tracks +
+            // rotates it each frame (no Lua needed). We store the offset in
+            // PS1Player's local space so the runtime can add it to the
+            // player's world position to place the mesh.
+            //
+            // Use the full transform chain (PS1Player.inv * avatar.global)
+            // rather than avatar.Position — the latter only works when the
+            // avatar is a DIRECT child of PS1Player. For nested FBX imports
+            // where the mesh lives inside Humanoid/Skeleton3D/Mesh, the
+            // innermost Position is usually (0,0,0); we need the cumulative
+            // offset from all intermediate transforms instead.
             var avatar = FindFirstOfType<MeshInstance3D>(player);
             if (avatar != null)
             {
-                data.PlayerAvatarOffset = avatar.Position;
+                Transform3D local = player.GlobalTransform.AffineInverse() * avatar.GlobalTransform;
+                data.PlayerAvatarOffset = local.Origin;
                 for (int i = 0; i < data.Objects.Count; i++)
                 {
                     if (ReferenceEquals(data.Objects[i].Node, avatar))
@@ -161,6 +168,92 @@ public static class SceneCollector
         return null;
     }
 
+    // Search siblings + ancestors for the first AnimationPlayer. FBX imports
+    // typically put AnimationPlayer as a sibling of MeshInstance3D under a
+    // common root; if the user re-parented something we still find it.
+    private static AnimationPlayer? FindAnimationPlayerNearby(Node from)
+    {
+        for (var p = from.GetParent(); p != null; p = p.GetParent())
+        {
+            foreach (var c in p.GetChildren())
+            {
+                if (c is AnimationPlayer ap) return ap;
+            }
+        }
+        return null;
+    }
+
+    private static string[] CollectClipNamesFrom(AnimationPlayer? ap)
+    {
+        if (ap == null) return System.Array.Empty<string>();
+        var result = new System.Collections.Generic.List<string>();
+        foreach (var libName in ap.GetAnimationLibraryList())
+        {
+            var lib = ap.GetAnimationLibrary(libName);
+            if (lib == null) continue;
+            foreach (var animName in lib.GetAnimationList())
+            {
+                string s = animName.ToString();
+                string qualified = string.IsNullOrEmpty(libName.ToString()) ? s : $"{libName}/{s}";
+                result.Add(qualified);
+            }
+        }
+        return result.ToArray();
+    }
+
+    // Walk up to find a PS1Player ancestor. If found, this node is part of
+    // the player avatar subtree and gets auto-skinning defaults even without
+    // an explicit PS1SkinnedMesh script attached.
+    private static PS1Player? FindPS1PlayerAncestor(Node n)
+    {
+        for (var p = n.GetParent(); p != null; p = p.GetParent())
+        {
+            if (p is PS1Player pp) return pp;
+        }
+        return null;
+    }
+
+    // Shared skinned-mesh emission for both PS1SkinnedMesh-scripted nodes and
+    // raw MeshInstance3D descendants of PS1Player. Computes bone count, bone
+    // indices per triangle, bakes animation clips, and records the result in
+    // data.SkinnedMeshes so the writer picks it up.
+    private static void EmitSkinnedMeshData(MeshInstance3D mesh, string[] clipNames,
+        NodePath animationPlayerPath, int targetFps, ushort objectIndex, SceneData data)
+    {
+        int boneCount = DetectBoneCount(mesh);
+        if (boneCount == 0)
+        {
+            GD.PushWarning(
+                $"[PS1Godot] Skinned mesh '{mesh.Name}' has no Skeleton3D target " +
+                $"(or an empty one). Falling back to 1 bone at the mesh origin.");
+            boneCount = 1;
+        }
+        if (boneCount > 64)
+        {
+            GD.PushWarning(
+                $"[PS1Godot] Skinned mesh '{mesh.Name}' has {boneCount} bones; " +
+                $"runtime cap is 64. Bone indices >= 64 will be clamped.");
+        }
+        int clampedBoneCount = System.Math.Min(boneCount, 64);
+        byte[] boneIndices = ComputeBoneIndices(mesh, clampedBoneCount);
+
+        var clips = BakeSkinClips(mesh, clipNames, animationPlayerPath, targetFps,
+            clampedBoneCount, data.GteScaling);
+
+        data.SkinnedMeshes.Add(new SkinnedMeshRecord
+        {
+            Name = mesh.Name,
+            GameObjectIndex = objectIndex,
+            BoneCount = (byte)clampedBoneCount,
+            BoneIndices = boneIndices,
+            Clips = clips,
+        });
+        GD.Print(
+            $"[PS1Godot] Skinned mesh '{mesh.Name}': {boneCount} bones, " +
+            $"{boneIndices.Length / 3} triangles, {clips.Count} baked clips " +
+            $"({System.Linq.Enumerable.Sum(System.Linq.Enumerable.Select(clips, c => (int)c.FrameCount))} total frames).");
+    }
+
     private static void WalkAddMeshes(Node n, SceneData data,
         Dictionary<(string, PSXBPP), int> textureCache,
         Dictionary<string, int> luaCache)
@@ -194,45 +287,55 @@ public static class SceneCollector
             // Stage 1 skinned-mesh export: if this is a PS1SkinnedMesh,
             // resolve its skeleton, compute per-triangle bone indices from
             // vertex weights, and record it for SplashpackWriter to emit as
-            // a SkinTable entry + SkinData block. Clip baking (stage 2)
-            // remains pending — the emitted block has clipCount = 0, so the
-            // mesh renders at bind pose via the skinned render path without
-            // animation until we land the baker.
+            // a SkinTable entry + SkinData block.
             if (pmi is PS1SkinnedMesh ps1Skin)
             {
-                int boneCount = DetectBoneCount(ps1Skin);
-                if (boneCount == 0)
-                {
-                    GD.PushWarning(
-                        $"[PS1Godot] PS1SkinnedMesh '{ps1Skin.Name}' has no Skeleton3D target " +
-                        $"(or an empty one). Falling back to 1 bone at the mesh origin.");
-                    boneCount = 1;
-                }
-                if (boneCount > 64)
-                {
-                    GD.PushWarning(
-                        $"[PS1Godot] PS1SkinnedMesh '{ps1Skin.Name}' has {boneCount} bones; " +
-                        $"runtime cap is 64. Bone indices >= 64 will be clamped.");
-                }
-                int clampedBoneCount = System.Math.Min(boneCount, 64);
-                byte[] boneIndices = ComputeBoneIndices(ps1Skin, clampedBoneCount);
-
-                var clips = BakeSkinClips(ps1Skin, clampedBoneCount, data.GteScaling);
-
-                data.SkinnedMeshes.Add(new SkinnedMeshRecord
-                {
-                    Name = ps1Skin.Name,
-                    GameObjectIndex = objectIndex,
-                    BoneCount = (byte)clampedBoneCount,
-                    BoneIndices = boneIndices,
-                    Clips = clips,
-                });
-                GD.Print(
-                    $"[PS1Godot] PS1SkinnedMesh '{ps1Skin.Name}': {boneCount} bones, " +
-                    $"{boneIndices.Length / 3} triangles, {clips.Count} baked clips " +
-                    $"({System.Linq.Enumerable.Sum(System.Linq.Enumerable.Select(clips, c => (int)c.FrameCount))} total frames). " +
-                    $"(stage 2 — clips baked for PSX playback.)");
+                EmitSkinnedMeshData(ps1Skin, ps1Skin.ClipNames ?? System.Array.Empty<string>(),
+                    ps1Skin.AnimationPlayerPath, ps1Skin.TargetFps, objectIndex, data);
             }
+        }
+        // Auto-detect raw MeshInstance3D descendants of a PS1Player with a
+        // bound Skin + Skeleton. This is what you get when an FBX character
+        // is instanced under PS1Player without the user manually attaching
+        // PS1SkinnedMesh script to the inner mesh node — most users won't
+        // know they need to. Export it with sensible defaults (all clips
+        // from the nearest AnimationPlayer, baked at 15 fps) and rename the
+        // exported object to "Player" so Lua's SkinnedAnim.Play keys by a
+        // stable name regardless of the FBX's internal naming.
+        else if (n is MeshInstance3D rawMi && rawMi is not PS1MeshInstance
+                 && rawMi.Visible && rawMi.Mesh != null
+                 && rawMi.Skin != null && !rawMi.Skeleton.IsEmpty
+                 && FindPS1PlayerAncestor(rawMi) != null)
+        {
+            int surfaceCount = rawMi.Mesh.GetSurfaceCount();
+            var surfaceTextureIndices = new int[surfaceCount];
+            for (int s = 0; s < surfaceCount; s++)
+            {
+                surfaceTextureIndices[s] = ResolveSurfaceTextureRaw(rawMi, s, data, textureCache);
+            }
+
+            // Rename the node to "Player" so its exported name is stable for
+            // Lua SkinnedAnim.Play("Player", ...) calls, regardless of what
+            // Mixamo / FBX importer called the inner mesh.
+            if (rawMi.Name != "Player") rawMi.Name = "Player";
+
+            var psxMesh = PSXMesh.FromGodotMesh(
+                rawMi, data.GteScaling, PS1MeshInstance.ColorMode.FlatColor,
+                new Color(1, 1, 1, 1), surfaceTextureIndices, data.Textures);
+
+            ushort objectIndex = (ushort)data.Objects.Count;
+            data.Objects.Add(new SceneObject
+            {
+                Node = rawMi,
+                Mesh = psxMesh,
+                SurfaceTextureIndices = surfaceTextureIndices,
+                LuaFileIndex = -1,
+            });
+
+            var ap = FindAnimationPlayerNearby(rawMi);
+            var clipNames = CollectClipNamesFrom(ap);
+            var apPath = ap != null ? rawMi.GetPathTo(ap) : new NodePath();
+            EmitSkinnedMeshData(rawMi, clipNames, apPath, 15, objectIndex, data);
         }
         else if (n is PS1TriggerBox tb && tb.Visible)
         {
@@ -339,15 +442,24 @@ public static class SceneCollector
     // ps1_default.tres uses that parameter name — see ps1.gdshader).
     // Returns null if the material type isn't recognized or has no
     // texture set.
-    // Best-effort bone count for a PS1SkinnedMesh. Returns 0 if the
-    // mesh isn't bound to a Skeleton3D or if the skeleton has no bones
-    // yet (e.g., placeholder authoring). Used for logging in stage 0;
-    // stage 1+ will walk the skeleton to emit real SkinData.
-    private static int DetectBoneCount(PS1SkinnedMesh mesh)
+    // The count we want is the number of distinct bones the MESH REFERENCES,
+    // which is skin.GetBindCount() — the size of the index space for
+    // SurfaceGetArrays(ArrayType.Bones). Returns the skeleton bone count as a
+    // fallback for meshes without a Skin (test/placeholder assets) or 0 if
+    // neither is configured.
+    private static int DetectBoneCount(MeshInstance3D mesh)
     {
-        if (mesh.Skeleton == null || mesh.Skeleton.IsEmpty) return 0;
-        var node = mesh.GetNodeOrNull<Skeleton3D>(mesh.Skeleton);
-        return node?.GetBoneCount() ?? 0;
+        if (mesh.Skin != null)
+        {
+            int binds = mesh.Skin.GetBindCount();
+            if (binds > 0) return binds;
+        }
+        if (mesh.Skeleton != null && !mesh.Skeleton.IsEmpty)
+        {
+            var node = mesh.GetNodeOrNull<Skeleton3D>(mesh.Skeleton);
+            return node?.GetBoneCount() ?? 0;
+        }
+        return 0;
     }
 
     // One bone index byte per triangle vertex (3 bytes per tri). Order
@@ -357,7 +469,7 @@ public static class SceneCollector
     // vertices (per-triangle rigid skinning) — simpler than per-vertex
     // and matches what most PS1 title skinning rigs actually did. Falls
     // back to bone 0 when the mesh has no weight data.
-    private static byte[] ComputeBoneIndices(PS1SkinnedMesh mesh, int boneCount)
+    private static byte[] ComputeBoneIndices(MeshInstance3D mesh, int boneCount)
     {
         var result = new System.Collections.Generic.List<byte>();
         if (mesh.Mesh == null) return result.ToArray();
@@ -374,15 +486,28 @@ public static class SceneCollector
         for (int s = 0; s < surfaceCount; s++)
         {
             var arrays = mesh.Mesh.SurfaceGetArrays(s);
+            var verts = arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array();
             var indices = arrays[(int)Mesh.ArrayType.Index].AsInt32Array();
             var bonesArr   = arrays[(int)Mesh.ArrayType.Bones].AsInt32Array();
             var weightsArr = arrays[(int)Mesh.ArrayType.Weights].AsFloat32Array();
 
-            int vertCount = indices.Length > 0 ? 0 : arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array().Length;
+            int vertCount = verts.Length;
             int triCount = indices.Length > 0 ? indices.Length / 3 : vertCount / 3;
             bool hasSkin = bonesArr.Length > 0 && weightsArr.Length == bonesArr.Length;
-            // Godot packs 4 bones + 4 weights per vertex (default skinning).
-            int perVert = hasSkin && bonesArr.Length > 0 ? 4 : 0;
+            // Godot stores bones/weights as a flat array; the stride is
+            // EITHER 4 per vertex (default) OR 8 per vertex if the mesh was
+            // imported with ARRAY_FLAG_USE_8_BONE_WEIGHTS (common for Mixamo
+            // rigs and other dense character skins). Hard-coding 4 here
+            // reads the wrong offset for every vertex after the first in an
+            // 8-weight mesh, which scrambles bone assignments across
+            // triangles and produces the classic "exploded mesh" failure
+            // mode — NOT a scale or bind-pose issue. Compute the stride
+            // from the actual data to stay correct in both cases.
+            int perVert = (hasSkin && vertCount > 0) ? (bonesArr.Length / vertCount) : 0;
+            if (hasSkin && (perVert != 4 && perVert != 8))
+            {
+                GD.PushWarning($"[PS1Godot] '{mesh.Name}' surface {s}: unexpected bones-per-vertex stride {perVert} (bones={bonesArr.Length}, verts={vertCount}). Expected 4 or 8; skinning may be wrong.");
+            }
 
             for (int t = 0; t < triCount; t++)
             {
@@ -451,23 +576,16 @@ public static class SceneCollector
         return (byte)best;
     }
 
-    // Resolve the AnimationPlayer for a PS1SkinnedMesh. Explicit path
-    // wins; otherwise look for an AnimationPlayer among the mesh's
-    // siblings (the typical test-asset layout: Skeleton/SkinnedMesh/AP
-    // as siblings under a common parent Node3D). Returns null if none.
-    private static AnimationPlayer? ResolveAnimationPlayer(PS1SkinnedMesh mesh)
+    // Resolve the AnimationPlayer for a skinned mesh. Explicit path wins;
+    // otherwise walk up the tree looking for an AnimationPlayer sibling,
+    // which is where FBX imports put it. Returns null if none.
+    private static AnimationPlayer? ResolveAnimationPlayer(MeshInstance3D mesh, NodePath animationPlayerPath)
     {
-        if (mesh.AnimationPlayerPath != null && !mesh.AnimationPlayerPath.IsEmpty)
+        if (animationPlayerPath != null && !animationPlayerPath.IsEmpty)
         {
-            return mesh.GetNodeOrNull<AnimationPlayer>(mesh.AnimationPlayerPath);
+            return mesh.GetNodeOrNull<AnimationPlayer>(animationPlayerPath);
         }
-        var parent = mesh.GetParent();
-        if (parent == null) return null;
-        foreach (var child in parent.GetChildren())
-        {
-            if (child is AnimationPlayer ap) return ap;
-        }
-        return null;
+        return FindAnimationPlayerNearby(mesh);
     }
 
     // Bake all of the mesh's authored clips into BakedBoneMatrix blobs
@@ -477,10 +595,11 @@ public static class SceneCollector
     // into a single byte[] per clip. Returns an empty list if the skin
     // setup is incomplete — runtime renders rest-pose only in that case.
     private static System.Collections.Generic.List<SkinClipRecord> BakeSkinClips(
-        PS1SkinnedMesh mesh, int boneCount, float gteScaling)
+        MeshInstance3D mesh, string[] clipNames, NodePath animationPlayerPath, int targetFps,
+        int boneCount, float gteScaling)
     {
         var result = new System.Collections.Generic.List<SkinClipRecord>();
-        if (mesh.ClipNames == null || mesh.ClipNames.Length == 0) return result;
+        if (clipNames == null || clipNames.Length == 0) return result;
 
         var skeleton = (mesh.Skeleton != null && !mesh.Skeleton.IsEmpty)
             ? mesh.GetNodeOrNull<Skeleton3D>(mesh.Skeleton)
@@ -498,26 +617,56 @@ public static class SceneCollector
             return result;
         }
 
-        var ap = ResolveAnimationPlayer(mesh);
+        var ap = ResolveAnimationPlayer(mesh, animationPlayerPath);
         if (ap == null)
         {
             GD.PushWarning($"[PS1Godot] '{mesh.Name}': no AnimationPlayer found. Skipping clip bake.");
             return result;
         }
 
-        int fps = Mathf.Clamp(mesh.TargetFps, 1, 30);
+        int fps = Mathf.Clamp(targetFps, 1, 30);
 
-        // Pre-compute each bone's bind-inverse so we can reuse it across
-        // every frame. Skin.GetBindPose returns the inverse bind matrix
-        // already — it's what we multiply the current pose by.
+        // The mesh's bone indices (from SurfaceGetArrays / ArrayType.Bones) are
+        // SKIN-LOCAL — they index into this Skin's bind list, not into the
+        // Skeleton3D's bone list. So baked entry `bi` in the output must
+        // correspond to skin-local bind index `bi`, combining:
+        //   (a) the bind-inverse at slot bi (from the Skin), and
+        //   (b) the current pose of whatever skeleton bone bind bi references
+        //       (via Skin.GetBindBone(bi)).
+        // For small rigs authored with skin bind order == skeleton bone order
+        // (e.g. SkinnedTest cylinder), this reduces to the old
+        // "skeleton.GetBoneGlobalPose(bi) * skin.GetBindPose(bi)" identity.
+        // For Mixamo humanoids (skin binds often in a different order than
+        // skeleton traversal), the mapping is essential — without it, every
+        // vertex gets transformed by the wrong bone's pose and the mesh
+        // explodes into Picasso.
         int skinBindCount = skin.GetBindCount();
         var bindInv = new Transform3D[boneCount];
-        for (int b = 0; b < boneCount; b++)
+        var skeletonBoneFor = new int[boneCount];
+        int skeletonBoneTotal = skeleton.GetBoneCount();
+        for (int bi = 0; bi < boneCount; bi++)
         {
-            bindInv[b] = (b < skinBindCount) ? skin.GetBindPose(b) : Transform3D.Identity;
+            bindInv[bi] = (bi < skinBindCount) ? skin.GetBindPose(bi) : Transform3D.Identity;
+            // Skin→skeleton bone mapping. Godot's FBX importer with
+            // `skins/use_named_skins=true` stores bind *names* and returns
+            // -1 from GetBindBone. Fall back to name lookup in that case;
+            // only resort to identity mapping as a last ditch (which is
+            // only correct for hand-authored rigs like the SkinnedTest
+            // cylinder where bind indices == skeleton indices).
+            int skBone = (bi < skinBindCount) ? skin.GetBindBone(bi) : -1;
+            if (skBone < 0 && bi < skinBindCount)
+            {
+                StringName bindName = skin.GetBindName(bi);
+                if (!string.IsNullOrEmpty(bindName.ToString()))
+                {
+                    skBone = skeleton.FindBone(bindName);
+                }
+            }
+            if (skBone < 0) skBone = bi;
+            skeletonBoneFor[bi] = skBone;
         }
 
-        foreach (var rawName in mesh.ClipNames)
+        foreach (var rawName in clipNames)
         {
             string clipName = rawName ?? "";
             if (string.IsNullOrWhiteSpace(clipName)) continue;
@@ -535,8 +684,11 @@ public static class SceneCollector
             byte[] frameData = new byte[frameCount * boneCount * 24];
 
             // Stash the current play state so we restore it when done.
+            // Guard the position read — GetCurrentAnimationPosition() errors
+            // when no clip is assigned (common at export time on freshly-
+            // imported FBXs whose AP hasn't been kicked off yet).
             var originalClip = ap.CurrentAnimation;
-            double originalPos = ap.CurrentAnimationPosition;
+            double originalPos = string.IsNullOrEmpty(originalClip) ? 0.0 : ap.CurrentAnimationPosition;
             ap.CurrentAnimation = clipName;
 
             for (int f = 0; f < frameCount; f++)
@@ -547,11 +699,27 @@ public static class SceneCollector
                 // on the Skeleton3D), which is what we read below.
                 ap.Seek(time, update: true);
 
-                for (int b = 0; b < boneCount; b++)
+                for (int bi = 0; bi < boneCount; bi++)
                 {
-                    Transform3D currentPose = skeleton.GetBoneGlobalPose(b);
-                    Transform3D combined = currentPose * bindInv[b];
-                    WriteBakedBoneMatrix(frameData, (f * boneCount + b) * 24, combined, gteScaling);
+                    int skBone = skeletonBoneFor[bi];
+                    Transform3D currentPose = (skBone >= 0 && skBone < skeletonBoneTotal)
+                        ? skeleton.GetBoneGlobalPose(skBone)
+                        : Transform3D.Identity;
+                    Transform3D combined = currentPose * bindInv[bi];
+                    // Godot's inverse-bind for Mixamo-style rigs embeds a cm→m
+                    // unit-scale factor (~0.01) inside the basis — the bind
+                    // math is internally consistent on centimeter-scale mesh
+                    // vertices. But we export vertices already scaled to
+                    // meters (via Humanoid.Scale=0.01 baked into PSXMesh),
+                    // so the same 0.01 applied on the PSX side would shrink
+                    // every vertex 100× and collapse the mesh toward each
+                    // bone's origin (the classic "exploded fan" symptom seen
+                    // in PCSX-Redux with this pipeline). Orthonormalize strips
+                    // the scale but preserves the rotation direction; the
+                    // origin stays valid because it was composed BEFORE we
+                    // touched the basis.
+                    combined.Basis = combined.Basis.Orthonormalized();
+                    WriteBakedBoneMatrix(frameData, (f * boneCount + bi) * 24, combined, gteScaling);
                 }
             }
 
@@ -1566,12 +1734,12 @@ public static class SceneCollector
             // space and stored in PS1 fp12 — but we need world-space XYZ in
             // Godot units for the per-triangle room test. Walk the source
             // MeshInstance3D to get the positions at export-time precision.
-            var pmi = obj.Node as PS1MeshInstance;
-            if (pmi == null || pmi.Mesh == null) continue;
+            var mi = obj.Node;
+            if (mi == null || mi.Mesh == null) continue;
 
-            var xform = pmi.GlobalTransform;
-            var nodeScale = pmi.Scale;
-            var godotMesh = pmi.Mesh;
+            var xform = mi.GlobalTransform;
+            var nodeScale = mi.Scale;
+            var godotMesh = mi.Mesh;
             int surfaceCount = godotMesh.GetSurfaceCount();
 
             int triGlobal = 0;
@@ -1777,14 +1945,26 @@ public static class SceneCollector
     // export-time texture (untextured → FlatColor path in PSXMesh).
     private static int ResolveSurfaceTexture(PS1MeshInstance pmi, int surfaceIdx,
         SceneData data, Dictionary<(string, PSXBPP), int> cache)
+        => ResolveSurfaceTextureCore(pmi, pmi.BitDepth, surfaceIdx, data, cache);
+
+    // Same material-resolution pipeline for a raw MeshInstance3D (no PS1
+    // settings). Used when auto-detecting FBX-imported character meshes
+    // under PS1Player. Defaults to 8bpp — the exporter's safe middle
+    // ground — since we have no author-configured bit depth to follow.
+    private static int ResolveSurfaceTextureRaw(MeshInstance3D mi, int surfaceIdx,
+        SceneData data, Dictionary<(string, PSXBPP), int> cache)
+        => ResolveSurfaceTextureCore(mi, PSXBPP.TEX_8BIT, surfaceIdx, data, cache);
+
+    private static int ResolveSurfaceTextureCore(MeshInstance3D mi, PSXBPP bitDepth, int surfaceIdx,
+        SceneData data, Dictionary<(string, PSXBPP), int> cache)
     {
         // Material resolution order (matches Godot's rendering precedence):
         //   1. MaterialOverride — replaces every surface's material.
         //   2. Surface override material — per-surface override on the instance.
         //   3. Mesh's surface material — the material baked into the mesh itself.
-        Material? mat = pmi.MaterialOverride;
-        if (mat == null) mat = pmi.GetSurfaceOverrideMaterial(surfaceIdx);
-        if (mat == null && pmi.Mesh != null) mat = pmi.Mesh.SurfaceGetMaterial(surfaceIdx);
+        Material? mat = mi.MaterialOverride;
+        if (mat == null) mat = mi.GetSurfaceOverrideMaterial(surfaceIdx);
+        if (mat == null && mi.Mesh != null) mat = mi.Mesh.SurfaceGetMaterial(surfaceIdx);
 
         var tex = ExtractAlbedoTexture(mat);
         if (tex == null) return -1;
@@ -1792,17 +1972,17 @@ public static class SceneCollector
         string path = tex.ResourcePath ?? "";
         if (string.IsNullOrEmpty(path))
         {
-            GD.PushWarning($"[PS1Godot] {pmi.Name}: surface {surfaceIdx} has an in-memory texture (no resource path) — can't dedup; exporting as untextured.");
+            GD.PushWarning($"[PS1Godot] {mi.Name}: surface {surfaceIdx} has an in-memory texture (no resource path) — can't dedup; exporting as untextured.");
             return -1;
         }
 
-        var key = (path, pmi.BitDepth);
+        var key = (path, bitDepth);
         if (cache.TryGetValue(key, out int existing)) return existing;
 
         Image? img = tex.GetImage();
         if (img == null || img.IsEmpty())
         {
-            GD.PushWarning($"[PS1Godot] {pmi.Name}: surface {surfaceIdx} texture '{path}' has no image data — skipping.");
+            GD.PushWarning($"[PS1Godot] {mi.Name}: surface {surfaceIdx} texture '{path}' has no image data — skipping.");
             return -1;
         }
 
@@ -1829,11 +2009,11 @@ public static class SceneCollector
             // Nearest filter preserves the chunky PS1 look; bilinear would
             // add blur the GPU can't afford on hardware anyway.
             img.Resize(newW, newH, Image.Interpolation.Nearest);
-            GD.PushWarning($"[PS1Godot] {pmi.Name}: texture '{path}' was {srcW}×{srcH}; auto-downscaled to {newW}×{newH} (PSX VRAM page max). Author at {MaxDim}×{MaxDim} or smaller for predictable results.");
+            GD.PushWarning($"[PS1Godot] {mi.Name}: texture '{path}' was {srcW}×{srcH}; auto-downscaled to {newW}×{newH} (PSX VRAM page max). Author at {MaxDim}×{MaxDim} or smaller for predictable results.");
         }
 
         // 4bpp requires width divisible by 4, 8bpp by 2.
-        int requiredMultiple = pmi.BitDepth switch
+        int requiredMultiple = bitDepth switch
         {
             PSXBPP.TEX_4BIT => 4,
             PSXBPP.TEX_8BIT => 2,
@@ -1841,11 +2021,11 @@ public static class SceneCollector
         };
         if (img.GetWidth() % requiredMultiple != 0)
         {
-            GD.PushError($"[PS1Godot] {pmi.Name}: texture '{path}' width {img.GetWidth()} not a multiple of {requiredMultiple} (required for {pmi.BitDepth}). Skipping.");
+            GD.PushError($"[PS1Godot] {mi.Name}: texture '{path}' width {img.GetWidth()} not a multiple of {requiredMultiple} (required for {bitDepth}). Skipping.");
             return -1;
         }
 
-        var psxTex = PSXTexture.FromGodotImage(img, pmi.BitDepth, path);
+        var psxTex = PSXTexture.FromGodotImage(img, bitDepth, path);
         int idx = data.Textures.Count;
         data.Textures.Add(psxTex);
         cache[key] = idx;

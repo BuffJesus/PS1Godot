@@ -28,15 +28,30 @@ public sealed class PSXMesh
             GD.PushWarning($"[PS1Godot] {node.Name}: VertexColorMode={colorMode} not yet implemented; falling back to FlatColor.");
         }
 
-        // Bake MeshInstance3D.Scale into vertex positions. FBX/GLTF assets
-        // often import at non-1 internal scale (cm, mm, etc.) and the author
-        // compensates by setting Scale on the node so it looks correct in
-        // the Godot viewport. The exporter reads raw SurfaceGetArrays verts,
-        // which don't include that scale — so without baking, a humanoid
-        // that looks right in the editor exports at the raw asset scale.
-        // Position and rotation stay in the instance transform (runtime
-        // animates rotation); only scale gets baked in here.
-        Vector3 nodeScale = node.Scale;
+        // Bake the node's effective scale (including ancestor scales) into
+        // vertex positions. FBX/GLTF assets often import at non-1 internal
+        // scale (cm, mm, etc.) and the author compensates by scaling either
+        // the mesh or a parent so it looks right in the Godot viewport.
+        // The exporter reads raw SurfaceGetArrays verts which don't include
+        // any scale.
+        Vector3 nodeScale = node.GlobalTransform.Basis.Scale;
+
+        // Special case for skinned FBX imports (Mixamo etc.): Godot leaves
+        // the vertices in the FBX's native units (typically cm, so
+        // humanoid verts are ~180 tall) but bakes the cm→m unit-conversion
+        // factor into each Skin bind-pose basis. Godot's own renderer
+        // relies on that bind-scale to place the mesh at meter-scale, so
+        // the host transform stays at identity (otherwise the scale is
+        // applied twice and the mesh disappears in the viewport). Our
+        // PSX pipeline uses orthonormalized bone matrices (scale stripped
+        // so int16 fp12 fits), which means the EXPORTER has to apply the
+        // cm→m factor itself — we pull it from the skin's bind basis
+        // rather than relying on the node transform.
+        if (node.Skin != null && node.Skin.GetBindCount() > 0)
+        {
+            Vector3 bindScale = node.Skin.GetBindPose(0).Basis.Scale;
+            nodeScale *= bindScale;
+        }
         // Use a relative tolerance large enough to ignore Godot's basis-
         // decomposition noise (we've seen ~1.5e-4 drift on "uniform"
         // cubes). Real non-uniform authoring is typically at least a few

@@ -8,7 +8,12 @@ namespace PS1Godot.Exporter;
 
 public sealed class SceneObject
 {
-    public required PS1MeshInstance Node { get; init; }
+    // Base MeshInstance3D, not PS1MeshInstance — lets the exporter accept
+    // auto-detected raw FBX-imported meshes (skinned character avatars under
+    // PS1Player) alongside hand-authored PS1MeshInstance nodes. PS1-specific
+    // properties are only read through a local typed variable in the
+    // collector, not through this field.
+    public required MeshInstance3D Node { get; init; }
     public required PSXMesh Mesh { get; init; }
 
     // Indices into SceneData.Textures — one per mesh surface (parallel to

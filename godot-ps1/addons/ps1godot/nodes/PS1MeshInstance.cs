@@ -89,8 +89,18 @@ public partial class PS1MeshInstance : MeshInstance3D
         // skips drawing the whole mesh once a corner crosses the frustum edge,
         // so the cube vanishes at certain orbit angles.
         //
-        // Pad the cull volume so Godot keeps drawing while the snap fudges
-        // pixels. 2 world units is overkill for a 320×240 framebuffer but cheap.
-        if (ExtraCullMargin < 2.0f) ExtraCullMargin = 2.0f;
+        // Scale the pad to the mesh size so a 0.1 m prop isn't wrapped in a
+        // 4 m halo (which looks like a giant yellow cage around the player
+        // when the mesh is a humanoid). 10 % of the largest AABB edge covers
+        // the snap's pixel-scale displacement at any reasonable zoom, and the
+        // clamp keeps absurdly tiny or absurdly huge meshes sane. Only raise
+        // the margin — never lower a hand-set value.
+        if (Mesh != null)
+        {
+            var size = Mesh.GetAabb().Size;
+            float maxEdge = Mathf.Max(size.X, Mathf.Max(size.Y, size.Z));
+            float dynamicMargin = Mathf.Clamp(maxEdge * 0.1f, 0.1f, 2.0f);
+            if (ExtraCullMargin < dynamicMargin) ExtraCullMargin = dynamicMargin;
+        }
     }
 }

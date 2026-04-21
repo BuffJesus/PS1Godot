@@ -68,6 +68,15 @@ local hideAtTick = 0
 local LINE_MIN_HOLD = 90   -- ~1.5 s at 60 fps onUpdate (used when clip is short/missing)
 local LINE_TAIL     = 30   -- ~0.5 s after audio ends before hiding
 
+-- ── Walk / idle animation state ──
+-- Drives the humanoid avatar's walk cycle. isWalking tracks the last
+-- commanded state so we only call SkinnedAnim.Play on edges (starting
+-- the clip every frame would reset it to frame 0 and the legs would
+-- freeze mid-stride). walkLastX/Z are sampled independently of the
+-- idle detector below because that block is gated on cutscene state.
+local isWalking = false
+local walkLastX, walkLastZ = 0, 0
+
 -- ── Idle detection ──
 -- Two-beat sequence: "You appear to be standing still." → pause →
 -- "This is either intentional... or deeply concerning." → hold → hide.
@@ -172,6 +181,12 @@ function onCreate(self)
     -- returns silently if there's no mesh called "SkinnedMesh" in the scene,
     -- so this no-ops for scenes without the test asset.
     SkinnedAnim.Play("SkinnedMesh", "wave", { loop = true })
+    -- Seed walk-detector with the spawn position so the first-frame delta
+    -- doesn't trip walk->idle detection against (0,0).
+    do
+        local p = Player.GetPosition()
+        walkLastX, walkLastZ = p.x, p.z
+    end
     -- Lock the player in place for the intro cutscene; otherwise pad input
     -- moves the character around while the camera is on its track and the
     -- player ends up wherever they wandered (instead of at PS1Player's
@@ -212,6 +227,29 @@ function onUpdate(self, dt)
     -- mesh each frame was removed — it was duplicating work and risked
     -- fighting the runtime's own transform update. See scenemanager.cpp
     -- "auto-track the player avatar mesh" block.
+
+    -- Walk-cycle state machine for the humanoid avatar. Fires only on
+    -- edges — calling SkinnedAnim.Play every frame would pin the clip
+    -- to frame 0 and the legs would never move. Gated on Cutscene state
+    -- so the avatar stays still during the intro camera track (controls
+    -- are disabled then anyway, but being explicit avoids a blink of
+    -- walk on the first post-cutscene frame).
+    if not Cutscene.IsPlaying() then
+        local pp = Player.GetPosition()
+        local moving = (pp.x ~= walkLastX) or (pp.z ~= walkLastZ)
+        walkLastX, walkLastZ = pp.x, pp.z
+        -- Mixamo exports every take under the literal name "mixamo_com" —
+        -- the exporter's auto-wire path passes the clip through verbatim.
+        -- If/when we rename clips in the Godot AnimationPlayer editor,
+        -- update the name here to match.
+        if moving and not isWalking then
+            SkinnedAnim.Play("Player", "mixamo_com", { loop = true })
+            isWalking = true
+        elseif not moving and isWalking then
+            SkinnedAnim.Stop("Player")
+            isWalking = false
+        end
+    end
 
     -- ── Cutscene narration: text + audio co-fired ──
     local playing = Cutscene.IsPlaying()
