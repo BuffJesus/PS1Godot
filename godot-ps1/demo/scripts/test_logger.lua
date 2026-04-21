@@ -48,41 +48,24 @@ local narration = {
     { 600, "We think.",                                              "system_we_think"         },
 }
 
--- ── Green cube dialog sequences ──
--- Press 1: full first conversation (3 auto-advancing lines)
--- Press 2: "Okay, good talk." (then dialog hides)
--- Press 3+: cycles three extras one per press
--- Durations are in onUpdate ticks (~60 fps), longer than the audio so
--- there's a beat of "text held" silence after each line plays.
--- Dialog body element is 224 px wide (~28 chars/line at 8 px/char).
--- Use '\n' to split long lines across two rows (runtime-supported).
-local INTERACTIONS = {
-    {
-        { text = "Hey.",                                          clip = "sc_hey",       dur = 110 },
-        { text = "...You're not supposed\nto be here yet.",       clip = "sc_not_yet",   dur = 200 },
-        { text = "Did the camera finish\nmoving? It never tells me.", clip = "sc_camera", dur = 240 },
-    },
-    {
-        { text = "Okay, good talk.",                              clip = "sc_good_talk", dur = 160 },
-    },
+-- ── Green cube dialog (one line per Triangle press) ──
+-- Each press cycles to the next line, plays the audio, and schedules
+-- a hide ~1.5 s later. Pressing again before the hide-tick re-arms
+-- the timer with the next line. Replaces the previous multi-line
+-- auto-advance state machine which could wedge and leave a stuck
+-- dialog box on screen — single-state code is harder to wedge.
+local DIALOG_LINES = {
+    { text = "Hey.",                                          clip = "sc_hey"          },
+    { text = "...You're not supposed\nto be here yet.",       clip = "sc_not_yet"      },
+    { text = "Did the camera finish\nmoving? It never tells me.", clip = "sc_camera"   },
+    { text = "Okay, good talk.",                              clip = "sc_good_talk"    },
+    { text = "I spin because it\ngives me purpose.",          clip = "sc_purpose"      },
+    { text = "The checkered one thinks\nit's better than me.",clip = "sc_thinks_better"},
+    { text = "Don't trust anything\nthat bobs.",              clip = "sc_bobbing"      },
 }
-local EXTRAS = {
-    { text = "I spin because it\ngives me purpose.",              clip = "sc_purpose",       dur = 200 },
-    { text = "The checkered one thinks\nit's better than me.",    clip = "sc_thinks_better", dur = 220 },
-    { text = "Don't trust anything\nthat bobs.",                  clip = "sc_bobbing",       dur = 180 },
-}
-
-local activeSeq, activeIdx, activeFrame = nil, 0, 0
-local interactionCount, extraIdx = 0, 0
-
--- Watchdog: if the auto-advance state-machine wedges and a line has
--- been on screen for longer than `current.dur + DIALOG_IDLE_GRACE`
--- frames without progressing, force-hide. Resets on every onInteract
--- and every line advance so a normal sequence never trips it — only
--- a stuck dialog does, and it clears within ~3 s instead of staying
--- on screen forever.
-local lastAdvanceFrame = 0
-local DIALOG_IDLE_GRACE = 180   -- 3 s at 60 fps onUpdate
+local lineIdx = 0
+local hideAtTick = 0
+local LINE_HOLD = 90   -- ~1.5 s at 60 fps onUpdate
 
 -- ── Idle detection ──
 -- Two-beat sequence: "You appear to be standing still." → pause →
@@ -203,39 +186,20 @@ function onUpdate(self, dt)
         Controls.SetEnabled(true)
     end
 
-    -- ── Active dialog sequence advancement ──
-    -- Yield if some other script took over the dialog canvas — otherwise
-    -- our next scheduled line would overwrite their text. We don't hide
-    -- the canvas here; the new owner is managing it.
-    if activeSeq ~= nil then
-        if currentDialogOwner ~= MY_DIALOG_OWNER then
-            activeSeq = nil
-        else
-            activeFrame = activeFrame + 1
-            local current = activeSeq[activeIdx]
-            if activeFrame >= current.dur then
-                activeIdx = activeIdx + 1
-                activeFrame = 0
-                lastAdvanceFrame = tick
-                if activeIdx <= #activeSeq then
-                    showLine(activeSeq[activeIdx])
-                else
-                    if dialogCanvas >= 0 then UI.SetCanvasVisible(dialogCanvas, false) end
-                    activeSeq = nil
-                end
-            elseif (tick - lastAdvanceFrame) > current.dur + DIALOG_IDLE_GRACE then
-                -- Watchdog tripped — line has been on screen for longer
-                -- than its authored duration plus a 3 s grace and still
-                -- hasn't advanced. Force-hide rather than leaving it stuck.
-                if dialogCanvas >= 0 then UI.SetCanvasVisible(dialogCanvas, false) end
-                activeSeq = nil
-                Debug.Log("test_logger: dialog watchdog fired, forced hide")
-            end
+    -- ── Single-line dialog auto-hide ──
+    -- onInteract sets hideAtTick to (tick + LINE_HOLD). When tick passes
+    -- that mark, hide the canvas (assuming we still own it). Yield to
+    -- whoever currentDialogOwner now is — if they took over, they're
+    -- managing the canvas, not us.
+    if hideAtTick > 0 and tick >= hideAtTick then
+        if currentDialogOwner == MY_DIALOG_OWNER and dialogCanvas >= 0 then
+            UI.SetCanvasVisible(dialogCanvas, false)
         end
+        hideAtTick = 0
     end
 
     -- ── Idle detection (only after cutscene + outside dialog) ──
-    if not playing and activeSeq == nil and sysVoiceCanvas >= 0
+    if not playing and hideAtTick == 0 and sysVoiceCanvas >= 0
             and cutsceneRanThisSession then
         local p = Player.GetPosition()
         local moved = (p.x ~= lastX) or (p.z ~= lastZ)
@@ -277,16 +241,8 @@ local MY_DIALOG_OWNER = 1
 
 function onInteract(self)
     currentDialogOwner = MY_DIALOG_OWNER
-    interactionCount = interactionCount + 1
-    if interactionCount <= #INTERACTIONS then
-        activeSeq = INTERACTIONS[interactionCount]
-    else
-        extraIdx = (extraIdx % #EXTRAS) + 1
-        activeSeq = { EXTRAS[extraIdx] }
-    end
-    activeIdx = 1
-    activeFrame = 0
-    lastAdvanceFrame = tick
-    showLine(activeSeq[activeIdx])
-    Debug.Log("test_logger: dialog sequence " .. interactionCount .. " started")
+    lineIdx = (lineIdx % #DIALOG_LINES) + 1
+    showLine(DIALOG_LINES[lineIdx])
+    hideAtTick = tick + LINE_HOLD
+    Debug.Log("test_logger: dialog line " .. lineIdx .. " shown")
 end
