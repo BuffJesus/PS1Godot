@@ -1,0 +1,258 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Text;
+
+namespace PS1Godot.Exporter;
+
+// Minimal Standard MIDI File (SMF) parser. Only the subset needed to
+// produce a flat, absolute-tick event list for PS1M serialization:
+// note on/off, tempo meta events, and the ticks-per-quarter-note from
+// the header. Ignores meta text, controllers (except when
+// ChannelVolume mapping is added later), program changes, system
+// exclusive, etc.
+//
+// Supports format 0 (single track) and format 1 (multi-track, all
+// tracks start at tick 0 and are merged by absolute tick). Format 2
+// (sequential tracks) is not supported — we'd need a different
+// merging strategy and SMF2 is almost never used.
+public static class MidiParser
+{
+    public enum MidiEventKind
+    {
+        NoteOn,
+        NoteOff,
+    }
+
+    public readonly struct MidiNoteEvent
+    {
+        public uint AbsoluteTick { get; init; }
+        public MidiEventKind Kind { get; init; }
+        public byte Channel { get; init; }     // 0-15
+        public byte Note { get; init; }        // 0-127
+        public byte Velocity { get; init; }    // 0-127
+        // Source track index (format-1 SMFs put each instrument on its
+        // own MTrk while sometimes leaving every event on MIDI channel
+        // 0). Bindings can filter by track so two tracks-worth of notes
+        // don't stomp each other on the same packed channel.
+        public int Track { get; init; }
+    }
+
+    public readonly struct MidiTempoEvent
+    {
+        public uint AbsoluteTick { get; init; }
+        // Microseconds per quarter-note (SMF standard). 500000 = 120 BPM.
+        public uint MicrosPerQuarter { get; init; }
+    }
+
+    public sealed class ParsedMidi
+    {
+        public int TicksPerQuarter { get; init; }
+        public int TrackCount { get; init; }
+        public List<MidiNoteEvent> Notes { get; init; } = new();
+        public List<MidiTempoEvent> Tempos { get; init; } = new();
+    }
+
+    public static ParsedMidi Parse(byte[] bytes)
+    {
+        if (bytes == null || bytes.Length < 14)
+            throw new InvalidDataException("MIDI file too short for a valid header.");
+
+        using var ms = new MemoryStream(bytes);
+        using var r = new BinaryReader(ms);
+
+        // MThd header.
+        if (ReadChunkId(r) != "MThd")
+            throw new InvalidDataException("MIDI file missing MThd header.");
+        uint headerLen = ReadU32BE(r);
+        if (headerLen < 6) throw new InvalidDataException("MThd header length < 6.");
+        ushort format = ReadU16BE(r);
+        ushort trackCount = ReadU16BE(r);
+        ushort division = ReadU16BE(r);
+        // Skip any extra header bytes past the required 6.
+        if (headerLen > 6) r.BaseStream.Seek(headerLen - 6, SeekOrigin.Current);
+
+        if (format == 2)
+            throw new InvalidDataException("MIDI format 2 (sequential tracks) is not supported.");
+
+        if ((division & 0x8000) != 0)
+            throw new InvalidDataException("SMPTE-division MIDI files are not supported; use ticks-per-quarter.");
+
+        int tpq = division;
+        var notes = new List<MidiNoteEvent>();
+        var tempos = new List<MidiTempoEvent>();
+
+        for (int t = 0; t < trackCount; t++)
+        {
+            if (ReadChunkId(r) != "MTrk")
+            {
+                // Skip unknown chunk types per the SMF spec.
+                uint skipLen = ReadU32BE(r);
+                r.BaseStream.Seek(skipLen, SeekOrigin.Current);
+                t--;
+                continue;
+            }
+            uint trackLen = ReadU32BE(r);
+            long trackEnd = r.BaseStream.Position + trackLen;
+            ParseTrack(r, trackEnd, notes, tempos, t);
+        }
+
+        // Sort events by absolute tick (format 1 tracks started at 0 each).
+        // At the same tick: NoteOff MUST come before NoteOn. Otherwise a
+        // sequence like  Off(60) + On(60)  at one tick would dispatch as
+        // On then Off — and our mono-per-channel runtime sees the Off
+        // matching the just-started note's number and silences it. That
+        // kills every repeated-pitch note in the song. Putting Off first
+        // closes the prior note cleanly, then On retriggers fresh.
+        notes.Sort((a, b) =>
+        {
+            int c = a.AbsoluteTick.CompareTo(b.AbsoluteTick);
+            if (c != 0) return c;
+            return ((int)b.Kind).CompareTo((int)a.Kind);
+        });
+        tempos.Sort((a, b) => a.AbsoluteTick.CompareTo(b.AbsoluteTick));
+
+        return new ParsedMidi
+        {
+            TicksPerQuarter = tpq,
+            TrackCount = trackCount,
+            Notes = notes,
+            Tempos = tempos,
+        };
+    }
+
+    private static void ParseTrack(BinaryReader r, long trackEnd,
+                                    List<MidiNoteEvent> notes,
+                                    List<MidiTempoEvent> tempos,
+                                    int trackIndex)
+    {
+        uint absTick = 0;
+        byte runningStatus = 0;
+
+        while (r.BaseStream.Position < trackEnd)
+        {
+            uint delta = ReadVarLen(r);
+            absTick += delta;
+
+            byte status = r.ReadByte();
+            if (status < 0x80)
+            {
+                // Running status — reuse previous status byte, current byte
+                // is actually data1.
+                r.BaseStream.Seek(-1, SeekOrigin.Current);
+                if (runningStatus == 0)
+                    throw new InvalidDataException("MIDI track used running status before any status byte.");
+                status = runningStatus;
+            }
+            else if (status < 0xF0)
+            {
+                runningStatus = status;
+            }
+
+            if (status == 0xFF)
+            {
+                // Meta event: type (1 B) + varlen length + data.
+                byte metaType = r.ReadByte();
+                uint metaLen = ReadVarLen(r);
+                long metaStart = r.BaseStream.Position;
+                if (metaType == 0x51 && metaLen == 3)
+                {
+                    // Set tempo: 3-byte big-endian micros per quarter.
+                    byte b0 = r.ReadByte();
+                    byte b1 = r.ReadByte();
+                    byte b2 = r.ReadByte();
+                    uint mpq = ((uint)b0 << 16) | ((uint)b1 << 8) | b2;
+                    tempos.Add(new MidiTempoEvent { AbsoluteTick = absTick, MicrosPerQuarter = mpq });
+                }
+                r.BaseStream.Seek(metaStart + metaLen, SeekOrigin.Begin);
+            }
+            else if (status == 0xF0 || status == 0xF7)
+            {
+                // SysEx — skip.
+                uint sysLen = ReadVarLen(r);
+                r.BaseStream.Seek(sysLen, SeekOrigin.Current);
+            }
+            else
+            {
+                byte kind = (byte)(status & 0xF0);
+                byte channel = (byte)(status & 0x0F);
+                switch (kind)
+                {
+                    case 0x80: // Note off
+                    {
+                        byte note = r.ReadByte();
+                        byte vel = r.ReadByte();
+                        notes.Add(new MidiNoteEvent
+                        {
+                            AbsoluteTick = absTick,
+                            Kind = MidiEventKind.NoteOff,
+                            Channel = channel,
+                            Note = note,
+                            Velocity = vel,
+                            Track = trackIndex,
+                        });
+                        break;
+                    }
+                    case 0x90: // Note on (velocity 0 means off)
+                    {
+                        byte note = r.ReadByte();
+                        byte vel = r.ReadByte();
+                        notes.Add(new MidiNoteEvent
+                        {
+                            AbsoluteTick = absTick,
+                            Kind = (vel == 0) ? MidiEventKind.NoteOff : MidiEventKind.NoteOn,
+                            Channel = channel,
+                            Note = note,
+                            Velocity = vel,
+                            Track = trackIndex,
+                        });
+                        break;
+                    }
+                    case 0xA0: // Poly aftertouch — skip, 2 data bytes
+                    case 0xB0: // CC — skip, 2 data bytes
+                    case 0xE0: // Pitch bend — skip, 2 data bytes
+                        r.ReadByte(); r.ReadByte();
+                        break;
+                    case 0xC0: // Program change — skip, 1 data byte
+                    case 0xD0: // Channel aftertouch — skip, 1 data byte
+                        r.ReadByte();
+                        break;
+                    default:
+                        // Unknown status; try to skip one byte to recover.
+                        r.ReadByte();
+                        break;
+                }
+            }
+        }
+    }
+
+    private static string ReadChunkId(BinaryReader r)
+    {
+        return Encoding.ASCII.GetString(r.ReadBytes(4));
+    }
+
+    private static uint ReadU32BE(BinaryReader r)
+    {
+        byte a = r.ReadByte(), b = r.ReadByte(), c = r.ReadByte(), d = r.ReadByte();
+        return ((uint)a << 24) | ((uint)b << 16) | ((uint)c << 8) | d;
+    }
+
+    private static ushort ReadU16BE(BinaryReader r)
+    {
+        byte a = r.ReadByte(), b = r.ReadByte();
+        return (ushort)(((uint)a << 8) | b);
+    }
+
+    // Variable-length quantity (7 bits per byte, high bit = continue).
+    private static uint ReadVarLen(BinaryReader r)
+    {
+        uint v = 0;
+        for (int i = 0; i < 4; i++)
+        {
+            byte b = r.ReadByte();
+            v = (v << 7) | (uint)(b & 0x7F);
+            if ((b & 0x80) == 0) return v;
+        }
+        throw new InvalidDataException("MIDI varlen exceeded 4 bytes.");
+    }
+}

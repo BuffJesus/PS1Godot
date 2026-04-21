@@ -28,8 +28,8 @@ namespace PS1Godot.Exporter;
 //                  Name table — referenced by header.nameTableOffset.
 public static class SplashpackWriter
 {
-    public const ushort SplashpackVersion = 21;
-    public const int HeaderSize = 136;
+    public const ushort SplashpackVersion = 22;
+    public const int HeaderSize = 144;
     public const int GameObjectSize = 92;
     public const int TriSize = 52;
     public const int LuaFileSize = 8; // luaCodeOffset (u32) + length (u32)
@@ -309,6 +309,53 @@ public static class SplashpackWriter
         if (scene.SkinnedMeshes.Count > 0)
         {
             WriteSkinSection(w, scene, headerOffsets.SkinTableOffsetPos);
+        }
+
+        // ── Music sequence section (v22+) ──
+        // Table of 24-byte MusicTableEntry { dataOff(u32), dataSize(u32),
+        // name[16] } followed by the PS1M blobs in order. Reader code:
+        // splashpack.cpp:295.
+        if (scene.MusicSequences.Count > 0)
+        {
+            WriteMusicSection(w, scene, headerOffsets.MusicTableOffsetPos);
+        }
+    }
+
+    // ─── Music sequence section ─────────────────────────────────────────
+    //
+    // 24-byte MusicTableEntry × N, then PS1M blobs aligned to 4 bytes
+    // each. Names are baked inline (16-byte fixed field, null-terminated
+    // when shorter) so the runtime doesn't need a second offset chase.
+    private static void WriteMusicSection(BinaryWriter w, SceneData scene, long musicTableOffsetPos)
+    {
+        AlignTo4(w);
+        long tableStart = w.BaseStream.Position;
+        BackfillUInt32(w, musicTableOffsetPos, (uint)tableStart);
+
+        int count = Math.Min(scene.MusicSequences.Count, 8);
+        var dataOffPositions = new long[count];
+
+        for (int i = 0; i < count; i++)
+        {
+            var seq = scene.MusicSequences[i];
+            dataOffPositions[i] = w.BaseStream.Position;
+            w.Write((uint)0);                    // dataOffset (backfilled)
+            w.Write((uint)seq.Ps1mData.Length);  // dataSize
+            // Name: 16-byte fixed field, null-padded. Names already
+            // truncated to 15 chars in SceneCollector so the trailing
+            // byte stays 0 for null termination.
+            byte[] nameBytes = Encoding.UTF8.GetBytes(seq.Name ?? string.Empty);
+            int nameLen = Math.Min(nameBytes.Length, 15);
+            w.Write(nameBytes, 0, nameLen);
+            for (int p = nameLen; p < 16; p++) w.Write((byte)0);
+        }
+
+        for (int i = 0; i < count; i++)
+        {
+            AlignTo4(w);
+            long blobStart = w.BaseStream.Position;
+            w.Write(scene.MusicSequences[i].Ps1mData);
+            BackfillUInt32(w, dataOffPositions[i], (uint)blobStart);
         }
     }
 
@@ -795,6 +842,7 @@ public static class SplashpackWriter
         public long PixelDataOffsetPos;
         public long AnimationTableOffsetPos;
         public long SkinTableOffsetPos;
+        public long MusicTableOffsetPos;
     }
 
     private static HeaderOffsets WriteHeader(BinaryWriter w, SceneData scene, int atlasCount, int clutCount, int colliderCount,
@@ -938,6 +986,15 @@ public static class SplashpackWriter
         w.Write(PSXTrig.ConvertCoordinateToPSX(avOff.Z, scene.GteScaling));
         w.Write((ushort)(scene.PlayerAvatarObjectIndex < 0 ? 0xFFFF : scene.PlayerAvatarObjectIndex));
         w.Write((ushort)0);            // pad_rig
+
+        // v22: sequenced-music table (count + 16-bit pad + u32 offset).
+        // Capped at 8 entries by the runtime; any extras were already
+        // dropped by the collector.
+        int musicCount = Math.Min(scene.MusicSequences.Count, 8);
+        w.Write((ushort)musicCount);   // musicSequenceCount
+        w.Write((ushort)0);            // pad_music
+        offsets.MusicTableOffsetPos = w.BaseStream.Position;
+        w.Write((uint)0);              // musicTableOffset (backfilled)
 
         long written = w.BaseStream.Position - headerStart;
         if (written != HeaderSize)

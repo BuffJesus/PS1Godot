@@ -43,6 +43,15 @@ public sealed class AudioClipRecord
     public required string Name { get; init; }
 }
 
+// One pre-serialized PS1M sequenced-music blob. Lua picks it by name
+// via Music.Play("..."). The runtime caps sequences per scene at 8
+// (matches MusicSequencer::MAX_SEQUENCES).
+public sealed class MusicSequenceRecord
+{
+    public required byte[] Ps1mData { get; init; }   // PS1M binary blob
+    public required string Name { get; init; }       // null-truncated to 15 chars in writer
+}
+
 // World-space AABB that fires a Lua script when the player's AABB enters
 // or leaves it. Serialized as SPLASHPACKTriggerBox (32 bytes).
 public sealed class TriggerBoxRecord
@@ -310,6 +319,10 @@ public sealed class SceneData
     // Audio clips authored on PS1Scene.AudioClips, already ADPCM-encoded.
     // Parallel name table lets Lua resolve `Audio.Play("name")` at runtime.
     public List<AudioClipRecord> AudioClips { get; } = new();
+
+    // Sequenced music tracks (.mid → PS1M). Parallel name lookup via
+    // Music.Play("..."). Capped at 8 entries by the runtime.
+    public List<MusicSequenceRecord> MusicSequences { get; } = new();
 
     // UI canvases gathered from PS1UICanvas nodes + their PS1UIElement
     // children. Lua resolves by name via UI.FindCanvas.

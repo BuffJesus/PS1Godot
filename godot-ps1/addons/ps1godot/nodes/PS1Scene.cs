@@ -80,6 +80,12 @@ public partial class PS1Scene : Node3D
     [Export]
     public Godot.Collections.Array<PS1AudioClip> AudioClips { get; set; } = new();
 
+    // Sequenced background music. Each entry parses one .mid file and
+    // ships as a PS1M blob in the splashpack. Lua plays by name via
+    // Music.Play("..."). Up to 8 sequences per scene (runtime cap).
+    [Export]
+    public Godot.Collections.Array<PS1MusicSequence> MusicSequences { get; set; } = new();
+
     [ExportGroup("Scene loading")]
     // Additional scenes that ship in the same splashpack drop. The currently-
     // open scene exports as scene_0; entries here export as scene_1, scene_2,

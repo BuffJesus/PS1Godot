@@ -60,6 +60,9 @@ public static class SceneCollector
         if (root is PS1Scene sceneWithAudio)
         {
             CollectAudioClips(sceneWithAudio, data);
+            // Music sequences depend on AudioClips (channels reference clip
+            // names) — collect after audio so the lookup table is populated.
+            CollectMusicSequences(sceneWithAudio, data);
         }
 
         // Dedup cache keyed by (resourcePath, bitDepth). A texture used at two
@@ -976,6 +979,126 @@ public static class SceneCollector
                 Name = name,
             });
             GD.Print($"[PS1Godot] Audio clip '{name}': {pcm.Length} samples @ {rate}Hz → {adpcm.Length} bytes ADPCM (loop={clip.Loop}, index {data.AudioClips.Count - 1})");
+        }
+    }
+
+    private static void CollectMusicSequences(PS1Scene scene, SceneData data)
+    {
+        var seqs = scene.MusicSequences;
+        if (seqs == null || seqs.Count == 0) return;
+
+        // Build a clip-name → index lookup once. AudioClips were collected
+        // just before this in the parent walk.
+        var clipIndexByName = new Dictionary<string, int>(data.AudioClips.Count);
+        for (int i = 0; i < data.AudioClips.Count; i++)
+            clipIndexByName[data.AudioClips[i].Name] = i;
+
+        var seenNames = new HashSet<string>();
+
+        foreach (var seq in seqs)
+        {
+            if (seq == null) continue;
+            if (data.MusicSequences.Count >= 8)
+            {
+                GD.PushWarning("[PS1Godot] PS1Scene.MusicSequences: only the first 8 entries are exported; runtime cap.");
+                break;
+            }
+
+            // Resolve a name. SequenceName wins; otherwise use the .mid
+            // basename. Falls back to "music_<index>" if both are empty.
+            string name = string.IsNullOrWhiteSpace(seq.SequenceName)
+                ? System.IO.Path.GetFileNameWithoutExtension(seq.MidiFile ?? "")
+                : seq.SequenceName;
+            if (string.IsNullOrEmpty(name)) name = $"music_{data.MusicSequences.Count}";
+            if (name.Length > 15) name = name[..15];   // matches MusicTableEntry.name[16]
+            if (!seenNames.Add(name))
+            {
+                GD.PushWarning($"[PS1Godot] Duplicate music sequence name '{name}' — Music.Play will only find one.");
+            }
+
+            if (string.IsNullOrEmpty(seq.MidiFile))
+            {
+                GD.PushError($"[PS1Godot] PS1MusicSequence '{name}': MidiFile is empty — skipping.");
+                continue;
+            }
+
+            byte[] midiBytes;
+            try
+            {
+                string globalPath = ProjectSettings.GlobalizePath(seq.MidiFile);
+                midiBytes = System.IO.File.ReadAllBytes(globalPath);
+            }
+            catch (System.Exception ex)
+            {
+                GD.PushError($"[PS1Godot] PS1MusicSequence '{name}': failed to read '{seq.MidiFile}' ({ex.Message}) — skipping.");
+                continue;
+            }
+
+            MidiParser.ParsedMidi parsed;
+            try { parsed = MidiParser.Parse(midiBytes); }
+            catch (System.Exception ex)
+            {
+                GD.PushError($"[PS1Godot] PS1MusicSequence '{name}': MIDI parse failed ({ex.Message}) — skipping.");
+                continue;
+            }
+
+            // Map authored channels to PS1MSerializer.ChannelBinding.
+            // Skip channels whose AudioClipName doesn't resolve.
+            var bindings = new List<PS1MSerializer.ChannelBinding>();
+            if (seq.Channels != null)
+            {
+                foreach (var ch in seq.Channels)
+                {
+                    if (ch == null) continue;
+                    if (string.IsNullOrEmpty(ch.AudioClipName))
+                    {
+                        GD.PushWarning($"[PS1Godot] PS1MusicSequence '{name}': MIDI channel {ch.MidiChannel} has no AudioClipName — skipped.");
+                        continue;
+                    }
+                    if (!clipIndexByName.TryGetValue(ch.AudioClipName, out int clipIdx))
+                    {
+                        GD.PushError($"[PS1Godot] PS1MusicSequence '{name}': MIDI channel {ch.MidiChannel} references unknown audio clip '{ch.AudioClipName}'. Add it to PS1Scene.AudioClips.");
+                        continue;
+                    }
+                    bindings.Add(new PS1MSerializer.ChannelBinding
+                    {
+                        MidiChannel = ch.MidiChannel,
+                        MidiTrackIndex = ch.MidiTrackIndex,
+                        MidiNoteMin = ch.MidiNoteMin,
+                        MidiNoteMax = ch.MidiNoteMax,
+                        AudioClipIndex = clipIdx,
+                        BaseNoteMidi = ch.BaseNoteMidi,
+                        Volume = ch.Volume,
+                        Pan = ch.Pan,
+                        LoopSample = ch.LoopSample,
+                        Percussion = ch.Percussion,
+                    });
+                }
+            }
+            if (bindings.Count == 0)
+            {
+                GD.PushError($"[PS1Godot] PS1MusicSequence '{name}': no usable channel bindings — skipping. Add at least one PS1MusicChannel pointing at an audio clip.");
+                continue;
+            }
+
+            byte[] ps1m;
+            try
+            {
+                int? bpm = seq.BpmOverride > 0 ? seq.BpmOverride : null;
+                ps1m = PS1MSerializer.Serialize(parsed, bindings, bpm, seq.LoopStartBeat);
+            }
+            catch (System.Exception ex)
+            {
+                GD.PushError($"[PS1Godot] PS1MusicSequence '{name}': PS1M serialize failed ({ex.Message}) — skipping.");
+                continue;
+            }
+
+            data.MusicSequences.Add(new MusicSequenceRecord
+            {
+                Ps1mData = ps1m,
+                Name = name,
+            });
+            GD.Print($"[PS1Godot] Music sequence '{name}': {parsed.Notes.Count} notes, {bindings.Count} channels, {ps1m.Length} bytes (index {data.MusicSequences.Count - 1}).");
         }
     }
 
