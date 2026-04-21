@@ -182,15 +182,57 @@ public partial class PS1GodotPlugin : EditorPlugin
         // psxsplash's FileLoader expects "scene_<index>.splashpack" (and .vram, .spu)
         // siblings under PCdrv's root. The launch-emulator.cmd script points PCdrv at
         // godot-ps1/build/, so that's where these files have to land.
-        string relPath = "res://build/scene_0.splashpack";
-        string absPath = ProjectSettings.GlobalizePath(relPath);
-        System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(absPath)!);
+        string buildDir = ProjectSettings.GlobalizePath("res://build/");
+        System.IO.Directory.CreateDirectory(buildDir);
 
-        // Collect the currently-edited scene (walks tree, converts each
-        // PS1MeshInstance's mesh to PSX format).
         var sceneRoot = EditorInterface.Singleton.GetEditedSceneRoot();
-        var sceneData = Exporter.SceneCollector.FromRoot(sceneRoot, sceneRoot?.SceneFilePath ?? "");
-        GD.Print($"[PS1Godot] Scene: {(string.IsNullOrEmpty(sceneData.ScenePath) ? "(unsaved)" : sceneData.ScenePath)}");
+        if (sceneRoot == null)
+        {
+            GD.PushError("[PS1Godot] No scene open — open a .tscn whose root is a PS1Scene before exporting.");
+            return;
+        }
+
+        // Export the open scene as scene_0, then iterate PS1Scene.SubScenes
+        // (if any) to emit scene_1, scene_2, … in declared order. Each
+        // sub-scene is instantiated, walked, exported, then disposed so its
+        // PSX texture/buffer state doesn't bleed into the next.
+        ExportOneScene(sceneRoot, 0);
+
+        if (sceneRoot is PS1Scene rootPs1 && rootPs1.SubScenes != null)
+        {
+            for (int i = 0; i < rootPs1.SubScenes.Count; i++)
+            {
+                var packed = rootPs1.SubScenes[i];
+                if (packed == null)
+                {
+                    GD.PushWarning($"[PS1Godot] SubScenes[{i}] is null — skipped (Scene.Load({i + 1}) won't have a target).");
+                    continue;
+                }
+                Node? sub = packed.Instantiate();
+                if (sub == null)
+                {
+                    GD.PushError($"[PS1Godot] SubScenes[{i}] failed to instantiate.");
+                    continue;
+                }
+                try
+                {
+                    ExportOneScene(sub, i + 1);
+                }
+                finally
+                {
+                    sub.QueueFree();
+                }
+            }
+        }
+    }
+
+    private void ExportOneScene(Node sceneRoot, int sceneIndex)
+    {
+        string buildDir = ProjectSettings.GlobalizePath("res://build/");
+        string absPath = System.IO.Path.Combine(buildDir, $"scene_{sceneIndex}.splashpack");
+
+        var sceneData = Exporter.SceneCollector.FromRoot(sceneRoot, sceneRoot.SceneFilePath ?? "");
+        GD.Print($"[PS1Godot] Scene[{sceneIndex}]: {(string.IsNullOrEmpty(sceneData.ScenePath) ? "(unsaved)" : sceneData.ScenePath)}");
         GD.Print($"[PS1Godot]   PS1MeshInstance objects found: {sceneData.Objects.Count}");
 
         int totalTris = 0;
@@ -212,11 +254,10 @@ public partial class PS1GodotPlugin : EditorPlugin
             GD.Print($"[PS1Godot]   .splashpack = {packBytes}B");
             GD.Print($"[PS1Godot]   .vram       = {vramBytes}B");
             GD.Print($"[PS1Godot]   .spu        = {spuBytes}B");
-
         }
         catch (System.Exception e)
         {
-            GD.PushError($"[PS1Godot] Splashpack export failed: {e.Message}");
+            GD.PushError($"[PS1Godot] Scene[{sceneIndex}] export failed: {e.Message}");
         }
     }
 

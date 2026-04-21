@@ -80,6 +80,17 @@ public partial class PS1Scene : Node3D
     [Export]
     public Godot.Collections.Array<PS1AudioClip> AudioClips { get; set; } = new();
 
+    [ExportGroup("Scene loading")]
+    // Additional scenes that ship in the same splashpack drop. The currently-
+    // open scene exports as scene_0; entries here export as scene_1, scene_2,
+    // … in order. Lua calls Scene.Load(N) to swap to scene_N at runtime.
+    // Each PackedScene must have a PS1Scene root; the exporter walks each one
+    // the same way it walks the main scene. Use this for boss arenas,
+    // dream-realm transitions, separate map regions — anywhere a hard scene
+    // swap is preferable to streaming or putting everything in one file.
+    [Export]
+    public Godot.Collections.Array<PackedScene> SubScenes { get; set; } = new();
+
     [ExportGroup("Export")]
     // World-to-PSX scale: Godot units divided by this land in PSX fixed-point
     // space. At 4.0, a 30-unit floor ends up at ±3.75 PSX units — camera sits

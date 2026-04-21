@@ -1,0 +1,64 @@
+[gd_scene format=4 uid="uid://ck3rdrm0001a"]
+
+[ext_resource type="Script" uid="uid://b8ogc8krip2k" path="res://addons/ps1godot/nodes/PS1Scene.cs" id="1_scene"]
+[ext_resource type="Script" uid="uid://dng0iofdw3dk7" path="res://addons/ps1godot/nodes/PS1MeshInstance.cs" id="2_mesh"]
+[ext_resource type="Script" uid="uid://cfdlp12g2rtct" path="res://addons/ps1godot/nodes/PS1Player.cs" id="3_player"]
+[ext_resource type="Script" uid="uid://bbl6b0g2qjisp" path="res://addons/ps1godot/nodes/PS1TriggerBox.cs" id="4_trigger"]
+[ext_resource type="Texture2D" uid="uid://cul6k2s7n8ysj" path="res://demo/textures/test_checker.png" id="5_checker"]
+
+; Minimal "checkered realm" — a flat slab with the checkered cube standing
+; alone in the void. Reachable by walking into the trigger at RoomB's
+; east wall in demo.tscn (Lua calls Scene.Load(1) → loads this file).
+; Walking into the return trigger near the player calls Scene.Load(0)
+; to go back to the main demo.
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_realm"]
+size = Vector2(20, 20)
+
+[sub_resource type="StandardMaterial3D" id="mat_void_floor"]
+albedo_color = Color(0.08, 0.05, 0.18, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_realm_cube"]
+size = Vector3(2, 2, 2)
+
+[sub_resource type="StandardMaterial3D" id="mat_checker_realm"]
+albedo_texture = ExtResource("5_checker")
+texture_filter = 0
+
+[node name="Scene" type="Node3D"]
+script = ExtResource("1_scene")
+SceneType = 0
+JumpHeight = 1.8
+Gravity = 20.0
+FogEnabled = true
+FogColor = Color(0.18, 0.12, 0.32, 1)
+FogDensity = 2
+
+[node name="VoidFloor" type="MeshInstance3D" parent="."]
+material_override = SubResource("mat_void_floor")
+mesh = SubResource("PlaneMesh_realm")
+script = ExtResource("2_mesh")
+Collision = 1
+
+[node name="CheckeredCube" type="MeshInstance3D" parent="."]
+transform = Transform3D(0.707, 0, 0.707, 0, 1, 0, -0.707, 0, 0.707, 0, 1, 0)
+material_override = SubResource("mat_checker_realm")
+mesh = SubResource("BoxMesh_realm_cube")
+script = ExtResource("2_mesh")
+Collision = 1
+ScriptFile = "res://demo/scripts/checkered_dialog.lua"
+Interactable = true
+InteractionRadiusMeters = 2.5
+
+[node name="PS1Player" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 6)
+script = ExtResource("3_player")
+
+; Walk back into the spawn area to return to the main demo. Player spawns
+; at z=6; trigger sits behind them at z=8 so they have to deliberately
+; turn around and walk into it. Fires teleport_back.lua → Scene.Load(0).
+[node name="ReturnTrigger" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 8)
+script = ExtResource("4_trigger")
+HalfExtents = Vector3(3, 2, 1)
+ScriptFile = "res://demo/scripts/teleport_back.lua"

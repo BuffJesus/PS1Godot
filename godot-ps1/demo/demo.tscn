@@ -8,11 +8,12 @@
 [ext_resource type="Texture2D" uid="uid://cul6k2s7n8ysj" path="res://demo/textures/test_checker.png" id="6_checker"]
 [ext_resource type="Script" uid="uid://bbl6b0g2qjisp" path="res://addons/ps1godot/nodes/PS1TriggerBox.cs" id="9_oeqrt"]
 [ext_resource type="Script" uid="uid://bp1p1kqop2wwy" path="res://addons/ps1godot/nodes/PS1UICanvas.cs" id="10_uican"]
-[ext_resource type="Script" uid="uid://c01mt2tth0oll" path="res://addons/ps1godot/nodes/PS1UIElement.cs" id="11_uiel"]
 [ext_resource type="Resource" path="res://addons/ps1godot/themes/PS1Theme.tres" id="11_theme"]
-[ext_resource type="Script" path="res://addons/ps1godot/nodes/PS1Room.cs" id="12_room"]
-[ext_resource type="Script" path="res://addons/ps1godot/nodes/PS1PortalLink.cs" id="12_portal"]
+[ext_resource type="Script" uid="uid://c01mt2tth0oll" path="res://addons/ps1godot/nodes/PS1UIElement.cs" id="11_uiel"]
 [ext_resource type="Script" uid="uid://dqtfgfu4x00ke" path="res://addons/ps1godot/nodes/PS1Animation.cs" id="12_anim"]
+[ext_resource type="Script" uid="uid://jrh5nx2xvbl7" path="res://addons/ps1godot/nodes/PS1PortalLink.cs" id="12_portal"]
+[ext_resource type="Script" uid="uid://b3x6j35uenejj" path="res://addons/ps1godot/nodes/PS1Room.cs" id="12_room"]
+[ext_resource type="PackedScene" path="res://demo/checkered_realm.tscn" id="13_realm"]
 [ext_resource type="Script" uid="uid://bg1ih72kp4c3g" path="res://addons/ps1godot/nodes/PS1AnimationKeyframe.cs" id="13_kf"]
 [ext_resource type="Script" uid="uid://cfdlp12g2rtct" path="res://addons/ps1godot/nodes/PS1Player.cs" id="13_tdg64"]
 [ext_resource type="Script" uid="uid://bwafnk42jueor" path="res://addons/ps1godot/nodes/PS1Cutscene.cs" id="14_cs"]
@@ -196,39 +197,6 @@ _surfaces = [{
 [sub_resource type="BoxMesh" id="BoxMesh_cube"]
 size = Vector3(2, 2, 2)
 
-[sub_resource type="StandardMaterial3D" id="mat_room_blue"]
-albedo_color = Color(0.25, 0.45, 0.95, 1)
-
-[sub_resource type="StandardMaterial3D" id="mat_room_magenta"]
-albedo_color = Color(0.85, 0.25, 0.75, 1)
-
-; Distinctive "tiled" look for the portal-test area — bright yellow floor
-; stands out against the grass/checkered demo ground so the rooms are
-; easy to spot from spawn.
-[sub_resource type="StandardMaterial3D" id="mat_room_floor_a"]
-albedo_color = Color(0.95, 0.85, 0.25, 1)
-
-[sub_resource type="StandardMaterial3D" id="mat_room_floor_b"]
-albedo_color = Color(0.25, 0.85, 0.55, 1)
-
-[sub_resource type="PlaneMesh" id="PlaneMesh_room_half"]
-size = Vector2(5, 5)
-
-; Wall slab + marker pillar meshes. Walls are 0.15 m thick so they sit
-; comfortably inside each room's 5×3×5 AABB without straddling the
-; shared boundary.
-[sub_resource type="BoxMesh" id="BoxMesh_wall_side"]
-size = Vector3(5, 3, 0.15)
-
-[sub_resource type="BoxMesh" id="BoxMesh_wall_end"]
-size = Vector3(0.15, 3, 5)
-
-[sub_resource type="BoxMesh" id="BoxMesh_pillar"]
-size = Vector3(0.4, 6, 0.4)
-
-[sub_resource type="StandardMaterial3D" id="mat_pillar"]
-albedo_color = Color(0.98, 0.65, 0.15, 1)
-
 [sub_resource type="StandardMaterial3D" id="mat_checker"]
 albedo_texture = ExtResource("6_checker")
 texture_filter = 0
@@ -350,6 +318,33 @@ _data = {
 &"wave": SubResource("Animation_7eb7w")
 }
 
+[sub_resource type="StandardMaterial3D" id="mat_room_floor_a"]
+albedo_color = Color(0.95, 0.85, 0.25, 1)
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_room_half"]
+size = Vector2(5, 5)
+
+[sub_resource type="StandardMaterial3D" id="mat_room_floor_b"]
+albedo_color = Color(0.25, 0.85, 0.55, 1)
+
+[sub_resource type="StandardMaterial3D" id="mat_room_blue"]
+albedo_color = Color(0.25, 0.45, 0.95, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_wall_side"]
+size = Vector3(5, 3, 0.15)
+
+[sub_resource type="StandardMaterial3D" id="mat_room_magenta"]
+albedo_color = Color(0.85, 0.25, 0.75, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_wall_end"]
+size = Vector3(0.15, 3, 5)
+
+[sub_resource type="StandardMaterial3D" id="mat_pillar"]
+albedo_color = Color(0.98, 0.65, 0.15, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_pillar"]
+size = Vector3(0.4, 6, 0.4)
+
 [node name="Scene" type="Node3D" unique_id=1345701053]
 script = ExtResource("1_scene")
 SceneType = 2
@@ -357,6 +352,7 @@ JumpHeight = 1.8
 Gravity = 20.0
 FogEnabled = true
 FogColor = Color(0.65, 0.75, 0.85, 1)
+SubScenes = Array[PackedScene]([ExtResource("13_realm")])
 AudioClips = Array[ExtResource("2_onvmd")]([SubResource("Clip_welcome"), SubResource("Clip_not_alarmed"), SubResource("Clip_stable"), SubResource("Clip_other_cube"), SubResource("Clip_we_think"), SubResource("Clip_ignore_checkered"), SubResource("Clip_not_part"), SubResource("Clip_idle"), SubResource("Clip_concerning"), SubResource("Clip_sc_hey"), SubResource("Clip_sc_not_yet"), SubResource("Clip_sc_camera"), SubResource("Clip_sc_good_talk"), SubResource("Clip_sc_purpose"), SubResource("Clip_sc_thinks_better"), SubResource("Clip_sc_bobbing"), SubResource("Clip_ck_part"), SubResource("Clip_ck_always"), SubResource("Clip_ck_why_dont"), SubResource("Clip_ck_why_spin")])
 
 [node name="Floor" type="MeshInstance3D" parent="." unique_id=1239192714]
@@ -378,12 +374,8 @@ ScriptFile = "res://demo/scripts/test_logger.lua"
 Interactable = true
 InteractionRadiusMeters = 2.0
 
-; Checkered cube tucked inside RoomB so the player has a reason to walk
-; through the rooms + portal to reach it. Position lines up with RoomB's
-; interior (15 ± 2.5 wide); rotation kept as 45° around Y for the
-; spinning visual.
 [node name="Cube2" type="MeshInstance3D" parent="." unique_id=750822538]
-transform = Transform3D(0.707, 0, 0.707, 0, 1, 0, -0.707, 0, 0.707, 16, 1, 1)
+transform = Transform3D(0.707, 0, 0.707, 0, 1, 0, -0.707, 0, 0.707, 14.722351, 1, 0.14348507)
 material_override = SubResource("mat_checker")
 extra_cull_margin = 2.0
 mesh = SubResource("BoxMesh_cube")
@@ -464,30 +456,30 @@ TargetObjectName = "Cube2"
 
 [node name="Kf0" type="Node" parent="BounceAnim" unique_id=1397606559]
 script = ExtResource("13_kf")
-Value = Vector3(4, 1, -3)
+Value = Vector3(16, 1, 1)
 
 [node name="Kf1" type="Node" parent="BounceAnim" unique_id=893314091]
 script = ExtResource("13_kf")
 Frame = 15
-Value = Vector3(4, 1.5, -3)
+Value = Vector3(16, 1.5, 1)
 Interp = 3
 
 [node name="Kf2" type="Node" parent="BounceAnim" unique_id=235744392]
 script = ExtResource("13_kf")
 Frame = 30
-Value = Vector3(4, 1, -3)
+Value = Vector3(16, 1, 1)
 Interp = 2
 
 [node name="Kf3" type="Node" parent="BounceAnim" unique_id=1353620163]
 script = ExtResource("13_kf")
 Frame = 45
-Value = Vector3(4, 1.5, -3)
+Value = Vector3(16, 1.5, 1)
 Interp = 3
 
 [node name="Kf4" type="Node" parent="BounceAnim" unique_id=1144429089]
 script = ExtResource("13_kf")
 Frame = 59
-Value = Vector3(4, 1, -3)
+Value = Vector3(16, 1, 1)
 Interp = 2
 
 [node name="SpinAnim" type="Node" parent="." unique_id=445708699]
@@ -637,54 +629,24 @@ ClipNames = PackedStringArray("wave")
 [node name="AnimationPlayer" type="AnimationPlayer" parent="SkinnedTest" unique_id=106166795]
 libraries/ = SubResource("AnimationLibrary_ntps4")
 
-; ── Test scene for PS1Room + PS1PortalLink (Phase 2 bullet 12) ──────────
-; Two adjacent rooms at x=+10..+18 connected by a portal at x=+12.5.
-; Walk east from spawn — yellow floor + tall orange pillars are visible
-; from a distance so the test area is easy to find. Pass through the gap
-; in the side walls to enter RoomA; cross through the open shared face
-; to reach RoomB through the portal.
-;
-; Walls sit inside each room's 5×3×5 volume (offset 0.075 m from the
-; AABB face) so every wall triangle's vertices stay within one room and
-; the assignment is clean. The shared face at x=12.5 is left open — the
-; PS1PortalLink is the doorway.
-
-; Room floors are visual-only (Collision=None) so they don't auto-emit
-; nav regions. The existing Floor's nav region already covers x=±15
-; including the room footprint; emitting overlapping mini-regions
-; trapped the player inside the room (no portal stitched between
-; overlapping regions). Player walks on Floor's nav region throughout.
 [node name="RoomFloorA" type="MeshInstance3D" parent="." unique_id=2004180001]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0.01, 0)
 material_override = SubResource("mat_room_floor_a")
+extra_cull_margin = 2.0
 mesh = SubResource("PlaneMesh_room_half")
 script = ExtResource("2_mesh")
 
 [node name="RoomFloorB" type="MeshInstance3D" parent="." unique_id=2004180002]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 15, 0.01, 0)
 material_override = SubResource("mat_room_floor_b")
+extra_cull_margin = 2.0
 mesh = SubResource("PlaneMesh_room_half")
 script = ExtResource("2_mesh")
 
-[node name="RoomCubeA" type="MeshInstance3D" parent="." unique_id=2004180003]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 1, 0)
-material_override = SubResource("mat_room_blue")
-mesh = SubResource("BoxMesh_cube")
-script = ExtResource("2_mesh")
-Collision = 1
-
-[node name="RoomCubeB" type="MeshInstance3D" parent="." unique_id=2004180004]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 15, 1, 0)
-material_override = SubResource("mat_room_magenta")
-mesh = SubResource("BoxMesh_cube")
-script = ExtResource("2_mesh")
-Collision = 1
-
-; ── RoomA walls (N + S only — west face is the player entrance,
-;    east face is the shared portal with RoomB) ──
 [node name="RoomA_WallN" type="MeshInstance3D" parent="." unique_id=2004180011]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 1.5, -2.425)
 material_override = SubResource("mat_room_blue")
+extra_cull_margin = 2.0
 mesh = SubResource("BoxMesh_wall_side")
 script = ExtResource("2_mesh")
 Collision = 1
@@ -692,21 +654,34 @@ Collision = 1
 [node name="RoomA_WallS" type="MeshInstance3D" parent="." unique_id=2004180012]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 1.5, 2.425)
 material_override = SubResource("mat_room_blue")
+extra_cull_margin = 2.0
 mesh = SubResource("BoxMesh_wall_side")
 script = ExtResource("2_mesh")
 Collision = 1
 
-; ── RoomB walls (E + N + S; west face is the shared portal with RoomA) ──
 [node name="RoomB_WallE" type="MeshInstance3D" parent="." unique_id=2004180020]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 17.425, 1.5, 0)
 material_override = SubResource("mat_room_magenta")
+extra_cull_margin = 2.0
 mesh = SubResource("BoxMesh_wall_end")
 script = ExtResource("2_mesh")
 Collision = 1
 
+; Teleport trigger in front of RoomB's east wall. Stepping into this
+; volume calls Scene.Load(1) → the checkered realm sub-scene. Sits just
+; inside the wall so the player has to walk deliberately past the
+; checkered cube to reach it.
+[node name="TeleportToRealm" type="Node3D" parent="." unique_id=2004180040]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 17, 1, 0)
+script = ExtResource("9_oeqrt")
+HalfExtents = Vector3(0.3, 1.5, 2.25)
+ScriptFile = "res://demo/scripts/teleport_to_realm.lua"
+metadata/_custom_type_script = "uid://bbl6b0g2qjisp"
+
 [node name="RoomB_WallN" type="MeshInstance3D" parent="." unique_id=2004180021]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 15, 1.5, -2.425)
 material_override = SubResource("mat_room_magenta")
+extra_cull_margin = 2.0
 mesh = SubResource("BoxMesh_wall_side")
 script = ExtResource("2_mesh")
 Collision = 1
@@ -714,16 +689,15 @@ Collision = 1
 [node name="RoomB_WallS" type="MeshInstance3D" parent="." unique_id=2004180022]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 15, 1.5, 2.425)
 material_override = SubResource("mat_room_magenta")
+extra_cull_margin = 2.0
 mesh = SubResource("BoxMesh_wall_side")
 script = ExtResource("2_mesh")
 Collision = 1
 
-; ── Approach pillars: tall orange markers visible from spawn so the
-; player can spot the test area from a distance. Sit just outside the
-; rooms (x=4, ±3 z) so they don't get assigned to either room.
 [node name="ApproachPillarN" type="MeshInstance3D" parent="." unique_id=2004180030]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 3, -3)
 material_override = SubResource("mat_pillar")
+extra_cull_margin = 2.0
 mesh = SubResource("BoxMesh_pillar")
 script = ExtResource("2_mesh")
 Collision = 1
@@ -731,6 +705,7 @@ Collision = 1
 [node name="ApproachPillarS" type="MeshInstance3D" parent="." unique_id=2004180031]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 3, 3)
 material_override = SubResource("mat_pillar")
+extra_cull_margin = 2.0
 mesh = SubResource("BoxMesh_pillar")
 script = ExtResource("2_mesh")
 Collision = 1
@@ -747,10 +722,6 @@ script = ExtResource("12_room")
 RoomName = "RoomB_Magenta"
 VolumeSize = Vector3(5, 3, 5)
 
-; Portal at the shared face between the two rooms. Forward = -Z in Godot;
-; we rotate 90° around Y so forward points +X — into RoomB. The exporter
-; auto-corrects if the author got the direction wrong, but authoring it
-; right keeps the Godot gizmo matching intent.
 [node name="PS1PortalLink_AB" type="Node3D" parent="." unique_id=2004180007]
 transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, 12.5, 1.5, 0)
 script = ExtResource("12_portal")
