@@ -451,9 +451,16 @@ upstream so the fix lands sooner.
   mismatch (same family of bug as entry N)?
 - File upstream with a minimal `.splashpack` that reproduces.
 
-**Status.** Reproduced + diagnosed 2026-04-20. The runtime is correct;
-the surprise is purely about which Godot-space sign convention an
-author has to use.
+**Status.** Reproduced + diagnosed 2026-04-20. Root cause was **on our
+side, not psxsplash's** — `SceneCollector.EncodeKeyframeValue` used
+`DegToFp10 = 4096f / 360f` for rotation tracks, but `psyqo::Angle` is
+`FixedPoint<10>` measured in fractions of Pi (per
+`nugget/psyqo/trigonometry.hh:45-48`): 1.0 pi-unit = 180° = 1024 raw
+fp10. So our encoder was doubling every angle. Authored 180° became
+360° (wraps to 0°), authored 45° became 90° (camera pitched straight
+up). Fixed by switching the constant to `1024f / 180f`. Entry kept as
+a postmortem so the specific failure pattern ("any cutscene with
+non-zero yaw produces camera staring at sky") is searchable.
 
 **Reading the psyqo + psxsplash sources gave the actual rules:**
 - `psyqo::Matrix33::vs[i]` is **column i** (verified against

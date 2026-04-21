@@ -832,8 +832,15 @@ public static class SceneCollector
             case PS1AnimationTrackType.Rotation:
             case PS1AnimationTrackType.CameraRotation:
             {
-                // 1 full turn (360°) = 4096 in fp10.
-                const float DegToFp10 = 4096f / 360f;
+                // psyqo::Angle = FixedPoint<10>, measured in fractions of
+                // Pi (trigonometry.hh:45-48): 1.0 pi-unit = 180° = 1024
+                // raw fp10. So 180° → 1024, 360° → 2048, 45° → 256.
+                // (The previous 4096/360 constant was 2× too large — it
+                // treated "1 full turn" as 4096 which would be correct
+                // for fp12 but psyqo uses fp10. Result was every angle
+                // doubled: authored 180° became 360° = wraps to 0°,
+                // authored 45° became 90°, etc.)
+                const float DegToFp10 = 1024f / 180f;
                 int rx = Mathf.RoundToInt(-v.X * DegToFp10);
                 int ry = Mathf.RoundToInt(-v.Y * DegToFp10);
                 int rz = Mathf.RoundToInt(v.Z * DegToFp10);
