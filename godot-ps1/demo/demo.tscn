@@ -506,58 +506,66 @@ TotalFrames = 600
 script = ExtResource("15_tr")
 TrackType = 0
 
+; Overhead → eye-level descent along x=0 so the camera never pans
+; laterally. Smooth, predictable, non-disorienting. Last keyframe
+; lines up with the third-person rig (Kf4 matches player pos +
+; rig offset at spawn) so control handoff is seamless.
 [node name="CamPosKf0" type="Node" parent="IntroCutscene/CamPosTrack" unique_id=1293512181]
 script = ExtResource("13_kf")
-Value = Vector3(0, 8, 6)
+Value = Vector3(0, 15, 18)
 
 [node name="CamPosKf1" type="Node" parent="IntroCutscene/CamPosTrack" unique_id=859689584]
 script = ExtResource("13_kf")
 Frame = 150
-Value = Vector3(5, 6, 4)
+Value = Vector3(0, 12, 15)
 Interp = 4
 
 [node name="CamPosKf2" type="Node" parent="IntroCutscene/CamPosTrack" unique_id=777955848]
 script = ExtResource("13_kf")
 Frame = 300
-Value = Vector3(5, 5, -1)
+Value = Vector3(0, 8, 13)
 Interp = 4
 
 [node name="CamPosKf3" type="Node" parent="IntroCutscene/CamPosTrack" unique_id=31898244]
 script = ExtResource("13_kf")
 Frame = 450
-Value = Vector3(4, 5, 3)
+Value = Vector3(0, 5, 12)
 Interp = 4
 
 [node name="CamPosKf4" type="Node" parent="IntroCutscene/CamPosTrack" unique_id=560384909]
 script = ExtResource("13_kf")
 Frame = 599
-Value = Vector3(0, 4, 5)
+Value = Vector3(0, 3, 11)
 Interp = 4
 
 [node name="CamRotTrack" type="Node" parent="IntroCutscene" unique_id=711669043]
 script = ExtResource("15_tr")
 TrackType = 1
 
+; Matching pitch descent: starts looking steeply downward (overhead
+; view of the scene) and smoothly levels out to the same heading as the
+; third-person rig (0° all axes) by frame 599. No yaw or roll, so the
+; camera never jerks sideways.
 [node name="CamRotKf0" type="Node" parent="IntroCutscene/CamRotTrack" unique_id=1515879523]
 script = ExtResource("13_kf")
-Value = Vector3(-40, 0, 0)
+Value = Vector3(-50, 0, 0)
 
 [node name="CamRotKf1" type="Node" parent="IntroCutscene/CamRotTrack" unique_id=1661118081]
 script = ExtResource("13_kf")
 Frame = 150
-Value = Vector3(-30, -45, 0)
+Value = Vector3(-40, 0, 0)
 Interp = 4
 
 [node name="CamRotKf2" type="Node" parent="IntroCutscene/CamRotTrack" unique_id=320274732]
 script = ExtResource("13_kf")
 Frame = 300
-Value = Vector3(-20, -120, 0)
+Value = Vector3(-25, 0, 0)
 Interp = 4
 
 [node name="CamRotKf3" type="Node" parent="IntroCutscene/CamRotTrack" unique_id=624521851]
 script = ExtResource("13_kf")
 Frame = 450
-Value = Vector3(-15, -30, 0)
+Value = Vector3(-10, 0, 0)
 Interp = 4
 
 [node name="CamRotKf4" type="Node" parent="IntroCutscene/CamRotTrack" unique_id=1322462890]
