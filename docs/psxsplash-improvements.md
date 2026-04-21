@@ -537,6 +537,82 @@ verbatim.
 
 ---
 
+### N+7. Sequenced music sequencer (custom format, MIDI-driven)
+
+**Problem.** psxsplash plays single-clip ADPCM via `AudioManager` and
+streams CD-DA via `MusicManager`, but has no sequenced-music story —
+no SEQ/VAB player, no MIDI parser, no per-channel pitch shifting on
+short instrument samples. Discord 2026-04-20 (spicyjpeg) confirmed
+sequenced music is on the roadmap with no concrete ETA. Games that
+want chiptune/tracker-style BGM either ship as multiple long
+single-track ADPCM loops (huge SPU footprint) or wait.
+
+**What we built.** A self-contained sequencer on top of `AudioManager`,
+shipped as an additive patch — no breaking changes to existing
+psxsplash APIs.
+
+- `src/musicsequencer.{hh,cpp}` — new class, ~300 LOC. Mono per
+  channel; each music channel owns a fixed SPU voice for the song's
+  lifetime. Tick model advances by the existing `m_dt12` so playback
+  scales naturally with frame timing.
+- 84-entry pitch table (exact 12th root of 2 in fp12, capped at the
+  SPU's 0x3FFF), precomputed as static rodata. We tried iterating
+  `rate = (rate * NUM) / DEN` with reasonable-sized fixed-point
+  ratios first; rounding error compounds enough over 36 semitones to
+  produce wildly wrong pitches.
+- Splashpack format bumped v21 → v22. Header tail grew 8 bytes
+  (`musicSequenceCount` + pad + `musicTableOffset`); section appended
+  after audio is an array of 24-byte `MusicTableEntry { dataOffset,
+  dataSize, char[16] name }` rows pointing at PS1M blobs.
+- PS1M binary blob: 16 B header (`"PS1M"` magic, BPM, ticksPerBeat,
+  channelCount, eventCount, loopStartTick) + 8 B `MusicChannelEntry`
+  × N + 8 B `MusicEvent` × M.
+- `AudioManager` extensions:
+  - `reserveVoices(int n)` — first N voices off-limits to `play()`.
+    Sequencer claims its pool on `playByIndex`, releases on `stop()`.
+  - `playOnVoice(int voice, int clipIdx, int vol, int pan)` — direct
+    placement bypassing the free-voice search. Sequencer drives notes
+    through this so dialog can never steal a held music note.
+  - `play()` rewritten to scan voices `[m_reservedForMusic,
+    MAX_VOICES)` itself (psyqo's `getNextFreeChannel` always starts
+    at 0 and doesn't know about the reservation).
+  - `getClipDurationFrames(int)` — derived from ADPCM size + sample
+    rate; small but useful for Lua-side dialog timing.
+- `SceneManager` owns the sequencer + a parallel name table
+  (`findMusicSequenceByName`); registers sequences from
+  `SplashpackSceneSetup::musicSequences[]` in `InitializeScene`,
+  ticks each frame next to the animation player, calls `stop()`
+  before `m_audio.reset()` on scene teardown.
+- Lua API: `Music.Play(nameOrIndex, vol)`, `Music.Stop()`,
+  `Music.IsPlaying()`, `Music.SetVolume(v)`, `Music.GetBeat()`,
+  `Music.Find(name)`. `Audio.GetClipDuration(nameOrIndex)` also added.
+
+**A couple of small gotchas worth flagging if you upstream a similar
+design:**
+- `m_dt12` convention is 4096 = one **30** fps frame (per the
+  `(elapsed_us * 4096) / 33333` calc), not 60. Cost an hour debugging
+  music-plays-at-half-speed.
+- Sort note-off before note-on at the same tick. Otherwise repeated
+  same-pitch notes (every snare hit in a typical drum loop) get
+  silenced by their own trailing note-off through a mono-per-channel
+  cut.
+
+**Status.** Local patch in `psxsplash-main/src/musicsequencer.{hh,cpp}`
++ touches in `audiomanager`, `scenemanager`, `splashpack`, `luaapi`,
+`Makefile`. Format documented in `docs/sequenced-music-format.md`,
+authoring side documented in the plugin's README. Self-contained
+enough that it's a viable upstream PR / starting point for the
+official sequencer when that work begins.
+
+**Evidence.**
+- `2026-04-20` — Demo scene needs background music; only existing
+  options are CD-DA streaming (heavy authoring chain, no sample-level
+  pitch control) or one-shot ADPCM (no sequencing). Built the
+  sequencer end-to-end in one session; runs the Reaper-authored test
+  song at correct tempo + pitch with bass/pad/lead/kick/snare/hat.
+
+---
+
 ## Changelog
 
 - `2026-04-18` — Document created. All entries speculative, pending Phase 2
@@ -549,3 +625,5 @@ verbatim.
   Real Phase 2 bullet 6 bisect; local one-liner patch applied.
 - `2026-04-20` — Entry N+2 upstreamed in psxsplash `70ada6e`. Vendor
   refresh pulled upstream to latest main; local patch dropped.
+- `2026-04-20` (evening) — Added entry N+7 (sequenced music sequencer).
+  Self-contained additive patch; viable upstream PR or design reference.

@@ -19,29 +19,48 @@ landed too: subdivision tool, texture compliance analyzer, low-res
 compositor preview, PS1Lua as a first-class Godot script language via
 GDExtension.
 
-**Phase 2 (splashpack exporter MVP): in progress, bullets 1–6, 8, 9, 10
-(MVP), and 11 running on PSX.** The Godot demo scene exports to a valid
-splashpack, boots in PCSX-Redux, and plays: intro cutscene with narrator,
-third-person camera follows the player, humanoid avatar tracks + turns
-with player input, interactive cubes with branching dialog, animated
-skinned mesh, audio with per-clip residency, in-editor dock with live
-scene-budget bars. Remaining Phase 2 bullets: 7 (nav beyond flat) and
-12 (rooms/portals). See `ROADMAP.md`.
+**Phase 2 (splashpack exporter MVP): in progress, bullets 1–6, 8, 9, 10,
+11, and 12 (MVP) running on PSX.** The Godot demo scene exports to a
+valid splashpack, boots in PCSX-Redux, and plays: intro cutscene with
+narrator + camera arc + cube zoom, third-person camera follows the
+player, humanoid avatar tracks + turns with player input, interactive
+cubes with branching dialog (audio-aware auto-hide), animated skinned
+mesh, audio with per-clip residency, **MIDI-driven sequenced background
+music** with per-channel pitch shifting and dialog ducking, multi-scene
+teleport (`Scene.Load`), portal-culled interior scene, in-editor dock
+with live scene-budget bars. Remaining Phase 2 bullets: 7 (nav beyond
+flat). See `ROADMAP.md`.
 
 **What works right now**
 - PS1 spatial shader + default material, vertex jitter, fog
 - Custom nodes: `PS1Scene`, `PS1MeshInstance`, `PS1SkinnedMesh`,
   `PS1Camera`, `PS1Player`, `PS1AudioClip`, `PS1TriggerBox`,
   `PS1UICanvas`, `PS1UIElement`, `PS1Animation`, `PS1Cutscene`
-- Splashpack **v21** exporter (meshes with bone weights, textures with
+- Splashpack **v22** exporter (meshes with bone weights, textures with
   CLUT quantization, per-object colliders, flat nav regions,
   source-text Lua scripts, ADPCM audio with Residency flags,
-  editor-driven camera + avatar rigs from `PS1Player` child nodes)
+  editor-driven camera + avatar rigs from `PS1Player` child nodes,
+  rooms + portals + tri-ref assignment for interior scenes,
+  sequenced music tracks)
 - Skinned meshes with per-vertex rigid bone assignment + baked
   animation clips sampled at author-set FPS
 - First-person / third-person camera mode switching via
   `Camera.SetMode()` Lua API
-- Runtime `\n` word-wrap for dialog and narrator text
+- **Sequenced music**: drop a `.mid` + sample-bank WAVs into the scene,
+  bind each MIDI channel to an instrument sample (with per-note routing
+  for drum kits), and play via `Music.Play("name")`. Voice reservation
+  keeps dialog from stealing music notes; dialog scripts auto-duck the
+  bed while voice clips play. PS1M binary format documented in
+  `docs/sequenced-music-format.md`.
+- Multi-scene support: `Scene.Load(N)` swaps to additional scenes
+  packed alongside the main one (boss arenas, dream realms, region
+  transitions)
+- Cutscene authoring with multi-track timelines (camera position +
+  rotation, object position, audio events) — runtime camera follows the
+  authored arc, hands back to the player rig cleanly at the end
+- Runtime `\n` word-wrap for dialog and narrator text; `Audio.GetClipDuration`
+  lets dialog scripts auto-hide the box once the voice clip actually
+  finishes (instead of a fixed timeout)
 - Dockable **PS1Godot** panel with triangle/VRAM/SPU budget bars,
   dependency-detection setup section, and primary Run-on-PSX CTA
 - PS1 UI prefab templates (`dialog_box`, `menu_list`, `hud_bar`,
@@ -52,11 +71,14 @@ scene-budget bars. Remaining Phase 2 bullets: 7 (nav beyond flat) and
 **What doesn't yet**
 - Non-trivial nav regions (DotRecast port or manual polygon auth,
   Phase 2 bullet 7)
-- Rooms / portals for interior-scene culling (Phase 2 bullet 12)
-- Cutscenes polish beyond MVP (rotation/scale tracks, camera-bug
-  reproduction — Phase 2 bullet 10 option B)
-- WYSIWYG UI canvas editor, dialog tree editor, `PS1Theme.tres`
-  (Phase 3 § UI authoring experience)
+- MIDI CC parsing for music — volume/pan/expression/pitch-bend events
+  in the source MIDI are read but ignored. Per-channel mix is set on
+  the binding resource instead.
+- Cell subdivision + per-room portal-ref lists for the room/portal
+  renderer (runtime falls back to "render all of a room's tri-refs"
+  cleanly without them)
+- WYSIWYG UI canvas editor, dialog tree editor, MIDI event-marker
+  authoring (Phase 3 § UI authoring experience)
 - F5-to-play binding, VRAM viewer dock, project templates
   (Phase 3)
 - Phase 0.5 install-buttons on the setup dock

@@ -1,4 +1,4 @@
-# Splashpack format v21
+# Splashpack format v22
 
 Extracted from `psxsplash-main/src/splashpack.{hh,cpp}` and
 `godot-ps1/addons/ps1godot/exporter/SplashpackWriter.cs`. Keep this in sync when
@@ -26,16 +26,18 @@ the respective sidecar file, not absolute addresses.
 Little-endian throughout. The PS1 MIPS CPU is little-endian; writer and loader
 both assume it.
 
-## File header — `SPLASHPACKFileHeader` (136 bytes)
+## File header — `SPLASHPACKFileHeader` (144 bytes)
 
-Source: `splashpack.cpp` ~lines 21–85. `static_assert(sizeof(...) == 136)`.
+Source: `splashpack.cpp` ~lines 21–90. `static_assert(sizeof(...) == 144)`.
 v21 appended 16 bytes at the end of the v20 header for editor-driven player
-rigs (camera offset + avatar attachment).
+rigs (camera offset + avatar attachment). v22 appended a further 8 bytes
+for the sequenced-music table (`musicSequenceCount` + `pad_music` +
+`musicTableOffset`).
 
 | Offset | Type | Field | Notes |
 |-------:|------|-------|-------|
 | 0 | `char[2]` | `magic` | `"SP"` |
-| 2 | `u16` | `version` | `21`; loader asserts `>= 21` |
+| 2 | `u16` | `version` | `22`; loader asserts `>= 22` |
 | 4 | `u16` | `luaFileCount` | |
 | 6 | `u16` | `gameObjectCount` | |
 | 8 | `u16` | `textureAtlasCount` | |
@@ -91,6 +93,9 @@ rigs (camera offset + avatar attachment).
 | 126 | `PackedVec3` | `playerAvatarOffset` | v21+. Mesh-origin to player-origin offset, player-local. |
 | 132 | `u16` | `playerAvatarObjectIndex` | v21+. Which gameObject auto-tracks player; `0xFFFF` = none. |
 | 134 | `u16` | `pad_rig` | 0 |
+| 136 | `u16` | `musicSequenceCount` | v22+. Number of sequenced-music entries (capped at 8). |
+| 138 | `u16` | `pad_music` | 0 |
+| 140 | `u32` | `musicTableOffset` | v22+. → `MusicTableEntry[]` in `.splashpack`, 0 if no sequences. |
 
 ## Post-header layout (main `.splashpack`)
 
@@ -98,7 +103,7 @@ Written in this order by `PSXSceneWriter.Write()` and read linearly by
 `SplashPackLoader::LoadSplashpack()`:
 
 ```
-Header (136 bytes)
+Header (144 bytes)
 ├── LuaFile[]          — luaFileCount × sizeof(LuaFile)
 ├── GameObject[]       — gameObjectCount × sizeof(GameObject)
 ├── SPLASHPACKCollider[] — colliderCount × 32 bytes
@@ -113,6 +118,7 @@ Header (136 bytes)
 ├── Skinned mesh table — pointed to by skinTableOffset
 ├── UI table           — canvases + fonts, pointed to by uiTableOffset
 ├── Audio table        — clip headers (data lives in .spu), at audioTableOffset
+├── Music table        — MusicTableEntry[] + PS1M blobs, at musicTableOffset (v22+)
 ├── Name table         — null-terminated strings, at nameTableOffset
 ├── Pixel data table   — TPage + CLUT offsets into .vram, at pixelDataOffset
 └── Per-object triangle streams — referenced by GameObject.polygonsOffset
@@ -161,6 +167,17 @@ Header (136 bytes)
 | `u16` | `length` |
 | `u16` | `pad` |
 
+### `MusicTableEntry` — 24 bytes (v22+)
+
+| Offset | Type | Field | Notes |
+|-------:|------|-------|-------|
+| 0 | `u32` | `dataOffset` | Byte offset of the PS1M blob in the `.splashpack`. |
+| 4 | `u32` | `dataSize` | Size of the PS1M blob in bytes. |
+| 8 | `char[16]` | `name` | Null-padded; truncated by writer to 15 chars + null. Lua resolves via `Music.Find(name)` / `Music.Play(name)`. |
+
+The PS1M blob's internal layout (header + channel table + event stream)
+is documented separately in `docs/sequenced-music-format.md`.
+
 ## Coordinate conversions (writer side)
 
 SplashEdit runs in Unity coordinates (left-handed, Y-up, meters) and converts
@@ -177,7 +194,7 @@ All fp12 fields are stored as `u16` with range 0–65535; the writer has overflo
 guards that log an error but write a clamped value, so corrupt scenes fail at
 export-time, not runtime.
 
-## Version history (as of v21)
+## Version history (as of v22)
 
 - v10: audio clips
 - v11: fog config
@@ -192,6 +209,12 @@ export-time, not runtime.
   reads a `Camera3D` child of `PS1Player` as the third-person offset and a
   `MeshInstance3D` child as the auto-tracked avatar. `Camera.SetMode` Lua
   API flips between first- and third-person at runtime.
+- v22: sequenced music — `musicSequenceCount` + `pad_music` +
+  `musicTableOffset` appended to the header (+8 bytes). Music section
+  is an array of 24-byte `MusicTableEntry` rows pointing at PS1M blobs.
+  Format documented in `docs/sequenced-music-format.md`. Runtime adds a
+  `MusicSequencer` class on top of `AudioManager` (with voice
+  reservation so dialog can't steal music notes).
 
 ## When porting the writer to Godot
 

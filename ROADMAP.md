@@ -222,10 +222,13 @@ without crashing, even if features are stubbed.
 
 **Status (2026-04-20):** bullets 1–6 ✅, 7 🟡 (authored regions +
 auto-portals + ramps; DotRecast auto-gen deferred), 8 ✅ (+ `\n` runtime
-wrap, dialog ownership), 9 ✅, 10 ✅ (MVP — position/rotation/UI tracks on
-the runtime roadmap), 11 ✅ (staged end-to-end 2026-04-20), 12 🟡 (rooms
-+ portals + tri-ref assignment; cells + portal-refs deferred). Format
-at **v21** (bumped for editor-driven player rigs).
+wrap, dialog ownership, audio-aware auto-hide via `Audio.GetClipDuration`),
+9 ✅, 10 ✅ (camera position + rotation + zoom-on-target tracks; player-rig
+handoff convention derived from psyqo's matrix order), 11 ✅, 12 ✅
+(rooms + portals + tri-ref assignment; cells + portal-refs deferred,
+runtime falls back cleanly without them). Format at **v22** (bumped for
+sequenced music). Multi-scene packing + `Scene.Load(N)` Lua API also
+landed on top of the bullet-list scope.
 
 1. **Writer skeleton + 3-file split.** Port `PSXSceneWriter.Write()` structure
    and offset bookkeeping. Emit an empty but valid splashpack (current format
@@ -419,41 +422,60 @@ Assets pack via Phase 2 bullet 6; Lua can't trigger them yet.
       trigger." Counts SPU-RAM per area; warns on overflow.
 - [ ] `Music.PlayXA(track)` / `Music.Stop()` / `Music.SetVolume(v)`.
 
-### Sequenced music + music-driven events *(blocked: upstream psxsplash)*
+### Sequenced music + music-driven events *(MVP shipped 2026-04-20)*
 
-Upstream psxsplash is working on sequenced-music support (no ETA, per
-Discord 2026-04-20 spicyjpeg; likely a few months). The existing team
-has confirmed custom events in the sequence timeline would be
-"not hard to support." When that lands, surface it through Lua so
-music can drive gameplay, not just play alongside it.
+Upstream psxsplash had no sequenced-music support and no concrete ETA,
+so we built our own: a small custom binary format (`PS1M`) parsed at
+export from MIDI, played back by a new `MusicSequencer` class on top
+of psxsplash's existing `AudioManager`. Format is documented in
+`docs/sequenced-music-format.md`; runtime patch tracker entry in
+`docs/psxsplash-improvements.md`.
 
-- [ ] `Music.PlaySequenced(name)` — play an authored sequence
-      (replacement for the XA streaming path once sequences exist).
+- [x] **`Music.Play(nameOrIndex[, volume])`** — start a sequence. Volume
+      is the master 0-127. Returns true on success.
+- [x] **`Music.Stop()`**, **`Music.IsPlaying()`**, **`Music.SetVolume(v)`**,
+      **`Music.GetBeat()`**, **`Music.Find(name)`**.
+- [x] **`PS1MusicSequence` Godot resource** — points at a `.mid` file,
+      carries per-MIDI-channel bindings (`PS1MusicChannel` sub-resources)
+      that map each channel to a `PS1AudioClip` sample with base note,
+      volume, pan, and optional note-range filter (for drum kits
+      where one MIDI channel drives multiple sample channels).
+- [x] **MIDI parser in C#** — SMF format 0/1, NoteOn/Off + Set Tempo
+      meta event. Sort order = NoteOff before NoteOn at same tick (so
+      consecutive same-pitch notes don't kill each other through our
+      mono-per-channel runtime).
+- [x] **PS1M serializer** — flat array of 8-byte events (tick, channel,
+      kind, data1, data2). 16-byte header + 8-byte channel entries +
+      events. ~12 KB for a 2-minute song.
+- [x] **Splashpack v22** — header tail grew 8 bytes for music table
+      offset + count. Music section = array of 24-byte
+      `MusicTableEntry` + per-sequence PS1M blobs aligned to 4 bytes.
+- [x] **Voice reservation** — `AudioManager::reserveVoices(n)` +
+      `playOnVoice(...)`. The sequencer claims voices `0..channelCount-1`
+      for the song's lifetime. Dialog/SFX use voices `[n, MAX_VOICES)`.
+      No more "music note silenced because dialog stole its voice."
+- [x] **Dialog auto-ducking** — dialog scripts `Music.SetVolume(18)` on
+      show, restore the master on hide. Applied across `test_logger.lua`,
+      `checkered_dialog.lua`, `realm_cube_dialog.lua`.
+- [x] **Drum-kit support** — per-note routing on `PS1MusicChannel`
+      (`MidiNoteMin`/`MidiNoteMax`) lets one MIDI channel drive multiple
+      sample channels. Demo wires kick (note 36) → `inst_kick`, snare
+      (40) → `inst_snare`, hat (42) → `inst_hat`.
 - [ ] `onMusicEvent(cueName, beatNumber)` — Lua callback the runtime
       dispatches when the sequence hits an author-placed event marker.
-      Shape mirrors `onInteract` / `onTriggerEnter`: scene-level hook
-      script invoked with the event args. Unlocks:
+      Format reserves event kinds 4–255 for this; runtime parser will
+      dispatch on a new kind without a header bump. Unlocks:
         - rhythm-game inputs keyed to the beat,
-        - boss phase transitions triggered by the track (e.g., "enrage
-          at the chorus drop"),
+        - boss phase transitions triggered by the track,
         - dialog / cutscene timing synchronized without dead-reckoning
-          frame counts,
-        - visual effects flashed on a downbeat without the author
-          polling the music clock.
-- [ ] `Music.GetBeat()` / `Music.GetBar()` — query the sequencer
-      position without waiting for an event. Supports "should enemies
-      telegraph their attack 1 beat before swinging?" logic.
-- [ ] `PS1Scene.MusicSequenceFile` authoring property — drops in the
-      sequence asset; exporter handles packaging the same way audio
-      clips work today.
-- [ ] Event-marker authoring UI — either a timeline overlay on the
-      sequence asset's inspector, or a plain string list "emit event
-      'chorus_start' at beat 128". Minimum viable is the string list;
-      timeline view is Phase 3 polish.
-
-Track progress by watching the upstream psxsplash repo; open the
-integration work when the format stabilizes. Tracker entry in
-`docs/psxsplash-improvements.md` once we know the format shape.
+          frame counts.
+- [ ] **MIDI CC parsing** — CC 7 (Volume), CC 10 (Pan), CC 11 (Expression),
+      Pitch Bend. Parser currently skips them; would let authored MIDI
+      mix automation drive runtime per-channel volume / pan / pitch.
+- [ ] `Music.GetBar()` — query bar number on top of `GetBeat`.
+- [ ] **MIDI event-marker authoring UI** — either a timeline overlay or
+      a plain string list ("emit event 'chorus_start' at beat 128").
+      Minimum viable is the string list; timeline view is Phase 3 polish.
 
 ### Save / load
 
@@ -854,6 +876,87 @@ matters, and do better where it's cheap.
       archives physically close on the disc to reduce seeks. Only matters
       once Phase 2.5 chunk streaming is real.
 - [ ] Loading screens (uses existing PSXCanvas path; just a convention).
+
+### Music authoring experience
+
+Phase 2.5 shipped sequenced music end-to-end (drop a `.mid` + sample
+WAVs, bind by hand, play on PSX). The MVP works but the binding step
+is "open inspector, fill 6+ resource fields per channel, hope the
+mix is right." We learned a lot doing this for the demo song —
+several of those discoveries should become first-class plugin
+features so other authors don't repeat the same trial-and-error.
+
+Tiered by effort vs. user reach:
+
+**Tier 1 — DAW-agnostic (works for any DAW that exports MIDI):**
+
+- [ ] **`PS1MusicSequence` "Import MIDI" inspector button.** Pick a
+      `.mid`, the plugin parses it (re-using the same `MidiParser` the
+      exporter calls), and auto-creates a starter `PS1MusicChannel`
+      sub-resource per MIDI channel found in the file. User still
+      drops in samples + tunes mix, but the per-channel binding
+      skeleton is filled in for them. Massive reduction in
+      "what-do-I-bind-to-what" friction.
+- [ ] **MIDI inspection / debug tools committed under `tools/`** —
+      `midi_inspect.py`, `midi_polyphony.py` already shipped from
+      the demo work. Document them in the music guide so authors
+      can sanity-check their `.mid` (per-track polyphony, channel
+      distribution, note ranges) before/after import.
+- [ ] **"Music Authoring Guide"** at `docs/music-authoring.md`.
+      Universal flow ("export multi-track .mid + render each
+      instrument as a single short WAV at a known root note"), one
+      paragraph per major DAW (Reaper, Ableton, FL, Logic) on how
+      to do the per-channel render in that specific DAW.
+- [ ] **MIDI event-marker authoring** for `Music.OnEvent` — minimum
+      viable is a string list ("emit 'chorus_start' at beat 128") on
+      the `PS1MusicSequence` resource; timeline overlay is later
+      polish. Requires the runtime side to land first
+      (`onMusicEvent` Lua callback — listed above in Phase 2.5).
+
+**Tier 2 — Reaper-specific power feature:**
+
+- [ ] **`tools/rpp_extract_samples.py` upgrade.** Already extracts
+      sample paths + per-track linear volumes (proven on
+      `RetroAdventureSong.rpp`). Extend to also pull
+      ReaSamplOmatic5000 root notes (one of the doubles in the VST
+      state) and ReaSynth params (waveform + ADSR for chord
+      tracks). Emit a JSON the editor can consume.
+- [ ] **`PS1MusicSequence` "Sync from Reaper project" button.** Picks
+      a `.rpp`, runs the extractor, builds out a complete sequence
+      resource: sample paths copied + trimmed to fit the SPU budget,
+      base notes set, per-channel volumes mapped from Reaper's mix,
+      drum-kit splits inferred from MIDI note distribution. The
+      author clicks "Run on PSX" and the song plays approximately
+      as authored, no manual binding step.
+- [ ] **Sample auto-conversion** — the extractor already needs to
+      downmix stereo→mono, resample to a PSX-friendly rate, and
+      trim to fit the 508 KB SPU. Bake that into a reusable
+      utility (`tools/convert_real_samples.py` is the
+      starting point) so it's available for any sample-bank import,
+      not just Reaper projects.
+- Reaper-only because the `.rpp` is plain text and decodable;
+  Ableton's `.als` / FL's `.flp` are binary and would need separate
+  parsers (much bigger investment).
+
+**Tier 3 — Universal stem-render flow** *(later polish)*:
+
+- [ ] **Per-track stem-render convention.** Author renders each track
+      as audio in their DAW (every DAW supports this), names the
+      output `track_bass.wav` / `track_lead.wav` / etc. next to the
+      `.mid`, and the importer auto-binds each MIDI track to the
+      matching audio file by name. Works for any synth in any DAW
+      because the user is rendering through their actual instrument
+      patches — sample fidelity matches the source perfectly.
+- [ ] **Pitch-recognition assist** — when an author drops a stem
+      WAV, optionally analyze it for fundamental frequency at the
+      first audible note and suggest a `BaseNoteMidi` value. Cheap
+      via FFT or autocorrelation. Saves the "what note was this
+      sample recorded at?" guesswork.
+
+**Done when:** an author who's never seen PS1Godot can drop a `.mid`
++ a folder of WAVs into a scene, click an Import button, get a
+working sequence resource that plays a recognizable rendition of the
+source on PSX with no manual binding work.
 
 **Done when:** someone who's never seen the project can open Godot, select the
 "PS1 Game" template, press F5, and see a playable scene in the emulator within
