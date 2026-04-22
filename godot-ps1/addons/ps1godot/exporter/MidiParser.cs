@@ -181,6 +181,31 @@ public static class MidiParser
                 uint sysLen = ReadVarLen(r);
                 r.BaseStream.Seek(sysLen, SeekOrigin.Current);
             }
+            else if (status >= 0xF1 && status <= 0xFE)
+            {
+                // System Common (F1-F6) and System Realtime (F8-FE).
+                // Rare in SMF files but legal. Eating a fixed 1 byte
+                // (old default behaviour) desynced the track parser for
+                // any message with a data-byte count other than 1.
+                //   F1 MTC quarter-frame: 1 data byte
+                //   F2 Song Position:     2 data bytes
+                //   F3 Song Select:       1 data byte
+                //   F6 Tune Request:      0 data bytes
+                //   F8..FE Realtime:      0 data bytes each
+                //   F4, F5, FD are reserved/undefined — treat as 0-byte.
+                switch (status)
+                {
+                    case 0xF1: case 0xF3:
+                        r.ReadByte();
+                        break;
+                    case 0xF2:
+                        r.ReadByte(); r.ReadByte();
+                        break;
+                    default:
+                        // F4, F5, F6, F8, F9, FA, FB, FC, FD, FE — 0 data bytes.
+                        break;
+                }
+            }
             else
             {
                 byte kind = (byte)(status & 0xF0);
@@ -227,9 +252,9 @@ public static class MidiParser
                         r.ReadByte();
                         break;
                     default:
-                        // Unknown status; try to skip one byte to recover.
-                        r.ReadByte();
-                        break;
+                        // Unreachable: status is verified 0x80..0xEF above.
+                        throw new InvalidDataException(
+                            $"MIDI parser: unexpected channel status byte 0x{status:X2} at position {r.BaseStream.Position - 1}.");
                 }
             }
         }
