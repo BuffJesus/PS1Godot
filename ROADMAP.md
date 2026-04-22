@@ -400,8 +400,12 @@ from a seed in under 100 ms on hardware.
 
 The runtime already has a collider grid and nav regions — bind them to Lua.
 
-- [ ] `Physics.Raycast(origin, dir, maxDist)` → hit (normal, distance, object).
-      Unlocks targeting, line-of-sight, "look at block, break block."
+- [x] `Physics.Raycast(origin, dir, maxDist)` → `{ object, distance, point }`
+      or nil. MVP hits **Solid collider AABBs** (not world-geometry triangles).
+      Linear scan up to 64 colliders, slab method in FP12. Normal not returned
+      yet — compute from the hit face or the collider's world position until
+      ray-vs-triangle lands. Unlocks projectiles, pickups, LoS-to-objects.
+- [ ] `Physics.Raycast` against BVH triangles — needed for walls-block-LoS.
 - [ ] `Physics.OverlapBox/Sphere(bounds)` → list of intersecting GameObjects.
 - [ ] `Physics.SweepSphere(origin, dir, radius)` for projectiles.
 - [ ] `Nav.Pathfind(from, to, maxSteps)` — portal-aware path across nav
@@ -729,7 +733,9 @@ modern, beautiful) — see `docs/ui-ux-plan.md` § UI authoring.
 ### Input
 
 - [ ] `Input.IsPressed(pad, btn)` — multi-pad; current API implicitly pad 0.
-- [ ] `Input.JustPressed(btn)` single-frame edge trigger.
+- [x] ~~`Input.JustPressed(btn)`~~ — already shipped as `Input.IsPressed`,
+      which is the single-frame press edge (confusingly named: the continuous
+      "held" variant is `Input.IsHeld`). Roadmap was wrong; closing as-is.
 - [ ] `Input.SetRumble(pad, intensity, frames)` — analog controllers support it.
 
 ### Cutscenes / flow control
