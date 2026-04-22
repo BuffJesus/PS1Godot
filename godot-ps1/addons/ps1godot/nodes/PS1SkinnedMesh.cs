@@ -21,6 +21,7 @@ namespace PS1Godot;
 // 15 is plenty for PS1 dialog animations, 30 for combat.
 [Tool]
 [GlobalClass]
+[Icon("res://addons/ps1godot/icons/ps1_skinned_mesh.svg")]
 public partial class PS1SkinnedMesh : PS1MeshInstance
 {
     [ExportGroup("PS1 / Skinning")]
@@ -32,7 +33,7 @@ public partial class PS1SkinnedMesh : PS1MeshInstance
     // Sampling rate for baking bone matrices (frames per second).
     // Lower values save memory and splashpack size; 15 is usually
     // sufficient for PS1 character animation.
-    [Export(PropertyHint.Range, "1,30,1")]
+    [Export(PropertyHint.Range, "1,30,1,suffix:fps")]
     public int TargetFps { get; set; } = 15;
 
     // Which clips to bake. If empty, every animation in the

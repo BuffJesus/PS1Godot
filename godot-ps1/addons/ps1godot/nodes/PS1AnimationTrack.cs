@@ -11,6 +11,7 @@ namespace PS1Godot;
 // multi-property timelines (camera + door + NPC walking together).
 [Tool]
 [GlobalClass]
+[Icon("res://addons/ps1godot/icons/ps1_animation_track.svg")]
 public partial class PS1AnimationTrack : Node
 {
     // Must match a PS1MeshInstance Name elsewhere in the scene. Camera-

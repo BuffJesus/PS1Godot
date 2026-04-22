@@ -25,8 +25,10 @@ public enum PS1AnimationTrackType
 // in cutscenes (follow-up). Play from Lua via Animation.Play("<name>").
 [Tool]
 [GlobalClass]
+[Icon("res://addons/ps1godot/icons/ps1_animation.svg")]
 public partial class PS1Animation : Node
 {
+    [ExportGroup("Identity")]
     // Unique name used by Animation.Play lookups. Falls back to the node's
     // name if empty.
     [Export] public string AnimationName { get; set; } = "";
@@ -35,11 +37,12 @@ public partial class PS1Animation : Node
     // that's what the runtime's object name table resolves to a GameObject.
     [Export] public string TargetObjectName { get; set; } = "";
 
+    [ExportGroup("Timing")]
     // What this animation drives on the target.
     [Export] public PS1AnimationTrackType TrackType { get; set; } = PS1AnimationTrackType.Position;
 
     // Total length in 30-fps frames. 60 = 2 seconds. Max 8191 per the
     // runtime's 13-bit frame field in CutsceneKeyframe (~4.5 minutes).
-    [Export(PropertyHint.Range, "1,8191,1")]
+    [Export(PropertyHint.Range, "1,8191,1,suffix:frames")]
     public int TotalFrames { get; set; } = 60;
 }

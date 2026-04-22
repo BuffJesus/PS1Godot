@@ -32,6 +32,7 @@ namespace PS1Godot;
 // path — skinned avatars stay in their own pipeline.
 [Tool]
 [GlobalClass]
+[Icon("res://addons/ps1godot/icons/ps1_mesh_group.svg")]
 public partial class PS1MeshGroup : Node3D
 {
     public enum CollisionKind

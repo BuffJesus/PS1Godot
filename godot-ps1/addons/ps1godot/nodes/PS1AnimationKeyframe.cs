@@ -21,12 +21,13 @@ public enum PS1InterpMode
 //   Active:   Value.X used as a boolean (non-zero = active, 0 = hidden).
 [Tool]
 [GlobalClass]
+[Icon("res://addons/ps1godot/icons/ps1_animation_keyframe.svg")]
 public partial class PS1AnimationKeyframe : Node
 {
     // Frame number within the parent animation's timeline. Must be in
     // [0, TotalFrames). Multiple keyframes may share a frame if you want
     // stepped behavior, but authors should generally pick distinct frames.
-    [Export(PropertyHint.Range, "0,8191,1")]
+    [Export(PropertyHint.Range, "0,8191,1,suffix:frames")]
     public int Frame { get; set; } = 0;
 
     // Track-type-dependent triple (see the class comment for units).

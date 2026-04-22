@@ -13,6 +13,7 @@ namespace PS1Godot;
 //   - No collision (opt in when you actually want it)
 [Tool]
 [GlobalClass]
+[Icon("res://addons/ps1godot/icons/ps1_mesh_instance.svg")]
 public partial class PS1MeshInstance : MeshInstance3D
 {
     public enum CollisionKind
@@ -49,7 +50,7 @@ public partial class PS1MeshInstance : MeshInstance3D
     // this object's attached script. Disabled by default — most meshes
     // are not interactive.
     [Export] public bool Interactable { get; set; } = false;
-    [Export(PropertyHint.Range, "0.1,10.0,0.1")]
+    [Export(PropertyHint.Range, "0.1,10.0,0.1,suffix:m")]
     public float InteractionRadiusMeters { get; set; } = 1.5f;
     // PSX controller button ids — must match psyqo::AdvancedPad::Button:
     //   0=Select  1=L3       2=R3       3=Start
@@ -64,7 +65,7 @@ public partial class PS1MeshInstance : MeshInstance3D
     public int InteractButton { get; set; } = 12;
     // Repeatable = fires every time within cooldown. Non-repeatable = once, then locked.
     [Export] public bool InteractionRepeatable { get; set; } = true;
-    [Export(PropertyHint.Range, "0,600,1")]
+    [Export(PropertyHint.Range, "0,600,1,suffix:frames")]
     public int InteractionCooldownFrames { get; set; } = 30;
     // UI canvas to show as a "Press X to ..." prompt while in range. Empty
     // = no prompt. Wire-up lands when the UI bullet ships; for now the
