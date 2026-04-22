@@ -208,6 +208,7 @@ Width = 192
 Color = Color(0.85, 0.85, 0.85, 1)
 ThemeSlot = 1
 Text = "Licensed by"
+TextAlign = 1
 
 [node name="LicensedLine2" type="Node" parent="LicensedCanvas" unique_id=510065470]
 script = ExtResource("9_uiel")
@@ -219,6 +220,7 @@ Width = 224
 Color = Color(0.85, 0.85, 0.85, 1)
 ThemeSlot = 1
 Text = "HeadSpider Studios"
+TextAlign = 1
 
 [node name="MarkLine" type="Node" parent="LicensedCanvas" unique_id=510065471]
 script = ExtResource("9_uiel")
@@ -229,5 +231,6 @@ Width = 40
 Color = Color(0.85, 0.85, 0.85, 1)
 ThemeSlot = 1
 Text = "HS(TM)"
+TextAlign = 1
 
 [editable path="HeadSpider/SpiderMesh"]
