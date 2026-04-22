@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="PS1UIFontAsset" load_steps=3 format=3]
+
+; Bundled demo font for the PS1 UI pipeline. OFL-licensed (see OFL.txt),
+; chosen because it's a proportional pixel-style face that reads cleanly
+; at 10–16 px on the PSX. Drop it onto a PS1UIElement's Font slot and run
+; Tools → "PS1Godot: Generate bitmap for selected PS1UIFontAsset" to
+; populate GlyphWidth / GlyphHeight / Bitmap / AdvanceWidths on first use
+; (those fields are persisted back into this .tres by the generator).
+
+[ext_resource type="FontFile" path="res://addons/ps1godot/fonts/VT323-Regular.ttf" id="1_vt323"]
+[ext_resource type="Script" path="res://addons/ps1godot/nodes/PS1UIFontAsset.cs" id="2_script"]
+
+[resource]
+script = ExtResource("2_script")
+SourceFont = ExtResource("1_vt323")
+FontSize = 12
+FontName = "vt323"
+AlphaThreshold = 0.3
+GlyphWidth = 0
+GlyphHeight = 0
+AdvanceWidths = PackedByteArray(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)

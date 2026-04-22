@@ -1,4 +1,4 @@
-[gd_scene load_steps=14 format=4 uid="uid://cps1splashtmpl01"]
+[gd_scene load_steps=15 format=4 uid="uid://cps1splashtmpl01"]
 
 [ext_resource type="Script" uid="uid://b8ogc8krip2k" path="res://addons/ps1godot/nodes/PS1Scene.cs" id="1_scene"]
 [ext_resource type="Script" uid="uid://dng0iofdw3dk7" path="res://addons/ps1godot/nodes/PS1MeshInstance.cs" id="2_mesh"]
@@ -13,6 +13,7 @@
 [ext_resource type="Resource" path="res://addons/ps1godot/themes/PS1Theme.tres" id="11_theme"]
 [ext_resource type="Script" uid="uid://3bx6n5sx7krl" path="res://addons/ps1godot/nodes/PS1MusicChannel.cs" id="12_chan"]
 [ext_resource type="Script" uid="uid://c2oekhtvjyqlt" path="res://addons/ps1godot/nodes/PS1MusicSequence.cs" id="13_seq"]
+[ext_resource type="Resource" path="res://addons/ps1godot/fonts/vt323_font.tres" id="14_font"]
 
 ; Splash chime clip slot. Replace Stream with your own sample (any
 ; imported .wav under res://). ClipName is what the cutscene's
@@ -158,13 +159,15 @@ Theme = ExtResource("11_theme")
 [node name="BrandText" type="Node" parent="BrandCanvas" unique_id=9200000051]
 script = ExtResource("10_uiel")
 ElementName = "brand"
-X = 80
+Anchor = 2
+X = 0
 Y = 32
 Width = 160
 Height = 16
 Color = Color(0.85, 0.85, 0.85, 1)
 ThemeSlot = 8
 Text = "Your Studio Name"
+Font = ExtResource("14_font")
 
 ; Licensed canvas — three-line legal block at bottom of the screen,
 ; mimicking the stock PS1 boot logo's "Licensed by SCE / SCEE(TM)"
@@ -180,8 +183,9 @@ Theme = ExtResource("11_theme")
 [node name="LicensedLine1" type="Node" parent="LicensedCanvas" unique_id=9200000061]
 script = ExtResource("10_uiel")
 ElementName = "line1"
-X = 96
-Y = 168
+Anchor = 8
+X = 0
+Y = 56
 Width = 128
 Height = 16
 Color = Color(0.85, 0.85, 0.85, 1)
@@ -191,8 +195,9 @@ Text = "Licensed by"
 [node name="LicensedLine2" type="Node" parent="LicensedCanvas" unique_id=9200000062]
 script = ExtResource("10_uiel")
 ElementName = "line2"
-X = 64
-Y = 184
+Anchor = 8
+X = 0
+Y = 40
 Width = 192
 Height = 16
 Color = Color(0.85, 0.85, 0.85, 1)
@@ -202,8 +207,9 @@ Text = "Your Studio Name"
 [node name="MarkLine" type="Node" parent="LicensedCanvas" unique_id=9200000063]
 script = ExtResource("10_uiel")
 ElementName = "mark"
-X = 144
-Y = 208
+Anchor = 8
+X = 0
+Y = 16
 Width = 32
 Height = 16
 Color = Color(0.85, 0.85, 0.85, 1)
