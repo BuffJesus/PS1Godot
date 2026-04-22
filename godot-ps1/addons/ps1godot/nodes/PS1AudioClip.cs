@@ -29,8 +29,10 @@ public enum PS1AudioClipResidency
 // the runtime resolve names to clip indices.
 [Tool]
 [GlobalClass]
+[Icon("res://addons/ps1godot/icons/ps1_audio_clip.svg")]
 public partial class PS1AudioClip : Resource
 {
+    [ExportGroup("Source")]
     // Accepts any AudioStream so users can drop in whatever Godot imported,
     // but at export time we only decode AudioStreamWav (raw PCM in .Data).
     // .mp3 / .ogg imports as AudioStreamMP3 / AudioStreamOggVorbis, which
@@ -45,6 +47,7 @@ public partial class PS1AudioClip : Resource
     // file.
     [Export] public string ClipName { get; set; } = "";
 
+    [ExportGroup("Playback")]
     // Whether the SPU should repeat this sample. On-hardware this writes the
     // sampleRepeatAddr register; loop points are encoded in the ADPCM stream's
     // final block flags byte.

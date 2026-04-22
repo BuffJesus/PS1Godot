@@ -11,13 +11,16 @@ namespace PS1Godot;
 // PS1Scene.AudioClips. Resolved to a clip index at export.
 [Tool]
 [GlobalClass]
+[Icon("res://addons/ps1godot/icons/ps1_audio_event.svg")]
 public partial class PS1AudioEvent : Node
 {
+    [ExportGroup("Timing")]
     // Cutscene frame to fire on (0-based, capped at the cutscene's
     // TotalFrames - 1).
-    [Export(PropertyHint.Range, "0,8191,1")]
+    [Export(PropertyHint.Range, "0,8191,1,suffix:frames")]
     public int Frame { get; set; } = 0;
 
+    [ExportGroup("Playback")]
     // Authored clip name — must match an entry in PS1Scene.AudioClips.
     // Empty / unresolved names produce a warning at export.
     [Export] public string ClipName { get; set; } = "";

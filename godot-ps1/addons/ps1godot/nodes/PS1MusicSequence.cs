@@ -12,8 +12,10 @@ namespace PS1Godot;
 // plays at a time.
 [Tool]
 [GlobalClass]
+[Icon("res://addons/ps1godot/icons/ps1_music_sequence.svg")]
 public partial class PS1MusicSequence : Resource
 {
+    [ExportGroup("Source")]
     // Relative or res:// path to the source .mid. Parsed at export.
     [Export(PropertyHint.File, "*.mid,*.midi")]
     public string MidiFile { get; set; } = "";
@@ -22,10 +24,11 @@ public partial class PS1MusicSequence : Resource
     // if left blank.
     [Export] public string SequenceName { get; set; } = "";
 
+    [ExportGroup("Playback")]
     // Tempo override. Most .mid files carry a tempo meta-event which the
     // exporter honours — set this only when the source file's tempo is
     // missing or wrong. 0 = use the file's tempo (or 120 as fallback).
-    [Export(PropertyHint.Range, "0,300,1")]
+    [Export(PropertyHint.Range, "0,300,1,suffix:bpm")]
     public int BpmOverride { get; set; } = 0;
 
     // When the sequencer reaches end-of-events, it resumes from this
@@ -33,6 +36,7 @@ public partial class PS1MusicSequence : Resource
     [Export(PropertyHint.Range, "-1,255,1")]
     public int LoopStartBeat { get; set; } = 0;
 
+    [ExportGroup("Channels")]
     // Per-MIDI-channel bindings to PS1AudioClips. Channels not listed
     // here are silent — drop a PS1MusicChannel per MIDI channel the
     // .mid uses, match MidiChannel to the source, and point AudioClipName

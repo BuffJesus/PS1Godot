@@ -14,8 +14,10 @@ namespace PS1Godot;
 // each pointing at a different ADPCM sample.
 [Tool]
 [GlobalClass]
+[Icon("res://addons/ps1godot/icons/ps1_music_channel.svg")]
 public partial class PS1MusicChannel : Resource
 {
+    [ExportGroup("MIDI filter")]
     // 0-15. Matches the channel byte in the source MIDI's note events.
     [Export(PropertyHint.Range, "0,15,1")]
     public int MidiChannel { get; set; } = 0;
@@ -39,6 +41,7 @@ public partial class PS1MusicChannel : Resource
     [Export(PropertyHint.Range, "0,127,1")]
     public int MidiNoteMax { get; set; } = 127;
 
+    [ExportGroup("Sample")]
     // Name of a PS1AudioClip on PS1Scene.AudioClips. Empty entries are
     // skipped (and warned about) at export.
     [Export] public string AudioClipName { get; set; } = "";
@@ -48,15 +51,6 @@ public partial class PS1MusicChannel : Resource
     // semitones of shift, then converted to fp12 SPU pitch at runtime.
     [Export(PropertyHint.Range, "0,127,1")]
     public int BaseNoteMidi { get; set; } = 60;
-
-    // Per-channel volume scaler, 0-127. Combined with note velocity
-    // and the sequence's master volume at runtime.
-    [Export(PropertyHint.Range, "0,127,1")]
-    public int Volume { get; set; } = 100;
-
-    // 0 = full left, 64 = centre, 127 = full right.
-    [Export(PropertyHint.Range, "0,127,1")]
-    public int Pan { get; set; } = 64;
 
     // Loop the sample for the duration of the held note (held drones,
     // pads). When false, the sample plays once and stops on key-off
@@ -68,4 +62,14 @@ public partial class PS1MusicChannel : Resource
     // MIDI note picks the drum (kit-mapped via separate channels) and
     // pitch shifting would just sound wrong.
     [Export] public bool Percussion { get; set; } = false;
+
+    [ExportGroup("Mix")]
+    // Per-channel volume scaler, 0-127. Combined with note velocity
+    // and the sequence's master volume at runtime.
+    [Export(PropertyHint.Range, "0,127,1")]
+    public int Volume { get; set; } = 100;
+
+    // 0 = full left, 64 = centre, 127 = full right.
+    [Export(PropertyHint.Range, "0,127,1")]
+    public int Pan { get; set; } = 64;
 }
