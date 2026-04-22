@@ -301,7 +301,79 @@ bool CollisionSystem::testAABB(const AABB& a, const AABB& b,
         penetration = minOverlapZ;
         normal = psyqo::Vec3{zero, zero, (overlapZ1 < overlapZ2) ? negOne : one};
     }
-    
+
+    return true;
+}
+
+// ============================================================================
+// Ray-cast (slab method vs. collider AABBs)
+// ============================================================================
+
+// Slab-method ray-vs-AABB. If the ray origin+t*dir intersects the box for any
+// t in [tMinIn, tMaxIn], returns true and writes the entry-t to tEnterOut.
+// A zero component in dir means the ray is parallel to that axis; the axis is
+// skipped only if the origin is already inside the slab. FP12 division is used
+// on the two non-zero axes at most (cheap enough for <=64 colliders).
+static bool rayVsAABB_FP(const psyqo::Vec3& origin,
+                         const psyqo::Vec3& dir,
+                         const psxsplash::AABB& box,
+                         psyqo::FixedPoint<12> tMinIn,
+                         psyqo::FixedPoint<12> tMaxIn,
+                         psyqo::FixedPoint<12>& tEnterOut) {
+    psyqo::FixedPoint<12> tmin = tMinIn;
+    psyqo::FixedPoint<12> tmax = tMaxIn;
+    psyqo::FixedPoint<12> zero;
+
+    for (int axis = 0; axis < 3; axis++) {
+        psyqo::FixedPoint<12> o = (axis == 0) ? origin.x : (axis == 1) ? origin.y : origin.z;
+        psyqo::FixedPoint<12> d = (axis == 0) ? dir.x    : (axis == 1) ? dir.y    : dir.z;
+        psyqo::FixedPoint<12> bmin = (axis == 0) ? box.min.x : (axis == 1) ? box.min.y : box.min.z;
+        psyqo::FixedPoint<12> bmax = (axis == 0) ? box.max.x : (axis == 1) ? box.max.y : box.max.z;
+
+        if (d.value == 0) {
+            if (o < bmin || o > bmax) return false;
+            continue;
+        }
+        psyqo::FixedPoint<12> t1 = (bmin - o) / d;
+        psyqo::FixedPoint<12> t2 = (bmax - o) / d;
+        if (t1 > t2) { auto tmp = t1; t1 = t2; t2 = tmp; }
+        if (t1 > tmin) tmin = t1;
+        if (t2 < tmax) tmax = t2;
+        if (tmin > tmax) return false;
+    }
+    // Ignore boxes fully behind the origin (tmax < 0). tmin < 0 is fine — it
+    // means the origin is inside the box, in which case we report 0 so the
+    // caller treats the origin itself as the hit point.
+    if (tmax < zero) return false;
+    tEnterOut = (tmin < zero) ? zero : tmin;
+    return true;
+}
+
+bool CollisionSystem::raycast(const psyqo::Vec3& origin,
+                              const psyqo::Vec3& dir,
+                              psyqo::FixedPoint<12> maxDist,
+                              uint16_t& outObjectIndex,
+                              psyqo::FixedPoint<12>& outDistance) const {
+    psyqo::FixedPoint<12> zero;
+    psyqo::FixedPoint<12> bestT = maxDist;
+    int bestIdx = -1;
+
+    for (int i = 0; i < m_colliderCount; i++) {
+        const CollisionData& col = m_colliders[i];
+        if (col.type != CollisionType::Solid) continue;
+
+        psyqo::FixedPoint<12> tEnter;
+        if (rayVsAABB_FP(origin, dir, col.bounds, zero, bestT, tEnter)) {
+            if (tEnter < bestT) {
+                bestT = tEnter;
+                bestIdx = i;
+            }
+        }
+    }
+
+    if (bestIdx < 0) return false;
+    outObjectIndex = m_colliders[bestIdx].gameObjectIndex;
+    outDistance = bestT;
     return true;
 }
 

@@ -108,6 +108,7 @@ class SceneManager {
     AudioManager& getAudio() { return m_audio; }
     MusicSequencer& getMusicSequencer() { return m_musicSequencer; }
     MusicManager& getMusic() { return m_music; }
+    CollisionSystem& getCollision() { return m_collisionSystem; }
 
     // Controls enable/disable (Lua-driven)
     void setControlsEnabled(bool enabled) { m_controlsEnabled = enabled; }

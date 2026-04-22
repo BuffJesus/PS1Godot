@@ -434,7 +434,20 @@ void LuaAPI::RegisterAll(psyqo::Lua& L, SceneManager* scene, CutscenePlayer* cut
     L.push(SkinnedAnim_GetClip);
     L.setField(-2, "GetClip");
 
+    L.push(SkinnedAnim_BindPose);
+    L.setField(-2, "BindPose");
+
     L.setGlobal("SkinnedAnim");
+
+    // ========================================================================
+    // PHYSICS API
+    // ========================================================================
+    L.newTable();
+
+    L.push(Physics_Raycast);
+    L.setField(-2, "Raycast");
+
+    L.setGlobal("Physics");
 
     // ========================================================================
     // CONTROLS API
@@ -2310,12 +2323,34 @@ int LuaAPI::SkinnedAnim_Play(lua_State* L) {
     animState.subFrame = 0;
     animState.playing = true;
     animState.loop = loop;
+    animState.bindPose = false;
 
     // Release old callback if any
     if (animState.luaCallbackRef != LUA_NOREF) {
         luaL_unref(L, LUA_REGISTRYINDEX, animState.luaCallbackRef);
     }
     animState.luaCallbackRef = onCompleteRef;
+
+    return 0;
+}
+
+int LuaAPI::SkinnedAnim_BindPose(lua_State* L) {
+    psyqo::Lua lua(L);
+    if (!s_sceneManager || !lua.isString(1)) return 0;
+
+    int si = s_sceneManager->findSkinAnimByObjectName(lua.toString(1));
+    if (si < 0) return 0;
+
+    SkinAnimState& animState = s_sceneManager->getSkinAnimState(si);
+    animState.playing = false;
+    animState.bindPose = true;
+    animState.currentFrame = 0;
+    animState.subFrame = 0;
+
+    if (animState.luaCallbackRef != LUA_NOREF) {
+        luaL_unref(L, LUA_REGISTRYINDEX, animState.luaCallbackRef);
+        animState.luaCallbackRef = LUA_NOREF;
+    }
 
     return 0;
 }
@@ -2751,13 +2786,64 @@ int LuaAPI::Player_SetRotation(lua_State* L) {
 
 int LuaAPI::Player_GetRotation(lua_State* L) {
     psyqo::Lua lua(L);
-    
+
     if (s_sceneManager) {
         psyqo::Vec3 pos = s_sceneManager->getPlayerRotation();
         PushVec3(lua, pos.x, pos.y, pos.z);
     } else {
         PushVec3(lua, psyqo::FixedPoint<12>(0), psyqo::FixedPoint<12>(0), psyqo::FixedPoint<12>(0));
     }
+    return 1;
+}
+
+// ============================================================================
+// PHYSICS API IMPLEMENTATION
+// ============================================================================
+
+int LuaAPI::Physics_Raycast(lua_State* L) {
+    psyqo::Lua lua(L);
+    if (!s_sceneManager || !lua.isTable(1) || !lua.isTable(2)) {
+        lua_pushnil(L);
+        return 1;
+    }
+
+    psyqo::Vec3 origin, dir;
+    ReadVec3(lua, 1, origin.x, origin.y, origin.z);
+    ReadVec3(lua, 2, dir.x,    dir.y,    dir.z);
+
+    // Zero-dir would fall through the slab test's "parallel axis" guard three
+    // times and report distance 0 whenever origin sits inside any box. Reject
+    // explicitly so callers notice the bug instead of seeing phantom hits.
+    if (dir.x.value == 0 && dir.y.value == 0 && dir.z.value == 0) {
+        lua_pushnil(L);
+        return 1;
+    }
+
+    // Default range of 10000 world units — large enough that jam authors who
+    // forget to pass maxDist don't see silent misses. Real scenes top out
+    // around a few hundred units.
+    psyqo::FixedPoint<12> maxDist = lua.isNoneOrNil(3)
+        ? psyqo::FixedPoint<12>(10000)
+        : readFP(lua, 3);
+
+    uint16_t hitIdx;
+    psyqo::FixedPoint<12> hitT;
+    if (!s_sceneManager->getCollision().raycast(origin, dir, maxDist, hitIdx, hitT)) {
+        lua_pushnil(L);
+        return 1;
+    }
+
+    // Build { object = <idx>, distance = <t>, point = {x,y,z} }
+    lua.newTable();
+    lua.push((lua_Number)hitIdx);
+    lua.setField(-2, "object");
+    lua.push(hitT);
+    lua.setField(-2, "distance");
+    PushVec3(lua,
+        origin.x + dir.x * hitT,
+        origin.y + dir.y * hitT,
+        origin.z + dir.z * hitT);
+    lua.setField(-2, "point");
     return 1;
 }
 

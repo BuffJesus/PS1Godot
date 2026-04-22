@@ -187,6 +187,13 @@ void psxsplash::SceneManager::InitializeScene(uint8_t* splashpackData, LoadingSc
         m_skinAnimSets[i] = sceneSetup.loadedSkinAnimSets[i];
         m_skinAnimStates[i] = SkinAnimState{};
         m_skinAnimStates[i].animSet = &m_skinAnimSets[i];
+        // bindPose default-on so characters render in T-pose until a clip
+        // starts — otherwise the first frame shows clip[0] frame[0] which is
+        // mid-stride for most Mixamo walks. luaCallbackRef must be explicitly
+        // LUA_NOREF (= -2); the zero-init from SkinAnimState{} leaves it at 0,
+        // which is a valid Lua registry ref and would crash luaL_unref.
+        m_skinAnimStates[i].bindPose = true;
+        m_skinAnimStates[i].luaCallbackRef = LUA_NOREF;
 
         uint16_t goIdx = m_skinAnimSets[i].gameObjectIndex;
         if (goIdx < m_gameObjects.size()) {

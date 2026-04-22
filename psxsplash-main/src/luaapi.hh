@@ -405,6 +405,23 @@ private:
     // SkinnedAnim.GetClip(objectName) -> string or nil
     static int SkinnedAnim_GetClip(lua_State* L);
 
+    // SkinnedAnim.BindPose(objectName) -> nil
+    // Stop any active clip and render the mesh in its bind pose (T-pose)
+    // with identity bone matrices. Use for idle / title-screen states where
+    // frame 0 of a walk clip would show a mid-stride pose.
+    static int SkinnedAnim_BindPose(lua_State* L);
+
+    // ========================================================================
+    // PHYSICS API — ray casts against collider AABBs
+    // ========================================================================
+
+    // Physics.Raycast({x,y,z}, {x,y,z}, maxDist) ->
+    //   nil on miss, or { object = <goIndex>, distance = <t>, point = {x,y,z} }
+    // Tests against all Solid colliders (NOT world geometry triangles). Pass
+    // a roughly-unit direction so `distance` is in world units. Safe to call
+    // a few times per frame; linear scan over up to 64 colliders.
+    static int Physics_Raycast(lua_State* L);
+
     // Controls.SetEnabled(bool) - enable/disable all player input
     static int Controls_SetEnabled(lua_State* L);
 

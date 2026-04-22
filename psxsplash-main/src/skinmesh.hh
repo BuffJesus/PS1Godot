@@ -63,7 +63,8 @@ struct SkinAnimState {
     uint8_t  currentClip;
     bool     playing;
     bool     loop;                 // runtime loop override (set by Lua Play call)
-    uint8_t  _pad;
+    bool     bindPose;             // render bind pose (identity bone matrices) instead of a clip frame.
+                                   // Default-on so characters render in T-pose until a clip starts.
     int      luaCallbackRef;       // Lua registry reference, LUA_NOREF = none
 };
 

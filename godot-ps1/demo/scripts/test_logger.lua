@@ -154,8 +154,6 @@ local function resetIdle()
 end
 
 function onCreate(self)
-    Debug.Log("test_logger: onCreate fired")
-
     dialogCanvas = UI.FindCanvas("dialog")
     if dialogCanvas >= 0 then
         dialogBodyEl = UI.FindElement(dialogCanvas, "body")
@@ -177,10 +175,6 @@ function onCreate(self)
     if Music ~= nil then
         Music.Play("retro_adventure", bgmMasterVol)
     end
-    -- Start the bullet-11 test rig's wave animation if present. findSkinAnim
-    -- returns silently if there's no mesh called "SkinnedMesh" in the scene,
-    -- so this no-ops for scenes without the test asset.
-    SkinnedAnim.Play("SkinnedMesh", "wave", { loop = true })
     -- Seed walk-detector with the spawn position so the first-frame delta
     -- doesn't trip walk->idle detection against (0,0).
     do
@@ -246,7 +240,9 @@ function onUpdate(self, dt)
             SkinnedAnim.Play("Player", "mixamo_com", { loop = true })
             isWalking = true
         elseif not moving and isWalking then
-            SkinnedAnim.Stop("Player")
+            -- Rest in bind pose (T-pose) rather than freezing on the last
+            -- walk-cycle frame, which would leave the character mid-stride.
+            SkinnedAnim.BindPose("Player")
             isWalking = false
         end
     end
@@ -281,7 +277,6 @@ function onUpdate(self, dt)
             UI.SetCanvasVisible(dialogCanvas, false)
         end
         restoreMusic()
-        Debug.Log("test_logger: dialog auto-hidden at tick " .. tick)
         hideAtTick = 0
     end
 
@@ -330,5 +325,4 @@ function onInteract(self)
     currentDialogOwner = MY_DIALOG_OWNER
     lineIdx = (lineIdx % #DIALOG_LINES) + 1
     hideAtTick = showLine(DIALOG_LINES[lineIdx])
-    Debug.Log("test_logger: dialog line " .. lineIdx .. " shown")
 end

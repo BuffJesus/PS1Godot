@@ -114,6 +114,20 @@ public:
 
     void detectTriggers(const AABB& playerAABB, class SceneManager& scene);
 
+    /// Ray-vs-collider test against all registered Solid colliders.
+    ///
+    /// origin + t*dir, t in [0, maxDist]. Pass a roughly unit-length `dir` so
+    /// `outDistance` is in world units; if dir is any other length, outDistance
+    /// is still the correct `t` for that parameterization. Linear scan of up to
+    /// MAX_COLLIDERS AABBs — fine for jam-scale scenes, don't call per-frame
+    /// for 64 rays. Returns `true` on hit; writes outObjectIndex (GameObject
+    /// index) and outDistance (the t-parameter of the first entry).
+    bool raycast(const psyqo::Vec3& origin,
+                 const psyqo::Vec3& dir,
+                 psyqo::FixedPoint<12> maxDist,
+                 uint16_t& outObjectIndex,
+                 psyqo::FixedPoint<12>& outDistance) const;
+
     const CollisionResult* getResults() const { return m_results; }
     int getResultCount() const { return m_resultCount; }
 
