@@ -149,10 +149,11 @@ public static class SplashpackWriter
         }
 
         // ── Room block: RoomData[R]*36 + PortalData[P]*40 + TriangleRef[T]*4
-        //    + RoomPortalRef[P']*4 when portal-refs are populated. Loader
-        //    aligns its cursor to 4 bytes before reading RoomData so we
-        //    match that. Room cells still TODO — runtime falls back when
-        //    cellCount is 0.
+        //    + RoomCell[C]*28 (when cells populated) + RoomPortalRef[P']*4
+        //    (when portal-refs populated). Order matches the runtime
+        //    loader in splashpack.cpp — if cells come after portal-refs
+        //    the loader will read the wrong bytes. Loader aligns its
+        //    cursor to 4 bytes before reading RoomData, so do the same.
         if (roomCount > 0)
         {
             AlignTo4(w);
@@ -168,6 +169,10 @@ public static class SplashpackWriter
             {
                 w.Write(tr.ObjectIndex);
                 w.Write(tr.TriangleIndex);
+            }
+            foreach (var c in scene.RoomCells)
+            {
+                WriteRoomCell(w, c, scene.GteScaling);
             }
             foreach (var pr in scene.RoomPortalRefs)
             {
@@ -996,7 +1001,7 @@ public static class SplashpackWriter
         w.Write((ushort)roomTriRefCount); // roomTriRefCount
 
         w.Write((ushort)scene.Cutscenes.Count); // cutsceneCount
-        w.Write((ushort)0);            // roomCellCount
+        w.Write((ushort)scene.RoomCells.Count); // roomCellCount
         offsets.CutsceneTableOffsetPos = w.BaseStream.Position;
         w.Write((uint)0);              // cutsceneTableOffset (backfilled)
 
@@ -1194,6 +1199,28 @@ public static class SplashpackWriter
         long written = w.BaseStream.Position - entryStart;
         if (written != 36)
             throw new InvalidOperationException($"RoomData size mismatch: {written} vs 36.");
+    }
+
+    // ─── RoomCell (28 bytes) ─────────────────────────────────────────────
+    // Tight world-space AABB around the triangles bucketed into this cell,
+    // followed by the cell's slice of the room's tri-ref array. AABB
+    // encoding matches RoomData.
+    private static void WriteRoomCell(BinaryWriter w, RoomCellRecord c, float gteScaling)
+    {
+        long entryStart = w.BaseStream.Position;
+        w.Write(PSXTrig.ConvertWorldToFixed12(c.WorldMin.X / gteScaling));
+        w.Write(PSXTrig.ConvertWorldToFixed12(-c.WorldMax.Y / gteScaling));
+        w.Write(PSXTrig.ConvertWorldToFixed12(c.WorldMin.Z / gteScaling));
+        w.Write(PSXTrig.ConvertWorldToFixed12(c.WorldMax.X / gteScaling));
+        w.Write(PSXTrig.ConvertWorldToFixed12(-c.WorldMin.Y / gteScaling));
+        w.Write(PSXTrig.ConvertWorldToFixed12(c.WorldMax.Z / gteScaling));
+
+        w.Write(c.FirstTriRef);
+        w.Write(c.TriRefCount);
+
+        long written = w.BaseStream.Position - entryStart;
+        if (written != 28)
+            throw new InvalidOperationException($"RoomCell size mismatch: {written} vs 28.");
     }
 
     // ─── PortalData (40 bytes) ───────────────────────────────────────────

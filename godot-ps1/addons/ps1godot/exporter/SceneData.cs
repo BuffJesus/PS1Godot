@@ -280,9 +280,10 @@ public sealed class NavPortalRecord
 }
 
 // One RoomData entry (36 bytes). Authored via a PS1Room node; the
-// collector fills in the AABB in world space and the tri-ref slice.
-// CellCount stays 0 for the MVP — the runtime falls back cleanly to
-// "render all of the room's tri-refs" when cells are absent.
+// collector fills in the AABB in world space, the tri-ref slice, and
+// (for authored rooms large enough to warrant subdivision) the cell
+// slice. Runtime falls back cleanly to "render all of the room's
+// tri-refs" when cellCount is 0.
 public sealed class RoomRecord
 {
     public required Vector3 WorldMin { get; init; }
@@ -329,6 +330,19 @@ public readonly struct RoomPortalRefRecord
     public ushort OtherRoom { get; init; }
 }
 
+// One RoomCell entry (28 bytes). Subdivides a room's tri-ref slice
+// into sub-volumes so the renderer can frustum-cull whole clusters at
+// once rather than testing every triangle against the frustum. AABB is
+// tight around the cell's actual triangles (not the grid cell
+// boundary). Flat array indexed by RoomRecord.FirstCell / CellCount.
+public sealed class RoomCellRecord
+{
+    public required Vector3 WorldMin { get; init; }
+    public required Vector3 WorldMax { get; init; }
+    public required ushort FirstTriRef { get; init; }
+    public required ushort TriRefCount { get; init; }
+}
+
 public sealed class SceneData
 {
     public List<SceneObject> Objects { get; } = new();
@@ -358,6 +372,7 @@ public sealed class SceneData
     public List<PortalRecord> Portals { get; } = new();
     public List<RoomTriRefRecord> RoomTriRefs { get; } = new();
     public List<RoomPortalRefRecord> RoomPortalRefs { get; } = new();
+    public List<RoomCellRecord> RoomCells { get; } = new();
 
     // Lua scripts discovered on scene nodes. Deduplicated by resource path.
     public List<LuaFileRecord> LuaFiles { get; } = new();

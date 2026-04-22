@@ -1985,12 +1985,14 @@ public static class SceneCollector
             roomBounds[i] = ComputeRoomWorldBounds(rooms[i], RoomMargin);
         }
 
-        // Bucket triangles per room + catch-all. Ordering inside a bucket
-        // matches the object iteration order (rooms[r] = list of (objIdx,
-        // triIdx)); the writer flattens into data.RoomTriRefs room-by-room
-        // so each room's slice is contiguous.
-        var perRoom = new List<RoomTriRefRecord>[rooms.Count + 1];
-        for (int i = 0; i < perRoom.Length; i++) perRoom[i] = new();
+        // Bucket triangles per room + catch-all. Authored rooms track
+        // per-tri AABB + centroid alongside the ref so the flatten pass
+        // can subdivide each room into cells. Catch-all keeps the simple
+        // shape — it never subdivides (loose ±1000 m bounds), and the
+        // PS1MeshGroup path below doesn't have per-tri vertex access.
+        var perRoomTris = new List<RoomTriAssignment>[rooms.Count];
+        for (int i = 0; i < perRoomTris.Length; i++) perRoomTris[i] = new();
+        var perRoomCatchAll = new List<RoomTriRefRecord>();
         int catchAllIdx = rooms.Count;
 
         for (int objIdx = 0; objIdx < data.Objects.Count; objIdx++)
@@ -2014,7 +2016,7 @@ public static class SceneCollector
                 int merged = obj.Mesh.Triangles.Count;
                 for (int t = 0; t < merged; t++)
                 {
-                    perRoom[catchAllIdx].Add(new RoomTriRefRecord
+                    perRoomCatchAll.Add(new RoomTriRefRecord
                     {
                         ObjectIndex = (ushort)objIdx,
                         TriangleIndex = (ushort)t,
@@ -2075,39 +2077,119 @@ public static class SceneCollector
                         }
                     }
 
-                    int bucket = best >= 0 ? best : catchAllIdx;
-                    perRoom[bucket].Add(new RoomTriRefRecord
+                    var triRef = new RoomTriRefRecord
                     {
                         ObjectIndex = (ushort)objIdx,
                         TriangleIndex = (ushort)triGlobal,
-                    });
+                    };
+                    if (best >= 0)
+                    {
+                        perRoomTris[best].Add(new RoomTriAssignment
+                        {
+                            Ref = triRef,
+                            Min = VecMin(VecMin(v0, v1), v2),
+                            Max = VecMax(VecMax(v0, v1), v2),
+                            Centroid = centroid,
+                        });
+                    }
+                    else
+                    {
+                        perRoomCatchAll.Add(triRef);
+                    }
                     triGlobal++;
                 }
             }
         }
 
-        // Flatten into data.RoomTriRefs, stamping FirstTriRef / TriRefCount
-        // on each RoomRecord as we go. The writer appends a catch-all
-        // RoomRecord with a loose world-bounds box after the authored ones.
+        // Flatten into data.RoomTriRefs / data.RoomCells, stamping
+        // FirstTriRef / TriRefCount / FirstCell / CellCount on each
+        // RoomRecord as we go. Authored rooms subdivide into a 3D grid
+        // (~5 m per cell, max 4 per axis) when they have enough triangles
+        // for the extra indirection to earn its keep; smaller or sparser
+        // rooms skip subdivision and fall back to the full-room render
+        // path at runtime. Catch-all never subdivides.
         int running = 0;
+        ushort runningCell = 0;
         for (int r = 0; r < rooms.Count; r++)
         {
             var (rmin, rmax) = ComputeRoomWorldBounds(rooms[r], 0f);
-            var rec = new RoomRecord
+            var tris = perRoomTris[r];
+            int triCount = tris.Count;
+
+            ushort firstTriRef = (ushort)running;
+            ushort firstCell = runningCell;
+            byte cellCount = 0;
+
+            (int dx, int dy, int dz) = PickCellDivisions(rmax - rmin);
+            int totalDivs = dx * dy * dz;
+
+            if (totalDivs > 1 && triCount >= CellSubdivideMinTris)
+            {
+                // Bucket tris into grid cells by centroid.
+                var perCell = new List<RoomTriAssignment>[totalDivs];
+                for (int i = 0; i < totalDivs; i++) perCell[i] = new();
+                Vector3 extent = rmax - rmin;
+                float cwX = extent.X / dx, cwY = extent.Y / dy, cwZ = extent.Z / dz;
+                foreach (var at in tris)
+                {
+                    int cx = Mathf.Clamp((int)((at.Centroid.X - rmin.X) / cwX), 0, dx - 1);
+                    int cy = Mathf.Clamp((int)((at.Centroid.Y - rmin.Y) / cwY), 0, dy - 1);
+                    int cz = Mathf.Clamp((int)((at.Centroid.Z - rmin.Z) / cwZ), 0, dz - 1);
+                    perCell[cx + dx * (cy + dy * cz)].Add(at);
+                }
+
+                // Emit non-empty cells with tight AABB around their actual
+                // triangles (tighter than the grid-cell box → better culling).
+                int emitted = 0;
+                int offsetInRoom = 0;
+                for (int ci = 0; ci < totalDivs; ci++)
+                {
+                    var cellTris = perCell[ci];
+                    if (cellTris.Count == 0) continue;
+                    Vector3 cmin = cellTris[0].Min;
+                    Vector3 cmax = cellTris[0].Max;
+                    for (int j = 1; j < cellTris.Count; j++)
+                    {
+                        cmin = VecMin(cmin, cellTris[j].Min);
+                        cmax = VecMax(cmax, cellTris[j].Max);
+                    }
+                    data.RoomCells.Add(new RoomCellRecord
+                    {
+                        WorldMin = cmin,
+                        WorldMax = cmax,
+                        FirstTriRef = (ushort)(running + offsetInRoom),
+                        TriRefCount = (ushort)cellTris.Count,
+                    });
+                    foreach (var at in cellTris) data.RoomTriRefs.Add(at.Ref);
+                    offsetInRoom += cellTris.Count;
+                    emitted++;
+                }
+                cellCount = (byte)emitted;
+                runningCell += (ushort)emitted;
+            }
+            else
+            {
+                // No cells — just append tris in assignment order.
+                foreach (var at in tris) data.RoomTriRefs.Add(at.Ref);
+            }
+
+            data.Rooms.Add(new RoomRecord
             {
                 WorldMin = rmin,
                 WorldMax = rmax,
                 Name = rooms[r].RoomName,
-                FirstTriRef = (ushort)running,
-                TriRefCount = (ushort)perRoom[r].Count,
-            };
-            data.Rooms.Add(rec);
-            foreach (var tr in perRoom[r]) data.RoomTriRefs.Add(tr);
-            running += perRoom[r].Count;
+                FirstTriRef = firstTriRef,
+                TriRefCount = (ushort)triCount,
+                FirstCell = firstCell,
+                CellCount = cellCount,
+            });
+            running += triCount;
         }
         // Catch-all room entry — loose ±1000-unit box in Godot space; the
         // writer quantizes per usual. Runtime always renders this room's
-        // tri-refs regardless of camera position.
+        // tri-refs regardless of camera position. No cell subdivision —
+        // its bounds are deliberately loose and it sweeps up whatever
+        // didn't fit an authored room.
         {
             var rec = new RoomRecord
             {
@@ -2115,11 +2197,11 @@ public static class SceneCollector
                 WorldMax = new Vector3( 1000,  1000,  1000),
                 Name = "_catchall",
                 FirstTriRef = (ushort)running,
-                TriRefCount = (ushort)perRoom[catchAllIdx].Count,
+                TriRefCount = (ushort)perRoomCatchAll.Count,
             };
             data.Rooms.Add(rec);
-            foreach (var tr in perRoom[catchAllIdx]) data.RoomTriRefs.Add(tr);
-            running += perRoom[catchAllIdx].Count;
+            foreach (var tr in perRoomCatchAll) data.RoomTriRefs.Add(tr);
+            running += perRoomCatchAll.Count;
         }
 
         // Resolve PS1PortalLink nodes: RoomA/RoomB NodePaths → room indices.
@@ -2221,7 +2303,8 @@ public static class SceneCollector
         GD.Print($"[PS1Godot] Rooms: {rooms.Count} authored + 1 catch-all, " +
                  $"{data.Portals.Count} portals ({droppedPortals} dropped), " +
                  $"{data.RoomTriRefs.Count} tri-refs " +
-                 $"({perRoom[catchAllIdx].Count} catch-all), " +
+                 $"({perRoomCatchAll.Count} catch-all), " +
+                 $"{data.RoomCells.Count} cells, " +
                  $"{data.RoomPortalRefs.Count} portal-refs.");
     }
 
@@ -2232,6 +2315,41 @@ public static class SceneCollector
         foreach (var child in n.GetChildren())
             CollectRoomNodes(child, rooms, portals);
     }
+
+    // Per-triangle metadata captured while assigning to an authored room,
+    // used by the cell-subdivision pass to bucket tris and compute tight
+    // per-cell AABBs.
+    private readonly struct RoomTriAssignment
+    {
+        public RoomTriRefRecord Ref { get; init; }
+        public Vector3 Min { get; init; }
+        public Vector3 Max { get; init; }
+        public Vector3 Centroid { get; init; }
+    }
+
+    // Rooms with fewer tris than this skip cell subdivision — the indirect
+    // cost of a cell header starts to lose against just iterating the room
+    // below this threshold on PS1-scale tri counts.
+    private const int CellSubdivideMinTris = 12;
+
+    // Pick a cell grid for a room's world-space extent. Aims for ~5 m per
+    // cell; caps at 4 per axis so worst-case per-room cells stay under
+    // 4×4×4=64 (well within the u8 CellCount cap of 255). Axes with
+    // <=1 m extent get 1 division (no benefit to splitting).
+    private static (int dx, int dy, int dz) PickCellDivisions(Vector3 extent)
+    {
+        const float TargetCellSize = 5.0f;
+        const int MaxDiv = 4;
+        int Div(float e) => e <= 1.0f ? 1 : Mathf.Clamp(Mathf.CeilToInt(e / TargetCellSize), 1, MaxDiv);
+        return (Div(extent.X), Div(extent.Y), Div(extent.Z));
+    }
+
+    // Component-wise Vector3 min/max (Godot 4.x exposes Min/Max as instance
+    // methods but not componentwise — these wrap Mathf.Min per-axis).
+    private static Vector3 VecMin(Vector3 a, Vector3 b) =>
+        new(Mathf.Min(a.X, b.X), Mathf.Min(a.Y, b.Y), Mathf.Min(a.Z, b.Z));
+    private static Vector3 VecMax(Vector3 a, Vector3 b) =>
+        new(Mathf.Max(a.X, b.X), Mathf.Max(a.Y, b.Y), Mathf.Max(a.Z, b.Z));
 
     // Transform the 8 corners of (VolumeSize, VolumeOffset) by the room's
     // GlobalTransform, then AABB them. `margin` expands the box outward by

@@ -225,10 +225,10 @@ auto-portals + ramps; DotRecast auto-gen deferred), 8 ✅ (+ `\n` runtime
 wrap, dialog ownership, audio-aware auto-hide via `Audio.GetClipDuration`),
 9 ✅, 10 ✅ (camera position + rotation + zoom-on-target tracks; player-rig
 handoff convention derived from psyqo's matrix order), 11 ✅, 12 ✅
-(rooms + portals + tri-ref assignment; cells + portal-refs deferred,
-runtime falls back cleanly without them). Format at **v22** (bumped for
-sequenced music). Multi-scene packing + `Scene.Load(N)` Lua API also
-landed on top of the bullet-list scope.
+(rooms + portals + tri-ref assignment + auto cell subdivision + per-room
+portal-refs). Format at **v22** (bumped for sequenced music). Multi-scene
+packing + `Scene.Load(N)` Lua API also landed on top of the bullet-list
+scope.
 
 1. **Writer skeleton + 3-file split.** Port `PSXSceneWriter.Write()` structure
    and offset bookkeeping. Emit an empty but valid splashpack (current format
@@ -269,8 +269,11 @@ landed on top of the bullet-list scope.
     vertex-majority containment with a 0.5 m boundary expand; resolves
     portal rooms; auto-corrects portal normal to point RoomA → RoomB.
     Catch-all room appended for unassigned triangles. Cell subdivision
-    + per-room portal-ref lists deferred — runtime falls back cleanly
-    (renders all of a room's tri-refs / scans all portals) without them.
+    + per-room portal-ref lists landed 2026-04-22 — authored rooms now
+    subdivide into an auto 3D grid (~5 m per cell, max 4 per axis) with
+    tight per-cell AABBs, and each room carries a portal-ref slice so
+    the renderer iterates just its neighbors instead of scanning every
+    portal each frame.
 
 **Parity test:** take three reference scenes that ship with SplashEdit, rebuild
 them in Godot, and byte-diff the resulting splashpacks against the Unity output.
