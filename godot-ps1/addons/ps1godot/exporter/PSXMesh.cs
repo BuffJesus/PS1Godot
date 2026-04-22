@@ -129,6 +129,10 @@ public sealed class PSXMesh
                 // MakeVertex reflects in BOTH Y and Z. Two reflections compose
                 // to a rotation, which preserves winding — no swap needed
                 // (this used to flip i1↔i2 to compensate for a Y-only flip).
+                // INVARIANT: SceneCollector.ComputeBoneIndices must match
+                // whatever decision we make here. If you ever re-add an
+                // (i1, i2) swap, mirror it there too or every skinned-mesh
+                // vertex ends up with the wrong bone matrix.
 
                 Vector2 uv0 = uvs.Length > i0 ? uvs[i0] : Vector2.Zero;
                 Vector2 uv1 = uvs.Length > i1 ? uvs[i1] : Vector2.Zero;
