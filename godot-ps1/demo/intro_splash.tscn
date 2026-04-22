@@ -154,12 +154,12 @@ TrackType = 1
 
 [node name="CamRotKf0" type="Node" parent="IntroCutscene/CamRotTrack" unique_id=510065429]
 script = ExtResource("6_kf")
-Value = Vector3(5, 180, 0)
+Value = Vector3(5, 0, 0)
 
 [node name="CamRotKf1" type="Node" parent="IntroCutscene/CamRotTrack" unique_id=510065430]
 script = ExtResource("6_kf")
 Frame = 419
-Value = Vector3(5, 180, 0)
+Value = Vector3(5, 0, 0)
 
 [node name="SpiderRotTrack" type="Node" parent="IntroCutscene" unique_id=510065438]
 script = ExtResource("5_tr")

@@ -1017,21 +1017,21 @@ public static class SceneCollector
     }
 
     // Write one BakedBoneMatrix into `buf` at `offset` (24 bytes total).
-    // Layout: int16[9] row-major rotation (fp12) + int16[3] translation.
-    // Using the ORIGINAL Y-only sign pattern — Y+Z reflection caused
-    // skinned-mesh rendering artifacts (missing faces) that we couldn't
-    // pin down analytically. Keeping the Y-only bone encoding preserves
-    // the old skinned-mesh behavior while the rest of the pipeline uses
-    // the new Y+Z mesh/camera encoding.
-    // TODO: reconcile bone matrix sign pattern with Y+Z reflection.
+    // Layout: int16[9] row-major rotation (fp12) + int16[3] translation
+    // (fp12 at gteScaling, PSX Y-down+Z-forward). Matches the mesh
+    // vertex writer's Y+Z reflection (S·R·S with S=diag(1,-1,-1)) so
+    // bone transforms compose correctly with Y+Z-flipped local verts.
+    // psyqo's Matrix33.vs[i] is row i (verified via GTE R11=vs[0].x…
+    // R33=vs[2].z), so the row-major write lands directly in the
+    // GTE rotation register without transposition.
     private static void WriteBakedBoneMatrix(byte[] buf, int offset, Transform3D t, float gteScaling)
     {
         Basis b = t.Basis;
         float[,] m =
         {
-            {  b.Column0.X, -b.Column1.X,  b.Column2.X },
-            { -b.Column0.Y,  b.Column1.Y, -b.Column2.Y },
-            {  b.Column0.Z, -b.Column1.Z,  b.Column2.Z },
+            {  b.Column0.X, -b.Column1.X, -b.Column2.X },
+            { -b.Column0.Y,  b.Column1.Y,  b.Column2.Y },
+            { -b.Column0.Z,  b.Column1.Z,  b.Column2.Z },
         };
         for (int i = 0; i < 3; i++)
         {
@@ -1044,11 +1044,10 @@ public static class SceneCollector
             }
         }
 
-        // Translation: Y-only negation for now (bone matrix kept in old
-        // Y-only convention; see comment above).
+        // Translation: Y+Z negated to match the mesh vertex convention.
         short tx = PSXTrig.ConvertCoordinateToPSX( t.Origin.X, gteScaling);
         short ty = PSXTrig.ConvertCoordinateToPSX(-t.Origin.Y, gteScaling);
-        short tz = PSXTrig.ConvertCoordinateToPSX( t.Origin.Z, gteScaling);
+        short tz = PSXTrig.ConvertCoordinateToPSX(-t.Origin.Z, gteScaling);
         int tOff = offset + 18;
         buf[tOff + 0] = (byte)(tx & 0xFF);
         buf[tOff + 1] = (byte)((tx >> 8) & 0xFF);
