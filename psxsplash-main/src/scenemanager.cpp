@@ -91,6 +91,18 @@ void psxsplash::SceneManager::InitializeScene(uint8_t* splashpackData, LoadingSc
     m_playerAvatarOffset.z.value = sceneSetup.playerAvatarOffset.z.value;
     m_playerAvatarObjectIndex = sceneSetup.playerAvatarObjectIndex;
 
+    // Snapshot the avatar's authored rotation before the first GameTick
+    // so we can compose it with playerRotationY each frame instead of
+    // clobbering it. Without this snapshot the mesh's local-space
+    // orientation is always what renders (any parent-node rotation the
+    // author used to reorient e.g. a Mixamo FBX gets discarded).
+    if (m_playerAvatarObjectIndex < m_gameObjects.size()) {
+        GameObject* avatar = m_gameObjects[m_playerAvatarObjectIndex];
+        if (avatar) {
+            m_playerAvatarBaseRotation = avatar->rotation;
+        }
+    }
+
     // Scene type and render path
     m_sceneType = sceneSetup.sceneType;
 
@@ -740,9 +752,17 @@ void psxsplash::SceneManager::GameTick(psyqo::GPU &gpu) {
                 avatar->aabbMinY += dy; avatar->aabbMaxY += dy;
                 avatar->aabbMinZ += dz; avatar->aabbMaxZ += dz;
                 avatar->setDynamicMoved(true);
-                avatar->rotation = psxsplash::transposeMatrix33(
+                // Compose authored base rotation with current yaw. The
+                // renderer interprets avatar->rotation as the transpose
+                // of the effective vert rotation (v_world = R^T · v_local),
+                // so we build base · transpose(R_Y(yaw)) directly.
+                psyqo::Matrix33 invYaw = psxsplash::transposeMatrix33(
                     psyqo::SoftMath::generateRotationMatrix33(
                         playerRotationY, psyqo::SoftMath::Axis::Y, m_trig));
+                psyqo::Matrix33 composed;
+                psyqo::SoftMath::multiplyMatrix33(
+                    m_playerAvatarBaseRotation, invYaw, &composed);
+                avatar->rotation = composed;
             }
         }
     }

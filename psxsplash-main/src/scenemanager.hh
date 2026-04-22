@@ -234,6 +234,12 @@ class SceneManager {
     psyqo::Vec3 m_cameraRigOffset;
     psyqo::Vec3 m_playerAvatarOffset;
     uint16_t m_playerAvatarObjectIndex = 0xFFFF;
+    // Snapshot of the avatar's authored rotation from the splashpack
+    // (set once during InitializeScene). Each frame we compose this
+    // with playerRotationY so scene-side 180° compensations (e.g. a
+    // FBX whose local forward is +Z instead of Godot's -Z) survive
+    // the yaw update.
+    psyqo::Matrix33 m_playerAvatarBaseRotation;
     PlayerCameraMode m_cameraMode = PlayerCameraMode::ThirdPerson;
     
     int32_t m_playerRadius;          
