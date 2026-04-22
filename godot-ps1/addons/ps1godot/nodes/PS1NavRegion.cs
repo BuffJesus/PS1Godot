@@ -28,6 +28,7 @@ public enum PS1NavSurfaceType : byte
 // don't line up.
 [Tool]
 [GlobalClass]
+[Icon("res://addons/ps1godot/icons/ps1_nav_region.svg")]
 public partial class PS1NavRegion : Node3D
 {
     // Default to a 2×2 square at origin so the node is immediately usable

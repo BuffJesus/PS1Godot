@@ -12,11 +12,14 @@ namespace PS1Godot;
 // the RENDERER decides what to draw. You usually want one per-room of each.
 [Tool]
 [GlobalClass]
+[Icon("res://addons/ps1godot/icons/ps1_room.svg")]
 public partial class PS1Room : Node3D
 {
+    [ExportGroup("Identity")]
     // Displayed in debug prints; purely cosmetic for now.
     [Export] public string RoomName { get; set; } = "";
 
+    [ExportGroup("Volume")]
     // Local volume size. Exporter transforms the 8 corners by the node's
     // GlobalTransform to get a world AABB, so rotating / scaling the room
     // node reshapes the volume (then AABBs it again). Matches the

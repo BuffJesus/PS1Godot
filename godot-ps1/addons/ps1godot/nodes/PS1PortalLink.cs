@@ -16,8 +16,10 @@ namespace PS1Godot;
 // away from the camera, so the auto-correction matters.
 [Tool]
 [GlobalClass]
+[Icon("res://addons/ps1godot/icons/ps1_portal_link.svg")]
 public partial class PS1PortalLink : Node3D
 {
+    [ExportGroup("Rooms")]
     // Path to the PS1Room on the "near" side. Must be set, must differ
     // from RoomB, and both targets must be PS1Room nodes in the same
     // scene — the exporter warns and skips otherwise.
@@ -26,6 +28,7 @@ public partial class PS1PortalLink : Node3D
     // Path to the PS1Room on the "far" side.
     [Export] public NodePath RoomB { get; set; } = new NodePath();
 
+    [ExportGroup("Opening")]
     // Portal opening size in world units (X = width, Y = height). The
     // rendered portal quad is centered on the node and spans this size
     // along the node's local +X and +Y axes.
