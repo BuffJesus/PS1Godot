@@ -1361,14 +1361,10 @@ public static class SceneCollector
 
     private static void CollectAudioClips(PS1Scene scene, SceneData data)
     {
-        GD.Print($"[PS1Godot] PS1Scene.AudioClips.Count = {scene.AudioClips?.Count ?? -1}");
         if (scene.AudioClips == null) return;
         var seen = new HashSet<string>();
-        int slot = -1;
         foreach (var clip in scene.AudioClips)
         {
-            slot++;
-            GD.Print($"[PS1Godot]   slot[{slot}] = {(clip == null ? "null" : clip.GetType().Name)} Stream={(clip?.Stream == null ? "null" : clip.Stream.GetType().Name)} ClipName='{clip?.ClipName}'");
             if (clip == null || clip.Stream == null)
             {
                 GD.PushWarning("[PS1Godot] PS1Scene.AudioClips has an empty slot or a clip with no Stream — skipping.");

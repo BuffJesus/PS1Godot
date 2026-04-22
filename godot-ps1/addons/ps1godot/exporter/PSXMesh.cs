@@ -110,18 +110,6 @@ public sealed class PSXMesh
                 int i1 = indices.Length > 0 ? indices[t * 3 + 1] : t * 3 + 1;
                 int i2 = indices.Length > 0 ? indices[t * 3 + 2] : t * 3 + 2;
 
-                // Diagnostic: first triangle of first surface of Player. Prints
-                // pre-scale raw and post-scale-post-convert int16 the runtime
-                // actually gets. If |vx| is ~1800 → scale applied. If ~12000+
-                // or weirdly negative → scale skipped, int16 wrap in play.
-                if (s == 0 && t == 0 && node.Name.ToString() == "Player")
-                {
-                    GD.Print($"[PS1Godot] Player tri[0] pre-scale: p0={verts[i0]:F3} p1={verts[i1]:F3} p2={verts[i2]:F3}");
-                    var ps0 = verts[i0] * nodeScale;
-                    GD.Print($"[PS1Godot] Player tri[0] post-scale: p0={ps0:F4}");
-                    GD.Print($"[PS1Godot] Player tri[0] emitted int16: vx={PSXTrig.ConvertCoordinateToPSX(ps0.X, gteScaling)} vy={PSXTrig.ConvertCoordinateToPSX(-ps0.Y, gteScaling)} vz={PSXTrig.ConvertCoordinateToPSX(-ps0.Z, gteScaling)}");
-                }
-
                 var p0 = verts[i0] * nodeScale;
                 var p1 = verts[i1] * nodeScale;
                 var p2 = verts[i2] * nodeScale;
