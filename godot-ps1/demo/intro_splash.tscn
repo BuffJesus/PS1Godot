@@ -1,4 +1,4 @@
-[gd_scene load_steps=23 format=4 uid="uid://d1splashheadspider"]
+[gd_scene load_steps=28 format=4 uid="uid://d1splashheadspider"]
 
 [ext_resource type="Script" uid="uid://b8ogc8krip2k" path="res://addons/ps1godot/nodes/PS1Scene.cs" id="1_scene"]
 [ext_resource type="Script" uid="uid://cgk0vce50p3ph" path="res://addons/ps1godot/nodes/PS1AudioClip.cs" id="2_clip"]
@@ -6,21 +6,125 @@
 [ext_resource type="Script" uid="uid://bwafnk42jueor" path="res://addons/ps1godot/nodes/PS1Cutscene.cs" id="4_cs"]
 [ext_resource type="Script" uid="uid://bmwv0x052a03l" path="res://addons/ps1godot/nodes/PS1AnimationTrack.cs" id="5_tr"]
 [ext_resource type="Script" uid="uid://bg1ih72kp4c3g" path="res://addons/ps1godot/nodes/PS1AnimationKeyframe.cs" id="6_kf"]
-[ext_resource type="Script" path="res://addons/ps1godot/nodes/PS1AudioEvent.cs" id="7_ae"]
 [ext_resource type="Script" uid="uid://bp1p1kqop2wwy" path="res://addons/ps1godot/nodes/PS1UICanvas.cs" id="8_uican"]
 [ext_resource type="Script" uid="uid://c01mt2tth0oll" path="res://addons/ps1godot/nodes/PS1UIElement.cs" id="9_uiel"]
 [ext_resource type="Resource" path="res://addons/ps1godot/themes/PS1Theme.tres" id="10_theme"]
 [ext_resource type="PackedScene" uid="uid://c5a0o3855oqr4" path="res://demo/meshes/HeadSpider.fbx" id="11_headspider"]
 [ext_resource type="Material" path="res://demo/materials/ps1_headspider_body.tres" id="12_mat_body"]
+[ext_resource type="Material" path="res://demo/materials/ps1_headspider_eyes.tres" id="12_mat_eyes"]
 [ext_resource type="PackedScene" uid="uid://du1f0yvdm7v5t" path="res://demo/demo.tscn" id="13_demo"]
 [ext_resource type="PackedScene" uid="uid://ck3rdrm0001a" path="res://demo/checkered_realm.tscn" id="14_realm"]
 [ext_resource type="AudioStream" uid="uid://depr0h18ed78v" path="res://demo/audio/music/inst_lead.wav" id="15_chime_stream"]
+[ext_resource type="Script" path="res://addons/ps1godot/nodes/PS1MeshGroup.cs" id="16_meshgroup"]
+[ext_resource type="Script" uid="uid://3bx6n5sx7krl" path="res://addons/ps1godot/nodes/PS1MusicChannel.cs" id="17_mchan"]
+[ext_resource type="Script" uid="uid://c2oekhtvjyqlt" path="res://addons/ps1godot/nodes/PS1MusicSequence.cs" id="18_mseq"]
 
 [sub_resource type="Resource" id="Clip_chime"]
 script = ExtResource("2_clip")
 Stream = ExtResource("15_chime_stream")
 ClipName = "splash_chime"
 metadata/_custom_type_script = "uid://cgk0vce50p3ph"
+
+; Music-sequencer channels for ps1_startup.mid. Source uses intra-channel
+; chords: MIDI ch 1 plays dyads, ch 2 plays triads, ch 6 plays dyads.
+; Our sequencer is MONO per packed voice, so a chord on one MIDI channel
+; would retrigger itself and collapse to the last note (notes appearing
+; "skipped"). Fix: bind the same MIDI channel multiple times — each
+; duplicate binding becomes a polyphony lane, and PS1MSerializer's
+; voice-stealing allocator spreads chord members across the lanes.
+;
+; Allocation within the 8-voice MusicSequencer::MAX_CHANNELS cap:
+;   ch 0 → 1 lane (mono lead)
+;   ch 1 → 2 lanes (bass dyads)
+;   ch 2 → 3 lanes (triangle triads — the iconic rising arpeggio)
+;   ch 4 → 1 lane (final high chime)
+;   ch 6 → 1 lane (pluck ostinato; chord-collision cost is small here
+;                  because the chords are dense fast dyads that
+;                  function as thickening rather than harmony)
+; = 8 lanes. Remaining MIDI channels (3, 5, 7–12) are exact duplicates
+; of bound channels (verified via midi_binding_trace.py) — dropping
+; them costs no unique content.
+;
+; Every lane plays the single `splash_chime` sample (inst_lead.wav);
+; the pitch table handles per-note frequency shifts. BaseNoteMidi=69
+; (A4) matches demo.tscn's `inst_lead` convention.
+[sub_resource type="Resource" id="Chan_lead"]
+script = ExtResource("17_mchan")
+MidiChannel = 0
+AudioClipName = "splash_chime"
+BaseNoteMidi = 69
+Volume = 110
+metadata/_custom_type_script = "uid://3bx6n5sx7krl"
+
+[sub_resource type="Resource" id="Chan_bass_a"]
+script = ExtResource("17_mchan")
+MidiChannel = 1
+AudioClipName = "splash_chime"
+BaseNoteMidi = 69
+Volume = 95
+metadata/_custom_type_script = "uid://3bx6n5sx7krl"
+
+[sub_resource type="Resource" id="Chan_bass_b"]
+script = ExtResource("17_mchan")
+MidiChannel = 1
+AudioClipName = "splash_chime"
+BaseNoteMidi = 69
+Volume = 95
+metadata/_custom_type_script = "uid://3bx6n5sx7krl"
+
+[sub_resource type="Resource" id="Chan_triangle_a"]
+script = ExtResource("17_mchan")
+MidiChannel = 2
+AudioClipName = "splash_chime"
+BaseNoteMidi = 69
+Volume = 75
+metadata/_custom_type_script = "uid://3bx6n5sx7krl"
+
+[sub_resource type="Resource" id="Chan_triangle_b"]
+script = ExtResource("17_mchan")
+MidiChannel = 2
+AudioClipName = "splash_chime"
+BaseNoteMidi = 69
+Volume = 75
+metadata/_custom_type_script = "uid://3bx6n5sx7krl"
+
+[sub_resource type="Resource" id="Chan_triangle_c"]
+script = ExtResource("17_mchan")
+MidiChannel = 2
+AudioClipName = "splash_chime"
+BaseNoteMidi = 69
+Volume = 75
+metadata/_custom_type_script = "uid://3bx6n5sx7krl"
+
+[sub_resource type="Resource" id="Chan_pluck"]
+script = ExtResource("17_mchan")
+MidiChannel = 6
+AudioClipName = "splash_chime"
+BaseNoteMidi = 69
+Volume = 60
+metadata/_custom_type_script = "uid://3bx6n5sx7krl"
+
+[sub_resource type="Resource" id="Chan_finalchime"]
+script = ExtResource("17_mchan")
+MidiChannel = 4
+AudioClipName = "splash_chime"
+BaseNoteMidi = 69
+Volume = 127
+metadata/_custom_type_script = "uid://3bx6n5sx7krl"
+
+; One-shot sequence. LoopStartBeat=-1 → sequencer stops after the
+; final event instead of looping back to tick 0. Total playback
+; length: 13.17s (MIDI events end at tick 7584 @ 90 BPM, 384 ticks/
+; quarter) + 0.5s (last inst_lead sample decay) ≈ 13.67s. Paired with
+; the cutscene's 420-frame (14s) length so Scene.Load(1) can't fire
+; before the chime finishes decaying.
+[sub_resource type="Resource" id="Seq_splash"]
+script = ExtResource("18_mseq")
+MidiFile = "res://demo/audio/music/ps1_startup.mid"
+SequenceName = "ps1_startup"
+LoopStartBeat = -1
+Channels = Array[ExtResource("17_mchan")]([SubResource("Chan_lead"), SubResource("Chan_bass_a"), SubResource("Chan_bass_b"), SubResource("Chan_triangle_a"), SubResource("Chan_triangle_b"), SubResource("Chan_triangle_c"), SubResource("Chan_pluck"), SubResource("Chan_finalchime")])
+metadata/_custom_type_script = "uid://c2oekhtvjyqlt"
 
 ; Root PS1Scene. Scene 0 on export. SubScenes = [demo, realm] so Lua
 ; calls map to: Scene.Load(1) -> main demo, Scene.Load(2) -> realm.
@@ -29,11 +133,12 @@ metadata/_custom_type_script = "uid://cgk0vce50p3ph"
 [node name="IntroSplash" type="Node3D" unique_id=9100000001]
 script = ExtResource("1_scene")
 SceneType = 6
-FogEnabled = true
+FogEnabled = false
 FogColor = Color(0, 0, 0, 1)
-FogDensity = 30
+FogDensity = 1
 SceneLuaFile = "res://demo/scripts/intro_splash.lua"
 AudioClips = Array[ExtResource("2_clip")]([SubResource("Clip_chime")])
+MusicSequences = Array[ExtResource("18_mseq")]([SubResource("Seq_splash")])
 SubScenes = Array[PackedScene]([ExtResource("13_demo"), ExtResource("14_realm")])
 
 ; PS1Player at origin — the splash doesn't use player movement (controls
@@ -43,23 +148,59 @@ SubScenes = Array[PackedScene]([ExtResource("13_demo"), ExtResource("14_realm")]
 [node name="PS1Player" type="Node3D" parent="." unique_id=9100000002]
 script = ExtResource("3_player")
 
-; HeadSpider FBX instance. Rendered via SceneCollector's raw-MeshInstance3D
-; auto-detect path (introduced 2026-04-21); no PS1MeshInstance wrapper
-; needed. Material override points at ps1_headspider_body.tres so it
-; renders with the HeadSpider.png texture on PSX. If the FBX has an
-; internal eyes mesh with its own surface, author a per-surface override
-; in the editor pointing at ps1_headspider_eyes.tres.
-[node name="HeadSpider" parent="." unique_id=9100000003 instance=ExtResource("11_headspider")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
+; HeadSpider is a PS1MeshGroup — wraps the 5-piece FBX import so the
+; exporter merges Bug + FrontLegs + Head + LeftEye + RightEye into a
+; SINGLE exported GameObject. The cutscene's SpiderRotTrack can then
+; target "HeadSpider" with an ObjectRotation track and spin the whole
+; prop as a unit (a plain MeshInstance3D auto-walk would emit five
+; separate GameObjects, and rotation tracks target one at a time).
+;
+; Scale 0.5 + Y=1.5 keeps the body framed above the PS1 screen's
+; reserved bottom text band (Y>=168). The transform lives on the group
+; so the rotation track spins around the group's origin (= spider's
+; feet) rather than swinging the whole mesh around world zero.
+[node name="HeadSpider" type="Node3D" parent="." unique_id=9100000003]
+script = ExtResource("16_meshgroup")
+transform = Transform3D(0.5, 0, 0, 0, 0.5, 0, 0, 0, 0.5, 0, 1.5, 0)
+
+; FBX instance sits at identity inside the group — all transform lives
+; on the parent. Editable-children overrides wire per-submesh materials:
+; body/head/legs share ps1_headspider_body.tres, eyes use
+; ps1_headspider_eyes.tres.
+[node name="SpiderMesh" parent="HeadSpider" unique_id=9100000004 instance=ExtResource("11_headspider")]
+
+[editable path="HeadSpider/SpiderMesh"]
+
+[node name="Bug" parent="HeadSpider/SpiderMesh"]
 material_override = ExtResource("12_mat_body")
 
-; 5-second orbit cutscene. Camera pulls from an establishing distance
-; to a closer orbit, then back out, while the HeadSpider spins slowly
-; on Y. Chime fires at frame 0 via the PS1AudioEvent child.
+[node name="FrontLegs" parent="HeadSpider/SpiderMesh"]
+material_override = ExtResource("12_mat_body")
+
+[node name="Head" parent="HeadSpider/SpiderMesh"]
+material_override = ExtResource("12_mat_body")
+
+[node name="LeftEye" parent="HeadSpider/SpiderMesh"]
+material_override = ExtResource("12_mat_eyes")
+
+[node name="RightEye" parent="HeadSpider/SpiderMesh"]
+material_override = ExtResource("12_mat_eyes")
+
+; 14-second cutscene. Length is driven by the ps1_startup music
+; sequence: MIDI events run ~13.17s + the 0.5s inst_lead sample decay
+; on the final chime ≈ 13.67s of audible audio. TotalFrames=420 (14s @
+; 30fps) guarantees Scene.Load(1) can't fire before the chime finishes.
+; Music is kicked off from intro_splash.lua's onSceneCreationEnd (not
+; a PS1AudioEvent, since sequenced music has its own Lua Play API).
+;
+; Static camera frames the HeadSpider at (0, 2.5, 4) with a 5° downward
+; pitch; SpiderRotTrack spins the PS1MeshGroup a full 360° across the
+; 420-frame timeline (~25.7°/sec — slow, dignified turntable pace that
+; fits a 14-second boot logo).
 [node name="IntroCutscene" type="Node" parent="." unique_id=9100000010]
 script = ExtResource("4_cs")
 CutsceneName = "intro_splash"
-TotalFrames = 150
+TotalFrames = 420
 
 [node name="CamPosTrack" type="Node" parent="IntroCutscene" unique_id=9100000011]
 script = ExtResource("5_tr")
@@ -68,19 +209,13 @@ TrackType = 0
 [node name="CamPosKf0" type="Node" parent="IntroCutscene/CamPosTrack" unique_id=9100000012]
 script = ExtResource("6_kf")
 Frame = 0
-Value = Vector3(4, 2, 5)
+Value = Vector3(0, 2.5, 4)
 
 [node name="CamPosKf1" type="Node" parent="IntroCutscene/CamPosTrack" unique_id=9100000013]
 script = ExtResource("6_kf")
-Frame = 75
-Value = Vector3(-4, 2, 5)
-Interp = 4
-
-[node name="CamPosKf2" type="Node" parent="IntroCutscene/CamPosTrack" unique_id=9100000014]
-script = ExtResource("6_kf")
-Frame = 149
-Value = Vector3(0, 3, 6)
-Interp = 4
+Frame = 419
+Value = Vector3(0, 2.5, 4)
+Interp = 0
 
 [node name="CamRotTrack" type="Node" parent="IntroCutscene" unique_id=9100000020]
 script = ExtResource("5_tr")
@@ -89,40 +224,34 @@ TrackType = 1
 [node name="CamRotKf0" type="Node" parent="IntroCutscene/CamRotTrack" unique_id=9100000021]
 script = ExtResource("6_kf")
 Frame = 0
-Value = Vector3(-10, 180, 0)
+Value = Vector3(5, 180, 0)
 
 [node name="CamRotKf1" type="Node" parent="IntroCutscene/CamRotTrack" unique_id=9100000022]
 script = ExtResource("6_kf")
-Frame = 75
-Value = Vector3(-10, 180, 0)
-Interp = 4
+Frame = 419
+Value = Vector3(5, 180, 0)
+Interp = 0
 
-[node name="CamRotKf2" type="Node" parent="IntroCutscene/CamRotTrack" unique_id=9100000023]
-script = ExtResource("6_kf")
-Frame = 149
-Value = Vector3(-15, 180, 0)
-Interp = 4
-
-[node name="SpinTrack" type="Node" parent="IntroCutscene" unique_id=9100000030]
+; Object rotation track — the whole point of bundling HeadSpider as a
+; PS1MeshGroup. TrackType 3 = ObjectRotation; TargetObjectName must
+; match the group's exported name ("HeadSpider"). Rotation sweep
+; spans the entire 420-frame cutscene so the prop stays in motion
+; until the Scene.Load handoff (no awkward "stops spinning then
+; transitions" beat).
+[node name="SpiderRotTrack" type="Node" parent="IntroCutscene" unique_id=9100000030]
 script = ExtResource("5_tr")
 TargetObjectName = "HeadSpider"
 TrackType = 3
 
-[node name="SpinKf0" type="Node" parent="IntroCutscene/SpinTrack" unique_id=9100000031]
+[node name="SpiderRotKf0" type="Node" parent="IntroCutscene/SpiderRotTrack" unique_id=9100000031]
 script = ExtResource("6_kf")
 Frame = 0
 Value = Vector3(0, 0, 0)
 
-[node name="SpinKf1" type="Node" parent="IntroCutscene/SpinTrack" unique_id=9100000032]
+[node name="SpiderRotKf1" type="Node" parent="IntroCutscene/SpiderRotTrack" unique_id=9100000032]
 script = ExtResource("6_kf")
-Frame = 149
+Frame = 419
 Value = Vector3(0, 360, 0)
-
-[node name="ChimeAt0" type="Node" parent="IntroCutscene" unique_id=9100000040]
-script = ExtResource("7_ae")
-Frame = 0
-ClipName = "splash_chime"
-Volume = 110
 
 ; UI — "brand" at top (studio name) + "licensed" block below (small
 ; legal-style text). Theme slot `Neutral` keeps both a soft grey on
