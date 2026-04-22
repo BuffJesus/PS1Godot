@@ -2179,10 +2179,50 @@ public static class SceneCollector
             });
         }
 
+        // Per-room portal-ref lists. For each portal, both RoomA and RoomB
+        // get an entry pointing at the other — the renderer uses this to
+        // iterate just a room's neighbors instead of scanning every portal
+        // per frame. Catch-all has no portal links authored against it, so
+        // its refCount lands at 0 (runtime falls back for that room).
+        var perRoomPortalRefs = new List<RoomPortalRefRecord>[data.Rooms.Count];
+        for (int i = 0; i < perRoomPortalRefs.Length; i++)
+            perRoomPortalRefs[i] = new();
+        for (int p = 0; p < data.Portals.Count; p++)
+        {
+            var portal = data.Portals[p];
+            perRoomPortalRefs[portal.RoomA].Add(new RoomPortalRefRecord
+            {
+                PortalIndex = (ushort)p,
+                OtherRoom = portal.RoomB,
+            });
+            perRoomPortalRefs[portal.RoomB].Add(new RoomPortalRefRecord
+            {
+                PortalIndex = (ushort)p,
+                OtherRoom = portal.RoomA,
+            });
+        }
+        ushort runningPortalRef = 0;
+        for (int r = 0; r < data.Rooms.Count; r++)
+        {
+            var rec = data.Rooms[r];
+            int count = perRoomPortalRefs[r].Count;
+            if (count > 255)
+            {
+                GD.PushWarning($"[PS1Godot] Room '{rec.Name}' has {count} connecting portals — clamping to 255 (PortalRefCount is u8).");
+                count = 255;
+            }
+            rec.FirstPortalRef = runningPortalRef;
+            rec.PortalRefCount = (byte)count;
+            for (int i = 0; i < count; i++)
+                data.RoomPortalRefs.Add(perRoomPortalRefs[r][i]);
+            runningPortalRef += (ushort)count;
+        }
+
         GD.Print($"[PS1Godot] Rooms: {rooms.Count} authored + 1 catch-all, " +
                  $"{data.Portals.Count} portals ({droppedPortals} dropped), " +
                  $"{data.RoomTriRefs.Count} tri-refs " +
-                 $"({perRoom[catchAllIdx].Count} catch-all).");
+                 $"({perRoom[catchAllIdx].Count} catch-all), " +
+                 $"{data.RoomPortalRefs.Count} portal-refs.");
     }
 
     private static void CollectRoomNodes(Node n, List<PS1Room> rooms, List<PS1PortalLink> portals)

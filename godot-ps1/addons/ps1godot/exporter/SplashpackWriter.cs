@@ -148,11 +148,11 @@ public static class SplashpackWriter
             }
         }
 
-        // ── Room block: RoomData[R]*36 + PortalData[P]*40 + TriangleRef[T]*4.
-        //    Written only when the scene authors rooms; the loader aligns
-        //    its cursor to 4 bytes before reading RoomData, so do the same.
-        //    Room cells + per-room portal refs are TODO — runtime falls
-        //    back cleanly when their counts are 0.
+        // ── Room block: RoomData[R]*36 + PortalData[P]*40 + TriangleRef[T]*4
+        //    + RoomPortalRef[P']*4 when portal-refs are populated. Loader
+        //    aligns its cursor to 4 bytes before reading RoomData so we
+        //    match that. Room cells still TODO — runtime falls back when
+        //    cellCount is 0.
         if (roomCount > 0)
         {
             AlignTo4(w);
@@ -168,6 +168,11 @@ public static class SplashpackWriter
             {
                 w.Write(tr.ObjectIndex);
                 w.Write(tr.TriangleIndex);
+            }
+            foreach (var pr in scene.RoomPortalRefs)
+            {
+                w.Write(pr.PortalIndex);
+                w.Write(pr.OtherRoom);
             }
         }
 
@@ -1005,7 +1010,7 @@ public static class SplashpackWriter
         w.Write((uint)0);              // pixelDataOffset (0 = v20 split)
 
         w.Write((ushort)scene.Animations.Count); // animationCount
-        w.Write((ushort)0);            // roomPortalRefCount
+        w.Write((ushort)scene.RoomPortalRefs.Count); // roomPortalRefCount
         offsets.AnimationTableOffsetPos = w.BaseStream.Position;
         w.Write((uint)0);              // animationTableOffset (backfilled)
 

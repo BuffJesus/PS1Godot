@@ -281,8 +281,8 @@ public sealed class NavPortalRecord
 
 // One RoomData entry (36 bytes). Authored via a PS1Room node; the
 // collector fills in the AABB in world space and the tri-ref slice.
-// CellCount / PortalRefCount stay 0 for the MVP — the runtime falls back
-// cleanly to "render all of the room's tri-refs" when cells are absent.
+// CellCount stays 0 for the MVP — the runtime falls back cleanly to
+// "render all of the room's tri-refs" when cells are absent.
 public sealed class RoomRecord
 {
     public required Vector3 WorldMin { get; init; }
@@ -319,6 +319,16 @@ public readonly struct RoomTriRefRecord
     public ushort TriangleIndex { get; init; }
 }
 
+// One RoomPortalRef entry (4 bytes). Flat array, indexed by
+// RoomRecord.FirstPortalRef / PortalRefCount. Lets the renderer
+// iterate just the portals touching the current room instead of
+// scanning every portal in the scene each frame.
+public readonly struct RoomPortalRefRecord
+{
+    public ushort PortalIndex { get; init; }
+    public ushort OtherRoom { get; init; }
+}
+
 public sealed class SceneData
 {
     public List<SceneObject> Objects { get; } = new();
@@ -347,6 +357,7 @@ public sealed class SceneData
     public List<RoomRecord> Rooms { get; } = new();
     public List<PortalRecord> Portals { get; } = new();
     public List<RoomTriRefRecord> RoomTriRefs { get; } = new();
+    public List<RoomPortalRefRecord> RoomPortalRefs { get; } = new();
 
     // Lua scripts discovered on scene nodes. Deduplicated by resource path.
     public List<LuaFileRecord> LuaFiles { get; } = new();
