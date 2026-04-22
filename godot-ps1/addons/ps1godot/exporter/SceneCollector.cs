@@ -557,13 +557,19 @@ public static class SceneCollector
             }
             string elName = string.IsNullOrWhiteSpace(el.ElementName) ? el.Name : el.ElementName;
             Color color = ResolveElementColor(el, theme);
+            // Resolve anchor + inset/offset to an absolute top-left in
+            // PSX coords. The runtime's UIElement still reads plain X/Y
+            // (anchor bytes in the binary stay zero, see SplashpackWriter
+            // WriteUISection); doing the math at export keeps the binary
+            // layout unchanged.
+            var (absX, absY) = PS1UIAnchoring.Resolve(el);
             elements.Add(new UIElementRecord
             {
                 Name = elName,
                 Type = el.Type,
                 VisibleOnLoad = el.VisibleOnLoad,
-                X = (short)Mathf.Clamp(el.X, short.MinValue, short.MaxValue),
-                Y = (short)Mathf.Clamp(el.Y, short.MinValue, short.MaxValue),
+                X = (short)Mathf.Clamp(absX, short.MinValue, short.MaxValue),
+                Y = (short)Mathf.Clamp(absY, short.MinValue, short.MaxValue),
                 W = (short)Mathf.Clamp(el.Width, short.MinValue, short.MaxValue),
                 H = (short)Mathf.Clamp(el.Height, short.MinValue, short.MaxValue),
                 ColorR = (byte)Mathf.Clamp((int)(color.R * 255f), 0, 255),

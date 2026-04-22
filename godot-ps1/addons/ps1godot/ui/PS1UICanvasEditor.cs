@@ -195,9 +195,12 @@ public partial class PS1UICanvasEditor : VBoxContainer
 
         if (_selectedCanvas == null) return;
 
+        // Hidden elements (VisibleOnLoad == false) stay drawn so
+        // authors can still see where they sit while positioning —
+        // just at 30% alpha so the visible layout reads first.
         foreach (var child in _selectedCanvas.GetChildren())
-            if (child is PS1UIElement el && el.VisibleOnLoad)
-                DrawElement(el, z);
+            if (child is PS1UIElement el)
+                DrawElement(el, z, el.VisibleOnLoad ? 1f : 0.3f);
     }
 
     private void DrawGrid(int z)
@@ -225,11 +228,16 @@ public partial class PS1UICanvasEditor : VBoxContainer
         }
     }
 
-    private void DrawElement(PS1UIElement el, int z)
+    private void DrawElement(PS1UIElement el, int z, float alpha)
     {
         if (_canvasArea == null) return;
         var color = ResolveElementColor(el);
-        var rect = new Rect2(el.X * z, el.Y * z, el.Width * z, el.Height * z);
+        if (alpha < 1f) color = new Color(color, color.A * alpha);
+
+        // Resolve via the same helper the exporter uses so the preview
+        // matches the splashpack bit-for-bit.
+        var (absX, absY) = PS1UIAnchoring.Resolve(el);
+        var rect = new Rect2(absX * z, absY * z, el.Width * z, el.Height * z);
 
         switch (el.Type)
         {
@@ -240,7 +248,8 @@ public partial class PS1UICanvasEditor : VBoxContainer
             case PS1UIElementType.Text:
                 // Faint bounds rect so the author sees the layout box
                 // even when the text doesn't fill it.
-                _canvasArea.DrawRect(rect, BoundsColor, filled: false, width: 1f);
+                var bounds = new Color(BoundsColor, BoundsColor.A * alpha);
+                _canvasArea.DrawRect(rect, bounds, filled: false, width: 1f);
 
                 // Use Godot's default editor font at a size that reads
                 // at the current zoom. PSX glyphs are ~8 px tall; we
@@ -251,12 +260,12 @@ public partial class PS1UICanvasEditor : VBoxContainer
                 var font = ThemeDB.FallbackFont;
                 int fontSize = Mathf.Max(8, 8 * z);
                 string text = string.IsNullOrEmpty(el.Text) ? "(empty)" : el.Text;
-                var textColor = string.IsNullOrEmpty(el.Text) ? new Color(color, 0.4f) : color;
+                var textColor = string.IsNullOrEmpty(el.Text) ? new Color(color, 0.4f * alpha) : color;
 
                 // Wrap to element width so authors see overflow early.
                 _canvasArea.DrawMultilineString(
                     font,
-                    new Vector2(el.X * z + 2, el.Y * z + fontSize),
+                    new Vector2(absX * z + 2, absY * z + fontSize),
                     text,
                     HorizontalAlignment.Left,
                     el.Width * z,

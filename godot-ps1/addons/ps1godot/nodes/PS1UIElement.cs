@@ -11,9 +11,10 @@ namespace PS1Godot;
 //   - Image / Progress: runtime supports these but exporter MVP skips
 //     them.
 //
-// Coordinates are in PS1 screen pixels (320×240). Anchor is fixed to
-// top-left (0,0,0,0) in MVP — authors use absolute X/Y. Anchor support
-// lands when the exporter needs it (HUD pinned bottom-right, etc.).
+// Coordinates are in PS1 screen pixels (320×240). See the `Anchor`
+// property's doc for how X/Y are interpreted — Custom (default) means
+// "absolute top-left," other values turn X/Y into insets from the
+// anchored edges / offsets from the anchored center.
 public enum PS1UIElementType
 {
     Box = 1,
@@ -47,7 +48,21 @@ public partial class PS1UIElement : Node
 
     [Export] public bool VisibleOnLoad { get; set; } = true;
 
-    // Top-left corner in PS1 screen pixels. 320 wide × 240 tall.
+    // Placement mode. Custom = X/Y are the absolute top-left corner
+    // (backward-compatible default). Non-Custom = the element snaps
+    // to one of the nine PSX-screen reference points and X/Y become
+    // insets (edge anchors) or offsets (center anchors). See
+    // PS1UIAnchor's doc comment for full semantics.
+    [Export] public PS1UIAnchor Anchor { get; set; } = PS1UIAnchor.Custom;
+
+    // Interpretation depends on Anchor:
+    //   - Custom / TopLeft: absolute position of the top-left corner.
+    //   - TopRight, CenterRight, BottomRight: X is the inset in
+    //     pixels from the right edge (positive = onto the screen).
+    //   - BottomLeft, BottomCenter, BottomRight: Y is the inset from
+    //     the bottom edge.
+    //   - Center-aligned axes: the value is an offset from the PSX
+    //     center (160 horizontally, 120 vertically).
     [Export(PropertyHint.Range, "-256,576,1")]
     public int X { get; set; } = 16;
     [Export(PropertyHint.Range, "-256,576,1")]
