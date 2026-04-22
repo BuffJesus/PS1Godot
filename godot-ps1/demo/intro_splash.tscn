@@ -1,4 +1,4 @@
-[gd_scene load_steps=29 format=4 uid="uid://d1splashheadspider"]
+[gd_scene format=3 uid="uid://6eraibc1p7ft"]
 
 [ext_resource type="Script" uid="uid://b8ogc8krip2k" path="res://addons/ps1godot/nodes/PS1Scene.cs" id="1_scene"]
 [ext_resource type="Script" uid="uid://cgk0vce50p3ph" path="res://addons/ps1godot/nodes/PS1AudioClip.cs" id="2_clip"]
@@ -15,10 +15,10 @@
 [ext_resource type="PackedScene" uid="uid://du1f0yvdm7v5t" path="res://demo/demo.tscn" id="13_demo"]
 [ext_resource type="PackedScene" uid="uid://ck3rdrm0001a" path="res://demo/checkered_realm.tscn" id="14_realm"]
 [ext_resource type="AudioStream" uid="uid://depr0h18ed78v" path="res://demo/audio/music/inst_lead.wav" id="15_chime_stream"]
-[ext_resource type="Script" path="res://addons/ps1godot/nodes/PS1MeshGroup.cs" id="16_meshgroup"]
+[ext_resource type="Script" uid="uid://cq8p5ctbfp1ou" path="res://addons/ps1godot/nodes/PS1MeshGroup.cs" id="16_meshgroup"]
 [ext_resource type="Script" uid="uid://3bx6n5sx7krl" path="res://addons/ps1godot/nodes/PS1MusicChannel.cs" id="17_mchan"]
 [ext_resource type="Script" uid="uid://c2oekhtvjyqlt" path="res://addons/ps1godot/nodes/PS1MusicSequence.cs" id="18_mseq"]
-[ext_resource type="Resource" path="res://addons/ps1godot/fonts/vt323_font.tres" id="19_font_vt323"]
+[ext_resource type="Resource" uid="uid://bkwwgafcy6isa" path="res://addons/ps1godot/fonts/vt323_font.tres" id="19_font_vt323"]
 
 [sub_resource type="Resource" id="Clip_chime"]
 script = ExtResource("2_clip")
@@ -26,32 +26,8 @@ Stream = ExtResource("15_chime_stream")
 ClipName = "splash_chime"
 metadata/_custom_type_script = "uid://cgk0vce50p3ph"
 
-; Music-sequencer channels for ps1_startup.mid. Source uses intra-channel
-; chords: MIDI ch 1 plays dyads, ch 2 plays triads, ch 6 plays dyads.
-; Our sequencer is MONO per packed voice, so a chord on one MIDI channel
-; would retrigger itself and collapse to the last note (notes appearing
-; "skipped"). Fix: bind the same MIDI channel multiple times — each
-; duplicate binding becomes a polyphony lane, and PS1MSerializer's
-; voice-stealing allocator spreads chord members across the lanes.
-;
-; Allocation within the 8-voice MusicSequencer::MAX_CHANNELS cap:
-;   ch 0 → 1 lane (mono lead)
-;   ch 1 → 2 lanes (bass dyads)
-;   ch 2 → 3 lanes (triangle triads — the iconic rising arpeggio)
-;   ch 4 → 1 lane (final high chime)
-;   ch 6 → 1 lane (pluck ostinato; chord-collision cost is small here
-;                  because the chords are dense fast dyads that
-;                  function as thickening rather than harmony)
-; = 8 lanes. Remaining MIDI channels (3, 5, 7–12) are exact duplicates
-; of bound channels (verified via midi_binding_trace.py) — dropping
-; them costs no unique content.
-;
-; Every lane plays the single `splash_chime` sample (inst_lead.wav);
-; the pitch table handles per-note frequency shifts. BaseNoteMidi=69
-; (A4) matches demo.tscn's `inst_lead` convention.
 [sub_resource type="Resource" id="Chan_lead"]
 script = ExtResource("17_mchan")
-MidiChannel = 0
 AudioClipName = "splash_chime"
 BaseNoteMidi = 69
 Volume = 110
@@ -113,12 +89,6 @@ BaseNoteMidi = 69
 Volume = 127
 metadata/_custom_type_script = "uid://3bx6n5sx7krl"
 
-; One-shot sequence. LoopStartBeat=-1 → sequencer stops after the
-; final event instead of looping back to tick 0. Total playback
-; length: 13.17s (MIDI events end at tick 7584 @ 90 BPM, 384 ticks/
-; quarter) + 0.5s (last inst_lead sample decay) ≈ 13.67s. Paired with
-; the cutscene's 420-frame (14s) length so Scene.Load(1) can't fire
-; before the chime finishes decaying.
 [sub_resource type="Resource" id="Seq_splash"]
 script = ExtResource("18_mseq")
 MidiFile = "res://demo/audio/music/ps1_startup.mid"
@@ -127,196 +97,136 @@ LoopStartBeat = -1
 Channels = Array[ExtResource("17_mchan")]([SubResource("Chan_lead"), SubResource("Chan_bass_a"), SubResource("Chan_bass_b"), SubResource("Chan_triangle_a"), SubResource("Chan_triangle_b"), SubResource("Chan_triangle_c"), SubResource("Chan_pluck"), SubResource("Chan_finalchime")])
 metadata/_custom_type_script = "uid://c2oekhtvjyqlt"
 
-; Root PS1Scene. Scene 0 on export. SubScenes = [demo, realm] so Lua
-; calls map to: Scene.Load(1) -> main demo, Scene.Load(2) -> realm.
-; Black fog hides the edges of the scene so the HeadSpider "floats in
-; space" the way the stock PS1 boot logo floats on a black field.
-[node name="IntroSplash" type="Node3D" unique_id=9100000001]
+[node name="IntroSplash" type="Node3D" unique_id=510065409]
 script = ExtResource("1_scene")
 SceneType = 6
-FogEnabled = false
 FogColor = Color(0, 0, 0, 1)
-FogDensity = 1
 SceneLuaFile = "res://demo/scripts/intro_splash.lua"
 AudioClips = Array[ExtResource("2_clip")]([SubResource("Clip_chime")])
 MusicSequences = Array[ExtResource("18_mseq")]([SubResource("Seq_splash")])
 SubScenes = Array[PackedScene]([ExtResource("13_demo"), ExtResource("14_realm")])
 
-; PS1Player at origin — the splash doesn't use player movement (controls
-; are disabled in intro_splash.lua), but the runtime expects a player
-; spawn point and a camera rig target. Camera is driven by the cutscene's
-; CameraPosition + CameraRotation tracks below.
-[node name="PS1Player" type="Node3D" parent="." unique_id=9100000002]
+[node name="PS1Player" type="Node3D" parent="." unique_id=510065410]
 script = ExtResource("3_player")
 
-; HeadSpider is a PS1MeshGroup — wraps the 5-piece FBX import so the
-; exporter merges Bug + FrontLegs + Head + LeftEye + RightEye into a
-; SINGLE exported GameObject. The cutscene's SpiderRotTrack can then
-; target "HeadSpider" with an ObjectRotation track and spin the whole
-; prop as a unit (a plain MeshInstance3D auto-walk would emit five
-; separate GameObjects, and rotation tracks target one at a time).
-;
-; Scale 0.5 + Y=1.5 keeps the body framed above the PS1 screen's
-; reserved bottom text band (Y>=168). The transform lives on the group
-; so the rotation track spins around the group's origin (= spider's
-; feet) rather than swinging the whole mesh around world zero.
-[node name="HeadSpider" type="Node3D" parent="." unique_id=9100000003]
-script = ExtResource("16_meshgroup")
+[node name="HeadSpider" type="Node3D" parent="." unique_id=510065411]
 transform = Transform3D(0.5, 0, 0, 0, 0.5, 0, 0, 0, 0.5, 0, 1.5, 0)
+script = ExtResource("16_meshgroup")
 
-; FBX instance sits at identity inside the group — all transform lives
-; on the parent. Editable-children overrides wire per-submesh materials:
-; body/head/legs share ps1_headspider_body.tres, eyes use
-; ps1_headspider_eyes.tres.
-[node name="SpiderMesh" parent="HeadSpider" unique_id=9100000004 instance=ExtResource("11_headspider")]
+[node name="SpiderMesh" parent="HeadSpider" unique_id=510065412 instance=ExtResource("11_headspider")]
 
-[editable path="HeadSpider/SpiderMesh"]
-
-[node name="Bug" parent="HeadSpider/SpiderMesh"]
+[node name="Bug" parent="HeadSpider/SpiderMesh" index="0" unique_id=546548802]
 material_override = ExtResource("12_mat_body")
 
-[node name="FrontLegs" parent="HeadSpider/SpiderMesh"]
+[node name="FrontLegs" parent="HeadSpider/SpiderMesh" index="1" unique_id=1936992565]
 material_override = ExtResource("12_mat_body")
 
-[node name="Head" parent="HeadSpider/SpiderMesh"]
+[node name="Head" parent="HeadSpider/SpiderMesh" index="2" unique_id=135954397]
 material_override = ExtResource("12_mat_body")
 
-[node name="LeftEye" parent="HeadSpider/SpiderMesh"]
+[node name="LeftEye" parent="HeadSpider/SpiderMesh" index="3" unique_id=1256862062]
 material_override = ExtResource("12_mat_eyes")
 
-[node name="RightEye" parent="HeadSpider/SpiderMesh"]
+[node name="RightEye" parent="HeadSpider/SpiderMesh" index="4" unique_id=1011329892]
 material_override = ExtResource("12_mat_eyes")
 
-; 14-second cutscene. Length is driven by the ps1_startup music
-; sequence: MIDI events run ~13.17s + the 0.5s inst_lead sample decay
-; on the final chime ≈ 13.67s of audible audio. TotalFrames=420 (14s @
-; 30fps) guarantees Scene.Load(1) can't fire before the chime finishes.
-; Music is kicked off from intro_splash.lua's onSceneCreationEnd (not
-; a PS1AudioEvent, since sequenced music has its own Lua Play API).
-;
-; Static camera frames the HeadSpider at (0, 2.5, 4) with a 5° downward
-; pitch; SpiderRotTrack spins the PS1MeshGroup a full 360° across the
-; 420-frame timeline (~25.7°/sec — slow, dignified turntable pace that
-; fits a 14-second boot logo).
-[node name="IntroCutscene" type="Node" parent="." unique_id=9100000010]
+[node name="IntroCutscene" type="Node" parent="." unique_id=510065418]
 script = ExtResource("4_cs")
 CutsceneName = "intro_splash"
 TotalFrames = 420
 
-[node name="CamPosTrack" type="Node" parent="IntroCutscene" unique_id=9100000011]
+[node name="CamPosTrack" type="Node" parent="IntroCutscene" unique_id=510065419]
 script = ExtResource("5_tr")
 TrackType = 0
 
-[node name="CamPosKf0" type="Node" parent="IntroCutscene/CamPosTrack" unique_id=9100000012]
+[node name="CamPosKf0" type="Node" parent="IntroCutscene/CamPosTrack" unique_id=510065420]
 script = ExtResource("6_kf")
-Frame = 0
 Value = Vector3(0, 2.5, 4)
 
-[node name="CamPosKf1" type="Node" parent="IntroCutscene/CamPosTrack" unique_id=9100000013]
+[node name="CamPosKf1" type="Node" parent="IntroCutscene/CamPosTrack" unique_id=510065421]
 script = ExtResource("6_kf")
 Frame = 419
 Value = Vector3(0, 2.5, 4)
-Interp = 0
 
-[node name="CamRotTrack" type="Node" parent="IntroCutscene" unique_id=9100000020]
+[node name="CamRotTrack" type="Node" parent="IntroCutscene" unique_id=510065428]
 script = ExtResource("5_tr")
 TrackType = 1
 
-[node name="CamRotKf0" type="Node" parent="IntroCutscene/CamRotTrack" unique_id=9100000021]
+[node name="CamRotKf0" type="Node" parent="IntroCutscene/CamRotTrack" unique_id=510065429]
 script = ExtResource("6_kf")
-Frame = 0
 Value = Vector3(5, 180, 0)
 
-[node name="CamRotKf1" type="Node" parent="IntroCutscene/CamRotTrack" unique_id=9100000022]
+[node name="CamRotKf1" type="Node" parent="IntroCutscene/CamRotTrack" unique_id=510065430]
 script = ExtResource("6_kf")
 Frame = 419
 Value = Vector3(5, 180, 0)
-Interp = 0
 
-; Object rotation track — the whole point of bundling HeadSpider as a
-; PS1MeshGroup. TrackType 3 = ObjectRotation; TargetObjectName must
-; match the group's exported name ("HeadSpider"). Rotation sweep
-; spans the entire 420-frame cutscene so the prop stays in motion
-; until the Scene.Load handoff (no awkward "stops spinning then
-; transitions" beat).
-[node name="SpiderRotTrack" type="Node" parent="IntroCutscene" unique_id=9100000030]
+[node name="SpiderRotTrack" type="Node" parent="IntroCutscene" unique_id=510065438]
 script = ExtResource("5_tr")
 TargetObjectName = "HeadSpider"
 TrackType = 3
 
-[node name="SpiderRotKf0" type="Node" parent="IntroCutscene/SpiderRotTrack" unique_id=9100000031]
+[node name="SpiderRotKf0" type="Node" parent="IntroCutscene/SpiderRotTrack" unique_id=510065439]
 script = ExtResource("6_kf")
-Frame = 0
-Value = Vector3(0, 0, 0)
 
-[node name="SpiderRotKf1" type="Node" parent="IntroCutscene/SpiderRotTrack" unique_id=9100000032]
+[node name="SpiderRotKf1" type="Node" parent="IntroCutscene/SpiderRotTrack" unique_id=510065440]
 script = ExtResource("6_kf")
 Frame = 419
 Value = Vector3(0, 360, 0)
 
-; UI — "brand" at top (studio name) + "licensed" block below (small
-; legal-style text). Theme slot `Neutral` keeps both a soft grey on
-; black, evoking the stock PS1 boot logo's SCEE text without copying
-; its wording.
-[node name="BrandCanvas" type="Node" parent="." unique_id=9100000050]
+[node name="BrandCanvas" type="Node" parent="." unique_id=510065458]
 script = ExtResource("8_uican")
 CanvasName = "brand"
-VisibleOnLoad = true
 SortOrder = 10
 Theme = ExtResource("10_theme")
 
-[node name="BrandText" type="Node" parent="BrandCanvas" unique_id=9100000051]
+[node name="BrandText" type="Node" parent="BrandCanvas" unique_id=510065459]
 script = ExtResource("9_uiel")
 ElementName = "brand"
 Anchor = 2
 X = 0
 Y = 32
 Width = 128
-Height = 16
-Color = Color(0.85, 0.85, 0.85, 1)
-ThemeSlot = 8
-Text = "HeadSpider Studios"
+ThemeSlot = 1
+Text = "            HeadSpider Studios"
 Font = ExtResource("19_font_vt323")
 
-[node name="LicensedCanvas" type="Node" parent="." unique_id=9100000060]
+[node name="LicensedCanvas" type="Node" parent="." unique_id=510065468]
 script = ExtResource("8_uican")
 CanvasName = "licensed"
-VisibleOnLoad = true
 SortOrder = 10
 Theme = ExtResource("10_theme")
 
-[node name="LicensedLine1" type="Node" parent="LicensedCanvas" unique_id=9100000061]
+[node name="LicensedLine1" type="Node" parent="LicensedCanvas" unique_id=510065469]
 script = ExtResource("9_uiel")
 ElementName = "line1"
 Anchor = 8
 X = 0
 Y = 56
 Width = 192
-Height = 16
 Color = Color(0.85, 0.85, 0.85, 1)
-ThemeSlot = 8
+ThemeSlot = 1
 Text = "Licensed by"
 
-[node name="LicensedLine2" type="Node" parent="LicensedCanvas" unique_id=9100000062]
+[node name="LicensedLine2" type="Node" parent="LicensedCanvas" unique_id=510065470]
 script = ExtResource("9_uiel")
 ElementName = "line2"
 Anchor = 8
 X = 0
 Y = 40
 Width = 224
-Height = 16
 Color = Color(0.85, 0.85, 0.85, 1)
-ThemeSlot = 8
+ThemeSlot = 1
 Text = "HeadSpider Studios"
 
-[node name="MarkLine" type="Node" parent="LicensedCanvas" unique_id=9100000063]
+[node name="MarkLine" type="Node" parent="LicensedCanvas" unique_id=510065471]
 script = ExtResource("9_uiel")
 ElementName = "mark"
 Anchor = 8
 X = 0
-Y = 16
 Width = 40
-Height = 16
 Color = Color(0.85, 0.85, 0.85, 1)
-ThemeSlot = 8
+ThemeSlot = 1
 Text = "HS(TM)"
+
+[editable path="HeadSpider/SpiderMesh"]
