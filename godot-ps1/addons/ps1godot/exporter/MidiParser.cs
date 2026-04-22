@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 
 namespace PS1Godot.Exporter;
@@ -104,13 +105,21 @@ public static class MidiParser
         // matching the just-started note's number and silences it. That
         // kills every repeated-pitch note in the song. Putting Off first
         // closes the prior note cleanly, then On retriggers fresh.
-        notes.Sort((a, b) =>
-        {
-            int c = a.AbsoluteTick.CompareTo(b.AbsoluteTick);
-            if (c != 0) return c;
-            return ((int)b.Kind).CompareTo((int)a.Kind);
-        });
-        tempos.Sort((a, b) => a.AbsoluteTick.CompareTo(b.AbsoluteTick));
+        //
+        // OrderBy().ThenBy() is stable; List.Sort() isn't (introsort). The
+        // secondary keys (Track, Channel, Note) ensure re-exports of the
+        // same .mid produce byte-identical output — useful for CI diffs
+        // and reproducing audio bugs from a known seed.
+        notes = notes
+            .OrderBy(n => n.AbsoluteTick)
+            .ThenByDescending(n => (int)n.Kind)
+            .ThenBy(n => n.Track)
+            .ThenBy(n => n.Channel)
+            .ThenBy(n => n.Note)
+            .ToList();
+        tempos = tempos
+            .OrderBy(t => t.AbsoluteTick)
+            .ToList();
 
         return new ParsedMidi
         {
