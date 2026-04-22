@@ -88,6 +88,38 @@ public static class PS1MSerializer
 
         int tpq = midi.TicksPerQuarter > 0 ? midi.TicksPerQuarter : 480;
 
+        // PS1M's header carries one BPM for the whole track, but source MIDI
+        // can change tempo mid-track via meta 0x51. We preserve those changes
+        // by rescaling every event tick: compute the wall-clock micros each
+        // event sits at under the source tempo map, then convert back to
+        // ticks under the chosen reference tempo. Loop start (given in beats)
+        // is rescaled the same way so a post-tempo-change loop point lands at
+        // the correct wall-clock position.
+        uint refMpq = (uint)(60_000_000 / bpm);
+        var tempoSegs = new List<(uint startTick, uint mpq)>();
+        // SMF default 120 BPM (500000 mpq) applies until the first explicit
+        // tempo event. Seed a tick-0 segment if none exists.
+        if (midi.Tempos.Count == 0 || midi.Tempos[0].AbsoluteTick > 0)
+            tempoSegs.Add((0u, 500_000u));
+        foreach (var t in midi.Tempos)
+            tempoSegs.Add((t.AbsoluteTick, t.MicrosPerQuarter == 0 ? 500_000u : t.MicrosPerQuarter));
+        bool rescale = tempoSegs.Count > 1;
+
+        uint Rescale(uint srcTick)
+        {
+            if (!rescale) return srcTick;
+            long scaled = 0; // sum(ticksInSeg × mpq), i.e. wallMicros × tpq
+            for (int i = 0; i < tempoSegs.Count; i++)
+            {
+                uint segStart = tempoSegs[i].startTick;
+                if (srcTick <= segStart) break;
+                uint segEnd = (i + 1 < tempoSegs.Count) ? tempoSegs[i + 1].startTick : uint.MaxValue;
+                uint ticksInSeg = Math.Min(srcTick, segEnd) - segStart;
+                scaled += (long)ticksInSeg * tempoSegs[i].mpq;
+            }
+            return (uint)(scaled / refMpq);
+        }
+
         // Translate MIDI notes into PS1M events with polyphony-aware
         // voice allocation:
         //
@@ -195,7 +227,7 @@ public static class PS1MSerializer
             }
 
             byte kind = n.Kind == MidiParser.MidiEventKind.NoteOn ? (byte)0 : (byte)1;
-            events.Add(EncodeEvent(n.AbsoluteTick, (byte)packed, kind, n.Note, n.Velocity));
+            events.Add(EncodeEvent(Rescale(n.AbsoluteTick), (byte)packed, kind, n.Note, n.Velocity));
         }
 
         if (events.Count == 0)
@@ -211,9 +243,11 @@ public static class PS1MSerializer
                 $"PS1MSerializer: {events.Count} events exceeds the PS1M format's u16 event-count limit ({ushort.MaxValue}). Split the sequence into shorter segments or drop some channels.");
 
         // Convert loopStartBeat → loopStartTick. -1 → 0xFFFFFFFF (no loop).
+        // Rescale through the tempo map so "beat N" lands at the same
+        // wall-clock position after tempo changes.
         uint loopStartTick = loopStartBeat < 0
             ? 0xFFFFFFFFu
-            : (uint)(loopStartBeat * tpq);
+            : Rescale((uint)(loopStartBeat * tpq));
 
         // Write the blob.
         using var ms = new MemoryStream();
