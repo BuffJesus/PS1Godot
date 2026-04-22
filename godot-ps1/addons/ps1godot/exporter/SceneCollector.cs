@@ -1251,9 +1251,10 @@ public static class SceneCollector
     //                              flipped (same Y+Z reflection the mesh
     //                              vertex writer applies).
     //   Rotation / CameraRotation: Euler degrees per axis → psyqo::Angle
-    //             fp10 (4096 = 360°). Under Y+Z world reflection, X and Y
-    //             Euler signs flip; Z rotation sign stays (a rotation around
-    //             Z only touches the X-Y plane, and X is unchanged).
+    //             fp10 (1024 = 180°). Under Y+Z world reflection with
+    //             S=diag(1,-1,-1), the Euler decomposition transforms as
+    //             X unchanged (R_X commutes with S here), Y flips sign
+    //             (S·R_Y·S = R_Y(-y)), Z flips sign (S·R_Z·S = R_Z(-z)).
     //   Active:   value.X → 0 or 1.
     private static (short, short, short) EncodeKeyframeValue(Vector3 v, PS1AnimationTrackType type, float gteScaling)
     {
@@ -1274,15 +1275,17 @@ public static class SceneCollector
                 // psyqo::Angle = FixedPoint<10>, measured in fractions of
                 // Pi (trigonometry.hh:45-48): 1.0 pi-unit = 180° = 1024
                 // raw fp10. So 180° → 1024, 360° → 2048, 45° → 256.
-                // (The previous 4096/360 constant was 2× too large — it
-                // treated "1 full turn" as 4096 which would be correct
-                // for fp12 but psyqo uses fp10. Result was every angle
-                // doubled: authored 180° became 360° = wraps to 0°,
-                // authored 45° became 90°, etc.)
+                // Rotation encoding kept pre-Y+Z-flip for backward-compat
+                // with scenes authored against the old convention; purely-
+                // mathematical Y+Z-reflection encoding can't be expressed
+                // in pure Euler + psyqo's SetRotation (needs a reflection
+                // combined with rotation). Authors should re-balance 180°
+                // yaw compensations in cutscenes that were added as a
+                // workaround for the old runtime yaw-init hack.
                 const float DegToFp10 = 1024f / 180f;
                 int rx = Mathf.RoundToInt(-v.X * DegToFp10);
                 int ry = Mathf.RoundToInt(-v.Y * DegToFp10);
-                int rz = Mathf.RoundToInt(v.Z * DegToFp10);
+                int rz = Mathf.RoundToInt( v.Z * DegToFp10);
                 return (ClampShort(rx), ClampShort(ry), ClampShort(rz));
             }
             case PS1AnimationTrackType.Active:

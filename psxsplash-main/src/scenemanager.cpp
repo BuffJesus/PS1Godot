@@ -675,10 +675,10 @@ void psxsplash::SceneManager::GameTick(psyqo::GPU &gpu) {
         // Third-person rig: offset is captured at export time from the
         // Camera3D child of PS1Player (editor-tunable), player-local.
         // First-person: camera at player eye, no offset. Runtime rotates
-        // either offset by playerRotationY so the rig stays behind as
-        // the player turns. Rotation around Y:
-        //   dx = cosY*offsetX - sinY*offsetZ
-        //   dz = -sinY*offsetX - cosY*offsetZ
+        // the offset by playerRotationY around the Y axis. With yaw=0
+        // meaning "facing +Z", a Y-axis rotation is
+        //   dx = cosY*offsetX + sinY*offsetZ
+        //   dz = -sinY*offsetX + cosY*offsetZ
         //   dy = offsetY (Y is the rotation axis)
         psyqo::Vec3 activeOffset = m_cameraRigOffset;
         if (m_cameraMode == PlayerCameraMode::FirstPerson) {
@@ -691,11 +691,11 @@ void psxsplash::SceneManager::GameTick(psyqo::GPU &gpu) {
         auto cosY = m_trig.cos(playerRotationY);
 
         auto camX = static_cast<psyqo::FixedPoint<12>>(m_playerPosition.x)
-                  + cosY * activeOffset.x - sinY * activeOffset.z;
+                  + cosY * activeOffset.x + sinY * activeOffset.z;
         auto camY = static_cast<psyqo::FixedPoint<12>>(m_playerPosition.y)
                   + activeOffset.y;
         auto camZ = static_cast<psyqo::FixedPoint<12>>(m_playerPosition.z)
-                  - sinY * activeOffset.x - cosY * activeOffset.z;
+                  - sinY * activeOffset.x + cosY * activeOffset.z;
 
         m_currentCamera.SetPosition(camX, camY, camZ);
         m_currentCamera.SetRotation(playerRotationX, playerRotationY, playerRotationZ);
@@ -722,12 +722,13 @@ void psxsplash::SceneManager::GameTick(psyqo::GPU &gpu) {
                 auto sinY = m_trig.sin(playerRotationY);
                 auto cosY = m_trig.cos(playerRotationY);
 
+                // Y-axis rotation matches the camera rig formula above.
                 auto newX = static_cast<psyqo::FixedPoint<12>>(m_playerPosition.x)
-                          + cosY * m_playerAvatarOffset.x - sinY * m_playerAvatarOffset.z;
+                          + cosY * m_playerAvatarOffset.x + sinY * m_playerAvatarOffset.z;
                 auto newY = static_cast<psyqo::FixedPoint<12>>(m_playerPosition.y)
                           + m_playerAvatarOffset.y;
                 auto newZ = static_cast<psyqo::FixedPoint<12>>(m_playerPosition.z)
-                          - sinY * m_playerAvatarOffset.x - cosY * m_playerAvatarOffset.z;
+                          - sinY * m_playerAvatarOffset.x + cosY * m_playerAvatarOffset.z;
 
                 int32_t dx = newX.value - avatar->position.x.value;
                 int32_t dy = newY.value - avatar->position.y.value;
