@@ -169,6 +169,8 @@ void UISystem::loadFromSplashpack(uint8_t* data, uint16_t canvasCount,
                 break;
             case UIElementType::Text:
                 el.textData.fontIndex = typeData[0]; // 0=system, 1+=custom
+                el.textData.hAlign    = typeData[1]; // 0=Left, 1=Center, 2=Right
+                el.textData.vAlign    = typeData[2]; // 0=Top,  1=Middle, 2=Bottom
                 break;
             default:
                 break;
@@ -354,24 +356,46 @@ void UISystem::renderElement(UIElement& el,
 
     case UIElementType::Text: {
         uint8_t fi = el.textData.fontIndex;
+        uint8_t hAlign = el.textData.hAlign;
+        uint8_t vAlign = el.textData.vAlign;
         if (fi > 0 && fi <= m_fontCount) {
-            // Custom font: render proportionally into OT (handles '\n' itself)
-            renderProportionalText(fi - 1, x, y,
+            // Custom font: render proportionally into OT (handles '\n'
+            // + alignment itself)
+            renderProportionalText(fi - 1, x, y, w, h, hAlign, vAlign,
                                    el.colorR, el.colorG, el.colorB,
                                    el.textBuf, ot, balloc);
         } else {
-            // System font: split on '\n' and queue one entry per line. System
-            // font is ~8 px tall, so advance Y by 8 per line.
+            // System font: 8x8 glyph cell; advance 8px per char, 8px
+            // per line. Split on '\n', measure each line, shift per
+            // hAlign, shift whole block per vAlign.
             const int16_t systemLineHeight = 8;
+            const int16_t systemGlyphW = 8;
+
+            // Pass 1: count lines to size the vertical shift.
+            int lineCount = 0;
+            for (const char* p = el.textBuf; ; p++) {
+                if (*p == '\0') { lineCount++; break; }
+                if (*p == '\n') lineCount++;
+            }
+            int16_t totalH = (int16_t)(lineCount * systemLineHeight);
+            int16_t yOffset = 0;
+            if (vAlign == 1) yOffset = (int16_t)((h - totalH) / 2);
+            else if (vAlign == 2) yOffset = (int16_t)(h - totalH);
+
+            // Pass 2: queue each line with per-line x shift.
             const char* lineStart = el.textBuf;
-            int16_t cursorY = y;
+            int16_t cursorY = y + yOffset;
             while (m_pendingTextCount < UI_MAX_ELEMENTS) {
                 const char* p = lineStart;
                 while (*p != '\0' && *p != '\n') p++;
                 uint8_t segLen = (uint8_t)(p - lineStart);
                 if (segLen > 0) {
+                    int16_t lineW = (int16_t)(segLen * systemGlyphW);
+                    int16_t lineX = x;
+                    if (hAlign == 1) lineX = (int16_t)(x + (w - lineW) / 2);
+                    else if (hAlign == 2) lineX = (int16_t)(x + (w - lineW));
                     m_pendingTexts[m_pendingTextCount++] = {
-                        x, cursorY,
+                        lineX, cursorY,
                         el.colorR, el.colorG, el.colorB,
                         lineStart, segLen
                     };
@@ -454,6 +478,8 @@ void UISystem::uploadFonts(psyqo::GPU& gpu) {
 // ============================================================================
 
 void UISystem::renderProportionalText(int fontIdx, int16_t x, int16_t y,
+                                       int16_t w, int16_t h,
+                                       uint8_t hAlign, uint8_t vAlign,
                                        uint8_t r, uint8_t g, uint8_t b,
                                        const char* text,
                                        psyqo::OrderingTable<Renderer::ORDERING_TABLE_SIZE>& ot,
@@ -475,13 +501,55 @@ void UISystem::renderProportionalText(int fontIdx, int16_t x, int16_t y,
 
     psyqo::Color color = {.r = r, .g = g, .b = b};
 
-    // First: insert all glyph sprites at depth 0
-    int16_t cursorX = x;
-    int16_t cursorY = y;
+    // ── Pass 1: measure line widths for hAlign + count lines for
+    //            vAlign. Static buffer is plenty for a 64-byte text
+    //            buffer (worst case is 64 empty \n lines, we cap at 16
+    //            visible lines — the runtime render budget already
+    //            balks long before that).
+    constexpr int MAX_LINES = 16;
+    int16_t lineWidths[MAX_LINES] = {0};
+    int lineCount = 0;
+    {
+        int16_t cur = 0;
+        for (const char* p = text; ; p++) {
+            uint8_t c = (uint8_t)*p;
+            if (c == '\0') {
+                if (lineCount < MAX_LINES) lineWidths[lineCount] = cur;
+                lineCount++;
+                break;
+            }
+            if (c == '\n') {
+                if (lineCount < MAX_LINES) lineWidths[lineCount] = cur;
+                lineCount++;
+                cur = 0;
+                continue;
+            }
+            if (c < 32 || c > 127) c = '?';
+            cur += fd.advanceWidths[c - 32];
+        }
+        if (lineCount > MAX_LINES) lineCount = MAX_LINES;
+    }
+    int16_t totalH = (int16_t)(lineCount * fd.glyphH);
+    int16_t yOff = 0;
+    if (vAlign == 1) yOff = (int16_t)((h - totalH) / 2);
+    else if (vAlign == 2) yOff = (int16_t)(h - totalH);
+
+    auto startX = [&](int lineIdx) -> int16_t {
+        int16_t lw = (lineIdx < MAX_LINES) ? lineWidths[lineIdx] : (int16_t)0;
+        if (hAlign == 1) return (int16_t)(x + (w - lw) / 2);
+        if (hAlign == 2) return (int16_t)(x + (w - lw));
+        return x;
+    };
+
+    // ── Pass 2: emit glyph sprites, shifting per line ──────────
+    int lineIdx = 0;
+    int16_t cursorX = startX(0);
+    int16_t cursorY = (int16_t)(y + yOff);
     while (*text) {
         uint8_t c = (uint8_t)*text++;
         if (c == '\n') {
-            cursorX = x;
+            lineIdx++;
+            cursorX = startX(lineIdx);
             cursorY += fd.glyphH;
             continue;
         }

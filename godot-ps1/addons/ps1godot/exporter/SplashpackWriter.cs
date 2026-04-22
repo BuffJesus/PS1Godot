@@ -798,11 +798,16 @@ public static class SplashpackWriter
                 w.Write((byte)0);                            // pad1
 
                 // Type-specific (16 B). Text = fontIndex (0 = system,
-                // 1+ = custom font slot) + 15 pad; Box = all zeros.
+                // 1+ = custom font slot) + hAlign + vAlign + 13 pad;
+                // Box = all zeros. Runtime uisystem.cpp reads hAlign/
+                // vAlign in renderProportionalText to shift each line's
+                // starting X/Y by the measured text dimensions.
                 if (el.Type == PS1UIElementType.Text)
                 {
                     w.Write(el.FontIndex);
-                    for (int k = 0; k < 15; k++) w.Write((byte)0);
+                    w.Write(el.HAlign);
+                    w.Write(el.VAlign);
+                    for (int k = 0; k < 13; k++) w.Write((byte)0);
                 }
                 else
                 {

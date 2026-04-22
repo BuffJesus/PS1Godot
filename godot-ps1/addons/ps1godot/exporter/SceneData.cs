@@ -199,6 +199,11 @@ public sealed class UIElementRecord
     // Font index for Text elements: 0 = built-in system font,
     // 1+ = index into SceneData.UIFonts. Zero for non-Text.
     public required byte FontIndex { get; init; }
+    // Horizontal + vertical alignment bytes stamped into the element's
+    // type-specific data (bytes 1–2). 0 = Left/Top = current runtime
+    // default, so backward-compatible with existing splashpacks.
+    public required byte HAlign { get; init; }
+    public required byte VAlign { get; init; }
     public required string Text { get; init; }  // empty for non-Text types
 }
 

@@ -186,10 +186,11 @@ ElementName = "brand"
 Anchor = 2
 X = 0
 Y = 32
-Width = 128
+Width = 320
 ThemeSlot = 1
-Text = "            HeadSpider Studios"
+Text = "HeadSpider Studios"
 Font = ExtResource("19_font_vt323")
+TextAlign = 1
 
 [node name="LicensedCanvas" type="Node" parent="." unique_id=510065468]
 script = ExtResource("8_uican")

@@ -262,18 +262,44 @@ public partial class PS1UICanvasEditor : VBoxContainer
                 string text = string.IsNullOrEmpty(el.Text) ? "(empty)" : el.Text;
                 var textColor = string.IsNullOrEmpty(el.Text) ? new Color(color, 0.4f * alpha) : color;
 
-                // Wrap to element width so authors see overflow early.
+                // Mirror the runtime's alignment so authors see exactly
+                // what PSX will render. vAlign is computed by shifting
+                // the starting Y; hAlign is a direct pass-through to
+                // DrawMultilineString.
+                var halign = el.TextAlign switch
+                {
+                    PS1UITextAlign.Center => HorizontalAlignment.Center,
+                    PS1UITextAlign.Right  => HorizontalAlignment.Right,
+                    _                     => HorizontalAlignment.Left,
+                };
+                int lineCount = CountLines(text);
+                int totalH = lineCount * fontSize;
+                int vOffset = el.TextVAlign switch
+                {
+                    PS1UITextVAlign.Middle => (el.Height * z - totalH) / 2,
+                    PS1UITextVAlign.Bottom => (el.Height * z - totalH),
+                    _                      => 0,
+                };
+
                 _canvasArea.DrawMultilineString(
                     font,
-                    new Vector2(absX * z + 2, absY * z + fontSize),
+                    new Vector2(absX * z, absY * z + fontSize + vOffset),
                     text,
-                    HorizontalAlignment.Left,
+                    halign,
                     el.Width * z,
                     fontSize,
                     maxLines: -1,
                     modulate: textColor);
                 break;
         }
+    }
+
+    private static int CountLines(string s)
+    {
+        if (string.IsNullOrEmpty(s)) return 1;
+        int n = 1;
+        foreach (char c in s) if (c == '\n') n++;
+        return n;
     }
 
     // Mirrors Exporter.SceneCollector.ResolveElementColor so the

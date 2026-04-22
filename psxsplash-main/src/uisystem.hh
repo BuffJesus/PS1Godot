@@ -38,6 +38,8 @@ struct UIProgressData {
 
 struct UITextData {
     uint8_t fontIndex; // 0 = system font, 1+ = custom font
+    uint8_t hAlign;    // 0 = Left, 1 = Center, 2 = Right
+    uint8_t vAlign;    // 0 = Top,  1 = Middle, 2 = Bottom
 };
 
 struct UIElement {
@@ -156,6 +158,8 @@ private:
                        psyqo::BumpAllocator<Renderer::BUMP_ALLOCATOR_SIZE>& balloc);
 
     void renderProportionalText(int fontIdx, int16_t x, int16_t y,
+                                 int16_t w, int16_t h,
+                                 uint8_t hAlign, uint8_t vAlign,
                                 uint8_t r, uint8_t g, uint8_t b,
                                 const char* text,
                                 psyqo::OrderingTable<Renderer::ORDERING_TABLE_SIZE>& ot,

@@ -270,6 +270,8 @@ Width = 224
 Height = 48
 ThemeSlot = 1
 Text = "Hello from the realm!"
+TextAlign = 1
+TextVAlign = 1
 
 [node name="ReturnTrigger" type="Node3D" parent="." unique_id=446014279]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 8)

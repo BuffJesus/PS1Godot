@@ -584,6 +584,8 @@ public static class SceneCollector
                 ColorG = (byte)Mathf.Clamp((int)(color.G * 255f), 0, 255),
                 ColorB = (byte)Mathf.Clamp((int)(color.B * 255f), 0, 255),
                 FontIndex = fontIndex,
+                HAlign = (byte)el.TextAlign,
+                VAlign = (byte)el.TextVAlign,
                 Text = el.Text ?? "",
             });
         }

@@ -38,6 +38,27 @@ public enum PS1UIThemeSlot
     Neutral,
 }
 
+// Horizontal alignment of a Text element's content inside its
+// Width box. Computed per line at runtime using the selected font's
+// advance widths, so author-supplied `\n` or the future auto-wrap
+// both produce correctly-aligned lines.
+public enum PS1UITextAlign
+{
+    Left = 0,
+    Center = 1,
+    Right = 2,
+}
+
+// Vertical alignment of a Text element's content inside its Height
+// box. Same render-time computation as horizontal — stack of lines
+// gets shifted as a unit, not per line.
+public enum PS1UITextVAlign
+{
+    Top = 0,
+    Middle = 1,
+    Bottom = 2,
+}
+
 [Tool]
 [GlobalClass]
 public partial class PS1UIElement : Node
@@ -96,4 +117,14 @@ public partial class PS1UIElement : Node
     // Max 2 distinct custom fonts per scene (runtime cap); the
     // exporter errors on a third.
     [Export] public PS1UIFontAsset? Font { get; set; }
+
+    // Horizontal alignment of Text content inside the element's
+    // Width box. Runtime shifts each line's starting X by the
+    // measured line width so `\n` and auto-wrap both align correctly.
+    // Ignored for non-Text types.
+    [Export] public PS1UITextAlign TextAlign { get; set; } = PS1UITextAlign.Left;
+
+    // Vertical alignment of the text stack inside the Height box.
+    // Ignored for non-Text types.
+    [Export] public PS1UITextVAlign TextVAlign { get; set; } = PS1UITextVAlign.Top;
 }
