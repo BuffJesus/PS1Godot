@@ -782,9 +782,10 @@ public static class SceneCollector
                 int i0 = indices.Length > 0 ? indices[t * 3 + 0] : t * 3 + 0;
                 int i1 = indices.Length > 0 ? indices[t * 3 + 1] : t * 3 + 1;
                 int i2 = indices.Length > 0 ? indices[t * 3 + 2] : t * 3 + 2;
-                // PSXMesh swaps (i1, i2) for winding — mirror that here so
-                // bone indices line up with the emitted triangle vertices.
-                (i1, i2) = (i2, i1);
+                // PSXMesh no longer swaps (i1, i2) after the X-flip refactor
+                // (Y+Z reflection is a rotation, preserves winding), so we
+                // don't swap here either — bone indices line up with the
+                // emitted triangle vertices in their source order.
 
                 // Per-VERTEX rigid skinning: each vertex gets its own
                 // dominant bone (the one with the highest weight in its
