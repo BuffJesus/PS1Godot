@@ -918,10 +918,12 @@ public static class SplashpackWriter
         w.Write((ushort)interactableCount);  // interactableCount
 
         // Player start position + rotation (PackedVec3 each = 3 × int16 = 6 bytes).
+        // Y+Z flipped to PSX convention; rotation Euler left as-is pending
+        // the fp12/fp10 unit fix in the runtime (TODO in scenemanager.cpp).
         var pp = scene.PlayerPosition;
-        w.Write(PSXTrig.ConvertCoordinateToPSX(pp.X, scene.GteScaling));
+        w.Write(PSXTrig.ConvertCoordinateToPSX( pp.X, scene.GteScaling));
         w.Write(PSXTrig.ConvertCoordinateToPSX(-pp.Y, scene.GteScaling));
-        w.Write(PSXTrig.ConvertCoordinateToPSX(pp.Z, scene.GteScaling));
+        w.Write(PSXTrig.ConvertCoordinateToPSX(-pp.Z, scene.GteScaling));
         var pr = scene.PlayerRotation;
         w.Write(PSXTrig.ConvertToFixed12(pr.X));
         w.Write(PSXTrig.ConvertToFixed12(pr.Y));
@@ -1025,16 +1027,17 @@ public static class SplashpackWriter
         w.Write((uint)0);              // skinTableOffset (backfilled by WriteSkinSection)
 
         // v21: editor-configured rig data. Offsets are PackedVec3 = 3 × int16.
-        // Y is negated so Godot +Y (up) becomes PSX -Y (up in Y-down convention).
+        // Y+Z flipped: Godot +Y (up) → PSX -Y, Godot +Z (toward viewer) →
+        // PSX -Z (toward viewer in the Y-down / Z-forward convention).
         // Player-local space; runtime rotates by player yaw each frame.
         var camOff = scene.CameraRigOffset;
-        w.Write(PSXTrig.ConvertCoordinateToPSX(camOff.X, scene.GteScaling));
+        w.Write(PSXTrig.ConvertCoordinateToPSX( camOff.X, scene.GteScaling));
         w.Write(PSXTrig.ConvertCoordinateToPSX(-camOff.Y, scene.GteScaling));
-        w.Write(PSXTrig.ConvertCoordinateToPSX(camOff.Z, scene.GteScaling));
+        w.Write(PSXTrig.ConvertCoordinateToPSX(-camOff.Z, scene.GteScaling));
         var avOff = scene.PlayerAvatarOffset;
-        w.Write(PSXTrig.ConvertCoordinateToPSX(avOff.X, scene.GteScaling));
+        w.Write(PSXTrig.ConvertCoordinateToPSX( avOff.X, scene.GteScaling));
         w.Write(PSXTrig.ConvertCoordinateToPSX(-avOff.Y, scene.GteScaling));
-        w.Write(PSXTrig.ConvertCoordinateToPSX(avOff.Z, scene.GteScaling));
+        w.Write(PSXTrig.ConvertCoordinateToPSX(-avOff.Z, scene.GteScaling));
         w.Write((ushort)(scene.PlayerAvatarObjectIndex < 0 ? 0xFFFF : scene.PlayerAvatarObjectIndex));
         w.Write((ushort)0);            // pad_rig
 
@@ -1071,15 +1074,15 @@ public static class SplashpackWriter
 
         // World-space AABB in fp12. The runtime copies this straight into
         // its grid (updateCollider is declared but never called), so we need
-        // the final world coords, not locals. Godot→PSX negates Y; that
-        // inverts min↔max on the Y axis so the PSX minY ends up equal to
-        // -(Godot maxY).
-        w.Write(PSXTrig.ConvertWorldToFixed12(c.WorldMin.X / gteScaling));
+        // the final world coords, not locals. Godot→PSX reflects Y and Z —
+        // that swaps min↔max on both axes, so PSX minY = -(Godot maxY),
+        // PSX minZ = -(Godot maxZ), etc.
+        w.Write(PSXTrig.ConvertWorldToFixed12( c.WorldMin.X / gteScaling));
         w.Write(PSXTrig.ConvertWorldToFixed12(-c.WorldMax.Y / gteScaling));
-        w.Write(PSXTrig.ConvertWorldToFixed12(c.WorldMin.Z / gteScaling));
-        w.Write(PSXTrig.ConvertWorldToFixed12(c.WorldMax.X / gteScaling));
+        w.Write(PSXTrig.ConvertWorldToFixed12(-c.WorldMax.Z / gteScaling));
+        w.Write(PSXTrig.ConvertWorldToFixed12( c.WorldMax.X / gteScaling));
         w.Write(PSXTrig.ConvertWorldToFixed12(-c.WorldMin.Y / gteScaling));
-        w.Write(PSXTrig.ConvertWorldToFixed12(c.WorldMax.Z / gteScaling));
+        w.Write(PSXTrig.ConvertWorldToFixed12(-c.WorldMin.Z / gteScaling));
 
         w.Write(c.CollisionType);       // 1 byte
         w.Write(c.LayerMask);           // 1 byte
@@ -1093,16 +1096,17 @@ public static class SplashpackWriter
 
     // ─── SPLASHPACKTriggerBox (32 bytes) ────────────────────────────────
     //   int32[6] min/max XYZ + int16 luaFileIndex + u16 pad + u32 pad2.
-    //   Same Godot→PSX convention as colliders: negate Y, swap min/max.Y.
+    //   Same Godot→PSX convention as colliders: reflect Y and Z, swapping
+    //   min↔max on both axes.
     private static void WriteTriggerBox(BinaryWriter w, TriggerBoxRecord t, float gteScaling)
     {
         long entryStart = w.BaseStream.Position;
-        w.Write(PSXTrig.ConvertWorldToFixed12(t.WorldMin.X / gteScaling));
+        w.Write(PSXTrig.ConvertWorldToFixed12( t.WorldMin.X / gteScaling));
         w.Write(PSXTrig.ConvertWorldToFixed12(-t.WorldMax.Y / gteScaling));
-        w.Write(PSXTrig.ConvertWorldToFixed12(t.WorldMin.Z / gteScaling));
-        w.Write(PSXTrig.ConvertWorldToFixed12(t.WorldMax.X / gteScaling));
+        w.Write(PSXTrig.ConvertWorldToFixed12(-t.WorldMax.Z / gteScaling));
+        w.Write(PSXTrig.ConvertWorldToFixed12( t.WorldMax.X / gteScaling));
         w.Write(PSXTrig.ConvertWorldToFixed12(-t.WorldMin.Y / gteScaling));
-        w.Write(PSXTrig.ConvertWorldToFixed12(t.WorldMax.Z / gteScaling));
+        w.Write(PSXTrig.ConvertWorldToFixed12(-t.WorldMin.Z / gteScaling));
         w.Write(t.LuaFileIndex);        // int16
         w.Write((ushort)0);             // padding
         w.Write((uint)0);               // padding2
@@ -1176,17 +1180,17 @@ public static class SplashpackWriter
     }
 
     // ─── RoomData (36 bytes) ─────────────────────────────────────────────
-    // World-space AABB in PS1 coords (Y negated, swap min/max Y), then the
-    // tri-ref / cell / portal-ref slice indices.
+    // World-space AABB in PS1 coords (Y+Z negated, swap min/max on both axes),
+    // then the tri-ref / cell / portal-ref slice indices.
     private static void WriteRoom(BinaryWriter w, RoomRecord r, float gteScaling)
     {
         long entryStart = w.BaseStream.Position;
-        w.Write(PSXTrig.ConvertWorldToFixed12(r.WorldMin.X / gteScaling));
+        w.Write(PSXTrig.ConvertWorldToFixed12( r.WorldMin.X / gteScaling));
         w.Write(PSXTrig.ConvertWorldToFixed12(-r.WorldMax.Y / gteScaling));
-        w.Write(PSXTrig.ConvertWorldToFixed12(r.WorldMin.Z / gteScaling));
-        w.Write(PSXTrig.ConvertWorldToFixed12(r.WorldMax.X / gteScaling));
+        w.Write(PSXTrig.ConvertWorldToFixed12(-r.WorldMax.Z / gteScaling));
+        w.Write(PSXTrig.ConvertWorldToFixed12( r.WorldMax.X / gteScaling));
         w.Write(PSXTrig.ConvertWorldToFixed12(-r.WorldMin.Y / gteScaling));
-        w.Write(PSXTrig.ConvertWorldToFixed12(r.WorldMax.Z / gteScaling));
+        w.Write(PSXTrig.ConvertWorldToFixed12(-r.WorldMin.Z / gteScaling));
 
         w.Write(r.FirstTriRef);
         w.Write(r.TriRefCount);
@@ -1204,16 +1208,16 @@ public static class SplashpackWriter
     // ─── RoomCell (28 bytes) ─────────────────────────────────────────────
     // Tight world-space AABB around the triangles bucketed into this cell,
     // followed by the cell's slice of the room's tri-ref array. AABB
-    // encoding matches RoomData.
+    // encoding matches RoomData (Y+Z reflected, min↔max swapped on both).
     private static void WriteRoomCell(BinaryWriter w, RoomCellRecord c, float gteScaling)
     {
         long entryStart = w.BaseStream.Position;
-        w.Write(PSXTrig.ConvertWorldToFixed12(c.WorldMin.X / gteScaling));
+        w.Write(PSXTrig.ConvertWorldToFixed12( c.WorldMin.X / gteScaling));
         w.Write(PSXTrig.ConvertWorldToFixed12(-c.WorldMax.Y / gteScaling));
-        w.Write(PSXTrig.ConvertWorldToFixed12(c.WorldMin.Z / gteScaling));
-        w.Write(PSXTrig.ConvertWorldToFixed12(c.WorldMax.X / gteScaling));
+        w.Write(PSXTrig.ConvertWorldToFixed12(-c.WorldMax.Z / gteScaling));
+        w.Write(PSXTrig.ConvertWorldToFixed12( c.WorldMax.X / gteScaling));
         w.Write(PSXTrig.ConvertWorldToFixed12(-c.WorldMin.Y / gteScaling));
-        w.Write(PSXTrig.ConvertWorldToFixed12(c.WorldMax.Z / gteScaling));
+        w.Write(PSXTrig.ConvertWorldToFixed12(-c.WorldMin.Z / gteScaling));
 
         w.Write(c.FirstTriRef);
         w.Write(c.TriRefCount);
@@ -1224,18 +1228,19 @@ public static class SplashpackWriter
     }
 
     // ─── PortalData (40 bytes) ───────────────────────────────────────────
-    // Centre is in world fp12 (Y negated). half-W/H + axis vectors are in
-    // 4.12 fp (multiply by 4096 then int16-clamp). Y components of the
-    // axis vectors flip sign for the PSX Y-down convention.
+    // Centre is in world fp12 (Y and Z negated). half-W/H + axis vectors
+    // are in 4.12 fp (multiply by 4096 then int16-clamp). Y and Z
+    // components of the axis vectors flip sign for the PSX Y-down +
+    // Z-forward convention.
     private static void WritePortal(BinaryWriter w, PortalRecord p, float gteScaling)
     {
         long entryStart = w.BaseStream.Position;
         w.Write(p.RoomA);
         w.Write(p.RoomB);
 
-        w.Write(PSXTrig.ConvertWorldToFixed12(p.WorldCenter.X / gteScaling));
+        w.Write(PSXTrig.ConvertWorldToFixed12( p.WorldCenter.X / gteScaling));
         w.Write(PSXTrig.ConvertWorldToFixed12(-p.WorldCenter.Y / gteScaling));
-        w.Write(PSXTrig.ConvertWorldToFixed12(p.WorldCenter.Z / gteScaling));
+        w.Write(PSXTrig.ConvertWorldToFixed12(-p.WorldCenter.Z / gteScaling));
 
         short halfW = (short)Mathf.Clamp(Mathf.RoundToInt(p.PortalSize.X * 0.5f / gteScaling * 4096f), 1, short.MaxValue);
         short halfH = (short)Mathf.Clamp(Mathf.RoundToInt(p.PortalSize.Y * 0.5f / gteScaling * 4096f), 1, short.MaxValue);
@@ -1245,16 +1250,16 @@ public static class SplashpackWriter
         short Pack(float v) => (short)Mathf.Clamp(Mathf.RoundToInt(v * 4096f), short.MinValue, short.MaxValue);
         w.Write(Pack( p.Normal.X));
         w.Write(Pack(-p.Normal.Y));
-        w.Write(Pack( p.Normal.Z));
+        w.Write(Pack(-p.Normal.Z));
         w.Write((short)0);            // pad
 
         w.Write(Pack( p.Right.X));
         w.Write(Pack(-p.Right.Y));
-        w.Write(Pack( p.Right.Z));
+        w.Write(Pack(-p.Right.Z));
 
         w.Write(Pack( p.Up.X));
         w.Write(Pack(-p.Up.Y));
-        w.Write(Pack( p.Up.Z));
+        w.Write(Pack(-p.Up.Z));
 
         long written = w.BaseStream.Position - entryStart;
         if (written != 40)
@@ -1285,11 +1290,11 @@ public static class SplashpackWriter
         long polygonsOffsetPos = w.BaseStream.Position;
         w.Write((uint)0); // polygonsOffset placeholder
 
-        // Position: psyqo::Vec3 = 3 × int32. Godot → PSX: negate Y.
+        // Position: psyqo::Vec3 = 3 × int32. Godot → PSX: negate Y and Z.
         var pos = obj.Node.GlobalPosition;
-        w.Write(PSXTrig.ConvertWorldToFixed12(pos.X / gteScaling));
+        w.Write(PSXTrig.ConvertWorldToFixed12( pos.X / gteScaling));
         w.Write(PSXTrig.ConvertWorldToFixed12(-pos.Y / gteScaling));
-        w.Write(PSXTrig.ConvertWorldToFixed12(pos.Z / gteScaling));
+        w.Write(PSXTrig.ConvertWorldToFixed12(-pos.Z / gteScaling));
 
         // Rotation: 3×3 int32 matrix
         Quaternion q = obj.Node.GlobalBasis.GetRotationQuaternion();
@@ -1338,13 +1343,13 @@ public static class SplashpackWriter
             wmax = new Vector3(Mathf.Max(wmax.X, world.X), Mathf.Max(wmax.Y, world.Y), Mathf.Max(wmax.Z, world.Z));
         }
 
-        // Godot → PSX: negate Y only. Swap min/max for Y since we negated it.
-        w.Write(PSXTrig.ConvertWorldToFixed12(wmin.X / gteScaling));
+        // Godot → PSX: reflect Y and Z, so min↔max swaps on both axes.
+        w.Write(PSXTrig.ConvertWorldToFixed12( wmin.X / gteScaling));
         w.Write(PSXTrig.ConvertWorldToFixed12(-wmax.Y / gteScaling));
-        w.Write(PSXTrig.ConvertWorldToFixed12(wmin.Z / gteScaling));
-        w.Write(PSXTrig.ConvertWorldToFixed12(wmax.X / gteScaling));
+        w.Write(PSXTrig.ConvertWorldToFixed12(-wmax.Z / gteScaling));
+        w.Write(PSXTrig.ConvertWorldToFixed12( wmax.X / gteScaling));
         w.Write(PSXTrig.ConvertWorldToFixed12(-wmin.Y / gteScaling));
-        w.Write(PSXTrig.ConvertWorldToFixed12(wmax.Z / gteScaling));
+        w.Write(PSXTrig.ConvertWorldToFixed12(-wmin.Z / gteScaling));
     }
 
     // ─── Tri (52 bytes) ─────────────────────────────────────────────────

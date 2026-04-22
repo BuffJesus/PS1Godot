@@ -283,14 +283,14 @@ void psxsplash::SceneManager::InitializeScene(uint8_t* splashpackData, LoadingSc
     m_playerPosition = sceneSetup.playerStartPosition;
 
     playerRotationX = 0.0_pi;
-    // 180° Y rotation so the camera looks down Godot's -Z (Godot's "forward")
-    // when the splashpack is exported from PS1Godot. PSX's default camera
-    // direction is +Z; Godot's is -Z. Doing this here, not in the writer's
-    // mesh data, avoids winding/normal pitfalls on single-sided meshes.
-    // TODO: replace with proper playerStartRotation handling once the
-    // header's fp12-vs-fp10 unit mismatch is fixed (see
-    // docs/psxsplash-improvements.md).
-    playerRotationY = 1.0_pi;
+    // Zero yaw — the PS1Godot exporter now reflects both Y and Z on every
+    // world-space coordinate, so Godot's -Z (Godot forward) maps directly
+    // to PSX +Z (PSX forward) and no yaw compensation is needed here. The
+    // prior 180° Y-init was a compensation for exporting Z unflipped, which
+    // also side-effect-mirrored the scene on X.
+    // TODO: honor splashpack-provided playerStartRotation here once the
+    // fp12/fp10 unit mismatch is fixed (see docs/psxsplash-improvements.md).
+    playerRotationY = 0.0_pi;
     playerRotationZ = 0.0_pi;
 
     // Position + rotate the camera up front so authored camera placement is

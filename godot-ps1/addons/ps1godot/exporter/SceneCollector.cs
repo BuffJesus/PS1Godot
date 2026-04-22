@@ -1018,9 +1018,10 @@ public static class SceneCollector
 
     // Write one BakedBoneMatrix into `buf` at `offset` (24 bytes total).
     // Layout: int16[9] row-major rotation (fp12) + int16[3] translation
-    // (fp12 at gteScaling, PSX Y-down). Same Y-negation dance the mesh
-    // vertex writer does: flip row elements that involve the Y axis
-    // exactly once, and negate the translation's Y component.
+    // (fp12 at gteScaling, PSX Y-down+Z-forward). Same Y+Z reflection the
+    // mesh vertex writer does — apply S·R·S with S=diag(1,-1,-1), which
+    // negates entries where S[row]·S[col] = -1, i.e. exactly one of row/col
+    // is Y or Z.
     private static void WriteBakedBoneMatrix(byte[] buf, int offset, Transform3D t, float gteScaling)
     {
         // Extract row-major rotation from the basis.
@@ -1030,16 +1031,12 @@ public static class SceneCollector
         //   r[0..2] = row 0 = (col0.x, col1.x, col2.x)
         //   r[3..5] = row 1 = (col0.y, col1.y, col2.y)
         //   r[6..8] = row 2 = (col0.z, col1.z, col2.z)
-        // Y-down adjustment negates elements that touch Y exactly once:
-        //   row 0 col 1 (col1.x),
-        //   row 1 cols 0 & 2 (col0.y, col2.y),
-        //   row 2 col 1 (col1.y... wait col1.z, the Y axis's Z component).
-        // Pattern matches PSXTrig.ConvertRotationToPSXMatrix.
+        // Y+Z sign pattern matches PSXTrig.ConvertRotationToPSXMatrix.
         float[,] m =
         {
-            {  b.Column0.X, -b.Column1.X,  b.Column2.X },
-            { -b.Column0.Y,  b.Column1.Y, -b.Column2.Y },
-            {  b.Column0.Z, -b.Column1.Z,  b.Column2.Z },
+            {  b.Column0.X, -b.Column1.X, -b.Column2.X },
+            { -b.Column0.Y,  b.Column1.Y,  b.Column2.Y },
+            { -b.Column0.Z,  b.Column1.Z,  b.Column2.Z },
         };
         for (int i = 0; i < 3; i++)
         {
@@ -1052,10 +1049,10 @@ public static class SceneCollector
             }
         }
 
-        // Translation: PSX Y-negated + divided by gteScaling for fp12.
-        short tx = PSXTrig.ConvertCoordinateToPSX(t.Origin.X, gteScaling);
+        // Translation: Y+Z negated, divided by gteScaling for fp12.
+        short tx = PSXTrig.ConvertCoordinateToPSX( t.Origin.X, gteScaling);
         short ty = PSXTrig.ConvertCoordinateToPSX(-t.Origin.Y, gteScaling);
-        short tz = PSXTrig.ConvertCoordinateToPSX(t.Origin.Z, gteScaling);
+        short tz = PSXTrig.ConvertCoordinateToPSX(-t.Origin.Z, gteScaling);
         int tOff = offset + 18;
         buf[tOff + 0] = (byte)(tx & 0xFF);
         buf[tOff + 1] = (byte)((tx >> 8) & 0xFF);
@@ -1250,10 +1247,13 @@ public static class SceneCollector
 
     // Encode a Godot-space triple into the runtime's fp12 / fp10 values
     // per the given track type.
-    //   Position / CameraPosition: (x, y, z) meters → PSX fp12 with Y flipped.
+    //   Position / CameraPosition: (x, y, z) meters → PSX fp12 with Y and Z
+    //                              flipped (same Y+Z reflection the mesh
+    //                              vertex writer applies).
     //   Rotation / CameraRotation: Euler degrees per axis → psyqo::Angle
-    //             fp10 (4096 = 360°). PSX Y-down mirrors Godot X & Y
-    //             rotation signs; Z rotation passes through.
+    //             fp10 (4096 = 360°). Under Y+Z world reflection, X and Y
+    //             Euler signs flip; Z rotation sign stays (a rotation around
+    //             Z only touches the X-Y plane, and X is unchanged).
     //   Active:   value.X → 0 or 1.
     private static (short, short, short) EncodeKeyframeValue(Vector3 v, PS1AnimationTrackType type, float gteScaling)
     {
@@ -1263,9 +1263,9 @@ public static class SceneCollector
             case PS1AnimationTrackType.CameraPosition:
             {
                 float s = Mathf.Max(gteScaling, 0.0001f);
-                int vx = Mathf.RoundToInt(v.X / s * 4096f);
+                int vx = Mathf.RoundToInt( v.X / s * 4096f);
                 int vy = Mathf.RoundToInt(-v.Y / s * 4096f);
-                int vz = Mathf.RoundToInt(v.Z / s * 4096f);
+                int vz = Mathf.RoundToInt(-v.Z / s * 4096f);
                 return (ClampShort(vx), ClampShort(vy), ClampShort(vz));
             }
             case PS1AnimationTrackType.Rotation:
@@ -1691,15 +1691,16 @@ public static class SceneCollector
     }
 
     // PS1 nav region from a PlaneMesh bounding rect, expressed in PSX fp12.
-    // NavRegionSystem's point-in-poly requires CCW winding — we output corners
-    // in (-X,-Z) → (+X,-Z) → (+X,+Z) → (-X,+Z) which is CCW in standard XZ.
+    // NavRegionSystem's point-in-poly requires CCW winding in PSX (X, Z). The
+    // Godot→PSX Z-flip mirrors the polygon, so we emit Godot's CCW order in
+    // reverse to land on PSX-CCW after the flip.
     private static void EmitFlatNavRegion(Vector3 wMin, Vector3 wMax, SceneData data)
     {
         int fp(float godotValue) => PSXTrig.ConvertWorldToFixed12(godotValue / data.GteScaling);
         float floorY = 0.5f * (wMin.Y + wMax.Y);
 
         // World-space verts in Godot units — consumed by the portal stitcher
-        // downstream. Match the CCW corners we emit as VertsX/VertsZ.
+        // downstream. Godot-CCW order.
         var worldVerts = new[]
         {
             new Vector3(wMin.X, floorY, wMin.Z),
@@ -1708,10 +1709,11 @@ public static class SceneCollector
             new Vector3(wMin.X, floorY, wMax.Z),
         };
 
+        // Reversed + Z-negated → PSX-CCW.
         data.NavRegions.Add(new NavRegionRecord
         {
             VertsX = new[] { fp(wMin.X), fp(wMax.X), fp(wMax.X), fp(wMin.X) },
-            VertsZ = new[] { fp(wMin.Z), fp(wMin.Z), fp(wMax.Z), fp(wMax.Z) },
+            VertsZ = new[] { fp(-wMax.Z), fp(-wMax.Z), fp(-wMin.Z), fp(-wMin.Z) },
             PlaneA = 0,
             PlaneB = 0,
             PlaneD = fp(-floorY),  // Y-down: Godot +Y → PSX -Y
@@ -1769,16 +1771,20 @@ public static class SceneCollector
 
         int fp(float godotValue) => PSXTrig.ConvertWorldToFixed12(godotValue / data.GteScaling);
 
-        // The runtime plane equation is Y = A·X + B·Z + D in PSX-space (Y is
-        // already negated for PSX Y-down). SplashEdit encodes this by flipping
-        // the sign of A/B/D before fp12 conversion — match that convention
-        // here. planeD is additionally scaled like a world-Y value.
+        // Runtime plane equation: PSX_Y = A·PSX_X + B·PSX_Z + D.
+        // Substituting PSX_Y = -Godot_Y and PSX_Z = -Godot_Z into the fit
+        // Godot_Y = a·Godot_X + b·Godot_Z + d gives A = -a, B = +b, D = -d.
+        // The pre-Y+Z-flip code had B = -b (matched SplashEdit); adding the
+        // Z-flip flips that sign back.
+        // Vert order reverses too — polygon chirality flips under a single-axis
+        // reflection, and the runtime requires CCW in PSX (X, Z).
         var vertsX = new int[count];
         var vertsZ = new int[count];
         for (int i = 0; i < count; i++)
         {
-            vertsX[i] = fp(world[i].X);
-            vertsZ[i] = fp(world[i].Z);
+            int src = count - 1 - i;
+            vertsX[i] = fp( world[src].X);
+            vertsZ[i] = fp(-world[src].Z);
         }
 
         byte flags = node.Platform ? (byte)0x01 : (byte)0;
@@ -1789,7 +1795,7 @@ public static class SceneCollector
             VertsX = vertsX,
             VertsZ = vertsZ,
             PlaneA = PSXTrig.ConvertWorldToFixed12(-planeA),
-            PlaneB = PSXTrig.ConvertWorldToFixed12(-planeB),
+            PlaneB = PSXTrig.ConvertWorldToFixed12( planeB),
             PlaneD = PSXTrig.ConvertWorldToFixed12(-planeD / data.GteScaling),
             SurfaceType = surface,
             RoomIndex = (byte)System.Math.Clamp(node.RoomIndex, 0, 255),
@@ -1900,15 +1906,15 @@ public static class SceneCollector
                             int hdJI = fp(-(yI - yJ));
                             perRegion[i].Add(new NavPortalRecord
                             {
-                                Ax = fp(a0.X), Az = fp(a0.Z),
-                                Bx = fp(a1.X), Bz = fp(a1.Z),
+                                Ax = fp( a0.X), Az = fp(-a0.Z),
+                                Bx = fp( a1.X), Bz = fp(-a1.Z),
                                 NeighborRegion = (ushort)j,
                                 HeightDelta = (short)System.Math.Clamp(hdIJ, short.MinValue, short.MaxValue),
                             });
                             perRegion[j].Add(new NavPortalRecord
                             {
-                                Ax = fp(b0.X), Az = fp(b0.Z),
-                                Bx = fp(b1.X), Bz = fp(b1.Z),
+                                Ax = fp( b0.X), Az = fp(-b0.Z),
+                                Bx = fp( b1.X), Bz = fp(-b1.Z),
                                 NeighborRegion = (ushort)i,
                                 HeightDelta = (short)System.Math.Clamp(hdJI, short.MinValue, short.MaxValue),
                             });

@@ -8,9 +8,11 @@ namespace PS1Godot.Exporter;
 // stored as int16 for vertex positions / normals / matrix elements, or int32
 // for world-space positions that need more range.
 //
-// Coordinate convention: PS1 is Y-down, Godot is Y-up. Callers must negate Y
-// at the boundary — these helpers don't, so the call site stays explicit
-// about what's happening (matches how SplashEdit's port does it).
+// Coordinate convention: PS1 is Y-down + Z-forward (left-handed); Godot is
+// Y-up + Z-toward-viewer (right-handed). To bridge them, callers negate BOTH
+// Y and Z at the boundary (two reflections → rotation, so winding is
+// preserved — no triangle reordering needed). These helpers don't do the
+// negation themselves; the call site stays explicit about what's flipping.
 public static class PSXTrig
 {
     public const float FixedScale = 4096.0f; // 2^12
@@ -40,7 +42,8 @@ public static class PSXTrig
 
     /// <summary>
     /// Quaternion → 3×3 PSX rotation matrix in 4.12 fixed-point.
-    /// Applies the Y-down conversion (negates rows/cols touching Y) inline.
+    /// Applies the Y+Z reflection inline (S · R · S where S = diag(1,-1,-1);
+    /// entries are negated when S[i,i]·S[j,j] = -1).
     /// </summary>
     public static int[,] ConvertRotationToPSXMatrix(Quaternion rotation)
     {
@@ -56,12 +59,13 @@ public static class PSXTrig
         float m21 = 2f * (y * z + x * w);
         float m22 = 1f - 2f * (x * x + y * y);
 
-        // Y-down adjustment: negate elements that involve a Y axis exactly once.
+        // Y+Z reflection: R' = S·R·S with S = diag(1,-1,-1). Entry (i,j) gets
+        // a sign of S[i,i]·S[j,j]: negate when exactly one of row/col is Y or Z.
         float[,] adjusted = new float[3, 3]
         {
-            {  m00, -m01,  m02 },
-            { -m10,  m11, -m12 },
-            {  m20, -m21,  m22 },
+            {  m00, -m01, -m02 },
+            { -m10,  m11,  m12 },
+            { -m20,  m21,  m22 },
         };
 
         var result = new int[3, 3];

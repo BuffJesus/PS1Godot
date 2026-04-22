@@ -119,19 +119,16 @@ public sealed class PSXMesh
                     GD.Print($"[PS1Godot] Player tri[0] pre-scale: p0={verts[i0]:F3} p1={verts[i1]:F3} p2={verts[i2]:F3}");
                     var ps0 = verts[i0] * nodeScale;
                     GD.Print($"[PS1Godot] Player tri[0] post-scale: p0={ps0:F4}");
-                    GD.Print($"[PS1Godot] Player tri[0] emitted int16: vx={PSXTrig.ConvertCoordinateToPSX(ps0.X, gteScaling)} vy={PSXTrig.ConvertCoordinateToPSX(-ps0.Y, gteScaling)} vz={PSXTrig.ConvertCoordinateToPSX(ps0.Z, gteScaling)}");
+                    GD.Print($"[PS1Godot] Player tri[0] emitted int16: vx={PSXTrig.ConvertCoordinateToPSX(ps0.X, gteScaling)} vy={PSXTrig.ConvertCoordinateToPSX(-ps0.Y, gteScaling)} vz={PSXTrig.ConvertCoordinateToPSX(-ps0.Z, gteScaling)}");
                 }
 
                 var p0 = verts[i0] * nodeScale;
                 var p1 = verts[i1] * nodeScale;
                 var p2 = verts[i2] * nodeScale;
 
-                // Y-negation in MakeVertex is a reflection that reverses
-                // screen-space winding. Compensate with a single unconditional
-                // swap so nclip (projected-cross sign) sees PSX-front-facing
-                // CW for Godot-front-facing input.
-                (i1, i2) = (i2, i1);
-                (p1, p2) = (p2, p1);
+                // MakeVertex reflects in BOTH Y and Z. Two reflections compose
+                // to a rotation, which preserves winding — no swap needed
+                // (this used to flip i1↔i2 to compensate for a Y-only flip).
 
                 Vector2 uv0 = uvs.Length > i0 ? uvs[i0] : Vector2.Zero;
                 Vector2 uv1 = uvs.Length > i1 ? uvs[i1] : Vector2.Zero;
@@ -193,10 +190,8 @@ public sealed class PSXMesh
             Vector3 n1 = normalBasis * (normals.Length > i1 ? normals[i1] : Vector3.Up);
             Vector3 n2 = normalBasis * (normals.Length > i2 ? normals[i2] : Vector3.Up);
 
-            // Same winding-swap compensation as FromGodotMesh.
-            (i1, i2) = (i2, i1);
-            (p1, p2) = (p2, p1);
-            (n1, n2) = (n2, n1);
+            // Same rationale as FromGodotMesh — Y+Z reflection is a rotation,
+            // winding is preserved.
 
             Vector2 uv0 = uvs.Length > i0 ? uvs[i0] : Vector2.Zero;
             Vector2 uv1 = uvs.Length > i1 ? uvs[i1] : Vector2.Zero;
@@ -231,16 +226,16 @@ public sealed class PSXMesh
 
         return new PSXVertex
         {
-            // Godot → PSX: negate Y only (PS1 is Y-down). Z stays as-is — the
-            // camera-direction mismatch (Godot looks -Z, PSX +Z) is solved by
-            // rotating the camera 180° around Y in the psxsplash patch.
-            vx = PSXTrig.ConvertCoordinateToPSX(pos.X, gteScaling),
+            // Godot → PSX: reflect Y (PS1 is Y-down) AND Z (PSX looks +Z while
+            // Godot looks -Z). Two reflections compose to a rotation so the
+            // triangle's chirality is preserved — no winding swap needed.
+            vx = PSXTrig.ConvertCoordinateToPSX( pos.X, gteScaling),
             vy = PSXTrig.ConvertCoordinateToPSX(-pos.Y, gteScaling),
-            vz = PSXTrig.ConvertCoordinateToPSX(pos.Z, gteScaling),
+            vz = PSXTrig.ConvertCoordinateToPSX(-pos.Z, gteScaling),
 
-            nx = PSXTrig.ConvertToFixed12(normal.X),
+            nx = PSXTrig.ConvertToFixed12( normal.X),
             ny = PSXTrig.ConvertToFixed12(-normal.Y),
-            nz = PSXTrig.ConvertToFixed12(normal.Z),
+            nz = PSXTrig.ConvertToFixed12(-normal.Z),
 
             u = uByte,
             v = vByte,
