@@ -126,15 +126,9 @@ public sealed class PSXMesh
                 var p1 = verts[i1] * nodeScale;
                 var p2 = verts[i2] * nodeScale;
 
-                // Restore winding swap. My math said Y+Z (two reflections =
-                // rotation) preserves winding and no swap was needed, but
-                // empirically skinned meshes lose front-faces without this
-                // swap — PS1 GPU / psyqo nclip evidently uses a screen-space
-                // cross product convention that interacts with the Y+Z flip
-                // differently than naive chirality analysis predicts.
-                // Static meshes hide the regression (simple shapes).
-                (i1, i2) = (i2, i1);
-                (p1, p2) = (p2, p1);
+                // MakeVertex reflects in BOTH Y and Z. Two reflections compose
+                // to a rotation, which preserves winding — no swap needed
+                // (this used to flip i1↔i2 to compensate for a Y-only flip).
 
                 Vector2 uv0 = uvs.Length > i0 ? uvs[i0] : Vector2.Zero;
                 Vector2 uv1 = uvs.Length > i1 ? uvs[i1] : Vector2.Zero;
@@ -196,10 +190,8 @@ public sealed class PSXMesh
             Vector3 n1 = normalBasis * (normals.Length > i1 ? normals[i1] : Vector3.Up);
             Vector3 n2 = normalBasis * (normals.Length > i2 ? normals[i2] : Vector3.Up);
 
-            // Winding swap — matches FromGodotMesh, same rationale.
-            (i1, i2) = (i2, i1);
-            (p1, p2) = (p2, p1);
-            (n1, n2) = (n2, n1);
+            // Same rationale as FromGodotMesh — Y+Z reflection is a rotation,
+            // winding is preserved.
 
             Vector2 uv0 = uvs.Length > i0 ? uvs[i0] : Vector2.Zero;
             Vector2 uv1 = uvs.Length > i1 ? uvs[i1] : Vector2.Zero;
