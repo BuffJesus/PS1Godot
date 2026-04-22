@@ -1,3 +1,4 @@
+#include "PS1FontRasterizer.hpp"
 #include "PS1LuaResourceFormat.hpp"
 #include "PS1LuaScript.hpp"
 #include "PS1LuaScriptLanguage.hpp"
@@ -26,6 +27,7 @@ static void initialize_ps1lua_module(ModuleInitializationLevel p_level) {
 	GDREGISTER_CLASS(PS1LuaScriptLanguage);
 	GDREGISTER_CLASS(PS1LuaResourceFormatLoader);
 	GDREGISTER_CLASS(PS1LuaResourceFormatSaver);
+	GDREGISTER_CLASS(PS1FontRasterizer);
 
 	ps1lua_language_singleton = memnew(PS1LuaScriptLanguage);
 	Engine::get_singleton()->register_script_language(ps1lua_language_singleton);

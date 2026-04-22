@@ -22,6 +22,7 @@ public partial class PS1GodotPlugin : EditorPlugin
     private const string RunOnPsxMenuLabel = "PS1Godot: Run on PSX (export + build + launch)";
     private const string ConvertMeshToPS1MenuLabel = "PS1Godot: Convert selected MeshInstance3D to PS1MeshInstance";
     private const string AddSkinnedTestMenuLabel = "PS1Godot: Add Skinned Test Mesh (bullet 11 test asset)";
+    private const string GenerateFontBitmapMenuLabel = "PS1Godot: Generate bitmap for selected PS1UIFontAsset";
 
     private PS1TriggerBoxGizmo? _triggerBoxGizmo;
     private PS1GodotDock? _dock;
@@ -38,6 +39,7 @@ public partial class PS1GodotPlugin : EditorPlugin
         AddToolMenuItem(RunOnPsxMenuLabel, Callable.From(OnRunOnPsx));
         AddToolMenuItem(ConvertMeshToPS1MenuLabel, Callable.From(OnConvertMeshToPS1));
         AddToolMenuItem(AddSkinnedTestMenuLabel, Callable.From(OnAddSkinnedTestMesh));
+        AddToolMenuItem(GenerateFontBitmapMenuLabel, Callable.From(OnGenerateFontBitmap));
 
         _triggerBoxGizmo = new PS1TriggerBoxGizmo();
         AddNode3DGizmoPlugin(_triggerBoxGizmo);
@@ -108,6 +110,7 @@ public partial class PS1GodotPlugin : EditorPlugin
         RemoveToolMenuItem(RunOnPsxMenuLabel);
         RemoveToolMenuItem(ConvertMeshToPS1MenuLabel);
         RemoveToolMenuItem(AddSkinnedTestMenuLabel);
+        RemoveToolMenuItem(GenerateFontBitmapMenuLabel);
 
         SceneChanged -= OnSceneChanged;
         EditorInterface.Singleton.GetSelection().SelectionChanged -= OnEditorSelectionChanged;
@@ -434,6 +437,46 @@ public partial class PS1GodotPlugin : EditorPlugin
         EditorInterface.Singleton.MarkSceneAsUnsaved();
         GD.Print("[PS1Godot] Added 'SkinnedTest' — a 2-bone cylinder with a 'wave' animation. " +
                  "Export to see the stage-1 skin block emit; stage 2 will wire the animation to PSX.");
+    }
+
+    // Rasterize the selected PS1UIFontAsset via the C++ PS1FontRasterizer
+    // GDExtension class. Picks the resource from inspector focus first,
+    // falling back to the FileSystem selection. Result is saved back to
+    // disk so the Generated fields persist.
+    private void OnGenerateFontBitmap()
+    {
+        var inspected = EditorInterface.Singleton.GetInspector().GetEditedObject();
+        if (inspected is PS1UIFontAsset asset)
+        {
+            if (Tools.PS1FontGenerator.Populate(asset))
+            {
+                ResourceSaver.Save(asset);
+                EditorInterface.Singleton.GetResourceFilesystem().Scan();
+            }
+            return;
+        }
+
+        // Fallback — walk the FileSystem selection for the first .tres
+        // that loads as a PS1UIFontAsset. Nicer than demanding the
+        // inspector be focused.
+        var fs = EditorInterface.Singleton.GetResourceFilesystem();
+        var selectedPaths = EditorInterface.Singleton.GetSelectedPaths();
+        foreach (var p in selectedPaths)
+        {
+            if (!p.EndsWith(".tres", System.StringComparison.OrdinalIgnoreCase)) continue;
+            if (ResourceLoader.Load(p) is PS1UIFontAsset a)
+            {
+                if (Tools.PS1FontGenerator.Populate(a))
+                {
+                    ResourceSaver.Save(a, p);
+                    fs.Scan();
+                }
+                return;
+            }
+        }
+
+        GD.PushWarning("[PS1Godot] Generate font bitmap: select a PS1UIFontAsset resource " +
+                       "(click into its inspector, or select the .tres in FileSystem).");
     }
 
     private static void SetOwnerRecursive(Node n, Node owner)
