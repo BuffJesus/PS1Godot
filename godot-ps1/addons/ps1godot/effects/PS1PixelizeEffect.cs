@@ -13,6 +13,7 @@ namespace PS1Godot.Effects;
 // Compositor to disable without uninstalling the plugin.
 [Tool]
 [GlobalClass]
+[Icon("res://addons/ps1godot/icons/ps1_pixelize_effect.svg")]
 public partial class PS1PixelizeEffect : CompositorEffect
 {
     [Export]
