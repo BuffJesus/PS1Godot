@@ -319,8 +319,13 @@ be proposed upstream to psxsplash rather than hacked into the vendored tree
 Every GameObject is export-time today. Unlocking runtime spawning opens up
 bullets, pickups, particles, enemy waves, and voxel-style worlds.
 
-- [ ] `GameObject.Spawn(templateIdx, pos, rot)` + `GameObject.Destroy(self)` —
-      template pool in the splashpack, free-list in the runtime. **[runtime]**
+- [x] `Entity.Spawn(tag, pos [, rotY])` + `Entity.Destroy(obj)` — landed
+      under `Entity` namespace (consistent with `Entity.Find`). Pool pattern:
+      author sets `Tag` + `StartsInactive = true` on N template instances in
+      the editor; Spawn scans for the first inactive match, activates it,
+      fires `onEnable`. Also ships `Entity.GetTag`/`SetTag`/`FindByTag`. No
+      splashpack version bump (repurposed the `_reserved0` u16 legacy slot).
+      Per-spawn reset logic should live in `onEnable`, not `onCreate`.
 - [ ] `Mesh.Submit(verts, tris, tpage, aabb)` — Lua-built meshes submitted
       per-frame. Enables voxel chunks, procedural terrain, dynamic decals.
       **[runtime]**
