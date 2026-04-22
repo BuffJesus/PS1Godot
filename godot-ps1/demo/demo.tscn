@@ -604,30 +604,30 @@ TrackType = 1
 
 [node name="CamRotKf0" type="Node" parent="IntroCutscene/CamRotTrack" unique_id=1515879523]
 script = ExtResource("13_kf")
-Value = Vector3(45, 180, 0)
+Value = Vector3(45, 0, 0)
 
 [node name="CamRotKf1" type="Node" parent="IntroCutscene/CamRotTrack" unique_id=1661118081]
 script = ExtResource("13_kf")
 Frame = 180
-Value = Vector3(30, 180, 0)
+Value = Vector3(30, 0, 0)
 Interp = 4
 
 [node name="CamRotKf2" type="Node" parent="IntroCutscene/CamRotTrack" unique_id=320274732]
 script = ExtResource("13_kf")
 Frame = 345
-Value = Vector3(15, 180, 0)
+Value = Vector3(15, 0, 0)
 Interp = 4
 
 [node name="CamRotKf3" type="Node" parent="IntroCutscene/CamRotTrack" unique_id=624521851]
 script = ExtResource("13_kf")
 Frame = 500
-Value = Vector3(10, 180, 0)
+Value = Vector3(10, 0, 0)
 Interp = 4
 
 [node name="CamRotKf4" type="Node" parent="IntroCutscene/CamRotTrack" unique_id=1322462890]
 script = ExtResource("13_kf")
 Frame = 599
-Value = Vector3(0, 180, 0)
+Value = Vector3(0, 0, 0)
 Interp = 4
 
 [node name="PS1Player" type="Node3D" parent="." unique_id=1681451007]
