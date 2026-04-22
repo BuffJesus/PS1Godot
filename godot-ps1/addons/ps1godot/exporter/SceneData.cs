@@ -196,7 +196,27 @@ public sealed class UIElementRecord
     public required byte ColorR { get; init; }
     public required byte ColorG { get; init; }
     public required byte ColorB { get; init; }
+    // Font index for Text elements: 0 = built-in system font,
+    // 1+ = index into SceneData.UIFonts. Zero for non-Text.
+    public required byte FontIndex { get; init; }
     public required string Text { get; init; }  // empty for non-Text types
+}
+
+// A custom UI font ready for splashpack emission. Built by
+// SceneCollector from PS1UIFontAsset resources referenced by
+// elements. Serialized as a 112-byte UIFontDesc (see
+// psxsplash-main/src/uisystem.hh) + pixel data placed in the
+// splashpack "dead zone" and referenced by dataOffset.
+public sealed class UIFontRecord
+{
+    public required string Name { get; init; }       // debug / Lua lookup
+    public required byte GlyphW { get; init; }
+    public required byte GlyphH { get; init; }
+    public required ushort VramX { get; init; }      // PSX-VRAM hword coords
+    public required ushort VramY { get; init; }
+    public required ushort TextureH { get; init; }   // atlas height in pixels
+    public required byte[] AdvanceWidths { get; init; }  // length 96 (ASCII 0x20-0x7F)
+    public required byte[] PixelData4bpp { get; init; }  // 128 × TextureH bytes
 }
 
 // Per-object AABB collider written as SPLASHPACKCollider (32 bytes).
@@ -337,6 +357,13 @@ public sealed class SceneData
     // UI canvases gathered from PS1UICanvas nodes + their PS1UIElement
     // children. Lua resolves by name via UI.FindCanvas.
     public List<UICanvasRecord> UICanvases { get; } = new();
+
+    // Custom UI fonts referenced by elements. Deduped by resource
+    // identity during collection. Max 2 custom fonts per splashpack
+    // (runtime cap UI_MAX_FONTS - 1 reserved for the built-in system
+    // font at slot 0). Index in this list + 1 = the element's
+    // fontIndex byte (slot 0 is the system font).
+    public List<UIFontRecord> UIFonts { get; } = new();
 
     // Animations gathered from PS1Animation nodes + their PS1AnimationKeyframe
     // children. Lua plays by name via Animation.Play.

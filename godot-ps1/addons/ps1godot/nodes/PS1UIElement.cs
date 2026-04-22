@@ -89,4 +89,11 @@ public partial class PS1UIElement : Node
     // so authored text should stay under ~60 visible characters.
     [Export(PropertyHint.MultilineText)]
     public string Text { get; set; } = "";
+
+    // Custom font for Text elements. null → the built-in system font
+    // (fontIndex 0). Assigning a generated PS1UIFontAsset makes this
+    // element use that font at runtime. Ignored for non-Text types.
+    // Max 2 distinct custom fonts per scene (runtime cap); the
+    // exporter errors on a third.
+    [Export] public PS1UIFontAsset? Font { get; set; }
 }

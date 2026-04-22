@@ -712,7 +712,29 @@ public static class SplashpackWriter
         long uiTableStart = w.BaseStream.Position;
         BackfillUInt32(w, uiTableOffsetPos, (uint)uiTableStart);
 
-        // MVP: fontCount = 0, so no font descriptors here.
+        // Font descriptors (112 B each). Pixel-data offsets are
+        // placeholders until we write the actual 4bpp blobs at the
+        // end of this section, then backfill.
+        int fontCount = scene.UIFonts.Count;
+        var fontDataOffPositions = new long[fontCount];
+        for (int fi = 0; fi < fontCount; fi++)
+        {
+            var f = scene.UIFonts[fi];
+            long fontStart = w.BaseStream.Position;
+            w.Write(f.GlyphW);
+            w.Write(f.GlyphH);
+            w.Write(f.VramX);
+            w.Write(f.VramY);
+            w.Write(f.TextureH);
+            fontDataOffPositions[fi] = w.BaseStream.Position;
+            w.Write((uint)0);              // dataOffset (backfilled)
+            w.Write((uint)f.PixelData4bpp.Length);
+            // advanceWidths[96] — byte-for-byte copy.
+            w.Write(f.AdvanceWidths);
+            long written = w.BaseStream.Position - fontStart;
+            if (written != 112)
+                throw new InvalidOperationException($"UIFontDesc size mismatch: {written} vs 112.");
+        }
 
         int canvasCount = scene.UICanvases.Count;
 
@@ -775,11 +797,11 @@ public static class SplashpackWriter
                 w.Write(el.ColorR); w.Write(el.ColorG); w.Write(el.ColorB);
                 w.Write((byte)0);                            // pad1
 
-                // Type-specific (16 B). Text = fontIndex (0 = system) +
-                // 15 pad; Box = all zeros.
+                // Type-specific (16 B). Text = fontIndex (0 = system,
+                // 1+ = custom font slot) + 15 pad; Box = all zeros.
                 if (el.Type == PS1UIElementType.Text)
                 {
-                    w.Write((byte)0);                        // fontIndex (system)
+                    w.Write(el.FontIndex);
                     for (int k = 0; k < 15; k++) w.Write((byte)0);
                 }
                 else
@@ -828,6 +850,20 @@ public static class SplashpackWriter
                     BackfillUInt32(w, elementTextOffPositions[ci][ei], (uint)off);
                 }
             }
+        }
+
+        // Font pixel data — 4bpp packed glyph atlas per custom font.
+        // Placed after strings so nothing else references the offsets
+        // we're about to backfill. Runtime's UISystem::uploadFonts
+        // uploads each blob to (vramX, vramY) then overlays a 2-entry
+        // white-on-transparent CLUT in the first 2 hwords — we don't
+        // write the CLUT ourselves.
+        for (int fi = 0; fi < fontCount; fi++)
+        {
+            AlignTo4(w);
+            long dataOff = w.BaseStream.Position;
+            w.Write(scene.UIFonts[fi].PixelData4bpp);
+            BackfillUInt32(w, fontDataOffPositions[fi], (uint)dataOff);
         }
     }
 
@@ -955,7 +991,7 @@ public static class SplashpackWriter
         w.Write((uint)0);              // cutsceneTableOffset (backfilled)
 
         w.Write((ushort)scene.UICanvases.Count); // uiCanvasCount
-        w.Write((byte)0);              // uiFontCount (MVP: system font only)
+        w.Write((byte)scene.UIFonts.Count); // uiFontCount — custom fonts only; system font is built into the runtime
         w.Write((byte)0);              // uiPad5
         offsets.UiTableOffsetPos = w.BaseStream.Position;
         w.Write((uint)0);              // uiTableOffset (backfilled)

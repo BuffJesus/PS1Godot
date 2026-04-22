@@ -563,6 +563,14 @@ public static class SceneCollector
             // WriteUISection); doing the math at export keeps the binary
             // layout unchanged.
             var (absX, absY) = PS1UIAnchoring.Resolve(el);
+            // Resolve the font reference to a runtime index (0 = system
+            // font, 1+ = one-based slot in data.UIFonts). Non-Text
+            // elements get 0 regardless.
+            byte fontIndex = 0;
+            if (el.Type == PS1UIElementType.Text && el.Font != null)
+            {
+                fontIndex = ResolveFontIndex(el.Font, data, elementName: elName);
+            }
             elements.Add(new UIElementRecord
             {
                 Name = elName,
@@ -575,6 +583,7 @@ public static class SceneCollector
                 ColorR = (byte)Mathf.Clamp((int)(color.R * 255f), 0, 255),
                 ColorG = (byte)Mathf.Clamp((int)(color.G * 255f), 0, 255),
                 ColorB = (byte)Mathf.Clamp((int)(color.B * 255f), 0, 255),
+                FontIndex = fontIndex,
                 Text = el.Text ?? "",
             });
         }
@@ -588,6 +597,87 @@ public static class SceneCollector
             Elements = elements,
         });
         GD.Print($"[PS1Godot] UICanvas '{name}': residency={canvas.Residency}, {elements.Count} elements");
+    }
+
+    // VRAM slot assignments for custom fonts. Slot 0 is the runtime's
+    // built-in system font at (960, 464); we get two slots above it.
+    // Matches splashedit-main/Runtime/PSXUIExporter.cs.
+    private static readonly (ushort X, ushort Y, ushort MaxH)[] FontVramSlots =
+    {
+        (960,   0, 256),
+        (960, 256, 208),
+    };
+
+    // Dedupe a PS1UIFontAsset against what's already in data.UIFonts.
+    // Adds a new UIFontRecord on first sight (with VRAM slot + packed
+    // pixel data) and returns the runtime-side font index (1-based,
+    // since 0 is the system font). Max 2 custom fonts — a third logs
+    // an error and falls back to system font (index 0).
+    private static byte ResolveFontIndex(PS1UIFontAsset asset, SceneData data, string elementName)
+    {
+        if (!asset.IsGenerated || asset.Bitmap == null)
+        {
+            GD.PushError($"[PS1Godot] Element '{elementName}': font '{asset.ResourcePath}' " +
+                         "has no generated bitmap. Run Tools → 'Generate bitmap for selected " +
+                         "PS1UIFontAsset' first. Falling back to system font.");
+            return 0;
+        }
+
+        // Already collected? Reuse the same slot.
+        for (int i = 0; i < data.UIFonts.Count; i++)
+        {
+            if (data.UIFonts[i].Name == (string.IsNullOrWhiteSpace(asset.FontName) ? asset.ResourcePath : asset.FontName))
+                return (byte)(i + 1);
+        }
+
+        if (data.UIFonts.Count >= FontVramSlots.Length)
+        {
+            GD.PushError($"[PS1Godot] Element '{elementName}': font '{asset.FontName}' is the " +
+                         $"{data.UIFonts.Count + 1}rd custom font, but the runtime only has 2 slots. " +
+                         "Consolidate fonts or drop the extra. Falling back to system font.");
+            return 0;
+        }
+
+        var slot = FontVramSlots[data.UIFonts.Count];
+        if (asset.Bitmap.GetHeight() > slot.MaxH)
+        {
+            GD.PushWarning($"[PS1Godot] Font '{asset.FontName}' atlas is {asset.Bitmap.GetHeight()} px tall, " +
+                           $"slot {data.UIFonts.Count + 1} max is {slot.MaxH} px. Runtime will clip.");
+        }
+
+        byte[] advances = asset.AdvanceWidths ?? new byte[96];
+        if (advances.Length != 96)
+        {
+            GD.PushError($"[PS1Godot] Font '{asset.FontName}': advance widths length {advances.Length} != 96.");
+            return 0;
+        }
+
+        byte[] pixels;
+        try
+        {
+            pixels = PS1FontPacker.Pack4bpp(asset.Bitmap);
+        }
+        catch (System.Exception e)
+        {
+            GD.PushError($"[PS1Godot] Font '{asset.FontName}': 4bpp pack failed — {e.Message}");
+            return 0;
+        }
+
+        data.UIFonts.Add(new UIFontRecord
+        {
+            Name = string.IsNullOrWhiteSpace(asset.FontName) ? asset.ResourcePath : asset.FontName,
+            GlyphW = (byte)asset.GlyphWidth,
+            GlyphH = (byte)asset.GlyphHeight,
+            VramX = slot.X,
+            VramY = slot.Y,
+            TextureH = (ushort)asset.Bitmap.GetHeight(),
+            AdvanceWidths = advances,
+            PixelData4bpp = pixels,
+        });
+        GD.Print($"[PS1Godot] Font slot {data.UIFonts.Count}: '{asset.FontName}' " +
+                 $"{asset.GlyphWidth}×{asset.GlyphHeight} cells → VRAM ({slot.X},{slot.Y}), " +
+                 $"{pixels.Length} B pixel data");
+        return (byte)data.UIFonts.Count;
     }
 
     // Apply the canvas's theme to an element's color at export time.
