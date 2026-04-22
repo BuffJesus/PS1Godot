@@ -156,6 +156,21 @@ void MusicSequencer::tick(int32_t dt12) {
     if (m_nextEventIdx >= total) {
         uint32_t loopStart = m_active->header->loopStartTick;
         if (loopStart != 0xFFFFFFFFu) {
+            // Silence any notes still held at the loop seam. Without this,
+            // a pad/drone on the final chord keeps droning across the loop
+            // because its note-off event was at tick N but m_currentTick
+            // is now < N. Authors noticed stuck notes at the loop point.
+            int chanCount = m_active->header->channelCount;
+            if (chanCount > MAX_CHANNELS) chanCount = MAX_CHANNELS;
+            for (int i = 0; i < chanCount; i++) {
+                if (m_channels[i].activeVoice >= 0) {
+                    psyqo::SPU::silenceChannels(1u << m_channels[i].activeVoice);
+                    m_channels[i].activeNote = 0;
+                    // Keep activeVoice pinned to the reserved index — the
+                    // next noteOn on this channel retriggers it cleanly.
+                }
+            }
+
             m_currentTick = loopStart;
             m_subTick12 = 0;
             // Find the first event at or after loopStart.
