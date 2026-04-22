@@ -44,6 +44,19 @@ public partial class PS1MeshInstance : MeshInstance3D
     [Export(PropertyHint.File, "*.lua")]
     public string ScriptFile { get; set; } = "";
 
+    // Gameplay tag. 0 = untagged. GameObject.Spawn(tag, pos) scans for an
+    // INACTIVE object with this tag to activate — so template instances you
+    // want to pool should share a Tag and set StartsInactive = true, and
+    // scripts call GameObject.Spawn(MY_TAG, pos) to draw from the pool.
+    [Export(PropertyHint.Range, "0,65535,1")]
+    public int Tag { get; set; } = 0;
+
+    // When true, the object is exported but starts with flags.isActive = 0.
+    // Intended for pre-placed pool instances: author drops N copies of a
+    // "bullet" template, sets StartsInactive + matching Tag on each, and
+    // scripts activate them via GameObject.Spawn at runtime.
+    [Export] public bool StartsInactive { get; set; } = false;
+
     [ExportGroup("PS1 / Interactable")]
     // When true, the runtime treats this mesh as an interactable. Pressing
     // InteractButton within InteractionRadiusMeters fires onInteract on

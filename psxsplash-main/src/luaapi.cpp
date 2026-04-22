@@ -87,7 +87,22 @@ void LuaAPI::RegisterAll(psyqo::Lua& L, SceneManager* scene, CutscenePlayer* cut
     
     L.push(Entity_ForEach);
     L.setField(-2, "ForEach");
-    
+
+    L.push(Entity_GetTag);
+    L.setField(-2, "GetTag");
+
+    L.push(Entity_SetTag);
+    L.setField(-2, "SetTag");
+
+    L.push(Entity_FindByTag);
+    L.setField(-2, "FindByTag");
+
+    L.push(Entity_Spawn);
+    L.setField(-2, "Spawn");
+
+    L.push(Entity_Destroy);
+    L.setField(-2, "Destroy");
+
     L.setGlobal("Entity");
     
     // ========================================================================
@@ -824,14 +839,14 @@ int LuaAPI::Entity_SetRotationY(lua_State* L) {
 
 int LuaAPI::Entity_ForEach(lua_State* L) {
     psyqo::Lua lua(L);
-    
+
     if (!s_sceneManager || !lua.isFunction(1)) return 0;
-    
+
     size_t count = s_sceneManager->getGameObjectCount();
     for (size_t i = 0; i < count; i++) {
         auto* go = s_sceneManager->getGameObject(static_cast<uint16_t>(i));
         if (!go || !go->isActive()) continue;
-        
+
         // Push callback copy
         lua.copy(1);
         // Look up registered Lua table for this object (keyed by C++ pointer)
@@ -846,7 +861,125 @@ int LuaAPI::Entity_ForEach(lua_State* L) {
             lua.pop();  // pop error message
         }
     }
-    
+
+    return 0;
+}
+
+// Shared helper: given a GameObject*, push the Lua table that was registered
+// for it at scene init (keyed by the C++ pointer in LUA_REGISTRYINDEX). On
+// failure, pushes nil. Always leaves exactly one value on the stack.
+static void PushGameObjectHandle(psyqo::Lua& lua, psxsplash::GameObject* go) {
+    if (!go) {
+        lua.push();
+        return;
+    }
+    lua.push(reinterpret_cast<uint8_t*>(go));
+    lua.rawGet(LUA_REGISTRYINDEX);
+    if (!lua.isTable(-1)) {
+        lua.pop();
+        lua.push();
+    }
+}
+
+int LuaAPI::Entity_GetTag(lua_State* L) {
+    psyqo::Lua lua(L);
+    if (!lua.isTable(1)) { lua.pushNumber(0); return 1; }
+    lua.getField(1, "__cpp_ptr");
+    auto go = lua.toUserdata<GameObject>(-1);
+    lua.pop();
+    lua.pushNumber(go ? (lua_Number)go->tag : 0);
+    return 1;
+}
+
+int LuaAPI::Entity_SetTag(lua_State* L) {
+    psyqo::Lua lua(L);
+    if (!lua.isTable(1) || !lua.isNumber(2)) return 0;
+    lua.getField(1, "__cpp_ptr");
+    auto go = lua.toUserdata<GameObject>(-1);
+    lua.pop();
+    if (go) go->tag = (uint16_t)lua.toNumber(2);
+    return 0;
+}
+
+int LuaAPI::Entity_FindByTag(lua_State* L) {
+    psyqo::Lua lua(L);
+    if (!s_sceneManager || !lua.isNumber(1)) { lua.push(); return 1; }
+    uint16_t tag = (uint16_t)lua.toNumber(1);
+    // Tag 0 is the "untagged" sentinel — every default object has tag 0, so
+    // FindByTag(0) would return arbitrary unrelated geometry. Reject it.
+    if (tag == 0) { lua.push(); return 1; }
+    size_t count = s_sceneManager->getGameObjectCount();
+    for (size_t i = 0; i < count; i++) {
+        auto* go = s_sceneManager->getGameObject((uint16_t)i);
+        if (go && go->isActive() && go->tag == tag) {
+            PushGameObjectHandle(lua, go);
+            return 1;
+        }
+    }
+    lua.push();
+    return 1;
+}
+
+int LuaAPI::Entity_Spawn(lua_State* L) {
+    psyqo::Lua lua(L);
+    if (!s_sceneManager || !lua.isNumber(1) || !lua.isTable(2)) {
+        lua.push();
+        return 1;
+    }
+    uint16_t tag = (uint16_t)lua.toNumber(1);
+    // Tag 0 is "untagged" — Spawn(0, ...) would activate any random inactive
+    // object the author placed, including non-template geometry. Reject.
+    if (tag == 0) { lua.push(); return 1; }
+
+    psyqo::Vec3 pos;
+    ReadVec3(lua, 2, pos.x, pos.y, pos.z);
+
+    // Optional rotY in Lua's fp12 "pi fraction" convention (see
+    // Entity_SetRotationY — 1.0 = π radians = 180°).
+    bool hasRot = !lua.isNoneOrNil(3);
+    psyqo::Angle rotAngle;
+    if (hasRot) {
+        psyqo::FixedPoint<12> fp12 = readFP(lua, 3);
+        rotAngle.value = fp12.value >> 2;
+    }
+
+    // Scan for first inactive pool instance with matching tag.
+    size_t count = s_sceneManager->getGameObjectCount();
+    for (size_t i = 0; i < count; i++) {
+        auto* go = s_sceneManager->getGameObject((uint16_t)i);
+        if (!go) continue;
+        if (go->tag != tag) continue;
+        if (go->isActive()) continue;
+
+        go->position = pos;
+        if (hasRot) {
+            go->rotation = psxsplash::transposeMatrix33(
+                psyqo::SoftMath::generateRotationMatrix33(
+                    rotAngle, psyqo::SoftMath::Axis::Y, s_trig));
+        }
+        // Mark BVH position as stale so culling/collision re-evaluate.
+        go->setDynamicMoved(true);
+        // Activate; scene manager fires onEnable on the attached script.
+        s_sceneManager->setObjectActive(go, true);
+
+        PushGameObjectHandle(lua, go);
+        return 1;
+    }
+
+    // Pool exhausted.
+    lua.push();
+    return 1;
+}
+
+int LuaAPI::Entity_Destroy(lua_State* L) {
+    psyqo::Lua lua(L);
+    if (!lua.isTable(1)) return 0;
+    lua.getField(1, "__cpp_ptr");
+    auto go = lua.toUserdata<GameObject>(-1);
+    lua.pop();
+    if (go && s_sceneManager) {
+        s_sceneManager->setObjectActive(go, false);
+    }
     return 0;
 }
 

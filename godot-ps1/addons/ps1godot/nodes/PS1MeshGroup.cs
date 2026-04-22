@@ -63,6 +63,15 @@ public partial class PS1MeshGroup : Node3D
     [Export(PropertyHint.File, "*.lua")]
     public string ScriptFile { get; set; } = "";
 
+    // Gameplay tag — see PS1MeshInstance.Tag. Used by GameObject.Spawn for
+    // pool lookups.
+    [Export(PropertyHint.Range, "0,65535,1")]
+    public int Tag { get; set; } = 0;
+
+    // Export the group but start with flags.isActive = 0 — see
+    // PS1MeshInstance.StartsInactive.
+    [Export] public bool StartsInactive { get; set; } = false;
+
     [ExportGroup("PS1 / Naming")]
     // Exported GameObject name. Empty → falls back to the node's own Name,
     // which is what most scenes want. Set explicitly only when you need

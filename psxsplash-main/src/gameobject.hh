@@ -48,7 +48,10 @@ class GameObject final {
     
     // Component indices (0xFFFF = no component)
     uint16_t interactableIndex;
-    uint16_t _reserved0;       // Was healthIndex (legacy, kept for binary layout)
+    // Gameplay tag. 0 = untagged. Used by GameObject.Spawn (Lua) to find an
+    // inactive pool instance with a matching tag. Repurposed from the legacy
+    // healthIndex slot — binary layout unchanged.
+    uint16_t tag;
     // Runtime-only: Lua event bitmask (set during RegisterGameObject)
     // In the splashpack binary these 4 bytes are _reserved1 + _reserved2 (zeros).
     uint32_t eventMask;

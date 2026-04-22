@@ -29,6 +29,13 @@ public sealed class SceneObject
     // Index into SceneData.LuaFiles, or -1 for no script. Maps to the
     // GameObject.luaFileIndex field the runtime reads to dispatch events.
     public int LuaFileIndex { get; set; } = -1;
+
+    // Gameplay tag (0 = untagged). Written into GameObject.tag. Used by
+    // runtime GameObject.Spawn to find a free pool instance.
+    public ushort Tag { get; set; } = 0;
+
+    // When true, writer emits GameObject.flags with isActive = 0.
+    public bool StartsInactive { get; set; } = false;
 }
 
 // One entry in the splashpack's lua-file table. Runtime v20 (full-parser

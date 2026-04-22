@@ -281,6 +281,12 @@ public static class SceneCollector
                 surfaceTextureIndices, data.Textures);
 
             ushort objectIndex = (ushort)data.Objects.Count;
+            if (pmi.StartsInactive && pmi.Tag == 0)
+            {
+                GD.PushWarning($"[PS1Godot] '{pmi.Name}' has StartsInactive=true but Tag=0 — " +
+                               "Entity.Spawn rejects tag 0 as 'untagged', so this object will " +
+                               "be invisible at boot AND unreachable at runtime. Set a non-zero Tag.");
+            }
             data.Objects.Add(new SceneObject
             {
                 Node = pmi,
@@ -288,6 +294,8 @@ public static class SceneCollector
                 LocalAabb = pmi.Mesh.GetAabb(),
                 SurfaceTextureIndices = surfaceTextureIndices,
                 LuaFileIndex = ResolveLuaScript(pmi.Name, pmi.ScriptFile, data, luaCache),
+                Tag = (ushort)Mathf.Clamp(pmi.Tag, 0, 65535),
+                StartsInactive = pmi.StartsInactive,
             });
 
             EmitCollisionFor(pmi, objectIndex, data);
@@ -499,6 +507,12 @@ public static class SceneCollector
             }
         }
 
+        if (group.StartsInactive && group.Tag == 0)
+        {
+            GD.PushWarning($"[PS1Godot] PS1MeshGroup '{displayName}' has StartsInactive=true but " +
+                           "Tag=0 — Entity.Spawn rejects tag 0, so this group will be invisible " +
+                           "at boot AND unreachable at runtime. Set a non-zero Tag.");
+        }
         data.Objects.Add(new SceneObject
         {
             Node = group,
@@ -506,6 +520,8 @@ public static class SceneCollector
             LocalAabb = new Aabb(aabbMin, aabbMax - aabbMin),
             SurfaceTextureIndices = surfaceTextureIndices.ToArray(),
             LuaFileIndex = ResolveLuaScript(displayName, group.ScriptFile, data, luaCache),
+            Tag = (ushort)Mathf.Clamp(group.Tag, 0, 65535),
+            StartsInactive = group.StartsInactive,
         });
 
         GD.Print(

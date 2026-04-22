@@ -1306,10 +1306,12 @@ public static class SplashpackWriter
         w.Write((ushort)obj.Mesh.Triangles.Count);
         w.Write((short)obj.LuaFileIndex); // -1 = no script attached
 
-        w.Write((uint)1);               // flags — bit 0 = isActive
+        // flags — bit 0 = isActive. StartsInactive=true for pool templates
+        // that Lua's GameObject.Spawn will activate at runtime.
+        w.Write(obj.StartsInactive ? (uint)0 : (uint)1);
 
         w.Write(NoComponent);           // interactableIndex
-        w.Write((ushort)0);             // _reserved0
+        w.Write(obj.Tag);               // gameplay tag (0 = untagged)
         w.Write((uint)0);               // eventMask (runtime)
 
         WriteWorldAabb(w, obj, gteScaling);

@@ -89,6 +89,35 @@ private:
     // Entity.ForEach(callback) -> nil
     // Calls callback(object, index) for each active game object
     static int Entity_ForEach(lua_State* L);
+
+    // Entity.GetTag(object) -> number
+    static int Entity_GetTag(lua_State* L);
+
+    // Entity.SetTag(object, tag)
+    static int Entity_SetTag(lua_State* L);
+
+    // Entity.FindByTag(tag) -> object or nil
+    // Returns the first ACTIVE GameObject whose tag matches.
+    static int Entity_FindByTag(lua_State* L);
+
+    // Entity.Spawn(tag, {x,y,z} [, rotY]) -> object or nil
+    // Finds the first INACTIVE GameObject whose tag matches, activates it
+    // (fires onEnable), and writes the new position/rotation. Returns the
+    // object handle, or nil if the pool is exhausted or tag is 0.
+    //
+    // rotY uses the "pi fraction" convention shared with Entity.SetRotationY:
+    // 1.0 = π radians = 180°. So 0.5 = 90°, 0.25 = 45°. NOT raw radians.
+    //
+    // Pool pattern: author places N copies of a template prefab with
+    // StartsInactive=true + matching Tag in the editor; Spawn draws from
+    // that pool. Per-spawn reset logic should live in the template's
+    // onEnable hook (not onCreate, which fires once at scene init).
+    static int Entity_Spawn(lua_State* L);
+
+    // Entity.Destroy(object) -> nil
+    // Deactivates the object (fires onDisable). Lets the pool re-use it on
+    // the next Entity.Spawn with the same tag.
+    static int Entity_Destroy(lua_State* L);
     
     // ========================================================================
     // VEC3 API - Vector math
