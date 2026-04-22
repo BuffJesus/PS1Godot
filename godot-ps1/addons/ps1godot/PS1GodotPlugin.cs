@@ -25,6 +25,8 @@ public partial class PS1GodotPlugin : EditorPlugin
 
     private PS1TriggerBoxGizmo? _triggerBoxGizmo;
     private PS1GodotDock? _dock;
+    private PS1UICanvasEditor? _uiCanvasEditor;
+    private Button? _uiCanvasEditorTab;
 
     public override void _EnterTree()
     {
@@ -60,7 +62,33 @@ public partial class PS1GodotPlugin : EditorPlugin
         SceneChanged += OnSceneChanged;
         OnSceneChanged(EditorInterface.Singleton.GetEditedSceneRoot());
 
+        // PS1 UI canvas editor — bottom-panel tab showing a WYSIWYG
+        // preview of the selected PS1UICanvas. Selecting any
+        // PS1UIElement picks up its owning canvas too.
+        _uiCanvasEditor = new PS1UICanvasEditor();
+#pragma warning disable CS0618 // Obsolete: AddControlToBottomPanel / RemoveControlFromBottomPanel — migrate once 4.7 EditorDock API stabilizes (matches AddControlToDock site below).
+        _uiCanvasEditorTab = AddControlToBottomPanel(_uiCanvasEditor, "PS1 UI");
+#pragma warning restore CS0618
+        EditorInterface.Singleton.GetSelection().SelectionChanged += OnEditorSelectionChanged;
+        OnEditorSelectionChanged();
+
         GD.Print("[PS1Godot] Plugin enabled.");
+    }
+
+    private void OnEditorSelectionChanged()
+    {
+        if (_uiCanvasEditor == null) return;
+        PS1UICanvas? canvas = null;
+        foreach (var n in EditorInterface.Singleton.GetSelection().GetSelectedNodes())
+        {
+            if (n is PS1UICanvas c) { canvas = c; break; }
+            if (n is PS1UIElement el && el.GetParent() is PS1UICanvas parent)
+            {
+                canvas = parent;
+                break;
+            }
+        }
+        _uiCanvasEditor.SetSelectedCanvas(canvas);
     }
 
     private void OnSceneChanged(Node sceneRoot)
@@ -83,6 +111,17 @@ public partial class PS1GodotPlugin : EditorPlugin
         RemoveToolMenuItem(AddSkinnedTestMenuLabel);
 
         SceneChanged -= OnSceneChanged;
+        EditorInterface.Singleton.GetSelection().SelectionChanged -= OnEditorSelectionChanged;
+
+        if (_uiCanvasEditor != null)
+        {
+#pragma warning disable CS0618 // Obsolete — see AddControlToBottomPanel site above.
+            RemoveControlFromBottomPanel(_uiCanvasEditor);
+#pragma warning restore CS0618
+            _uiCanvasEditor.QueueFree();
+            _uiCanvasEditor = null;
+            _uiCanvasEditorTab = null;
+        }
 
         if (_dock != null)
         {

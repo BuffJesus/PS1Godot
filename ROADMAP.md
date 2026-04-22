@@ -962,6 +962,46 @@ matters, and do better where it's cheap.
       once Phase 2.5 chunk streaming is real.
 - [ ] Loading screens (uses existing PSXCanvas path; just a convention).
 
+### Graph authoring framework (PS1Graph)
+
+Visual node-graph authoring is the right shape for a whole family of
+concerns, not just one. Rather than build a single "visual scripting"
+feature, ship **one graph framework** — editor dock, pin model,
+serialization, compiler seam — and let each concern register as a
+*graph kind* with its own node palette and compiler pass. Inspired by
+Unreal's Blueprint machinery (`FKismetCompilerContext` → backend swap),
+but compiles to Lua at **export time** — runtime carries zero VM or
+graph-walker overhead.
+
+- [ ] **D0. PS1Graph framework.** `PS1GraphResource` (.tres) +
+      `PS1GraphNode` + `PS1GraphConnection` base classes; editor dock
+      built on Godot's `GraphEdit`. Typed pin system (exec + data),
+      context-menu palette, live validation, search.
+- [ ] **D1. `PS1DialogueGraph`** — *first graph kind.* Nodes: Line,
+      Choice, Condition, SetFlag, GiveItem, PlaySound, StartCutscene.
+      Compiles to a small Lua table (nodes + edges) walked by a stock
+      `Dialog.RunGraph(name)` helper. Replaces the Phase 3 "Dialog
+      tree editor" bullet above — same feature, unified framework.
+- [ ] **D2. `PS1QuestGraph`** — objectives as nodes, prerequisites as
+      edges, branch outcomes (success / fail paths). Compiles to a
+      quest state machine with save/load integration
+      (`QuestFlag.Set/Has`). `Quest.*` Lua API.
+- [ ] **D3. `PS1FSMGraph`** — states + transitions. Replaces the
+      hand-written `StateMachine.new({...})` from Phase 2.5 AI with
+      visual authoring. Same Lua output shape, different front end.
+- [ ] **D4. `PS1ScriptGraph`** — general-purpose Blueprint-style
+      scripting for trigger logic and event reactions. Last in order
+      because the node palette is unbounded and the use cases are
+      vaguer until D1–D3 land first. **Reject** from UE Blueprint:
+      UObject-per-node (use `Resource` subclasses), wildcard pin types
+      (fixed set: bool / int / fp12 / string / vec3 / entity-ref),
+      runtime VM (compile to Lua, zero runtime cost).
+
+Done when an author can open a graph editor dock, pick "New Dialogue
+Graph" / "New Quest Graph" / etc., author nodes + connections
+visually, hit Run on PSX, and see their dialogue / quest / FSM run
+without writing Lua by hand.
+
 ### Music authoring experience
 
 Phase 2.5 shipped sequenced music end-to-end (drop a `.mid` + sample
