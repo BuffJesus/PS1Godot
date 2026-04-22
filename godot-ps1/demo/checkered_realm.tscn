@@ -76,7 +76,7 @@ metadata/_custom_type_script = "uid://cgk0vce50p3ph"
 ; higher-pitched source.
 [sub_resource type="Resource" id="GuChan_guitar"]
 script = ExtResource("15_chan")
-MidiChannel = 1
+MidiChannel = 0
 AudioClipName = "gu_lead"
 BaseNoteMidi = 48
 Volume = 110
@@ -87,7 +87,7 @@ metadata/_custom_type_script = "uid://3bx6n5sx7krl"
 ; fine below BaseNote but sample quality drops if we stretch too far.
 [sub_resource type="Resource" id="GuChan_bass"]
 script = ExtResource("15_chan")
-MidiChannel = 3
+MidiChannel = 2
 AudioClipName = "gu_bass"
 BaseNoteMidi = 36
 Volume = 115
@@ -96,7 +96,7 @@ metadata/_custom_type_script = "uid://3bx6n5sx7krl"
 ; Vocals = Chester (mapped to sustained pad). Sparse, melody line.
 [sub_resource type="Resource" id="GuChan_vocal"]
 script = ExtResource("15_chan")
-MidiChannel = 5
+MidiChannel = 4
 AudioClipName = "gu_pad"
 BaseNoteMidi = 60
 Volume = 95
