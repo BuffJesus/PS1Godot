@@ -361,6 +361,13 @@ World-gen basics Lua stdlib doesn't provide.
 - [ ] `Math.Random(seed)` seeded RNG distinct from the shared global stream.
 - [ ] `Math.Hash(x, y, z)` — fast stable cell hash.
 - [ ] `Math.Lerp/Clamp/SmoothStep` / `Math.Fixed.*` convenience.
+- [ ] **FixedPoint ↔ integer conversion helpers.**
+      `Math.Floor(fp)` / `Math.Ceil(fp)` / `Math.Round(fp)` → int, plus
+      `Math.ToInt(fp)` (truncate) and `Math.ToFixed(int)` (promote).
+      Bridges fp12 math into array indexing, tile grids, and counter
+      updates without every script re-implementing the shift. Discord
+      feature request "FixedPoint to integer conversion functions"
+      (psxsplash channel, 2026-04).
 
 ### Procedural world primitives
 
@@ -421,6 +428,13 @@ Assets pack via Phase 2 bullet 6; Lua can't trigger them yet.
       "Ambient loop resident across chunk" vs "event cue streamed in on
       trigger." Counts SPU-RAM per area; warns on overflow.
 - [ ] `Music.PlayXA(track)` / `Music.Stop()` / `Music.SetVolume(v)`.
+- [ ] **`Audio.SetPitch(handle, semitones)` / runtime pitch control.**
+      Real-time pitch shift + slide on a playing voice, not just at
+      `Audio.Play` start. Piggy-backs on the 12TET pitch table we
+      already ship with the music sequencer — same data, new API
+      surface. Discord feature request "Pitch control in Audio"
+      (psxsplash channel, 2026-04, 5 upvotes, "considered").
+      **[runtime]**
 
 ### Sequenced music + music-driven events *(MVP shipped 2026-04-20)*
 
@@ -494,6 +508,13 @@ PS1 BIOS has memory-card syscalls; nothing in psxsplash surfaces them today.
 - [ ] `Entity.GetTransform/SetTransform` → matrix.
 - [ ] `Entity.GetScale/SetScale` iff the renderer supports non-uniform scale
       (may be no-op on vertex-baked meshes; check before promising).
+- [ ] **`TrackType::ObjectScale` cutscene / animation track.** Authored
+      as a Vector3 per keyframe (uniform or per-axis). Runtime expands
+      the GameObject's 3×3 to include scale diagonal before it feeds
+      the GTE. Use cases: doors opening, pulsing pickups, squash-and-
+      stretch. Discord feature request "Object scale animation"
+      (psxsplash channel, 2026-04, 2 upvotes, "considered").
+      **[runtime]**
 
 ### Camera modes (1st/3rd/Orbit)
 
@@ -512,6 +533,14 @@ runtime so first-person / orbit actually take effect.
       supplies the offset when present. **[runtime]**
 - [ ] Orbit mode: right-stick rotates camera around player pivot, radius
       authored on PS1Player. **[runtime]**
+- [ ] **`Camera.SetPosition/SetRotation` Lua override.** Lets a Lua
+      script drive the camera each frame without needing a new built-in
+      mode — over-the-shoulder aim, cinematic lock-ons, free-look
+      photo modes, the Wind Waker-style "let go of the stick, camera
+      glides back." Runtime reads player rig if no override was set
+      this frame. Pairs with `Scene.SetPaused(true)` for photo modes.
+      Discord feature request "Other controller types or lua based
+      camera control" (psxsplash channel, 2026-04). **[runtime]**
 
 ### Texture animation (UV scroll + frame-flip)
 
@@ -535,6 +564,54 @@ mechanisms cover most cases — UV-shifting and atlas-region cycling.
       mesh as "use UV scroll" without writing a per-mesh Lua script.
 - [ ] Demo addition: animated water plane (UV scroll) + a face mesh on
       an NPC with mouth-flap atlas frames (frame swap).
+
+### Rendering options
+
+Visual / rendering features authors ask for that don't fit into the
+more specialized sub-themes. Each is mostly runtime-side work with a
+~1–2-property authoring surface; aggregated here so we can knock them
+off together instead of one-off branches. Sources: Discord
+`#feature-requests`, psxsplash channel, 2026-04.
+
+- [ ] **Sprite / billboard objects.** `PS1Sprite` node — a single-quad
+      mesh that always faces the active camera. Exporter emits it like
+      any other mesh; the runtime rotates the quad's basis each frame
+      to align with `Camera.GetForward()` (or the camera-to-sprite
+      vector for full-axis billboards). Cheap (2 tris, one basis
+      update per sprite). Use cases: foliage, pickups, ground shadow
+      blobs, particle stand-ins before a full particle system.
+      Discord ask "Sprite objects" (2 upvotes). **[runtime]**
+
+- [ ] **Per-mesh backface rendering toggle.** `PS1MeshInstance.DoubleSided`
+      (bool, default false). When set, exporter either duplicates each
+      triangle with reversed winding or the runtime skips the `nclip`
+      back-face reject for objects flagged double-sided. Use cases:
+      single-sided foliage / banner planes, thin signs, interior
+      wallpapers — currently invisible from one side. Discord ask
+      "Render both sides of a tri option" / "Render BOTH faces, not
+      just front." **[runtime]**
+
+- [ ] **LOD meshes per `PS1MeshInstance`.** `LODs` = ordered
+      `(Mesh, distanceMeters)[]`. Exporter packs every LOD into the
+      atlas; runtime swaps by distance to camera with a small
+      hysteresis band. PS1 poly budgets are small enough that a naïve
+      two-or-three-step swap is all anyone actually wants. Discord ask
+      "LODs" (2 upvotes). **[runtime]**
+
+- [ ] **2D parallax skybox.** `PS1Sky` node referencing 1–3 layered
+      textures with per-layer parallax factors (0 = sky dome locked to
+      the horizon, 1 = world-locked). Renderer draws them as
+      full-screen layered quads **before** scene geometry so they
+      compose under everything. Authentic technique (Crash, Spyro,
+      MediEvil); far cheaper than a real skybox cube. Discord ask "2D
+      texture based skyboxes" (2 upvotes). **[runtime]**
+
+- [ ] **Subtitle helper on `UI.SetText`.** Document (and verify
+      against a minimal repro) that `UI.SetText` fires correctly
+      during `Cutscene.Play`. Ship a `Subtitle.Show(text,
+      durationFrames)` convenience that drives a reserved dialog
+      canvas during cutscenes. Discord ask "add a way to change text
+      of a PSX UI Text in cutscene."
 
 ### UI / HUD from Lua
 
@@ -850,6 +927,14 @@ matters, and do better where it's cheap.
       near-duplicate CLUTs that could merge, and meshes that each drag in a
       unique atlas. Powered by the data `SceneCollector` + `VRAMPacker`
       already have.
+- [ ] **UV out-of-range linter.** Warn when any vertex UV falls outside
+      `[0, 1]` — the PSX rasteriser doesn't wrap/clamp, so out-of-range
+      UVs pull whatever atlas neighbor happens to sit at that tpage
+      offset (usually garbage). Exporter already walks every mesh's
+      UVs; one bounds check per vertex. Option to auto-wrap `(u % 1)`
+      with a warning when the mesh is tagged "intended-tiling".
+      Discord ask "Fix UVs of meshes when exporting if the UV
+      coordinates are too large" (2 upvotes).
 - [ ] Quantized texture preview in the inspector for any PS1Texture asset.
 - [ ] EmmyLua stub generation from `luaapi.hh` on plugin load; dropped into
       `.godot/ps1godot/lua-stubs/` for Rider/VSCode to pick up.

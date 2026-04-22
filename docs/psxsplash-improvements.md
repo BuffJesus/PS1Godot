@@ -253,6 +253,77 @@ without a local patch.
 
 ---
 
+## Community-sourced asks (Discord `#feature-requests`, 2026-04)
+
+Items below come from the psxsplash Discord's #feature-requests board
+rather than our own porting work — we're tracking them here so they
+stay on our radar as upstream asks (and so we don't re-invent them
+editor-side when the runtime is the more natural home). Authoring-side
+halves of the same items are tracked in `ROADMAP.md`.
+
+### C-1. Full-motion video (FMV) playback
+
+**Problem.** psxsplash has no path for MDEC/BS video playback on the
+PSX. Cutscene intros, prerendered boss finishes, and CD-spinning bumper
+reels are a defining PS1-era look; right now authors who want one end
+up writing their own VLC loader or pre-rendering animations as long
+ADPCM+textured quad sequences (hugely wasteful).
+
+**Proposed direction.** `FMV.Play(res://path/to/video.str)` Lua API that
+streams a `.str` off the disc through the MDEC decoder, using PSYQo's
+existing CD streaming primitives. Synchronised audio track handled via
+XA-ADPCM. Surface `FMV.Stop()`, `FMV.IsPlaying()`, and a callback
+`onFMVEnd(name)` for cutscene hand-offs. `mkpsxiso`-side: add a "video
+track" entry to the ISO config so the file lands at a contiguous LBA.
+
+**Status.** Unfiled. Discord ask "FMV support" (5 upvotes, "considered").
+
+**Evidence.** _(no psxsplash-side incident yet — this is pure
+community ask)._
+
+---
+
+### C-2. NTSC / PAL mode switcher
+
+**Problem.** Runtime is hardcoded to one video standard at compile
+time (NTSC). Authors who target European hardware or want the taller
+PAL field for a specific look have to recompile the runtime — no
+scene- or runtime-level toggle exists.
+
+**Proposed direction.** `Display.SetMode("NTSC"|"PAL")` Lua API that
+re-initializes the GPU with the correct resolution/fps. For a less
+intrusive version, a header flag in the splashpack's `SceneSetup`
+that picks the mode at scene-load time (one `GPU_INIT_PAL` vs
+`GPU_INIT_NTSC` branch). Both PS1Scene inspector and the runtime API
+accepted.
+
+**Status.** Unfiled. Discord ask "NTSC/PAL mode switcher"
+(2 upvotes, "considered"). Pairs naturally with C-3 (FPS cap) since
+PAL's 50 Hz is effectively a mode change.
+
+**Evidence.** _(community ask only)._
+
+---
+
+### C-3. FPS cap / target-frame-rate option
+
+**Problem.** psxsplash currently runs at the display's native refresh.
+Authors who wrote their game loop around a specific dt (30 fps
+top-down, 60 fps shooter) have no way to tell the runtime "cap
+updates to N Hz." On PAL (50 Hz) their 30-fps code runs ~17 % fast.
+
+**Proposed direction.** `Display.SetTargetFps(30|60)` or a splashpack
+header field. Runtime already has `m_dt12` accumulation; cap by
+skipping `SceneManager::Update()` when accumulated < target
+interval. Animation / cutscene / sequencer ticks stay on wall-clock
+so they don't slow down with the cap.
+
+**Status.** Unfiled. Discord ask "FPS cap option" (2 upvotes).
+
+**Evidence.** _(community ask only)._
+
+---
+
 ### N. Honor playerStartPosition / playerStartRotation when no nav regions
 
 **Problem.** `SceneManager::InitializeScene()` only updates the camera from
@@ -627,3 +698,10 @@ official sequencer when that work begins.
   refresh pulled upstream to latest main; local patch dropped.
 - `2026-04-20` (evening) — Added entry N+7 (sequenced music sequencer).
   Self-contained additive patch; viable upstream PR or design reference.
+- `2026-04-21` — Added "Community-sourced asks" block with C-1 (FMV
+  playback), C-2 (NTSC/PAL switcher), C-3 (FPS cap). Sourced from
+  Discord #feature-requests screenshots. Authoring-side halves inlined
+  into `ROADMAP.md`'s Phase 2.5 sections (Audio pitch, Rendering
+  options: sprites / backface / LODs / 2D skybox, Object scale
+  animation, Camera Lua override, FixedPoint↔int helpers, UV-range
+  linter, Subtitle helper).
