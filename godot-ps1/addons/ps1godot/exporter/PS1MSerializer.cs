@@ -202,6 +202,14 @@ public static class PS1MSerializer
             throw new InvalidOperationException(
                 "PS1MSerializer: parsed MIDI has no playable notes (after channel filtering). Check the MIDI channel bindings.");
 
+        // Header.eventCount is u16; we can't honestly represent >65535. Silently
+        // clamping used to leave trailing blob bytes the runtime ignored — very
+        // confusing when an author's long piece played back truncated without a
+        // warning. Fail loud instead with an actionable message.
+        if (events.Count > ushort.MaxValue)
+            throw new InvalidOperationException(
+                $"PS1MSerializer: {events.Count} events exceeds the PS1M format's u16 event-count limit ({ushort.MaxValue}). Split the sequence into shorter segments or drop some channels.");
+
         // Convert loopStartBeat → loopStartTick. -1 → 0xFFFFFFFF (no loop).
         uint loopStartTick = loopStartBeat < 0
             ? 0xFFFFFFFFu
@@ -217,7 +225,7 @@ public static class PS1MSerializer
         w.Write((ushort)tpq);
         w.Write((byte)bindings.Count);
         w.Write((byte)0);                         // pad0
-        w.Write((ushort)Math.Min(events.Count, ushort.MaxValue));
+        w.Write((ushort)events.Count);
         w.Write(loopStartTick);
 
         // Channels (8 bytes each).
