@@ -23,6 +23,7 @@ public partial class PS1GodotPlugin : EditorPlugin
     private const string ConvertMeshToPS1MenuLabel = "PS1Godot: Convert selected MeshInstance3D to PS1MeshInstance";
     private const string AddSkinnedTestMenuLabel = "PS1Godot: Add Skinned Test Mesh (bullet 11 test asset)";
     private const string GenerateFontBitmapMenuLabel = "PS1Godot: Generate bitmap for selected PS1UIFontAsset";
+    private const string RunMidiTestsMenuLabel = "PS1Godot: Run MIDI Serializer Tests";
 
     private PS1TriggerBoxGizmo? _triggerBoxGizmo;
     private PS1GodotDock? _dock;
@@ -40,6 +41,7 @@ public partial class PS1GodotPlugin : EditorPlugin
         AddToolMenuItem(ConvertMeshToPS1MenuLabel, Callable.From(OnConvertMeshToPS1));
         AddToolMenuItem(AddSkinnedTestMenuLabel, Callable.From(OnAddSkinnedTestMesh));
         AddToolMenuItem(GenerateFontBitmapMenuLabel, Callable.From(OnGenerateFontBitmap));
+        AddToolMenuItem(RunMidiTestsMenuLabel, Callable.From(OnRunMidiTests));
 
         _triggerBoxGizmo = new PS1TriggerBoxGizmo();
         AddNode3DGizmoPlugin(_triggerBoxGizmo);
@@ -111,6 +113,7 @@ public partial class PS1GodotPlugin : EditorPlugin
         RemoveToolMenuItem(ConvertMeshToPS1MenuLabel);
         RemoveToolMenuItem(AddSkinnedTestMenuLabel);
         RemoveToolMenuItem(GenerateFontBitmapMenuLabel);
+        RemoveToolMenuItem(RunMidiTestsMenuLabel);
 
         SceneChanged -= OnSceneChanged;
         EditorInterface.Singleton.GetSelection().SelectionChanged -= OnEditorSelectionChanged;
@@ -171,6 +174,11 @@ public partial class PS1GodotPlugin : EditorPlugin
         foreach (var line in output)
             GD.Print(line.AsString().TrimEnd('\r', '\n'));
         return code;
+    }
+
+    private void OnRunMidiTests()
+    {
+        MidiSerializerTests.RunAll();
     }
 
     private void OnBuildPsxsplash()
