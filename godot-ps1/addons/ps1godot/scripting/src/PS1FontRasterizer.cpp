@@ -168,6 +168,11 @@ Dictionary PS1FontRasterizer::rasterize(const Ref<FontFile> &p_font, int p_font_
 			if (sy < 0 || sy >= atlas_hh) continue;
 			int dy = cell_top + py;
 			if (dy < 0 || dy >= atlas_h) continue;
+			// Clip to the cell's row. Required after the VRAM-budget
+			// clamp shortens cell_h below the glyph's natural height —
+			// without this, a tall glyph would bleed into the next
+			// row's cell and overwrite its neighbour.
+			if (dy < cell_y || dy >= cell_y + cell_h) continue;
 
 			for (int px = 0; px < g_w; px++) {
 				int sx = src_x + px;

@@ -45,13 +45,14 @@ public static class PS1FontGenerator
             return false;
         }
 
+        // PS1FontRasterizer inherits RefCounted — don't call Free() on
+        // it, let the reference drop when obj goes out of scope.
         var resultVar = obj.Call("rasterize", asset.SourceFont, asset.FontSize, asset.AlphaThreshold);
         var result = resultVar.As<Godot.Collections.Dictionary>();
         if (result == null || result.Count == 0)
         {
             GD.PushError("[PS1Godot] PS1FontGenerator: rasterizer returned empty. " +
                          "See earlier ERR_PRINT for the root cause.");
-            obj.Free();
             return false;
         }
 
@@ -63,13 +64,11 @@ public static class PS1FontGenerator
         if (bitmap == null)
         {
             GD.PushError("[PS1Godot] PS1FontGenerator: rasterizer returned null bitmap.");
-            obj.Free();
             return false;
         }
         if (advances == null || advances.Length != 96)
         {
             GD.PushError($"[PS1Godot] PS1FontGenerator: advance widths length {advances?.Length ?? 0} != 96.");
-            obj.Free();
             return false;
         }
 
@@ -87,7 +86,6 @@ public static class PS1FontGenerator
             asset.FontName = stem;
         }
 
-        obj.Free();
         GD.Print($"[PS1Godot] Generated '{asset.FontName}' @ {asset.FontSize}px: " +
                  $"{glyphW}×{glyphH} cells, atlas {bitmap.GetWidth()}×{bitmap.GetHeight()} px.");
         return true;
