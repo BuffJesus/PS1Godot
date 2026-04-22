@@ -150,6 +150,68 @@ public sealed class PSXMesh
         return psx;
     }
 
+    // Append one surface of `sub` to this PSXMesh, transforming vertex
+    // positions by `subToGroup` (the sub-mesh's local-to-group-local
+    // transform) before encoding. Used by PS1MeshGroup to merge several
+    // MeshInstance3D children into a single PSXMesh whose verts all live
+    // in the group's local space — the group's GameObject position +
+    // rotation then apply to the whole lot at runtime.
+    //
+    // Same winding swap + Y-negation convention as FromGodotMesh, so
+    // per-triangle front/back matches regardless of which path produced it.
+    public void AppendFromGodotSurface(MeshInstance3D sub, int surfaceIdx,
+        Transform3D subToGroup, int texIdx, PSXTexture? tex,
+        float gteScaling, byte rByte, byte gByte, byte bByte)
+    {
+        var mesh = sub.Mesh;
+        if (mesh == null || surfaceIdx >= mesh.GetSurfaceCount()) return;
+
+        var arrays = mesh.SurfaceGetArrays(surfaceIdx);
+        var verts = arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array();
+        var normals = arrays[(int)Mesh.ArrayType.Normal].AsVector3Array();
+        var uvs = arrays[(int)Mesh.ArrayType.TexUV].AsVector2Array();
+        var indices = arrays[(int)Mesh.ArrayType.Index].AsInt32Array();
+
+        // Orthonormalize for normals so non-uniform child scales don't
+        // warp the lighting vector. Positions still use the full transform
+        // because verts SHOULD scale with the sub-mesh's authored transform.
+        Basis normalBasis = subToGroup.Basis.Orthonormalized();
+
+        int triCount = indices.Length > 0 ? indices.Length / 3 : verts.Length / 3;
+
+        for (int t = 0; t < triCount; t++)
+        {
+            int i0 = indices.Length > 0 ? indices[t * 3 + 0] : t * 3 + 0;
+            int i1 = indices.Length > 0 ? indices[t * 3 + 1] : t * 3 + 1;
+            int i2 = indices.Length > 0 ? indices[t * 3 + 2] : t * 3 + 2;
+
+            Vector3 p0 = subToGroup * verts[i0];
+            Vector3 p1 = subToGroup * verts[i1];
+            Vector3 p2 = subToGroup * verts[i2];
+
+            Vector3 n0 = normalBasis * (normals.Length > i0 ? normals[i0] : Vector3.Up);
+            Vector3 n1 = normalBasis * (normals.Length > i1 ? normals[i1] : Vector3.Up);
+            Vector3 n2 = normalBasis * (normals.Length > i2 ? normals[i2] : Vector3.Up);
+
+            // Same winding-swap compensation as FromGodotMesh.
+            (i1, i2) = (i2, i1);
+            (p1, p2) = (p2, p1);
+            (n1, n2) = (n2, n1);
+
+            Vector2 uv0 = uvs.Length > i0 ? uvs[i0] : Vector2.Zero;
+            Vector2 uv1 = uvs.Length > i1 ? uvs[i1] : Vector2.Zero;
+            Vector2 uv2 = uvs.Length > i2 ? uvs[i2] : Vector2.Zero;
+
+            Triangles.Add(new Tri
+            {
+                v0 = MakeVertex(p0, n0, uv0, tex, gteScaling, rByte, gByte, bByte),
+                v1 = MakeVertex(p1, n1, uv1, tex, gteScaling, rByte, gByte, bByte),
+                v2 = MakeVertex(p2, n2, uv2, tex, gteScaling, rByte, gByte, bByte),
+                TextureIndex = texIdx,
+            });
+        }
+    }
+
     private static PSXVertex MakeVertex(Vector3 pos, Vector3 normal, Vector2 uv, PSXTexture? tex,
         float gteScaling, byte r, byte g, byte b)
     {

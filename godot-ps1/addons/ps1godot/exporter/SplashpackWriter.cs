@@ -1246,7 +1246,7 @@ public static class SplashpackWriter
 
     private static void WriteWorldAabb(BinaryWriter w, SceneObject obj, float gteScaling)
     {
-        Aabb local = obj.Node.Mesh.GetAabb();
+        Aabb local = obj.LocalAabb;
         Vector3 min = local.Position;
         Vector3 max = local.Position + local.Size;
 

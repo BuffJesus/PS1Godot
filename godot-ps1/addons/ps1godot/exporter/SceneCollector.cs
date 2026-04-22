@@ -258,6 +258,14 @@ public static class SceneCollector
         Dictionary<(string, PSXBPP), int> textureCache,
         Dictionary<string, int> luaCache)
     {
+        // PS1MeshGroup: merge every descendant MeshInstance3D's triangles
+        // into a single PSXMesh + GameObject. Walk stops at the group —
+        // descendants are consumed here, not visited as siblings.
+        if (n is PS1MeshGroup group && group.Visible)
+        {
+            EmitMeshGroup(group, data, textureCache, luaCache);
+            return;
+        }
         if (n is PS1MeshInstance pmi && pmi.Visible && pmi.Mesh != null)
         {
             int surfaceCount = pmi.Mesh.GetSurfaceCount();
@@ -277,6 +285,7 @@ public static class SceneCollector
             {
                 Node = pmi,
                 Mesh = psxMesh,
+                LocalAabb = pmi.Mesh.GetAabb(),
                 SurfaceTextureIndices = surfaceTextureIndices,
                 LuaFileIndex = ResolveLuaScript(pmi.Name, pmi.ScriptFile, data, luaCache),
             });
@@ -328,6 +337,7 @@ public static class SceneCollector
             {
                 Node = rawMi,
                 Mesh = psxMesh,
+                LocalAabb = rawMi.Mesh.GetAabb(),
                 SurfaceTextureIndices = surfaceTextureIndices,
                 LuaFileIndex = -1,
             });
@@ -365,6 +375,7 @@ public static class SceneCollector
             {
                 Node = autoMi,
                 Mesh = psxMesh,
+                LocalAabb = autoMi.Mesh.GetAabb(),
                 SurfaceTextureIndices = surfaceTextureIndices,
                 LuaFileIndex = -1,
             });
@@ -397,6 +408,132 @@ public static class SceneCollector
         foreach (var child in n.GetChildren())
         {
             WalkAddMeshes(child, data, textureCache, luaCache);
+        }
+    }
+
+    // Walk every MeshInstance3D descendant of `group`, bake each one's
+    // local-to-group transform into its triangle verts, concatenate into
+    // one PSXMesh, and emit as a single GameObject. Preserves per-sub-mesh
+    // texture indices so (e.g.) body + eye atlases still split correctly.
+    //
+    // Skinned sub-meshes are refused — rigged characters belong to
+    // PS1SkinnedMesh / PS1Player's auto-skinning pipeline, which expects
+    // one object per skeleton. A group with a skinned child gets a warning
+    // and falls back to skipping that child.
+    private static void EmitMeshGroup(PS1MeshGroup group, SceneData data,
+        Dictionary<(string, PSXBPP), int> textureCache,
+        Dictionary<string, int> luaCache)
+    {
+        var subMeshes = new List<MeshInstance3D>();
+        CollectMergableMeshes(group, subMeshes);
+
+        if (subMeshes.Count == 0)
+        {
+            GD.PushWarning(
+                $"[PS1Godot] PS1MeshGroup '{group.Name}' has no MeshInstance3D descendants — skipping.");
+            return;
+        }
+
+        // Author-facing name: explicit ObjectName wins, else node name.
+        string displayName = string.IsNullOrWhiteSpace(group.ObjectName)
+            ? group.Name.ToString()
+            : group.ObjectName;
+        if (group.Name.ToString() != displayName)
+        {
+            group.Name = displayName;
+        }
+
+        byte rByte = PSXTrig.ColorChannelToPSX(group.FlatColor.R);
+        byte gByte = PSXTrig.ColorChannelToPSX(group.FlatColor.G);
+        byte bByte = PSXTrig.ColorChannelToPSX(group.FlatColor.B);
+
+        var merged = new PSXMesh();
+        var surfaceTextureIndices = new List<int>();
+
+        // Bake the group's SCALE into the merged verts (PSX GameObjects
+        // only carry position + rotation at runtime — no scale). We do
+        // that by computing each sub's local transform relative to a
+        // rotation-only copy of the group: the group's scale then lives
+        // inside subToGroup.basis and flows through AppendFromGodotSurface
+        // into vertex positions. SplashpackWriter emits the group's
+        // GlobalBasis.GetRotationQuaternion() (rotation only, no scale)
+        // as the runtime rotation, which pairs correctly.
+        var groupRotOnly = new Transform3D(
+            group.GlobalTransform.Basis.Orthonormalized(),
+            group.GlobalTransform.Origin);
+        Transform3D groupInv = groupRotOnly.AffineInverse();
+
+        // Accumulate the group-local AABB from every transformed vertex.
+        // Used by WriteWorldAabb at write time — no runtime equivalent of
+        // Mesh.GetAabb() exists for a multi-source aggregate.
+        Vector3 aabbMin = new(float.MaxValue, float.MaxValue, float.MaxValue);
+        Vector3 aabbMax = new(float.MinValue, float.MinValue, float.MinValue);
+
+        foreach (var sub in subMeshes)
+        {
+            if (sub.Mesh == null) continue;
+            Transform3D subToGroup = groupInv * sub.GlobalTransform;
+            int surfaceCount = sub.Mesh.GetSurfaceCount();
+            for (int s = 0; s < surfaceCount; s++)
+            {
+                int texIdx = ResolveSurfaceTextureCore(sub, group.BitDepth, s, data, textureCache);
+                surfaceTextureIndices.Add(texIdx);
+                PSXTexture? tex = (texIdx >= 0 && texIdx < data.Textures.Count)
+                    ? data.Textures[texIdx]
+                    : null;
+                merged.AppendFromGodotSurface(sub, s, subToGroup, texIdx, tex,
+                    data.GteScaling, rByte, gByte, bByte);
+            }
+
+            // Extend the AABB with this sub-mesh's footprint in group space.
+            Aabb subAabb = sub.Mesh.GetAabb();
+            for (int c = 0; c < 8; c++)
+            {
+                var corner = new Vector3(
+                    (c & 1) != 0 ? subAabb.Position.X + subAabb.Size.X : subAabb.Position.X,
+                    (c & 2) != 0 ? subAabb.Position.Y + subAabb.Size.Y : subAabb.Position.Y,
+                    (c & 4) != 0 ? subAabb.Position.Z + subAabb.Size.Z : subAabb.Position.Z);
+                Vector3 p = subToGroup * corner;
+                aabbMin = new Vector3(Mathf.Min(aabbMin.X, p.X), Mathf.Min(aabbMin.Y, p.Y), Mathf.Min(aabbMin.Z, p.Z));
+                aabbMax = new Vector3(Mathf.Max(aabbMax.X, p.X), Mathf.Max(aabbMax.Y, p.Y), Mathf.Max(aabbMax.Z, p.Z));
+            }
+        }
+
+        data.Objects.Add(new SceneObject
+        {
+            Node = group,
+            Mesh = merged,
+            LocalAabb = new Aabb(aabbMin, aabbMax - aabbMin),
+            SurfaceTextureIndices = surfaceTextureIndices.ToArray(),
+            LuaFileIndex = ResolveLuaScript(displayName, group.ScriptFile, data, luaCache),
+        });
+
+        GD.Print(
+            $"[PS1Godot] PS1MeshGroup '{displayName}': merged {subMeshes.Count} mesh(es) → " +
+            $"{merged.Triangles.Count} tris across {surfaceTextureIndices.Count} surfaces.");
+    }
+
+    // Gather every MeshInstance3D descendant that qualifies for merging.
+    // Skips: skinned meshes (belong to the PS1SkinnedMesh pipeline), hidden
+    // nodes, and nodes without a Mesh resource. Nested PS1MeshGroup trees
+    // aren't recursed into — inner groups stay self-contained.
+    private static void CollectMergableMeshes(Node n, List<MeshInstance3D> outList)
+    {
+        foreach (var child in n.GetChildren())
+        {
+            if (child is PS1MeshGroup) continue;  // inner group, own scope
+            if (child is MeshInstance3D mi && mi.Visible && mi.Mesh != null)
+            {
+                if (mi.Skin != null && !mi.Skeleton.IsEmpty)
+                {
+                    GD.PushWarning(
+                        $"[PS1Godot] PS1MeshGroup: skinned mesh '{mi.Name}' skipped — " +
+                        $"put skinned characters under PS1Player, not inside a mesh group.");
+                    continue;
+                }
+                outList.Add(mi);
+            }
+            CollectMergableMeshes(child, outList);
         }
     }
 
@@ -1767,8 +1904,26 @@ public static class SceneCollector
             // space and stored in PS1 fp12 — but we need world-space XYZ in
             // Godot units for the per-triangle room test. Walk the source
             // MeshInstance3D to get the positions at export-time precision.
-            var mi = obj.Node;
-            if (mi == null || mi.Mesh == null) continue;
+            //
+            // PS1MeshGroup objects have a merged PSXMesh but no single
+            // source MeshInstance3D to rewalk — bucket them all into the
+            // catch-all so interior room/portal culling stays correct
+            // without requiring per-submesh traversal here. (Interior
+            // scenes that want per-sub-room tri assignment should use
+            // PS1MeshInstance per piece, not a group.)
+            if (obj.Node is not MeshInstance3D mi || mi.Mesh == null)
+            {
+                int merged = obj.Mesh.Triangles.Count;
+                for (int t = 0; t < merged; t++)
+                {
+                    perRoom[catchAllIdx].Add(new RoomTriRefRecord
+                    {
+                        ObjectIndex = (ushort)objIdx,
+                        TriangleIndex = (ushort)t,
+                    });
+                }
+                continue;
+            }
 
             var xform = mi.GlobalTransform;
             var nodeScale = mi.Scale;

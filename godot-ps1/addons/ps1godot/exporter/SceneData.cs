@@ -8,13 +8,18 @@ namespace PS1Godot.Exporter;
 
 public sealed class SceneObject
 {
-    // Base MeshInstance3D, not PS1MeshInstance — lets the exporter accept
-    // auto-detected raw FBX-imported meshes (skinned character avatars under
-    // PS1Player) alongside hand-authored PS1MeshInstance nodes. PS1-specific
-    // properties are only read through a local typed variable in the
-    // collector, not through this field.
-    public required MeshInstance3D Node { get; init; }
+    // Base Node3D — covers PS1MeshInstance, raw MeshInstance3D (FBX auto-
+    // detect under PS1Player), and PS1MeshGroup (multi-mesh aggregates
+    // that don't have a single Mesh on the node itself). PS1-specific
+    // properties are read through a local typed cast in the collector.
+    public required Node3D Node { get; init; }
     public required PSXMesh Mesh { get; init; }
+
+    // Local-space AABB for the writer's WriteWorldAabb pass. Cached here
+    // because PS1MeshGroup has no `Mesh` property to query at write time;
+    // for single-mesh objects the collector fills this with
+    // Node.Mesh.GetAabb(), for groups it aggregates descendant AABBs.
+    public required Aabb LocalAabb { get; init; }
 
     // Indices into SceneData.Textures — one per mesh surface (parallel to
     // Mesh.GetSurfaceCount). -1 means "this surface is untextured; use
