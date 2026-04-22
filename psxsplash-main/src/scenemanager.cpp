@@ -194,11 +194,14 @@ void psxsplash::SceneManager::InitializeScene(uint8_t* splashpackData, LoadingSc
         m_skinnedMeshCount);
 
     // Initialize UI system (v13+)
-    // Font pixel data is uploaded separately via uploadVramData() before InitializeScene.
+    // Custom-font glyph atlases live in the .splashpack (not the .vram
+    // file) and must be uploaded to VRAM here, after loadFromSplashpack
+    // has populated the font descriptors.
     if (sceneSetup.uiCanvasCount > 0 && sceneSetup.uiTableOffset != 0 && s_font != nullptr) {
         m_uiSystem.init(*s_font);
         m_uiSystem.loadFromSplashpack(splashpackData, sceneSetup.uiCanvasCount,
                                       sceneSetup.uiFontCount, sceneSetup.uiTableOffset);
+        m_uiSystem.uploadFonts(gpu);
         Renderer::GetInstance().SetUISystem(&m_uiSystem);
 
         if (loading && loading->isActive()) loading->updateProgress(gpu, 70);
