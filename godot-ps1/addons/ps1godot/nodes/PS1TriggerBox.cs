@@ -13,10 +13,12 @@ namespace PS1Godot;
 // in the editor.
 [Tool]
 [GlobalClass]
+[Icon("res://addons/ps1godot/icons/ps1_trigger_box.svg")]
 public partial class PS1TriggerBox : Node3D
 {
     private Vector3 _halfExtents = new Vector3(1, 1, 1);
 
+    [ExportGroup("Volume")]
     // Local half-extents. World AABB is computed at export by baking the
     // node's GlobalTransform into the 8 corners and taking the axis-aligned
     // extent — same approach colliders use.
@@ -34,6 +36,7 @@ public partial class PS1TriggerBox : Node3D
         }
     }
 
+    [ExportGroup("Scripting")]
     // Trigger-level Lua script. The runtime calls onTriggerEnter(index) /
     // onTriggerExit(index) as top-level functions in this script (no self,
     // since trigger boxes aren't GameObjects).

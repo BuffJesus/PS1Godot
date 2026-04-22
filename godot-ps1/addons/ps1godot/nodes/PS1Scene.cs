@@ -6,6 +6,7 @@ namespace PS1Godot;
 // Unity equivalent: PSXSceneExporter MonoBehaviour in SplashEdit.
 [Tool]
 [GlobalClass]
+[Icon("res://addons/ps1godot/icons/ps1_scene.svg")]
 public partial class PS1Scene : Node3D
 {
     // Scene categories matching the PS1 optimization reference
@@ -47,17 +48,17 @@ public partial class PS1Scene : Node3D
     // scene and place it where you want the player to appear. The old
     // PlayerStartPosition / PlayerStartRotation fields here were never
     // wired through the exporter.
-    [Export(PropertyHint.Range, "0.3,3.0,0.05")]
+    [Export(PropertyHint.Range, "0.3,3.0,0.05,suffix:m")]
     public float PlayerHeight { get; set; } = 1.7f;
-    [Export(PropertyHint.Range, "0.1,2.0,0.05")]
+    [Export(PropertyHint.Range, "0.1,2.0,0.05,suffix:m")]
     public float PlayerRadius { get; set; } = 0.3f;
-    [Export(PropertyHint.Range, "0.1,20.0,0.1")]
+    [Export(PropertyHint.Range, "0.1,20.0,0.1,suffix:m/s")]
     public float MoveSpeed { get; set; } = 3.0f;
-    [Export(PropertyHint.Range, "0.1,20.0,0.1")]
+    [Export(PropertyHint.Range, "0.1,20.0,0.1,suffix:m/s")]
     public float SprintSpeed { get; set; } = 6.0f;
-    [Export(PropertyHint.Range, "0.1,10.0,0.1")]
+    [Export(PropertyHint.Range, "0.1,10.0,0.1,suffix:m")]
     public float JumpHeight { get; set; } = 1.2f;
-    [Export(PropertyHint.Range, "0.1,40.0,0.1")]
+    [Export(PropertyHint.Range, "0.1,40.0,0.1,suffix:m/s²")]
     public float Gravity { get; set; } = 9.81f;
 
     [ExportGroup("Fog")]

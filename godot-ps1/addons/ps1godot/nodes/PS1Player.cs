@@ -30,10 +30,13 @@ public enum PS1CameraMode
 // character stats move onto the Phase 2.6 RPG toolkit's AttributeSet.
 [Tool]
 [GlobalClass]
+[Icon("res://addons/ps1godot/icons/ps1_player.svg")]
 public partial class PS1Player : Node3D
 {
+    [ExportGroup("Camera")]
     [Export] public PS1CameraMode CameraMode { get; set; } = PS1CameraMode.ThirdPerson;
 
+    [ExportGroup("Avatar")]
     // Texture applied to the auto-wired avatar mesh. Lives here (not as a
     // material_override on the nested FBX mesh) because instanced-scene
     // overrides break the moment the FBX's internal node names change —
