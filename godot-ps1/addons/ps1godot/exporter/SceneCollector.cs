@@ -1017,26 +1017,21 @@ public static class SceneCollector
     }
 
     // Write one BakedBoneMatrix into `buf` at `offset` (24 bytes total).
-    // Layout: int16[9] row-major rotation (fp12) + int16[3] translation
-    // (fp12 at gteScaling, PSX Y-down+Z-forward). Same Y+Z reflection the
-    // mesh vertex writer does — apply S·R·S with S=diag(1,-1,-1), which
-    // negates entries where S[row]·S[col] = -1, i.e. exactly one of row/col
-    // is Y or Z.
+    // Layout: int16[9] row-major rotation (fp12) + int16[3] translation.
+    // Using the ORIGINAL Y-only sign pattern — Y+Z reflection caused
+    // skinned-mesh rendering artifacts (missing faces) that we couldn't
+    // pin down analytically. Keeping the Y-only bone encoding preserves
+    // the old skinned-mesh behavior while the rest of the pipeline uses
+    // the new Y+Z mesh/camera encoding.
+    // TODO: reconcile bone matrix sign pattern with Y+Z reflection.
     private static void WriteBakedBoneMatrix(byte[] buf, int offset, Transform3D t, float gteScaling)
     {
-        // Extract row-major rotation from the basis.
         Basis b = t.Basis;
-        // Column 0/1/2 = rotated X/Y/Z axes in skeleton-relative space.
-        // Row-major layout:
-        //   r[0..2] = row 0 = (col0.x, col1.x, col2.x)
-        //   r[3..5] = row 1 = (col0.y, col1.y, col2.y)
-        //   r[6..8] = row 2 = (col0.z, col1.z, col2.z)
-        // Y+Z sign pattern matches PSXTrig.ConvertRotationToPSXMatrix.
         float[,] m =
         {
-            {  b.Column0.X, -b.Column1.X, -b.Column2.X },
-            { -b.Column0.Y,  b.Column1.Y,  b.Column2.Y },
-            { -b.Column0.Z,  b.Column1.Z,  b.Column2.Z },
+            {  b.Column0.X, -b.Column1.X,  b.Column2.X },
+            { -b.Column0.Y,  b.Column1.Y, -b.Column2.Y },
+            {  b.Column0.Z, -b.Column1.Z,  b.Column2.Z },
         };
         for (int i = 0; i < 3; i++)
         {
@@ -1049,10 +1044,11 @@ public static class SceneCollector
             }
         }
 
-        // Translation: Y+Z negated, divided by gteScaling for fp12.
+        // Translation: Y-only negation for now (bone matrix kept in old
+        // Y-only convention; see comment above).
         short tx = PSXTrig.ConvertCoordinateToPSX( t.Origin.X, gteScaling);
         short ty = PSXTrig.ConvertCoordinateToPSX(-t.Origin.Y, gteScaling);
-        short tz = PSXTrig.ConvertCoordinateToPSX(-t.Origin.Z, gteScaling);
+        short tz = PSXTrig.ConvertCoordinateToPSX( t.Origin.Z, gteScaling);
         int tOff = offset + 18;
         buf[tOff + 0] = (byte)(tx & 0xFF);
         buf[tOff + 1] = (byte)((tx >> 8) & 0xFF);
