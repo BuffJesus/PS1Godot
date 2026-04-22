@@ -60,6 +60,18 @@ void MusicSequencer::registerSequence(int index, const uint8_t *data, uint32_t s
         return;
     }
 
+    // Bail before reinterpreting past the buffer. Exporter always writes a
+    // matching size; this catches splashpack corruption or future format
+    // drift with a single printf instead of silently UB-reading.
+    uint32_t expected = sizeof(MusicSequenceHeader)
+                      + (uint32_t)sizeof(MusicChannelEntry) * hdr->channelCount
+                      + (uint32_t)sizeof(MusicEvent) * hdr->eventCount;
+    if (sizeBytes < expected) {
+        printf("[music] sequence %d truncated (have %u, need %u)\n",
+               index, (unsigned)sizeBytes, (unsigned)expected);
+        return;
+    }
+
     auto *channels = reinterpret_cast<const MusicChannelEntry *>(data + sizeof(MusicSequenceHeader));
     auto *events = reinterpret_cast<const MusicEvent *>(
         data + sizeof(MusicSequenceHeader)
