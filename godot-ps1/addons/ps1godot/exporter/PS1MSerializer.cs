@@ -57,20 +57,14 @@ public static class PS1MSerializer
             throw new InvalidOperationException(
                 $"PS1MSerializer: {bindings.Count} channels exceeds runtime max of {MaxChannels}.");
 
-        // Detect bindings that exactly duplicate (channel, track,
-        // note-range) — silent ones-after-the-other would be confusing.
-        // Note-range *overlap* across bindings on the same (ch, track)
-        // is allowed — the routing pass picks the first binding whose
-        // range matches each note.
-        var exactSet = new HashSet<(int, int, int, int)>(bindings.Count);
-        for (int i = 0; i < bindings.Count; i++)
-        {
-            var b = bindings[i];
-            var key = (b.MidiChannel, b.MidiTrackIndex, b.MidiNoteMin, b.MidiNoteMax);
-            if (!exactSet.Add(key))
-                throw new InvalidOperationException(
-                    $"PS1MSerializer: duplicate binding for MIDI channel {b.MidiChannel}, track {b.MidiTrackIndex}, notes {b.MidiNoteMin}-{b.MidiNoteMax}.");
-        }
+        // Duplicate bindings on the same (MidiChannel, track, note-range)
+        // are INTENTIONAL — they act as polyphony lanes, so chord notes
+        // on a single MIDI channel can spread across multiple mono
+        // voices instead of retriggering each other. The routing pass
+        // below allocates new notes to the first free lane and recycles
+        // oldest-held when every lane is busy. (Earlier builds rejected
+        // duplicates; that fought against intra-channel chords in
+        // every DAW-authored MIDI.)
 
         // Pick the effective tempo.  Manual override wins; otherwise use
         // the first SetTempo meta event; otherwise SMF default 120 BPM.
@@ -94,49 +88,110 @@ public static class PS1MSerializer
 
         int tpq = midi.TicksPerQuarter > 0 ? midi.TicksPerQuarter : 480;
 
-        // Translate MIDI notes into PS1M events. Routing per note:
-        //   1. iterate bindings in order; pick the first one whose
-        //      MidiChannel matches AND (MidiTrackIndex == -1 || matches
-        //      the note's source track) AND note in [Min..Max].
-        //   2. track-specific bindings ranked above wildcards in the
-        //      same scan: we do TWO passes — exact-track first, then
-        //      wildcard — so the natural binding order doesn't matter.
-        //   3. unmatched notes are dropped, with a one-shot warning per
-        //      (channel, track) combo so noisy MIDIs don't spam.
+        // Translate MIDI notes into PS1M events with polyphony-aware
+        // voice allocation:
+        //
+        //   1. For a note-on, collect every binding whose
+        //      (MidiChannel, track, note-range) matches. Track-specific
+        //      bindings are preferred over MidiTrackIndex=-1 wildcards
+        //      (scanned in two passes so authored order doesn't matter).
+        //   2. Among the matching bindings, pick the first one that's
+        //      NOT currently holding a note. If all are busy, steal the
+        //      oldest (lowest on-tick) — a "voice stealing" allocator
+        //      matches how real MIDI synths handle polyphony overflow.
+        //   3. Emit a PS1M note-on on the chosen binding's packed voice
+        //      and record (binding → note, tick) so subsequent chord
+        //      members land on a different lane.
+        //   4. For a note-off, find the binding currently holding that
+        //      note (same MidiChannel, filtering by track when explicit)
+        //      and clear its state. Off events from stolen-out notes
+        //      become no-ops (nothing holds that note anymore).
+        //   5. Unmatched notes are dropped with a one-shot warning per
+        //      (channel, track).
         var events = new List<byte[]>(midi.Notes.Count);
         var seenUnbound = new HashSet<(int ch, int track)>();
 
+        // Per-binding held-note state. heldNote[i] = MIDI note number the
+        // binding is currently playing, -1 if free. heldSince[i] = tick
+        // the currently-held note started on (used for oldest-first
+        // voice stealing).
+        var heldNote = new int[bindings.Count];
+        var heldSince = new uint[bindings.Count];
+        for (int i = 0; i < bindings.Count; i++) heldNote[i] = -1;
+
+        // Collect candidate bindings for (channel, track, note) in the
+        // two-pass priority order the old routing used. Reused per-note
+        // to avoid per-event allocation.
+        var candidates = new List<int>(bindings.Count);
+
         foreach (var n in midi.Notes)
         {
-            int packed = -1;
-            // Pass 1: bindings with explicit MidiTrackIndex matching this note.
+            candidates.Clear();
+
+            // Pass 1: bindings with an exact track match.
             for (int i = 0; i < bindings.Count; i++)
             {
                 var b = bindings[i];
-                if (b.MidiChannel == n.Channel && b.MidiTrackIndex == n.Track
+                if (b.MidiChannel == n.Channel
+                    && b.MidiTrackIndex == n.Track
                     && n.Note >= b.MidiNoteMin && n.Note <= b.MidiNoteMax)
                 {
-                    packed = i; break;
+                    candidates.Add(i);
                 }
             }
-            // Pass 2: wildcards (MidiTrackIndex = -1) on the same channel.
-            if (packed < 0)
+            // Pass 2: track-wildcard bindings (MidiTrackIndex == -1).
+            for (int i = 0; i < bindings.Count; i++)
             {
-                for (int i = 0; i < bindings.Count; i++)
+                var b = bindings[i];
+                if (b.MidiChannel == n.Channel
+                    && b.MidiTrackIndex < 0
+                    && n.Note >= b.MidiNoteMin && n.Note <= b.MidiNoteMax)
                 {
-                    var b = bindings[i];
-                    if (b.MidiChannel == n.Channel && b.MidiTrackIndex < 0
-                        && n.Note >= b.MidiNoteMin && n.Note <= b.MidiNoteMax)
-                    {
-                        packed = i; break;
-                    }
+                    candidates.Add(i);
                 }
             }
-            if (packed < 0)
+
+            if (candidates.Count == 0)
             {
                 if (seenUnbound.Add((n.Channel, n.Track)))
                     GD.PushWarning($"[PS1Godot] MIDI channel {n.Channel} / track {n.Track} (note {n.Note}) has no matching PS1MusicChannel binding — those notes won't play.");
                 continue;
+            }
+
+            int packed = -1;
+
+            if (n.Kind == MidiParser.MidiEventKind.NoteOn)
+            {
+                // Prefer an idle lane; fall back to stealing the oldest-held.
+                int oldestIdx = candidates[0];
+                uint oldestTick = heldSince[oldestIdx];
+                foreach (int i in candidates)
+                {
+                    if (heldNote[i] < 0) { packed = i; break; }
+                    if (heldSince[i] < oldestTick)
+                    {
+                        oldestTick = heldSince[i];
+                        oldestIdx = i;
+                    }
+                }
+                if (packed < 0) packed = oldestIdx;  // all busy — steal oldest
+                heldNote[packed] = n.Note;
+                heldSince[packed] = n.AbsoluteTick;
+            }
+            else // NoteOff
+            {
+                // Match the binding currently holding this exact note. If
+                // none holds it (the note got stolen), drop the off.
+                foreach (int i in candidates)
+                {
+                    if (heldNote[i] == n.Note)
+                    {
+                        packed = i;
+                        heldNote[i] = -1;
+                        break;
+                    }
+                }
+                if (packed < 0) continue;
             }
 
             byte kind = n.Kind == MidiParser.MidiEventKind.NoteOn ? (byte)0 : (byte)1;
