@@ -148,7 +148,9 @@ void MusicSequencer::tick(int32_t dt12) {
     if (!m_active) return;
 
     // Advance the playhead by (ticksPerFrame12 * dt12) >> 12.
-    // dt12=4096 (1.0) at 60 fps → exactly ticksPerFrame12 ticks per call.
+    // dt12 is fp12 where 4096 == 1/30 s wall-clock (see scenemanager),
+    // and ticksPerFrame12 holds ticks-per-(1/30 s) << 12, so at dt12=4096
+    // we advance exactly ticksPerFrame12 >> 12 ticks per call.
     uint32_t advance12 = (uint32_t)((((uint64_t)m_ticksPerFrame12) * (uint64_t)(dt12 < 0 ? 0 : dt12)) >> 12);
     m_subTick12 += advance12;
     uint32_t whole = m_subTick12 >> 12;
