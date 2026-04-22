@@ -21,8 +21,10 @@ namespace PS1Godot;
 // author typed each color by hand.
 [Tool]
 [GlobalClass]
+[Icon("res://addons/ps1godot/icons/ps1_theme.svg")]
 public partial class PS1Theme : Resource
 {
+    [ExportGroup("Foreground")]
     // Body text (dialog lines, HUD labels, menu items).
     [Export] public Color TextColor { get; set; } = new Color(1.0f, 1.0f, 1.0f);
 
@@ -30,12 +32,18 @@ public partial class PS1Theme : Resource
     // anything that should feel like a brand-colored accent.
     [Export] public Color AccentColor { get; set; } = new Color(1.0f, 0.85f, 0.30f);
 
+    [ExportGroup("Background")]
     // Dialog / menu background fill. Usually a saturated dark blue.
     [Export] public Color BgColor { get; set; } = new Color(0.0f, 0.0f, 0.4f);
 
     // Optional border stroke around background panels.
     [Export] public Color BgBorderColor { get; set; } = new Color(1.0f, 1.0f, 1.0f);
 
+    // Neutral dark fill for non-decorative elements (bar background,
+    // dim separator lines).
+    [Export] public Color NeutralColor { get; set; } = new Color(0.10f, 0.10f, 0.10f);
+
+    [ExportGroup("Status")]
     // "Healthy" / success / full-bar fill. HP bars when > 50 %.
     [Export] public Color HighlightColor { get; set; } = new Color(0.20f, 0.80f, 0.30f);
 
@@ -44,8 +52,4 @@ public partial class PS1Theme : Resource
 
     // Critical tone — low-HP red, error states, danger zone.
     [Export] public Color DangerColor { get; set; } = new Color(0.90f, 0.25f, 0.25f);
-
-    // Neutral dark fill for non-decorative elements (bar background,
-    // dim separator lines).
-    [Export] public Color NeutralColor { get; set; } = new Color(0.10f, 0.10f, 0.10f);
 }

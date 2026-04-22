@@ -61,14 +61,15 @@ public enum PS1UITextVAlign
 
 [Tool]
 [GlobalClass]
+[Icon("res://addons/ps1godot/icons/ps1_ui_element.svg")]
 public partial class PS1UIElement : Node
 {
+    [ExportGroup("Identity")]
     [Export] public string ElementName { get; set; } = "";
-
     [Export] public PS1UIElementType Type { get; set; } = PS1UIElementType.Text;
-
     [Export] public bool VisibleOnLoad { get; set; } = true;
 
+    [ExportGroup("Layout")]
     // Placement mode. Custom = X/Y are the absolute top-left corner
     // (backward-compatible default). Non-Custom = the element snaps
     // to one of the nine PSX-screen reference points and X/Y become
@@ -84,19 +85,20 @@ public partial class PS1UIElement : Node
     //     the bottom edge.
     //   - Center-aligned axes: the value is an offset from the PSX
     //     center (160 horizontally, 120 vertically).
-    [Export(PropertyHint.Range, "-256,576,1")]
+    [Export(PropertyHint.Range, "-256,576,1,suffix:px")]
     public int X { get; set; } = 16;
-    [Export(PropertyHint.Range, "-256,576,1")]
+    [Export(PropertyHint.Range, "-256,576,1,suffix:px")]
     public int Y { get; set; } = 16;
 
     // Width/height in pixels. For Text elements, used only when the
     // element needs layout (wrapping — not in MVP). For Box, the
     // rectangle extent.
-    [Export(PropertyHint.Range, "0,576,1")]
+    [Export(PropertyHint.Range, "0,576,1,suffix:px")]
     public int Width { get; set; } = 100;
-    [Export(PropertyHint.Range, "0,576,1")]
+    [Export(PropertyHint.Range, "0,576,1,suffix:px")]
     public int Height { get; set; } = 16;
 
+    [ExportGroup("Appearance")]
     // Tint. Text = foreground color, Box = fill color.
     [Export] public Color Color { get; set; } = new Color(1f, 1f, 1f, 1f);
 
@@ -106,10 +108,13 @@ public partial class PS1UIElement : Node
     // theme → every opted-in element restyles.
     [Export] public PS1UIThemeSlot ThemeSlot { get; set; } = PS1UIThemeSlot.Custom;
 
+    [ExportGroup("Text")]
     // Text body (Type == Text). UTF-8 bytes; runtime buffer is 64 B,
-    // so authored text should stay under ~60 visible characters.
+    // so authored text should stay under ~60 visible characters. Default
+    // "Text" so a newly-added element is visible by default; clear it
+    // and author your own.
     [Export(PropertyHint.MultilineText)]
-    public string Text { get; set; } = "";
+    public string Text { get; set; } = "Text";
 
     // Custom font for Text elements. null → the built-in system font
     // (fontIndex 0). Assigning a generated PS1UIFontAsset makes this

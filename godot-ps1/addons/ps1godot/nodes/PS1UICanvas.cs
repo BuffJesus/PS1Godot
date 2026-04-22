@@ -25,21 +25,24 @@ public enum PS1UIResidency
 
 [Tool]
 [GlobalClass]
+[Icon("res://addons/ps1godot/icons/ps1_ui_canvas.svg")]
 public partial class PS1UICanvas : Node
 {
+    [ExportGroup("Identity")]
     [Export] public string CanvasName { get; set; } = "";
-
     [Export] public PS1UIResidency Residency { get; set; } = PS1UIResidency.Gameplay;
 
     // Initial visibility. Gameplay canvases typically start visible;
     // MenuOnly / LoadOnDemand typically start hidden and Lua toggles them.
     [Export] public bool VisibleOnLoad { get; set; } = true;
 
+    [ExportGroup("Rendering")]
     // Back-to-front draw order. Lower sortOrder draws first (behind
     // higher). 8-bit to match the runtime's UICanvas.sortOrder.
     [Export(PropertyHint.Range, "0,255,1")]
     public int SortOrder { get; set; } = 0;
 
+    [ExportGroup("Theming")]
     // Palette source for this canvas's elements. When set, each
     // PS1UIElement child with a non-Custom ThemeSlot pulls its color
     // from the theme. Leave null for "authored colors only" (current

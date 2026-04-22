@@ -25,15 +25,17 @@ namespace PS1Godot;
 //     [Export]'d so they round-trip through .tres saves.
 [Tool]
 [GlobalClass]
+[Icon("res://addons/ps1godot/icons/ps1_ui_font_asset.svg")]
 public partial class PS1UIFontAsset : Resource
 {
+    [ExportGroup("Source")]
     // Source TTF/OTF (or any Godot FontFile). Required before
     // generation.
     [Export] public FontFile? SourceFont { get; set; }
 
     // Rendering size in pixels. Matches the font's intended PSX
     // on-screen height. Range mirrors SplashEdit's PSXFontAsset.
-    [Export(PropertyHint.Range, "6,32,1")]
+    [Export(PropertyHint.Range, "6,32,1,suffix:px")]
     public int FontSize { get; set; } = 12;
 
     // Lua-facing identifier. Defaults to the resource file name
@@ -48,12 +50,13 @@ public partial class PS1UIFontAsset : Resource
     [Export(PropertyHint.Range, "0.05,0.95,0.05")]
     public float AlphaThreshold { get; set; } = 0.3f;
 
-    // ── Generated (do not hand-edit) ─────────────────────────────
-
+    [ExportGroup("Generated (do not hand-edit)")]
     // Glyph cell dimensions on the atlas. Cell width is auto-picked
     // from {4, 8, 16, 32} (must divide 256 evenly for PSX UV wrap).
-    [Export] public int GlyphWidth { get; set; } = 0;
-    [Export] public int GlyphHeight { get; set; } = 0;
+    [Export(PropertyHint.Range, "0,32,1,suffix:px")]
+    public int GlyphWidth { get; set; } = 0;
+    [Export(PropertyHint.Range, "0,32,1,suffix:px")]
+    public int GlyphHeight { get; set; } = 0;
 
     // 256-wide atlas, RGBA8 (will pack to 4bpp + 2-entry CLUT at
     // export). Null until Generate is run.
