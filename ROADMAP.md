@@ -490,6 +490,19 @@ of psxsplash's existing `AudioManager`. Format is documented in
 - [ ] **MIDI event-marker authoring UI** — either a timeline overlay or
       a plain string list ("emit event 'chorus_start' at beat 128").
       Minimum viable is the string list; timeline view is Phase 3 polish.
+- [ ] **MIDI interpreter bug audit.** The 2026-04-21 1/3/5→0/2/4
+      `MidiChannel` scene fix (commit 6ce9621) hints at more off-by-one
+      or range bugs in the chain. Systematic pass over `MidiParser.cs`
+      (status-byte masking, running-status handling, delta-tick
+      accumulation, tempo meta 24-bit read), `PS1MSerializer.cs`
+      (channel filtering, note-range inclusivity, NoteOff-before-NoteOn
+      sort stability, drum-kit route resolution), and the PSX-side
+      `musicsequencer.cpp` (event dispatch, voice allocation, pitch
+      table indexing). Fixture test: one `.mid` per suspicious edge
+      case (format 0 vs. 1, running status, 14-bit pitch bend, tempo
+      mid-track, drum kit with out-of-range note) round-tripped
+      through the exporter and diffed against an authoritative reader.
+      High priority — bugs here silently produce wrong music.
 
 ### Save / load
 
@@ -756,6 +769,77 @@ but it can afford cheap global modulation.
 - [ ] Compile `.lua` → PSX bytecode at export via `luac_psx` headless in
       PCSX-Redux. Smaller splashpacks, enables `NOPARSER=1` runtime build
       (~25 KB RAM back — useful once scripts grow).
+
+### Authoring framework gaps *(from 2026-04-21 source survey)*
+
+A 2026-04-21 sweep of UE 5.7 / psyqo / SplashEdit / psxsplash / Godot
+for borrowable gameplay primitives picked three as high-leverage and
+shippable under PS1 budgets. Full reasoning in memory
+`project_authoring_survey_2026_04_21.md`; deferred items listed at the
+bottom so they're logged, not lost.
+
+- [ ] **Input actions + contexts.** Replace raw
+      `Controls.isButtonHeld(TRIANGLE)` polling with named actions
+      ("Interact", "Move", "Jump") bundled into contexts ("playing",
+      "menu", "dialog", "cutscene") that activate mutually-exclusively.
+      State-stack transitions (below) swap contexts automatically, so
+      cutscenes silence gameplay input without every script remembering
+      to check `isPaused`. Author declares actions via a
+      `PS1InputMap.tres` resource; exporter packs a small action table
+      (~32 B of runtime state — per-action bitmask + two int8 analog
+      channels + modifier enum). Supersedes the `Input.IsPressed /
+      JustPressed` items above — those remain the low-level accessors
+      the action layer sits on top of. Inspired by UE Enhanced Input,
+      shrunk. **[runtime]**
+
+- [ ] **Game state stack.** Formalize "what is the game doing right
+      now" as a push/pop stack of named states (Loading, Playing,
+      Paused, Cutscene, Dialog, Menu). Each state owns its input
+      context, audio ducking target, and UI visibility. Pushing Dialog
+      over Cutscene suspends the Cutscene tick without tearing it
+      down; popping resumes. Answers the recurring "how do I pause?"
+      / "can I layer a dialog over a cutscene?" questions without Lua
+      globals. Builds on the psyqo Scene-stack primitive we currently
+      underuse. `Game.PushState(name)` / `Game.PopState()` Lua API;
+      transitions emit `onStateEnter(name, reason)` /
+      `onStateExit(name, reason)` callbacks. **[runtime]**
+
+- [ ] **Camera rig abstraction with blending.** Decouple camera config
+      from `PS1Player`: `CameraRig` is a ~32-byte struct (position
+      offset `Vec3`, follow speed fp12, projH int16, mode enum) and
+      `CameraManager` blends between rigs over N frames via
+      `Camera.BlendTo(rig, frames, easing)`. Rooms, triggers, and
+      cutscenes declare a preferred rig; switching is a data change,
+      not a code branch. Unlocks Resident Evil-style fixed-angle room
+      cameras, cinematic rail cameras, and smooth cuts between them
+      without any Lua camera-math loops. Subsumes the "Camera modes
+      (1st/3rd/Orbit)" section above — those become specific built-in
+      rigs, not three separate code paths. **[runtime]**
+
+**Deferred for now, logged for future signals:**
+
+- *Pawn / controller / movement-component split (UE-style).*
+  Architectural win but premature without a second controller use case
+  (AI-possessed enemies, spectator cam). Revisit when one emerges.
+- *Event bus / delegate publish-subscribe.* Good shape but overlaps
+  with coroutines (Phase 2.5 above) and `Entity.Send` messaging;
+  low net gain right now.
+- *Ability struct (cooldown + cost + can-activate).* Phase 2.6 covers
+  a richer version via GAS-lite — no need for a lean duplicate here.
+- *Movement modes (Walk/Fall/Swim/Climb).* Useful but every game wants
+  its own mode set; better authored per-game in Lua on top of
+  `Physics.Raycast` + coroutines.
+- *Nav layer bitmasks.* Worthwhile once non-flat nav (Phase 2 bullet 7)
+  lands; depends on that data shape.
+- *Animation parameter caching (playhead / remaining / will-end).*
+  Small API surface; add when the first real script asks for it.
+
+**Cross-cutting north star (not a bullet, a reminder):** both UE and
+Godot expose movement, input, and interaction as *components* that
+plug onto a minimal entity. PS1Godot should trend in this direction in
+Phase 2.6+ rather than pile features onto `PS1Player`. Don't refactor
+preemptively, but when a second use case appears for the same feature,
+prefer extracting a component over parameterizing the host node.
 
 **Done when:** a procedural/dynamic game (voxel sandbox, roguelite, survival
 prototype) authored only in Godot + Lua runs in PCSX-Redux at playable
