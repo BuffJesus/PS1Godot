@@ -66,7 +66,17 @@ public:
 
 private:
     static constexpr int MAX_SEQUENCES = 8;
-    static constexpr int MAX_CHANNELS = 16;
+    // Matches SPU voice cap (audiomanager.hh MAX_VOICES=24). Voice
+    // reservation is dynamic per-scene — scenes that only declare N
+    // music channels still leave (24-N) voices for SFX, so this cap
+    // doesn't starve SFX in practice. IMPORTANT: bumping this value
+    // changes the layout of SceneManager (which owns MusicSequencer).
+    // The psxsplash Makefile doesn't track header deps, so a naked
+    // `make all` after editing this constant leaves stale .o files
+    // compiled against the old size → ABI mismatch between TUs → GPU
+    // state corruption → crash in sendPrimitive<FastFill> on the first
+    // frame. Always `make clean && make` after touching this.
+    static constexpr int MAX_CHANNELS = 24;
 
     struct Sequence {
         const MusicSequenceHeader *header;
