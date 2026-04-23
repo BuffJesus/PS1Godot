@@ -84,16 +84,22 @@ public partial class PS1GodotPlugin : EditorPlugin
     {
         if (_uiCanvasEditor == null) return;
         PS1UICanvas? canvas = null;
+        Node? selectedUINode = null;
         foreach (var n in EditorInterface.Singleton.GetSelection().GetSelectedNodes())
         {
-            if (n is PS1UICanvas c) { canvas = c; break; }
-            if (n is PS1UIElement el && el.GetParent() is PS1UICanvas parent)
+            if (n is PS1UICanvas c) { canvas = c; selectedUINode = c; break; }
+            // Walk up the tree to find an owning PS1UICanvas — works
+            // for any PS1UI* descendant (element, HBox, VBox, etc.)
+            // now that containers can nest arbitrarily deep.
+            Node? walker = n;
+            while (walker != null)
             {
-                canvas = parent;
-                break;
+                if (walker is PS1UICanvas parent) { canvas = parent; break; }
+                walker = walker.GetParent();
             }
+            if (canvas != null) { selectedUINode = n; break; }
         }
-        _uiCanvasEditor.SetSelectedCanvas(canvas);
+        _uiCanvasEditor.SetSelection(canvas, selectedUINode);
     }
 
     private void OnSceneChanged(Node sceneRoot)
