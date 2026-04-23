@@ -19,8 +19,11 @@ namespace PS1Godot.Exporter;
 // dense. The mapping happens here at export time.
 public static class PS1MSerializer
 {
-    // Maximum channels per sequence (matches MusicSequencer::MAX_CHANNELS).
-    public const int MaxChannels = 8;
+    // Maximum channels per sequence (matches MusicSequencer::MAX_CHANNELS
+    // in psxsplash-main/src/musicsequencer.hh). Runtime also caps voice
+    // reservation at MAX_VOICES=24 (audiomanager.hh), so even the full 16
+    // channels leave 8 voices free for SFX.
+    public const int MaxChannels = 16;
 
     // BPM used when the source MIDI carries no tempo meta event AND the
     // user didn't override it. 120 is the SMF default.
