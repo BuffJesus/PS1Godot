@@ -233,6 +233,9 @@ void LuaAPI::RegisterAll(psyqo::Lua& L, SceneManager* scene, CutscenePlayer* cut
     L.push(Camera_Shake);
     L.setField(-2, "Shake");
 
+    L.push(Camera_ShakeRaw);
+    L.setField(-2, "ShakeRaw");
+
     L.setGlobal("Camera");
     
     // ========================================================================
@@ -1792,6 +1795,19 @@ int LuaAPI::Camera_Shake(lua_State* L) {
     psyqo::Lua lua(L);
     if (!s_sceneManager) return 0;
     psyqo::FixedPoint<12> intensity = readFP(lua, 1);
+    int frames = static_cast<int>(lua.toNumber(2));
+    s_sceneManager->getCamera().Shake(intensity, frames);
+    return 0;
+}
+
+int LuaAPI::Camera_ShakeRaw(lua_State* L) {
+    psyqo::Lua lua(L);
+    if (!s_sceneManager) return 0;
+    // Lua integer → raw FP12 directly, skipping the readFP multiply-by-
+    // 4096 that's baked into Camera.Shake. Lets psxlua callers get sub-
+    // integer shake intensities without parsing decimal literals.
+    psyqo::FixedPoint<12> intensity;
+    intensity.value = static_cast<int32_t>(lua.toNumber(1));
     int frames = static_cast<int>(lua.toNumber(2));
     s_sceneManager->getCamera().Shake(intensity, frames);
     return 0;

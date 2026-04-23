@@ -247,6 +247,13 @@ private:
     // decaying linearly to zero. `intensity` is FP12 max offset in world
     // units (e.g., 0.2 for a punchy hit, 0.05 for footstep ambience).
     static int Camera_Shake(lua_State* L);
+
+    // Camera.ShakeRaw(rawFp12, frames) -> nil
+    // Same as Camera.Shake but takes intensity as a raw FP12 integer
+    // (4096 = 1.0 world unit). Useful from psxlua scripts that can't
+    // parse decimal literals like 0.04 — pass 164 to get 164/4096 ≈
+    // 0.04 world units of shake.
+    static int Camera_ShakeRaw(lua_State* L);
     
     // ========================================================================
     // AUDIO API - Sound playback (placeholder for SPU)

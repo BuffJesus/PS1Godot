@@ -111,18 +111,17 @@ end
 -- actual playback length + LINE_TAIL when audio is present. This way
 -- the player always hears the full voice clip before the box vanishes.
 --
--- Scene.PauseFor gives a small impact cue on every reveal — this is
--- the "press X to continue" juice that makes dialog land instead of
--- just appearing. 3 frames ≈ 50 ms is enough to feel without
--- delaying the audio clip. (Camera.Shake would pair well but its
--- intensity arg is FP12 and psxlua can't parse decimal literals
--- like 0.04; expose a Camera.ShakeRaw(rawFp12, frames) helper or
--- pass a Convert.IntToFp-based expression when we need the shake.)
+-- Camera.ShakeRaw + Scene.PauseFor give a small impact cue on every
+-- reveal. 164 raw FP12 = 164/4096 ≈ 0.04 world units (tiny rattle);
+-- 8-frame decay fades it out. Scene.PauseFor(3) freezes gameplay for
+-- ~50 ms so the player reads the reveal. Using ShakeRaw instead of
+-- Shake because psxlua can't parse decimal literals like 0.04.
 local function showLine(line)
     if dialogBodyEl >= 0 then
         UI.SetText(dialogBodyEl, line.text)
         UI.SetCanvasVisible(dialogCanvas, true)
     end
+    Camera.ShakeRaw(164, 8)
     Scene.PauseFor(3)
     local hold = LINE_MIN_HOLD
     if line.clip ~= nil then
