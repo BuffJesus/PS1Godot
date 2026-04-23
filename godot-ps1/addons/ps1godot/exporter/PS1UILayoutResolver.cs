@@ -98,6 +98,12 @@ public static class PS1UILayoutResolver
             case PS1UISpacer:
                 // Top-level spacer has no effect (canvas isn't a layout axis).
                 break;
+            case PS1UIModel:
+                // PS1UIModel is handled by SceneCollector.CollectUIModels in a
+                // parallel pass — it doesn't participate in UI-element layout.
+                // Silently skip here so it doesn't trip the "unknown widget"
+                // warning below.
+                break;
             default:
                 GD.PushWarning($"[PS1Godot] PS1UICanvas '{_canvas.Name}' has child '{child.Name}' " +
                                $"of type {child.GetType().Name} — not a PS1 UI widget, ignored.");
