@@ -10,6 +10,36 @@
 #include "gameobject.hh"
 #include "gtemath.hh"
 
+// Naive needle-in-haystack. Freestanding build doesn't pull <string.h>,
+// and this only runs on load errors so a straight two-pointer scan is
+// fine — the error strings are short.
+static bool containsSubstr(const char* haystack, const char* needle) {
+    if (!haystack || !needle) return false;
+    for (const char* h = haystack; *h; h++) {
+        const char* a = h;
+        const char* b = needle;
+        while (*a && *b && *a == *b) { a++; b++; }
+        if (!*b) return true;
+    }
+    return false;
+}
+
+// Print a Lua load-error with an actionable hint when psxlua's NOPARSER
+// tokenizer rejects a literal the Godot exporter-side rewriter should
+// have caught (decimal literals, rarely scientific notation). Authors
+// hitting this today either (a) have a form the rewriter skips —
+// scientific `1e-5`, bare trailing dot `5.`, `.5` — or (b) edited the
+// splashpack out-of-band without re-exporting.
+static void printLuaLoadError(const char* errMsg, int fileIndex) {
+    printf("Lua load error (asset %d): %s\n", fileIndex, errMsg ? errMsg : "(null)");
+    if (containsSubstr(errMsg, "malformed number")) {
+        printf("  hint: psxlua tokenizer is integer-only. Godot exporter auto-rewrites\n"
+               "        '0.06' -> FixedPoint.newFromRaw(246). It skips scientific form\n"
+               "        (1e-5), '.5', and '5.' — write 0.5, 5.0, or\n"
+               "        FixedPoint.newFromRaw(raw_fp12) manually. raw_fp12 = int*4096 + frac.\n");
+    }
+}
+
 // OOM-guarded allocator for Lua. The linker redirects luaI_realloc
 // here instead of straight to psyqo_realloc, so we can log before
 // returning NULL.
@@ -317,7 +347,7 @@ void psxsplash::Lua::LoadLuaFile(const char* code, size_t len, int index) {
     char filename[32];
     snprintf(filename, sizeof(filename), "lua_asset:%d", index);
     if (L.loadBuffer(code, len, filename) != LUA_OK) {
-        printf("Lua error: %s\n", L.toString(-1));
+        printLuaLoadError(L.toString(-1), index);
         L.pop();
         return;
     }
@@ -466,11 +496,11 @@ void psxsplash::Lua::RegisterGameObject(GameObject* go) {
 
                 L.pop(2); // pop nil and env
             } else {
-                printf("Lua error: %s\n", L.toString(-1));
+                printLuaLoadError(L.toString(-1), go->luaFileIndex);
                 L.pop(2); // pop error msg and env
             }
         } else {
-            printf("Lua error: %s\n", L.toString(-1));
+            printLuaLoadError(L.toString(-1), go->luaFileIndex);
             L.pop(); // pop error msg
         }
     }
