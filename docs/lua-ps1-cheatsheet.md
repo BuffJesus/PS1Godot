@@ -110,3 +110,10 @@ feedback is visual, not console.
 `godot-ps1/demo/scripts/combat_showcase.lua` applies every convention
 above. Copy-paste snippets from it when starting a new gameplay
 script — it's the closest thing to a known-good template.
+
+## Editor setup
+
+Godot itself opens `.lua` files as plain text. Point it at an external
+editor (Rider, VS Code, …) and run the API stub generator — see
+[`docs/lua-editor-setup.md`](lua-editor-setup.md). 5 minutes of config
+gets you highlighting + PS1Godot-aware completion.

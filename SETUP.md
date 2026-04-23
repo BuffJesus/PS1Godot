@@ -106,6 +106,17 @@ If `make` isn't available, install [MSYS2](https://www.msys2.org/) and add
    - Or simpler: use the Godot plugin's own "Play" button once the
      `PS1GodotPlugin` is enabled in Godot.
 
+### 5. Configure the external editor for Lua scripts
+
+Godot's built-in editor opens `.lua` files as plain text — no
+highlighting or completion. Point Godot at Rider (or VS Code, or your
+preferred editor) so double-clicking a Lua script pops it open with
+full language support, and run the API-stub generator so the external
+editor picks up PS1Godot-specific completions.
+
+See [`docs/lua-editor-setup.md`](docs/lua-editor-setup.md) for the
+step-by-step — takes about 5 minutes.
+
 ## Per-clone bootstrap
 
 ```bash
