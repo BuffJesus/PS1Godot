@@ -110,11 +110,19 @@ end
 -- auto-hide — LINE_MIN_HOLD for silent/missing clips, or the clip's
 -- actual playback length + LINE_TAIL when audio is present. This way
 -- the player always hears the full voice clip before the box vanishes.
+--
+-- Uses Camera.Shake + Scene.PauseFor for a small impact cue on every
+-- reveal — this is the "press X to continue" juice that makes dialog
+-- land instead of just appearing. Intensity is tiny (0.04 world units,
+-- decaying over 8 frames) and the pause is 3 frames (~50 ms); enough
+-- for the player to feel it without delaying the audio clip.
 local function showLine(line)
     if dialogBodyEl >= 0 then
         UI.SetText(dialogBodyEl, line.text)
         UI.SetCanvasVisible(dialogCanvas, true)
     end
+    Camera.Shake(0.04, 8)
+    Scene.PauseFor(3)
     local hold = LINE_MIN_HOLD
     if line.clip ~= nil then
         duckMusic()
