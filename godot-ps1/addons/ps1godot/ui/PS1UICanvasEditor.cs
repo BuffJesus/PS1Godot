@@ -72,6 +72,19 @@ public partial class PS1UICanvasEditor : VBoxContainer
     private Vector2I _dragNodeStart;
     private Vector2I _dragNodeSizeStart;
 
+    // One SubViewport per PS1UIModel. Each holds a Camera3D and a
+    // duplicate of the node's Target mesh; the viewport auto-renders
+    // (UpdateMode.Always) and its texture is drawn into the preview
+    // rect, so authors see the actual model they're positioning.
+    private sealed class ModelPreview
+    {
+        public SubViewport Viewport = null!;
+        public Camera3D Camera = null!;
+        public Node3D ModelRoot = null!;
+        public string LastTargetPath = "";
+    }
+    private readonly System.Collections.Generic.Dictionary<PS1UIModel, ModelPreview> _modelPreviews = new();
+
     public PS1UICanvasEditor()
     {
         Name = "PS1 UI";
@@ -87,13 +100,21 @@ public partial class PS1UICanvasEditor : VBoxContainer
     public void SetSelection(PS1UICanvas? canvas, Node? node)
     {
         bool changed = _selectedCanvas != canvas || _selectedNode != node;
+        bool canvasSwitched = _selectedCanvas != canvas;
         _selectedCanvas = canvas;
         _selectedNode   = node;
+        if (canvasSwitched) ClearModelPreviews();
         if (changed)
         {
             RefreshHeader();
             _canvasArea?.QueueRedraw();
         }
+    }
+
+    public override void _ExitTree()
+    {
+        ClearModelPreviews();
+        base._ExitTree();
     }
 
     // Back-compat for the prior one-arg signature used by the plugin.
@@ -274,9 +295,20 @@ public partial class PS1UICanvasEditor : VBoxContainer
             if (rect is (int rx, int ry, int rw, int rh))
             {
                 var color = child is PS1UIModel ? ModelOutline : ContainerOutline;
-                _canvasArea!.DrawRect(
-                    new Rect2(rx * z, ry * z, rw * z, rh * z),
-                    color, filled: false, width: 1f);
+                var rectPx = new Rect2(rx * z, ry * z, rw * z, rh * z);
+
+                // For PS1UIModel, render the actual target mesh inside
+                // the rect via a per-node SubViewport. Drawn first so
+                // the outline stays on top.
+                if (child is PS1UIModel mdlPreview && rw > 0 && rh > 0)
+                {
+                    var prev = EnsureModelPreview(mdlPreview, (int)rectPx.Size.X, (int)rectPx.Size.Y);
+                    var tex = prev.Viewport.GetTexture();
+                    if (tex != null)
+                        _canvasArea!.DrawTextureRect(tex, rectPx, tile: false);
+                }
+
+                _canvasArea!.DrawRect(rectPx, color, filled: false, width: 1f);
 
                 // Type/name label above the top-left corner for clarity.
                 var font = ThemeDB.FallbackFont;
@@ -592,7 +624,12 @@ public partial class PS1UICanvasEditor : VBoxContainer
 
             if (_dragMode == DragMode.Move)
             {
-                SetNodeXY(_selectedNode, _dragNodeStart.X + dxPx, _dragNodeStart.Y + dyPx);
+                // X/Y are insets from the anchor edge (see PS1UIAnchor docstring).
+                // For far-side anchors (Right*/Bottom*), "increase inset" means
+                // "move away from that edge toward center" which is the OPPOSITE
+                // of the mouse direction. Flip the delta so drag follows cursor.
+                var (effDx, effDy) = AnchorAdjustDelta(GetNodeAnchor(_selectedNode), dxPx, dyPx);
+                SetNodeXY(_selectedNode, _dragNodeStart.X + effDx, _dragNodeStart.Y + effDy);
             }
             else if (_dragMode == DragMode.ResizeBR)
             {
@@ -695,6 +732,112 @@ public partial class PS1UICanvasEditor : VBoxContainer
             case PS1UISizeBox sb: sb.WidthOverride = w; sb.HeightOverride = h; break;
             case PS1UIModel mdl:  mdl.Width = w; mdl.Height = h; break;
         }
+    }
+
+    private static PS1UIAnchor GetNodeAnchor(Node n) => n switch
+    {
+        PS1UIElement el => el.Anchor,
+        PS1UIHBox hb    => hb.Anchor,
+        PS1UIVBox vb    => vb.Anchor,
+        PS1UIOverlay ov => ov.Anchor,
+        PS1UISizeBox sb => sb.Anchor,
+        PS1UIModel mdl  => mdl.Anchor,
+        _               => PS1UIAnchor.Custom,
+    };
+
+    // Lazy-build the SubViewport + Camera3D + duplicated target mesh for
+    // `mdl`. Reuses the viewport across redraws; only rebuilds the mesh
+    // when Target changes. Size tracks the rect pixel extent so the
+    // rendered preview is sharp at the current zoom. Camera is updated
+    // on every call so OrbitYaw/Pitch/Distance edits reflect immediately.
+    private ModelPreview EnsureModelPreview(PS1UIModel mdl, int pixelW, int pixelH)
+    {
+        if (!_modelPreviews.TryGetValue(mdl, out var prev))
+        {
+            prev = new ModelPreview
+            {
+                Viewport = new SubViewport
+                {
+                    Disable3D = false,
+                    TransparentBg = true,
+                    RenderTargetUpdateMode = SubViewport.UpdateMode.Always,
+                    Size = new Vector2I(Mathf.Max(1, pixelW), Mathf.Max(1, pixelH)),
+                    OwnWorld3D = true,
+                },
+                ModelRoot = new Node3D(),
+                Camera = new Camera3D { Current = true, Fov = 40f, Near = 0.05f, Far = 1000f },
+            };
+            prev.Viewport.AddChild(prev.ModelRoot);
+            prev.Viewport.AddChild(prev.Camera);
+            AddChild(prev.Viewport);
+            _modelPreviews[mdl] = prev;
+        }
+
+        var desiredSize = new Vector2I(Mathf.Max(1, pixelW), Mathf.Max(1, pixelH));
+        if (prev.Viewport.Size != desiredSize) prev.Viewport.Size = desiredSize;
+
+        // Rebuild the mesh whenever the Target NodePath changes (including
+        // the first time). GetNodeOrNull is relative to mdl; we also fall
+        // back to the edited scene root so absolute paths work.
+        string targetStr = mdl.Target.ToString();
+        if (targetStr != prev.LastTargetPath)
+        {
+            foreach (var c in prev.ModelRoot.GetChildren()) c.QueueFree();
+            Node? tgt = mdl.GetNodeOrNull(mdl.Target);
+            if (tgt == null)
+            {
+                var root = GetTree()?.EditedSceneRoot;
+                if (root != null) tgt = root.GetNodeOrNull(mdl.Target);
+            }
+            if (tgt is Node3D n3d)
+            {
+                var dup = (Node3D)n3d.Duplicate((int)DuplicateFlags.UseInstantiation);
+                dup.Position = Vector3.Zero;
+                dup.Rotation = Vector3.Zero;
+                dup.Visible = true;
+                prev.ModelRoot.AddChild(dup);
+            }
+            prev.LastTargetPath = targetStr;
+        }
+
+        // Orbit: camera sits at yaw(Y) * pitch(X) * (0,0,distance) and
+        // looks at the model origin. Mirrors the runtime setup in
+        // renderer.cpp:renderUIModels so the preview matches PSX framing.
+        float yaw = Mathf.DegToRad(mdl.OrbitYawDegrees);
+        float pitch = Mathf.DegToRad(mdl.OrbitPitchDegrees);
+        float dist = Mathf.Max(0.01f, mdl.OrbitDistance);
+        var orbit = Basis.FromEuler(new Vector3(pitch, yaw, 0f));
+        var camPos = orbit * new Vector3(0f, 0f, dist);
+        prev.Camera.Transform = new Transform3D(Basis.Identity, camPos).LookingAt(Vector3.Zero, Vector3.Up);
+        return prev;
+    }
+
+    // Free all preview viewports — called when the selected canvas
+    // changes or the dock exits, to avoid leaking SubViewports of models
+    // that are no longer visible.
+    private void ClearModelPreviews()
+    {
+        foreach (var kv in _modelPreviews)
+        {
+            if (GodotObject.IsInstanceValid(kv.Value.Viewport))
+                kv.Value.Viewport.QueueFree();
+        }
+        _modelPreviews.Clear();
+    }
+
+    // Flip the mouse delta on any axis whose inset runs opposite the screen
+    // direction. Right* anchors: X counts leftward from the right edge, so
+    // dragging right (dxPx > 0) needs to DECREASE X. Bottom* anchors: Y
+    // counts upward from the bottom edge, so dragging down (dyPx > 0) needs
+    // to DECREASE Y.
+    private static (int dx, int dy) AnchorAdjustDelta(PS1UIAnchor anchor, int dxPx, int dyPx)
+    {
+        int ex = dxPx, ey = dyPx;
+        if (anchor is PS1UIAnchor.TopRight or PS1UIAnchor.CenterRight or PS1UIAnchor.BottomRight)
+            ex = -dxPx;
+        if (anchor is PS1UIAnchor.BottomLeft or PS1UIAnchor.BottomCenter or PS1UIAnchor.BottomRight)
+            ey = -dyPx;
+        return (ex, ey);
     }
 
     // ─── Add-node dropdown ─────────────────────────────────────────
