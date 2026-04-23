@@ -69,8 +69,10 @@ public partial class PS1UIModel : Node
     [Export(PropertyHint.Range, "0.1,100,0.1,suffix:m")]
     public float OrbitDistance { get; set; } = 3f;
 
-    // Projection H per-model. Narrower H (240+) = tighter FOV / more
-    // telephoto look. Default 240 matches PS1ModelFramer.
+    // Projection H per-model. Auto-derived at export from Width +
+    // OrbitDistance + target-mesh extent so the model fills the rect;
+    // this value is only used as a fallback when the exporter can't
+    // resolve the target's bounding box.
     [Export(PropertyHint.Range, "1,1024,1")]
     public int ProjectionH { get; set; } = 240;
 

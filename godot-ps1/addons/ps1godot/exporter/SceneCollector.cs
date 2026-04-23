@@ -781,6 +781,40 @@ public static class SceneCollector
         short pitchFp10 = DegToFp10(m.OrbitPitchDegrees);
         int distFp12    = (int)Mathf.Round(m.OrbitDistance * 4096f);
 
+        // Auto-derive ProjectionH so the target mesh's bounding radius
+        // projects to roughly half the rect width — i.e., resizing the
+        // rect in the UI Designer resizes the model to fit.
+        //
+        // Derivation: for a vertex at view-space (meshHalfExtent_m, 0, 0)
+        // with the center of the model at (0, 0, orbitDist_m):
+        //   Vx_gte       = meshHalfExtent_m * 4096 / gteScaling   (vertex units, PSXTrig)
+        //   TRZ          = orbitDist_m * 4096                     (no gteScaling — matches distFp12 above)
+        //   SX_offset_px = H * Vx_gte / TRZ
+        //                = H * meshHalfExtent_m / (gteScaling * orbitDist_m)
+        // For SX_offset_px = rectW/2:
+        //   H = (rectW/2) * gteScaling * orbitDist_m / meshHalfExtent_m
+        //
+        // Falls back to m.ProjectionH if we can't resolve the target's
+        // AABB (e.g., target is a skinned mesh or unresolved).
+        float meshHalfExtent = 0f;
+        if (targetIdx >= 0 && targetIdx < data.Objects.Count)
+        {
+            var size = data.Objects[targetIdx].LocalAabb.Size;
+            meshHalfExtent = Mathf.Max(Mathf.Max(size.X, size.Y), size.Z) * 0.5f;
+        }
+        ushort projectionH;
+        if (meshHalfExtent > 1e-4f && m.Width > 0 && m.OrbitDistance > 1e-4f)
+        {
+            float h = (m.Width * 0.5f) * data.GteScaling * m.OrbitDistance / meshHalfExtent;
+            projectionH = (ushort)Mathf.Clamp(Mathf.RoundToInt(h), 1, 65535);
+            GD.Print($"[PS1Godot] UIModel '{mName}': rectW={m.Width} orbit={m.OrbitDistance} " +
+                     $"halfExtent={meshHalfExtent:F3}m → projectionH={projectionH}");
+        }
+        else
+        {
+            projectionH = (ushort)Mathf.Clamp(m.ProjectionH, 1, 65535);
+        }
+
         models.Add(new UIModelRecord
         {
             Name = mName,
@@ -793,7 +827,7 @@ public static class SceneCollector
             OrbitYawFp10 = yawFp10,
             OrbitPitchFp10 = pitchFp10,
             OrbitDistanceFp12 = distFp12,
-            ProjectionH = (ushort)Mathf.Clamp(m.ProjectionH, 1, 1024),
+            ProjectionH = projectionH,
         });
     }
 

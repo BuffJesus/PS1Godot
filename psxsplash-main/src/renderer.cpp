@@ -127,7 +127,8 @@ void psxsplash::Renderer::processTriangle(
     Tri& tri, int32_t fogFarSZ,
     psyqo::OrderingTable<ORDERING_TABLE_SIZE>& ot,
     psyqo::BumpAllocator<BUMP_ALLOCATOR_SIZE>& balloc,
-    int depth) {
+    int depth,
+    bool forceFrontOT) {
 
     writeSafe<PseudoRegister::V0>(tri.v0);
     writeSafe<PseudoRegister::V1>(tri.v1);
@@ -146,9 +147,29 @@ void psxsplash::Renderer::processTriangle(
     // Entirely beyond fog wall → invisible.
     if (fogFarSZ > 0 && sz0 > fogFarSZ && sz1 > fogFarSZ && sz2 > fogFarSZ) return;
 
-    int32_t zIndex = eastl::max(eastl::max(sz0, sz1), sz2);
-    if (zIndex >= (int32_t)ORDERING_TABLE_SIZE) return;
-    if (zIndex < 1) zIndex = 1;
+    // OT slot assignment.
+    //  - Normal world polys: zIndex = maxSZ, offset by UI_RESERVED_SLOTS
+    //    so the front of the table is reserved for UI models.
+    //  - UI model polys: zIndex = (maxSZ - UI_SZ_BIAS) / UI_SZ_COMPRESSION
+    //    clamped to [1, UI_RESERVED_SLOTS-1]. Empirically, for a UI model
+    //    orbited at a typical author-chosen distance, rtpt's post-RTPT SZ
+    //    clusters around ~20000 with ±~2000 spread (4000-wide range for a
+    //    radius-1 mesh). Biasing by 18000 and shifting right by 6 maps
+    //    that onto slots [1, ~63], preserving within-model depth order.
+    static constexpr int32_t UI_RESERVED_SLOTS = 64;
+    static constexpr int32_t UI_SZ_BIAS        = 18000;
+    static constexpr int32_t UI_SZ_SHIFT       = 6;
+    int32_t rawZ = eastl::max(eastl::max(sz0, sz1), sz2);
+    int32_t zIndex;
+    if (forceFrontOT) {
+        zIndex = (rawZ - UI_SZ_BIAS) >> UI_SZ_SHIFT;
+        if (zIndex < 1) zIndex = 1;
+        if (zIndex >= UI_RESERVED_SLOTS) zIndex = UI_RESERVED_SLOTS - 1;
+    } else {
+        zIndex = rawZ + UI_RESERVED_SLOTS;
+        if (zIndex >= (int32_t)ORDERING_TABLE_SIZE) return;
+        if (zIndex < UI_RESERVED_SLOTS + 1) zIndex = UI_RESERVED_SLOTS + 1;
+    }
 
     psyqo::Vertex projected[3];
     read<Register::SXY0>(&projected[0].packed);
@@ -217,8 +238,8 @@ void psxsplash::Renderer::processTriangle(
             childB.v2 = m; childB.uvC.u = mu; childB.uvC.v = mv; childB.colorC = mc;
         }
 
-        processTriangle(childA, fogFarSZ, ot, balloc, depth + 1);
-        processTriangle(childB, fogFarSZ, ot, balloc, depth + 1);
+        processTriangle(childA, fogFarSZ, ot, balloc, depth + 1, forceFrontOT);
+        processTriangle(childB, fogFarSZ, ot, balloc, depth + 1, forceFrontOT);
         return;
     }
 
@@ -1458,15 +1479,19 @@ void psxsplash::Renderer::renderUIModels(
         psyqo::Matrix33 finalRot;
         MatrixMultiplyGTE(viewRot, obj->rotation, &finalRot);
 
-        // 3. Place the target at view-space (0, 0, distance). The camera
-        //    sits "behind" the model at world position obj.pos + R_view^T *
-        //    (0, 0, -dist), so the target lands at view (0, 0, dist) and
-        //    the model fills the screen at the framing the author chose.
-        //    Vertices are object-local; GTE applies finalRot then adds
-        //    this translation, projecting via the model's H register.
+        // 3. Place the target at view-space (tx, ty, distance) so its
+        //    projected center lands at the author-picked pixel. Solving
+        //    SX = H*TX/SZ + OFX(=160) for TX at SZ≈distance gives
+        //    TX = (cx - 160) * distance / H (and likewise Y). Shifting
+        //    via TRX/TRY is depth-correct for flat HUD planes and
+        //    physically faithful foreshortening for orbited 3D meshes —
+        //    and avoids mutating OFX/OFY across the frame.
+        int32_t centerPxX = (int32_t)disk.screenX + (int32_t)disk.screenW / 2;
+        int32_t centerPxY = (int32_t)disk.screenY + (int32_t)disk.screenH / 2;
+        int32_t projH = disk.projectionH > 0 ? disk.projectionH : 1;
         psyqo::Vec3 viewPos;
-        viewPos.x.value = 0;
-        viewPos.y.value = 0;
+        viewPos.x.value = ((int32_t)(centerPxX - 160) * st.currentDistFp12) / projH;
+        viewPos.y.value = ((int32_t)(centerPxY - 120) * st.currentDistFp12) / projH;
         viewPos.z.value = st.currentDistFp12;
 
         // 4. Set per-model H, write GTE state, render polys.
@@ -1477,9 +1502,10 @@ void psxsplash::Renderer::renderUIModels(
         writeSafe<PseudoRegister::Rotation>(finalRot);
         writeSafe<PseudoRegister::Translation>(viewPos);
 
-        // UI models bypass fog (depth fade at HUD scale looks wrong).
+        // UI models bypass fog (depth fade at HUD scale looks wrong) and
+        // go in at OT slot 1 so they always draw over world geometry.
         for (uint16_t t = 0; t < obj->polyCount; t++) {
-            processTriangle(obj->polygons[t], 0, ot, balloc, 0);
+            processTriangle(obj->polygons[t], 0, ot, balloc, 0, true);
         }
     }
 
