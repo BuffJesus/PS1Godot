@@ -24,6 +24,7 @@ public partial class PS1GodotPlugin : EditorPlugin
     private const string AddSkinnedTestMenuLabel = "PS1Godot: Add Skinned Test Mesh (bullet 11 test asset)";
     private const string GenerateFontBitmapMenuLabel = "PS1Godot: Generate bitmap for selected PS1UIFontAsset";
     private const string RunMidiTestsMenuLabel = "PS1Godot: Run MIDI Serializer Tests";
+    private const string RunLuaRewriterTestsMenuLabel = "PS1Godot: Run Lua Decimal Rewriter Tests";
     private const string FrameModelMenuLabel = "PS1Godot: Frame Selected Model in Viewport";
 
     private PS1TriggerBoxGizmo? _triggerBoxGizmo;
@@ -43,6 +44,7 @@ public partial class PS1GodotPlugin : EditorPlugin
         AddToolMenuItem(AddSkinnedTestMenuLabel, Callable.From(OnAddSkinnedTestMesh));
         AddToolMenuItem(GenerateFontBitmapMenuLabel, Callable.From(OnGenerateFontBitmap));
         AddToolMenuItem(RunMidiTestsMenuLabel, Callable.From(OnRunMidiTests));
+        AddToolMenuItem(RunLuaRewriterTestsMenuLabel, Callable.From(OnRunLuaRewriterTests));
         AddToolMenuItem(FrameModelMenuLabel, Callable.From(OnFrameSelectedModel));
 
         _triggerBoxGizmo = new PS1TriggerBoxGizmo();
@@ -188,6 +190,11 @@ public partial class PS1GodotPlugin : EditorPlugin
     private void OnRunMidiTests()
     {
         MidiSerializerTests.RunAll();
+    }
+
+    private void OnRunLuaRewriterTests()
+    {
+        LuaDecimalRewriterTests.RunAll();
     }
 
     private void OnBuildPsxsplash()

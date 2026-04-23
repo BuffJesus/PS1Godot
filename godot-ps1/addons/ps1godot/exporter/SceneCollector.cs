@@ -1777,11 +1777,20 @@ public static class SceneCollector
             return -1;
         }
 
-        var bytes = System.Text.Encoding.UTF8.GetBytes(source);
+        // Rewrite decimal literals (0.06 → FixedPoint.newFromRaw(246)) so
+        // psxlua's integer-only NOPARSER tokenizer accepts the source. No-op
+        // on scripts that already use the raw/integer convention.
+        string rewritten = LuaDecimalRewriter.Rewrite(source);
+
+        var bytes = System.Text.Encoding.UTF8.GetBytes(rewritten);
         int idx = data.LuaFiles.Count;
         data.LuaFiles.Add(new LuaFileRecord { Bytes = bytes, SourcePath = path });
         cache[path] = idx;
-        GD.Print($"[PS1Godot] Lua on '{nodeLabel}': {path} ({bytes.Length} bytes, index {idx})");
+        int deltaBytes = bytes.Length - System.Text.Encoding.UTF8.GetByteCount(source);
+        string rewriteNote = deltaBytes != 0
+            ? $", decimals rewritten (+{deltaBytes} B)"
+            : "";
+        GD.Print($"[PS1Godot] Lua on '{nodeLabel}': {path} ({bytes.Length} bytes, index {idx}{rewriteNote})");
         return idx;
     }
 
