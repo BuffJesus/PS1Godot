@@ -19,6 +19,7 @@
 [ext_resource type="Script" uid="uid://3bx6n5sx7krl" path="res://addons/ps1godot/nodes/PS1MusicChannel.cs" id="17_mchan"]
 [ext_resource type="Script" uid="uid://c2oekhtvjyqlt" path="res://addons/ps1godot/nodes/PS1MusicSequence.cs" id="18_mseq"]
 [ext_resource type="Resource" uid="uid://bkwwgafcy6isa" path="res://addons/ps1godot/fonts/vt323_font.tres" id="19_font_vt323"]
+[ext_resource type="Script" uid="uid://cgsx040a48qh5" path="res://addons/ps1godot/nodes/PS1UIModel.cs" id="20_uimodel"]
 
 [sub_resource type="Resource" id="Clip_chime"]
 script = ExtResource("2_clip")
@@ -191,6 +192,21 @@ ThemeSlot = 1
 Text = "HeadSpider Studios"
 Font = ExtResource("19_font_vt323")
 TextAlign = 1
+
+[node name="SpiderModelPreview" type="Node" parent="BrandCanvas" unique_id=900000001]
+script = ExtResource("20_uimodel")
+ModelName = "splash_spider"
+VisibleOnLoad = true
+Target = NodePath("../../HeadSpider")
+Anchor = 7
+X = 8
+Y = 8
+Width = 96
+Height = 96
+OrbitYawDegrees = 0.0
+OrbitPitchDegrees = -10.0
+OrbitDistance = 5.0
+ProjectionH = 240
 
 [node name="LicensedCanvas" type="Node" parent="." unique_id=510065468]
 script = ExtResource("8_uican")

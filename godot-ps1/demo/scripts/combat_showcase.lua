@@ -14,9 +14,15 @@
 --   3. Select any object you want to host this script (e.g., the green
 --      Cube) and set its ScriptFile to this file.
 --   4. At runtime:
---        Square   — spawn a bullet, Raycast-check every frame for hits
---        Circle   — melee swing: OverlapBox in front of player, crunch
---        Triangle — lock onto nearest enemy (marker via SetTag change)
+--        L2 — spawn a bullet, Raycast-check every frame for hits
+--        R2 — melee swing: OverlapBox in front of player, crunch
+--        R3 — lock onto nearest enemy (marker via SetTag change)
+--
+--      L2/R2/R3 are the only buttons free on both digital and analog
+--      pads: Square is sprint-on-digital, L3 is sprint-on-analog,
+--      L1/R1 are rotation-on-digital, Cross is jump, Triangle is
+--      interact (used by test_logger dialog). L2/R2/R3 survive both
+--      modes and don't conflict with any built-in control.
 --
 -- The script is deliberately long-form and commented — the goal is to
 -- be a copy-paste reference for the melee/shooter authoring pattern.
@@ -172,7 +178,7 @@ function onUpdate(self, dt)
     -- Single-frame press edges via Input.IsPressed (misnamed: it's
     -- actually the JustPressed / wasButtonPressed variant — see
     -- Input.IsHeld for the continuous flag).
-    if Input.IsPressed(Input.SQUARE)   then spawnBullet() end
-    if Input.IsPressed(Input.CIRCLE)   then meleeSwing()  end
-    if Input.IsPressed(Input.TRIANGLE) then toggleLock()  end
+    if Input.IsPressed(Input.L2) then spawnBullet() end
+    if Input.IsPressed(Input.R2) then meleeSwing()  end
+    if Input.IsPressed(Input.R3) then toggleLock()  end
 end
