@@ -25,6 +25,8 @@ public partial class PS1GodotPlugin : EditorPlugin
     private const string GenerateFontBitmapMenuLabel = "PS1Godot: Generate bitmap for selected PS1UIFontAsset";
     private const string RunMidiTestsMenuLabel = "PS1Godot: Run MIDI Serializer Tests";
     private const string RunLuaRewriterTestsMenuLabel = "PS1Godot: Run Lua Decimal Rewriter Tests";
+    private const string RegenLuaStubsMenuLabel = "PS1Godot: Regenerate Lua API stubs";
+    private const string RunStubGenTestsMenuLabel = "PS1Godot: Run Lua API Stub Generator Tests";
     private const string FrameModelMenuLabel = "PS1Godot: Frame Selected Model in Viewport";
 
     private PS1TriggerBoxGizmo? _triggerBoxGizmo;
@@ -45,6 +47,8 @@ public partial class PS1GodotPlugin : EditorPlugin
         AddToolMenuItem(GenerateFontBitmapMenuLabel, Callable.From(OnGenerateFontBitmap));
         AddToolMenuItem(RunMidiTestsMenuLabel, Callable.From(OnRunMidiTests));
         AddToolMenuItem(RunLuaRewriterTestsMenuLabel, Callable.From(OnRunLuaRewriterTests));
+        AddToolMenuItem(RegenLuaStubsMenuLabel, Callable.From(OnRegenLuaStubs));
+        AddToolMenuItem(RunStubGenTestsMenuLabel, Callable.From(OnRunStubGenTests));
         AddToolMenuItem(FrameModelMenuLabel, Callable.From(OnFrameSelectedModel));
 
         _triggerBoxGizmo = new PS1TriggerBoxGizmo();
@@ -195,6 +199,16 @@ public partial class PS1GodotPlugin : EditorPlugin
     private void OnRunLuaRewriterTests()
     {
         LuaDecimalRewriterTests.RunAll();
+    }
+
+    private void OnRegenLuaStubs()
+    {
+        LuaApiStubGenerator.Run();
+    }
+
+    private void OnRunStubGenTests()
+    {
+        LuaApiStubGeneratorTests.RunAll();
     }
 
     private void OnBuildPsxsplash()
