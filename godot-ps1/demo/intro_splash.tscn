@@ -90,76 +90,12 @@ BaseNoteMidi = 69
 Volume = 127
 metadata/_custom_type_script = "uid://3bx6n5sx7krl"
 
-[sub_resource type="Resource" id="Chan_filler3"]
-script = ExtResource("17_mchan")
-MidiChannel = 3
-AudioClipName = "splash_chime"
-BaseNoteMidi = 69
-Volume = 80
-metadata/_custom_type_script = "uid://3bx6n5sx7krl"
-
-[sub_resource type="Resource" id="Chan_filler5"]
-script = ExtResource("17_mchan")
-MidiChannel = 5
-AudioClipName = "splash_chime"
-BaseNoteMidi = 69
-Volume = 80
-metadata/_custom_type_script = "uid://3bx6n5sx7krl"
-
-[sub_resource type="Resource" id="Chan_filler7"]
-script = ExtResource("17_mchan")
-MidiChannel = 7
-AudioClipName = "splash_chime"
-BaseNoteMidi = 69
-Volume = 70
-metadata/_custom_type_script = "uid://3bx6n5sx7krl"
-
-[sub_resource type="Resource" id="Chan_filler8"]
-script = ExtResource("17_mchan")
-MidiChannel = 8
-AudioClipName = "splash_chime"
-BaseNoteMidi = 69
-Volume = 70
-metadata/_custom_type_script = "uid://3bx6n5sx7krl"
-
-[sub_resource type="Resource" id="Chan_filler9"]
-script = ExtResource("17_mchan")
-MidiChannel = 9
-AudioClipName = "splash_chime"
-BaseNoteMidi = 69
-Volume = 70
-metadata/_custom_type_script = "uid://3bx6n5sx7krl"
-
-[sub_resource type="Resource" id="Chan_filler10"]
-script = ExtResource("17_mchan")
-MidiChannel = 10
-AudioClipName = "splash_chime"
-BaseNoteMidi = 69
-Volume = 70
-metadata/_custom_type_script = "uid://3bx6n5sx7krl"
-
-[sub_resource type="Resource" id="Chan_filler11"]
-script = ExtResource("17_mchan")
-MidiChannel = 11
-AudioClipName = "splash_chime"
-BaseNoteMidi = 69
-Volume = 70
-metadata/_custom_type_script = "uid://3bx6n5sx7krl"
-
-[sub_resource type="Resource" id="Chan_filler12"]
-script = ExtResource("17_mchan")
-MidiChannel = 12
-AudioClipName = "splash_chime"
-BaseNoteMidi = 69
-Volume = 80
-metadata/_custom_type_script = "uid://3bx6n5sx7krl"
-
 [sub_resource type="Resource" id="Seq_splash"]
 script = ExtResource("18_mseq")
 MidiFile = "res://demo/audio/music/ps1_startup.mid"
 SequenceName = "ps1_startup"
 LoopStartBeat = -1
-Channels = Array[ExtResource("17_mchan")]([SubResource("Chan_lead"), SubResource("Chan_bass_a"), SubResource("Chan_bass_b"), SubResource("Chan_triangle_a"), SubResource("Chan_triangle_b"), SubResource("Chan_triangle_c"), SubResource("Chan_pluck"), SubResource("Chan_finalchime"), SubResource("Chan_filler3"), SubResource("Chan_filler5"), SubResource("Chan_filler7"), SubResource("Chan_filler8"), SubResource("Chan_filler9"), SubResource("Chan_filler10"), SubResource("Chan_filler11"), SubResource("Chan_filler12")])
+Channels = Array[ExtResource("17_mchan")]([SubResource("Chan_lead"), SubResource("Chan_bass_a"), SubResource("Chan_bass_b"), SubResource("Chan_triangle_a"), SubResource("Chan_triangle_b"), SubResource("Chan_triangle_c"), SubResource("Chan_pluck"), SubResource("Chan_finalchime")])
 metadata/_custom_type_script = "uid://c2oekhtvjyqlt"
 
 [node name="IntroSplash" type="Node3D" unique_id=510065409]
