@@ -18,6 +18,43 @@
 
 namespace psxsplash {
 
+// v23+: per-PS1UIModel mutable runtime state (Lua mutates via SceneManager;
+// renderer reads each frame). Static layout authored in the splashpack
+// (canvas index, screen rect, projection H, name) lives in
+// SPLASHPACKUIModel below — these two structs are read in lockstep.
+struct UIModelRuntimeState {
+    int16_t  currentYawFp10;
+    int16_t  currentPitchFp10;
+    int32_t  currentDistFp12;
+    uint16_t currentTargetObj;
+    uint8_t  visible;
+    uint8_t  _pad[3];
+};
+
+// v23+: one 3D-model widget on a UI canvas. The renderer pulls in
+// targetObjIndex's polygons and re-renders them via an alternate camera
+// matrix built from orbit yaw/pitch/distance around the GameObject's
+// own position. Layout must match the C# writer in
+// SplashpackWriter.WriteUIModelSection.
+struct SPLASHPACKUIModel {
+    char     name[16];
+    uint16_t canvasIndex;
+    uint16_t targetObjIndex;
+    int16_t  screenX;
+    int16_t  screenY;
+    uint16_t screenW;
+    uint16_t screenH;
+    int16_t  orbitYawFp10;       // psyqo::Angle raw, 1024 = π
+    int16_t  orbitPitchFp10;
+    int32_t  orbitDistFp12;
+    uint16_t projectionH;
+    uint8_t  visibleOnLoad;
+    uint8_t  _pad;
+    uint32_t _reserved1;         // reserved for future runtime state
+    uint32_t _reserved2;
+};
+static_assert(sizeof(SPLASHPACKUIModel) == 48, "SPLASHPACKUIModel must be 48 bytes");
+
 /**
  * Collision data as stored in the binary file (fixed layout for serialization)
  */
@@ -127,6 +164,12 @@ struct SplashpackSceneSetup {
     };
     MusicSequenceSetup musicSequences[MAX_MUSIC_SEQUENCES];
     uint16_t musicSequenceCount = 0;
+
+    // v23+: UI 3D-model widgets. The loader leaves `uiModels` pointing
+    // at the on-disk SPLASHPACKUIModel array so the renderer can walk
+    // them in-place (no copy into scene manager).
+    const SPLASHPACKUIModel *uiModels = nullptr;
+    uint16_t uiModelCount = 0;
 };
 
 class SplashPackLoader {

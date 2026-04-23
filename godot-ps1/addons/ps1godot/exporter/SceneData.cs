@@ -187,6 +187,32 @@ public sealed class UICanvasRecord
     public required bool VisibleOnLoad { get; init; }
     public required byte SortOrder { get; init; }
     public required System.Collections.Generic.List<UIElementRecord> Elements { get; init; }
+    // PS1UIModel entries attached to this canvas — 3D HUD model previews.
+    // Rendered after the main scene pass via an alternate camera matrix.
+    // Empty list when the canvas has no model widgets.
+    public System.Collections.Generic.List<UIModelRecord> Models { get; init; } =
+        new System.Collections.Generic.List<UIModelRecord>();
+}
+
+// A 3D model rendered in a screen rect on top of the main scene. Parallel
+// section in the splashpack (v23+). Serialized as a 48-byte entry.
+public sealed class UIModelRecord
+{
+    public required string Name { get; init; }
+    public required bool VisibleOnLoad { get; init; }
+    // Index into SceneData.Objects of the GameObject whose polygons will
+    // be re-rendered. -1 = unresolved (writer will warn and skip).
+    public required int TargetObjectIndex { get; init; }
+    public required short X { get; init; }
+    public required short Y { get; init; }
+    public required short W { get; init; }
+    public required short H { get; init; }
+    // fp10 "pi fraction" angle (1.0 = π): yaw & pitch orbit around target.
+    public required short OrbitYawFp10 { get; init; }
+    public required short OrbitPitchFp10 { get; init; }
+    // fp12 raw (4096 = 1.0 world unit).
+    public required int OrbitDistanceFp12 { get; init; }
+    public required ushort ProjectionH { get; init; }
 }
 
 // A single widget inside a UICanvasRecord. Serialized as 48 bytes per

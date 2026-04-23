@@ -86,8 +86,18 @@ struct SPLASHPACKFileHeader {
     uint16_t musicSequenceCount;
     uint16_t pad_music;
     uint32_t musicTableOffset;
+    // v23+: UI 3D models. Flat array of 48-byte UIModelEntry records
+    // (see SPLASHPACKUIModel below). Rendered in a post-main-scene HUD
+    // pass via Renderer::renderUIModels. Zero in scenes with no model
+    // widgets — loader still guards the field so v22 splashpacks with
+    // extra zero bytes past the end read as "no models" (they won't,
+    // since the writer for v22 didn't emit those 8 bytes — but the
+    // >= 23 version check keeps the path off for old packs).
+    uint16_t uiModelCount;
+    uint16_t pad_uimodel;
+    uint32_t uiModelTableOffset;
 };
-static_assert(sizeof(SPLASHPACKFileHeader) == 144, "SPLASHPACKFileHeader must be 144 bytes");
+static_assert(sizeof(SPLASHPACKFileHeader) == 152, "SPLASHPACKFileHeader must be 152 bytes");
 
 struct MusicTableEntry {
     uint32_t dataOffset;
@@ -95,6 +105,9 @@ struct MusicTableEntry {
     char name[16];
 };
 static_assert(sizeof(MusicTableEntry) == 24, "MusicTableEntry must be 24 bytes");
+
+// SPLASHPACKUIModel is declared in splashpack.hh so the renderer and
+// scene manager can walk the on-disk array without including this .cpp.
 
 struct SPLASHPACKTextureAtlas {
     uint32_t polygonsOffset;
@@ -309,6 +322,16 @@ void SplashPackLoader::LoadSplashpack(uint8_t *data, SplashpackSceneSetup &setup
             setup.musicSequences[i].name = table[i].name[0] ? table[i].name : nullptr;
         }
         setup.musicSequenceCount = (uint16_t)count;
+    }
+
+    // v23+: UI 3D-model table. Leave the on-disk array in place and hand
+    // the scene manager a typed pointer + count; the renderer walks the
+    // array directly without per-frame copying.
+    setup.uiModelCount = 0;
+    setup.uiModels = nullptr;
+    if (header->version >= 23 && header->uiModelCount > 0 && header->uiModelTableOffset != 0) {
+        setup.uiModels = reinterpret_cast<const SPLASHPACKUIModel *>(data + header->uiModelTableOffset);
+        setup.uiModelCount = header->uiModelCount;
     }
 
     if (header->cutsceneCount > 0 && header->cutsceneTableOffset != 0) {

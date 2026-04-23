@@ -492,6 +492,21 @@ private:
     // UI API - Canvas and element control
     // ========================================================================
     
+    // v23+: UI 3D-model control. `name` is the model's authored
+    // ModelName (unique per scene). Silently no-ops on unknown name.
+    //
+    // UI.SetModelVisible(name, bool) — show/hide the HUD model
+    static int UI_SetModelVisible(lua_State* L);
+    // UI.SetModelOrbit(name, yawPi, pitchPi [, distance]) — update the
+    // per-frame camera orbit. Angles are "pi fractions" (1.0 = π), same
+    // convention as Entity.SetRotationY. distance optional; omit to keep
+    // the authored value.
+    static int UI_SetModelOrbit(lua_State* L);
+    // UI.SetModel(name, gameObjectName) — swap which GameObject the slot
+    // renders. Used for inventory icon scrolling (preview slot persists;
+    // target object changes per selection).
+    static int UI_SetModel(lua_State* L);
+
     static int UI_FindCanvas(lua_State* L);
     static int UI_SetCanvasVisible(lua_State* L);
     static int UI_IsCanvasVisible(lua_State* L);

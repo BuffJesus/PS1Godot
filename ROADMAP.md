@@ -226,7 +226,8 @@ wrap, dialog ownership, audio-aware auto-hide via `Audio.GetClipDuration`),
 9 ✅, 10 ✅ (camera position + rotation + zoom-on-target tracks; player-rig
 handoff convention derived from psyqo's matrix order), 11 ✅, 12 ✅
 (rooms + portals + tri-ref assignment + auto cell subdivision + per-room
-portal-refs). Format at **v22** (bumped for sequenced music). Multi-scene
+portal-refs). Format at **v23** (v22 added sequenced music; v23 added UI
+3D-model HUD widgets). Multi-scene
 packing + `Scene.Load(N)` Lua API also landed on top of the bullet-list
 scope.
 
@@ -703,6 +704,19 @@ modern, beautiful) — see `docs/ui-ux-plan.md` § UI authoring.
       enum (`Custom` keeps authored color). Change theme once →
       every opted-in element restyles. Resolution happens at export
       time, so no runtime format change. **Landed 2026-04-20.**
+- [x] **3D-model HUD widgets (`PS1UIModel`).** Splashpack v23 adds a
+      ui-model-table parallel section. Author drops a `PS1UIModel` child
+      under a `PS1UICanvas`, sets Target (NodePath to a PS1MeshInstance),
+      screen rect, and orbit yaw/pitch/distance/projectionH. Renderer
+      adds a post-main-scene HUD pass that swaps the camera matrix to a
+      per-model orbit transform and re-renders that GameObject's polys
+      on top. Lua: `UI.SetModelVisible(name, bool)`,
+      `UI.SetModelOrbit(name, yawPi, pitchPi[, dist])`,
+      `UI.SetModel(name, goName)` for inventory-style target swap.
+      Static meshes only in v1 (skinned meshes deferred — polys live on
+      SkinAnimSet, not on the GO). No scissor clipping — author's camera
+      framing is expected to keep the model within its declared rect;
+      per-primitive clip is a follow-up if bleed proves problematic.
 - [ ] **9-patch border UI element.** A new `PS1UIElementType.Border`
       that takes corner + edge texture references and renders a
       scalable panel. Dialog boxes + HUD frames stop requiring manual

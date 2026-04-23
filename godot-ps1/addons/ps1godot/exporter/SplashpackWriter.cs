@@ -28,8 +28,10 @@ namespace PS1Godot.Exporter;
 //                  Name table — referenced by header.nameTableOffset.
 public static class SplashpackWriter
 {
-    public const ushort SplashpackVersion = 22;
-    public const int HeaderSize = 144;
+    public const ushort SplashpackVersion = 23;
+    // Header layout grew by 8 bytes in v23 (uiModelCount + uiModelTableOffset).
+    // See WriteHeader / WriteUIModelSection.
+    public const int HeaderSize = 152;
     public const int GameObjectSize = 92;
     public const int TriSize = 52;
     public const int LuaFileSize = 8; // luaCodeOffset (u32) + length (u32)
@@ -329,6 +331,16 @@ public static class SplashpackWriter
         {
             WriteMusicSection(w, scene, headerOffsets.MusicTableOffsetPos);
         }
+
+        // ── UI 3D-model section (v23+) ──
+        // 48-byte UIModelEntry × N, no data-block chase (entries are
+        // self-contained). Entries aggregate across all canvases; each
+        // carries its owning canvas index so the renderer can gate
+        // visibility on canvas.visible.
+        if (CountUIModels(scene) > 0)
+        {
+            WriteUIModelSection(w, scene, headerOffsets.UiModelTableOffsetPos);
+        }
     }
 
     // ─── Music sequence section ─────────────────────────────────────────
@@ -366,6 +378,90 @@ public static class SplashpackWriter
             long blobStart = w.BaseStream.Position;
             w.Write(scene.MusicSequences[i].Ps1mData);
             BackfillUInt32(w, dataOffPositions[i], (uint)blobStart);
+        }
+    }
+
+    // ─── UI 3D-model section (v23+) ─────────────────────────────────────
+    //
+    // Flat array of 48-byte UIModelEntry records aggregated across every
+    // canvas, capped at MAX_UI_MODELS (16 — matching the runtime's static
+    // array). Layout MUST match psxsplash's UIModel struct:
+    //   char     name[16];       // 16 B null-padded
+    //   uint16_t canvasIndex;    //  2 B — owning canvas
+    //   uint16_t targetObjIndex; //  2 B — GameObject to re-render
+    //   int16_t  screenX;        //  2 B
+    //   int16_t  screenY;        //  2 B
+    //   uint16_t screenW;        //  2 B
+    //   uint16_t screenH;        //  2 B
+    //   int16_t  orbitYawFp10;   //  2 B (psyqo::Angle raw, 1024=π)
+    //   int16_t  orbitPitchFp10; //  2 B
+    //   int32_t  orbitDistFp12;  //  4 B
+    //   uint16_t projectionH;    //  2 B
+    //   uint8_t  visibleOnLoad;  //  1 B
+    //   uint8_t  _pad;           //  1 B
+    //   uint32_t _reserved;      //  4 B  → reserved for runtime (e.g., current yaw)
+    //                                  Total: 48 B.
+    private const int UiModelEntrySize = 48;
+    private const int MaxUiModels = 16;
+
+    private static int CountUIModels(SceneData scene)
+    {
+        int total = 0;
+        foreach (var canvas in scene.UICanvases)
+        {
+            total += canvas.Models.Count;
+        }
+        if (total > MaxUiModels) total = MaxUiModels;
+        return total;
+    }
+
+    private static void WriteUIModelSection(BinaryWriter w, SceneData scene, long uiModelTableOffsetPos)
+    {
+        AlignTo4(w);
+        long tableStart = w.BaseStream.Position;
+        BackfillUInt32(w, uiModelTableOffsetPos, (uint)tableStart);
+
+        int emitted = 0;
+        for (int ci = 0; ci < scene.UICanvases.Count && emitted < MaxUiModels; ci++)
+        {
+            var canvas = scene.UICanvases[ci];
+            foreach (var m in canvas.Models)
+            {
+                if (emitted >= MaxUiModels) break;
+                if (m.TargetObjectIndex < 0)
+                {
+                    GD.PushWarning($"[PS1Godot] UIModel '{m.Name}' has no valid Target — skipped in splashpack.");
+                    continue;
+                }
+                long entryStart = w.BaseStream.Position;
+
+                // Name — 16 B fixed, null-padded.
+                byte[] nameBytes = Encoding.UTF8.GetBytes(m.Name ?? "");
+                int nameLen = Math.Min(nameBytes.Length, 15);
+                w.Write(nameBytes, 0, nameLen);
+                for (int p = nameLen; p < 16; p++) w.Write((byte)0);
+
+                w.Write((ushort)ci);                                // canvasIndex
+                w.Write((ushort)m.TargetObjectIndex);               // targetObjIndex
+                w.Write(m.X);                                       // screenX
+                w.Write(m.Y);                                       // screenY
+                w.Write((ushort)Mathf.Max(0, (int)m.W));            // screenW
+                w.Write((ushort)Mathf.Max(0, (int)m.H));            // screenH
+                w.Write(m.OrbitYawFp10);                            // orbitYawFp10
+                w.Write(m.OrbitPitchFp10);                          // orbitPitchFp10
+                w.Write(m.OrbitDistanceFp12);                       // orbitDistFp12
+                w.Write(m.ProjectionH);                             // projectionH
+                w.Write((byte)(m.VisibleOnLoad ? 1 : 0));           // visibleOnLoad
+                w.Write((byte)0);                                   // _pad
+                w.Write((uint)0);                                   // _reserved1
+                w.Write((uint)0);                                   // _reserved2
+
+                long written = w.BaseStream.Position - entryStart;
+                if (written != UiModelEntrySize)
+                    throw new InvalidOperationException(
+                        $"UIModelEntry size mismatch: wrote {written} bytes, expected {UiModelEntrySize}.");
+                emitted++;
+            }
         }
     }
 
@@ -894,6 +990,7 @@ public static class SplashpackWriter
         public long AnimationTableOffsetPos;
         public long SkinTableOffsetPos;
         public long MusicTableOffsetPos;
+        public long UiModelTableOffsetPos;
     }
 
     private static HeaderOffsets WriteHeader(BinaryWriter w, SceneData scene, int atlasCount, int clutCount, int colliderCount,
@@ -1049,6 +1146,16 @@ public static class SplashpackWriter
         w.Write((ushort)0);            // pad_music
         offsets.MusicTableOffsetPos = w.BaseStream.Position;
         w.Write((uint)0);              // musicTableOffset (backfilled)
+
+        // v23: UI 3D-model table. Parallel to the UI canvas section — each
+        // entry references a GameObject by index + carries a screen rect +
+        // per-model orbit camera params. Rendered in a post-main-scene
+        // HUD pass. Capped at 16 entries.
+        int uiModelCount = CountUIModels(scene);
+        w.Write((ushort)uiModelCount); // uiModelCount
+        w.Write((ushort)0);            // pad_uimodel
+        offsets.UiModelTableOffsetPos = w.BaseStream.Position;
+        w.Write((uint)0);              // uiModelTableOffset (backfilled)
 
         long written = w.BaseStream.Position - headerStart;
         if (written != HeaderSize)

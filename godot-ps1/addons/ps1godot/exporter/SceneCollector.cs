@@ -598,6 +598,11 @@ public static class SceneCollector
             });
         }
 
+        // Walk PS1UIModel children — 3D HUD previews. Resolve Target
+        // NodePath → GameObject index via the scene's emitted object list.
+        var models = new System.Collections.Generic.List<UIModelRecord>();
+        CollectUIModels(canvas, models, data, name);
+
         data.UICanvases.Add(new UICanvasRecord
         {
             Name = name,
@@ -605,8 +610,10 @@ public static class SceneCollector
             VisibleOnLoad = canvas.VisibleOnLoad,
             SortOrder = (byte)Mathf.Clamp(canvas.SortOrder, 0, 255),
             Elements = elements,
+            Models = models,
         });
-        GD.Print($"[PS1Godot] UICanvas '{name}': residency={canvas.Residency}, {elements.Count} elements");
+        GD.Print($"[PS1Godot] UICanvas '{name}': residency={canvas.Residency}, " +
+                 $"{elements.Count} elements, {models.Count} 3D models");
     }
 
     // VRAM slot assignments for custom fonts. Slot 0 is the runtime's
@@ -688,6 +695,115 @@ public static class SceneCollector
                  $"{asset.GlyphWidth}×{asset.GlyphHeight} cells → VRAM ({slot.X},{slot.Y}), " +
                  $"{pixels.Length} B pixel data");
         return (byte)data.UIFonts.Count;
+    }
+
+    // Walk the canvas subtree collecting PS1UIModel widgets — 3D HUD
+    // previews. Recurses into layout containers (HBox/VBox/SizeBox/Overlay)
+    // so a model widget nested inside a VBox is still found. Each found
+    // model resolves its Target NodePath to a Node3D and matches that back
+    // to a SceneObject index already emitted by the mesh walk.
+    private static void CollectUIModels(Node subtreeRoot,
+                                         System.Collections.Generic.List<UIModelRecord> models,
+                                         SceneData data,
+                                         string canvasName)
+    {
+        foreach (var child in subtreeRoot.GetChildren())
+        {
+            switch (child)
+            {
+                case PS1UIModel m:
+                    EmitUIModelRecord(m, models, data, canvasName);
+                    break;
+                // Layout containers — recurse in. PS1UIElement and PS1UISpacer
+                // never contain UIModel widgets.
+                case PS1UIHBox:
+                case PS1UIVBox:
+                case PS1UISizeBox:
+                case PS1UIOverlay:
+                    CollectUIModels(child, models, data, canvasName);
+                    break;
+            }
+        }
+    }
+
+    private static void EmitUIModelRecord(PS1UIModel m,
+                                           System.Collections.Generic.List<UIModelRecord> models,
+                                           SceneData data,
+                                           string canvasName)
+    {
+        string mName = string.IsNullOrWhiteSpace(m.ModelName) ? m.Name : m.ModelName;
+
+        // Resolve Target NodePath to a Node3D, then look up its SceneObject.
+        int targetIdx = -1;
+        if (!m.Target.IsEmpty)
+        {
+            var targetNode = m.GetNodeOrNull(m.Target);
+            if (targetNode is Node3D node3D)
+            {
+                for (int i = 0; i < data.Objects.Count; i++)
+                {
+                    if (ReferenceEquals(data.Objects[i].Node, node3D))
+                    {
+                        targetIdx = i;
+                        break;
+                    }
+                }
+                if (targetIdx < 0)
+                {
+                    GD.PushWarning($"[PS1Godot] UIModel '{mName}' on canvas '{canvasName}': " +
+                                   $"target '{targetNode.Name}' isn't an exported GameObject " +
+                                   "(is it under a PS1MeshGroup? that's not yet supported as a UIModel target).");
+                }
+            }
+            else
+            {
+                GD.PushWarning($"[PS1Godot] UIModel '{mName}' on canvas '{canvasName}': " +
+                               $"Target path '{m.Target}' doesn't resolve to a Node3D.");
+            }
+        }
+        else
+        {
+            GD.PushWarning($"[PS1Godot] UIModel '{mName}' on canvas '{canvasName}' has no Target set.");
+        }
+
+        // Screen rect via anchor (same rules as PS1UIElement).
+        int absX, absY;
+        var faux = new PS1UIElement
+        {
+            Anchor = m.Anchor, X = m.X, Y = m.Y, Width = m.Width, Height = m.Height,
+        };
+        (absX, absY) = PS1UIAnchoring.Resolve(faux);
+
+        // Angle unit conversion: psyqo::Angle is FixedPoint<10>, where
+        // 1.0 = π (scale = 1024). Degrees → pi-fraction = deg/180, then
+        // * 1024 gives raw fp10.
+        short yawFp10   = DegToFp10(m.OrbitYawDegrees);
+        short pitchFp10 = DegToFp10(m.OrbitPitchDegrees);
+        int distFp12    = (int)Mathf.Round(m.OrbitDistance * 4096f);
+
+        models.Add(new UIModelRecord
+        {
+            Name = mName,
+            VisibleOnLoad = m.VisibleOnLoad,
+            TargetObjectIndex = targetIdx,
+            X = (short)Mathf.Clamp(absX, short.MinValue, short.MaxValue),
+            Y = (short)Mathf.Clamp(absY, short.MinValue, short.MaxValue),
+            W = (short)Mathf.Clamp(m.Width,  short.MinValue, short.MaxValue),
+            H = (short)Mathf.Clamp(m.Height, short.MinValue, short.MaxValue),
+            OrbitYawFp10 = yawFp10,
+            OrbitPitchFp10 = pitchFp10,
+            OrbitDistanceFp12 = distFp12,
+            ProjectionH = (ushort)Mathf.Clamp(m.ProjectionH, 1, 1024),
+        });
+    }
+
+    private static short DegToFp10(float degrees)
+    {
+        // 1 fp10 unit = (1/1024) × π. deg → fp10: deg/180 × 1024.
+        float raw = degrees / 180f * 1024f;
+        if (raw > short.MaxValue) raw = short.MaxValue;
+        if (raw < short.MinValue) raw = short.MinValue;
+        return (short)Mathf.Round(raw);
     }
 
     // Apply the canvas's theme to an element's color at export time.

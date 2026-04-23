@@ -110,6 +110,18 @@ class SceneManager {
     MusicManager& getMusic() { return m_music; }
     CollisionSystem& getCollision() { return m_collisionSystem; }
 
+    // v23+: UI 3D-model accessors — the renderer walks these in its
+    // post-main-scene HUD pass; Lua reads/writes per-model state.
+    int getUIModelCount() const { return m_uiModelCount; }
+    const SPLASHPACKUIModel *getUIModelDisk(int i) const {
+        return (i >= 0 && i < m_uiModelCount) ? &m_uiModelsDisk[i] : nullptr;
+    }
+    UIModelRuntimeState *getUIModelState(int i) {
+        return (i >= 0 && i < m_uiModelCount) ? &m_uiModelStates[i] : nullptr;
+    }
+    // Find by authored name (nullptr on miss). Used by Lua UI.SetModel* APIs.
+    int findUIModelByName(const char *name) const;
+
     // Hit-stop / freeze. Holds gameplay tick (animation / cutscene / skin /
     // collision / Lua onUpdate) for `frames`, while still rendering and still
     // ticking camera shake + controls. Souls/Hades-style impact crunch.
@@ -220,7 +232,17 @@ class SceneManager {
     SkinAnimSet  m_skinAnimSets[MAX_SKINNED_MESHES];
     SkinAnimState m_skinAnimStates[MAX_SKINNED_MESHES];
     int m_skinnedMeshCount = 0;
-    
+
+    // v23+: UI 3D-model widgets. m_uiModelsDisk points into the
+    // splashpack's on-disk array (read-only); m_uiModelStates carries
+    // the mutable per-frame state (current yaw/pitch/dist + visibility
+    // + runtime target-object override). Renderer reads both to compose
+    // the HUD pass. UIModelRuntimeState is defined in splashpack.hh.
+    static constexpr int MAX_UI_MODELS = 16;
+    const SPLASHPACKUIModel *m_uiModelsDisk = nullptr;
+    UIModelRuntimeState m_uiModelStates[MAX_UI_MODELS];
+    int m_uiModelCount = 0;
+
     UISystem m_uiSystem;
 #ifdef PSXSPLASH_MEMOVERLAY
     MemOverlay m_memOverlay;

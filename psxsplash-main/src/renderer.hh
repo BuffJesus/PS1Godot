@@ -21,6 +21,14 @@
 
 namespace psxsplash {
 
+// Forward decls — splashpack.hh includes uisystem.hh which includes this
+// header, so we can't pull splashpack.hh here without triggering a
+// pragma-once cycle that leaves SPLASHPACKUIModel declared only AFTER
+// renderer.hh's class body has already parsed. Pointers are fine with
+// forward decls; renderer.cpp pulls in splashpack.hh for full definitions.
+struct SPLASHPACKUIModel;
+struct UIModelRuntimeState;
+
 class UISystem; // Forward declaration
 #ifdef PSXSPLASH_MEMOVERLAY
 class MemOverlay; // Forward declaration
@@ -66,6 +74,7 @@ class Renderer final {
                          const RoomPortalRef* roomPortalRefs = nullptr,
                          int cameraRoom = -1);
 
+
     void VramUpload(const uint16_t* imageData, int16_t posX, int16_t posY,
                     int16_t width, int16_t height);
 
@@ -77,6 +86,13 @@ class Renderer final {
 
     void SetSkinData(const SkinAnimSet* sets, const SkinAnimState* states, int count) {
         m_skinSets = sets; m_skinStates = states; m_skinCount = count;
+    }
+
+    // v23+: hand the renderer the per-scene UI 3D-model arrays (set once at
+    // scene init by SceneManager). Renderer reads them each frame in its
+    // post-skin HUD pass.
+    void SetUIModelData(const SPLASHPACKUIModel* disk, const UIModelRuntimeState* states, int count) {
+        m_uiModelsDisk = disk; m_uiModelStates = states; m_uiModelCount = count;
     }
 
     static Renderer& GetInstance() {
@@ -111,6 +127,11 @@ class Renderer final {
     const SkinAnimState* m_skinStates = nullptr;
     int m_skinCount = 0;
 
+    // v23+: UI 3D-model widgets — read once per frame in the HUD pass.
+    const SPLASHPACKUIModel* m_uiModelsDisk = nullptr;
+    const UIModelRuntimeState* m_uiModelStates = nullptr;
+    int m_uiModelCount = 0;
+
     TriangleRef m_visibleRefs[MAX_VISIBLE_TRIANGLES];
     int m_frameCount = 0;
 
@@ -128,6 +149,14 @@ class Renderer final {
                               psyqo::OrderingTable<ORDERING_TABLE_SIZE>& ot,
                               psyqo::BumpAllocator<BUMP_ALLOCATOR_SIZE>& balloc,
                               const Frustum* frustum = nullptr);
+
+    // v23+: post-skin HUD model pass. Inserted into the same OT as the
+    // main scene polys (so it draws on top in the same frame). Walks
+    // m_uiModelsDisk × m_uiModelStates and re-renders each visible
+    // model with an alternate camera transform.
+    void renderUIModels(eastl::vector<GameObject*>& objects,
+                        psyqo::OrderingTable<ORDERING_TABLE_SIZE>& ot,
+                        psyqo::BumpAllocator<BUMP_ALLOCATOR_SIZE>& balloc);
 };
 
 }  // namespace psxsplash

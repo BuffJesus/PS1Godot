@@ -16,6 +16,7 @@
 #include <psyqo/vector.hh>
 
 #include "gtemath.hh"
+#include "splashpack.hh"
 #include "skinmesh.hh"
 #include "uisystem.hh"
 #ifdef PSXSPLASH_MEMOVERLAY
@@ -339,6 +340,7 @@ void psxsplash::Renderer::Render(eastl::vector<GameObject*>& objects) {
             processTriangle(obj->polygons[i], fogFarSZ, ot, balloc);
     }
     renderSkinnedObjects(objects, cameraPosition, fogFarSZ, ot, balloc);
+    renderUIModels(objects, ot, balloc);
     if (m_uiSystem) m_uiSystem->renderOT(m_gpu, ot, balloc);
 #ifdef PSXSPLASH_MEMOVERLAY
     if (m_memOverlay) m_memOverlay->renderOT(ot, balloc);
@@ -413,6 +415,7 @@ void psxsplash::Renderer::RenderWithBVH(eastl::vector<GameObject*>& objects, con
     }
 
     renderSkinnedObjects(objects, cameraPosition, fogFarSZ, ot, balloc, &frustum);
+    renderUIModels(objects, ot, balloc);
 
     if (m_uiSystem) m_uiSystem->renderOT(m_gpu, ot, balloc);
 #ifdef PSXSPLASH_MEMOVERLAY
@@ -1100,6 +1103,7 @@ void psxsplash::Renderer::RenderWithRooms(eastl::vector<GameObject*>& objects,
     }
 
     renderSkinnedObjects(objects, cameraPosition, fogFarSZ, ot, balloc, &frustum);
+    renderUIModels(objects, ot, balloc);
 
     if (m_uiSystem) m_uiSystem->renderOT(m_gpu, ot, balloc);
 #ifdef PSXSPLASH_MEMOVERLAY
@@ -1398,6 +1402,91 @@ void psxsplash::Renderer::renderSkinnedObjects(
             }
         }
     }
+}
+
+// HUD model pass — re-renders each visible PS1UIModel with an alternate
+// camera matrix that orbits around the target GameObject's pivot at
+// (yaw, pitch) angles and a configurable distance + projection H.
+//
+// The model's vertices are submitted INTO THE SAME ordering table as the
+// main scene so depth-sorted overlap is automatic — but UI models are
+// authored with a tight orbit camera, so in practice they project very
+// close to the camera and land at low OT slots (i.e., drawn last / on
+// top of world geometry). Future patch can clamp zIndex to 1 for true
+// always-on-top behavior if any author scenario demands it.
+//
+// Skips models where: state.visible is false, target GO is out of range /
+// null, the GO has no polygons (e.g., it's a skinned mesh — Tier 2 v1
+// only supports static meshes; skinned UI models can be added later
+// alongside the bone-matrix state machine).
+void psxsplash::Renderer::renderUIModels(
+    eastl::vector<GameObject*>& objects,
+    psyqo::OrderingTable<ORDERING_TABLE_SIZE>& ot,
+    psyqo::BumpAllocator<BUMP_ALLOCATOR_SIZE>& balloc) {
+
+    if (!m_uiModelsDisk || !m_uiModelStates || m_uiModelCount == 0) return;
+
+    int32_t savedH = m_currentCamera->GetProjectionH();
+
+    for (int i = 0; i < m_uiModelCount; i++) {
+        const SPLASHPACKUIModel& disk = m_uiModelsDisk[i];
+        const UIModelRuntimeState& st = m_uiModelStates[i];
+
+        if (!st.visible) continue;
+        if (st.currentTargetObj >= objects.size()) continue;
+        GameObject* obj = objects[st.currentTargetObj];
+        if (!obj) continue;
+        // Skinned-mesh targets aren't supported in this v1 — their polys
+        // live on the SkinAnimSet, not on the GameObject itself, and the
+        // bone-matrix state machine would need to be repeated here. The
+        // GO's polys are zeroed out by SceneManager::InitializeScene for
+        // skinned objects, so polyCount==0 on those.
+        if (obj->polyCount == 0 || !obj->polygons) continue;
+
+        // 1. Build view rotation from yaw + pitch (R_view = R_x * R_y so
+        //    yaw is applied first, then pitch — typical orbit convention).
+        psyqo::Angle yawAng;   yawAng.value   = st.currentYawFp10;
+        psyqo::Angle pitchAng; pitchAng.value = st.currentPitchFp10;
+        auto rotY = psyqo::SoftMath::generateRotationMatrix33(
+                        yawAng,   psyqo::SoftMath::Axis::Y, m_trig);
+        auto rotX = psyqo::SoftMath::generateRotationMatrix33(
+                        pitchAng, psyqo::SoftMath::Axis::X, m_trig);
+        psyqo::Matrix33 viewRot;
+        psyqo::SoftMath::multiplyMatrix33(rotX, rotY, &viewRot);
+
+        // 2. Compose camera × object rotation for the GTE rotation register.
+        psyqo::Matrix33 finalRot;
+        MatrixMultiplyGTE(viewRot, obj->rotation, &finalRot);
+
+        // 3. Place the target at view-space (0, 0, distance). The camera
+        //    sits "behind" the model at world position obj.pos + R_view^T *
+        //    (0, 0, -dist), so the target lands at view (0, 0, dist) and
+        //    the model fills the screen at the framing the author chose.
+        //    Vertices are object-local; GTE applies finalRot then adds
+        //    this translation, projecting via the model's H register.
+        psyqo::Vec3 viewPos;
+        viewPos.x.value = 0;
+        viewPos.y.value = 0;
+        viewPos.z.value = st.currentDistFp12;
+
+        // 4. Set per-model H, write GTE state, render polys.
+        write<Register::H, Unsafe>(disk.projectionH);
+        ::clear<Register::TRX, Safe>();
+        ::clear<Register::TRY, Safe>();
+        ::clear<Register::TRZ, Safe>();
+        writeSafe<PseudoRegister::Rotation>(finalRot);
+        writeSafe<PseudoRegister::Translation>(viewPos);
+
+        // UI models bypass fog (depth fade at HUD scale looks wrong).
+        for (uint16_t t = 0; t < obj->polyCount; t++) {
+            processTriangle(obj->polygons[t], 0, ot, balloc, 0);
+        }
+    }
+
+    // Restore main scene H so anything sampled after (e.g., a re-entry
+    // into the main render path next frame) sees the right value. The
+    // top of Render() also re-syncs H, so this is defensive.
+    write<Register::H, Unsafe>(savedH);
 }
 
 void psxsplash::Renderer::VramUpload(const uint16_t* imageData, int16_t posX,

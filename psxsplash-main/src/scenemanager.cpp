@@ -212,6 +212,27 @@ void psxsplash::SceneManager::InitializeScene(uint8_t* splashpackData, LoadingSc
         m_skinnedMeshCount > 0 ? m_skinAnimStates : nullptr,
         m_skinnedMeshCount);
 
+    // v23+: UI 3D-model widgets. Copy authored state from the on-disk
+    // array into the runtime state array; renderer reads both each
+    // frame (disk → static fields like canvas index + screen rect;
+    // state → mutable fields like current yaw + visibility).
+    m_uiModelCount = (int)sceneSetup.uiModelCount;
+    if (m_uiModelCount > MAX_UI_MODELS) m_uiModelCount = MAX_UI_MODELS;
+    m_uiModelsDisk = sceneSetup.uiModels;
+    for (int i = 0; i < m_uiModelCount; i++) {
+        const SPLASHPACKUIModel& disk = m_uiModelsDisk[i];
+        UIModelRuntimeState& st = m_uiModelStates[i];
+        st.currentYawFp10   = disk.orbitYawFp10;
+        st.currentPitchFp10 = disk.orbitPitchFp10;
+        st.currentDistFp12  = disk.orbitDistFp12;
+        st.currentTargetObj = disk.targetObjIndex;
+        st.visible          = disk.visibleOnLoad;
+    }
+    Renderer::GetInstance().SetUIModelData(
+        m_uiModelCount > 0 ? m_uiModelsDisk : nullptr,
+        m_uiModelCount > 0 ? m_uiModelStates : nullptr,
+        m_uiModelCount);
+
     // Initialize UI system (v13+)
     // Custom-font glyph atlases live in the .splashpack (not the .vram
     // file) and must be uploaded to VRAM here, after loadFromSplashpack
@@ -1352,6 +1373,15 @@ int psxsplash::SceneManager::findSkinAnimByObjectName(const char* name) const {
             }
             return -1;  // Object found but not skinned
         }
+    }
+    return -1;
+}
+
+int psxsplash::SceneManager::findUIModelByName(const char *name) const {
+    if (!name || !m_uiModelsDisk || m_uiModelCount == 0) return -1;
+    for (int i = 0; i < m_uiModelCount; i++) {
+        const char *mn = m_uiModelsDisk[i].name;
+        if (mn && streq(mn, name)) return i;
     }
     return -1;
 }

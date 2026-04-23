@@ -566,7 +566,16 @@ void LuaAPI::RegisterAll(psyqo::Lua& L, SceneManager* scene, CutscenePlayer* cut
 
     L.push(UI_GetElementByIndex);
     L.setField(-2, "GetElementByIndex");
-    
+
+    L.push(UI_SetModelVisible);
+    L.setField(-2, "SetModelVisible");
+
+    L.push(UI_SetModelOrbit);
+    L.setField(-2, "SetModelOrbit");
+
+    L.push(UI_SetModel);
+    L.setField(-2, "SetModel");
+
     L.setGlobal("UI");
 
     // ========================================================================
@@ -2923,6 +2932,62 @@ int LuaAPI::UI_GetElementByIndex(lua_State* L) {
     int handle = s_uiSystem->getCanvasElementHandle(canvasIdx, elemIdx);
     lua.pushNumber(static_cast<lua_Number>(handle));
     return 1;
+}
+
+int LuaAPI::UI_SetModelVisible(lua_State* L) {
+    psyqo::Lua lua(L);
+    if (!s_sceneManager || !lua.isString(1)) return 0;
+    int idx = s_sceneManager->findUIModelByName(lua.toString(1));
+    if (idx < 0) return 0;
+    auto* st = s_sceneManager->getUIModelState(idx);
+    if (st) st->visible = lua.toBoolean(2) ? 1 : 0;
+    return 0;
+}
+
+int LuaAPI::UI_SetModelOrbit(lua_State* L) {
+    psyqo::Lua lua(L);
+    if (!s_sceneManager || !lua.isString(1)) return 0;
+    int idx = s_sceneManager->findUIModelByName(lua.toString(1));
+    if (idx < 0) return 0;
+    auto* st = s_sceneManager->getUIModelState(idx);
+    if (!st) return 0;
+
+    // Angles: "pi fractions" (1.0 = π) shifted fp12→fp10 (>>2), matching
+    // Entity.SetRotationY. Reject non-number gracefully with no-op.
+    if (lua.isNumber(2)) {
+        psyqo::FixedPoint<12> yaw12 = readFP(lua, 2);
+        st->currentYawFp10 = (int16_t)(yaw12.value >> 2);
+    }
+    if (lua.isNumber(3)) {
+        psyqo::FixedPoint<12> pitch12 = readFP(lua, 3);
+        st->currentPitchFp10 = (int16_t)(pitch12.value >> 2);
+    }
+    // Distance optional — keeps authored value if omitted.
+    if (!lua.isNoneOrNil(4)) {
+        psyqo::FixedPoint<12> dist = readFP(lua, 4);
+        st->currentDistFp12 = dist.value;
+    }
+    return 0;
+}
+
+int LuaAPI::UI_SetModel(lua_State* L) {
+    psyqo::Lua lua(L);
+    if (!s_sceneManager || !lua.isString(1) || !lua.isString(2)) return 0;
+    int idx = s_sceneManager->findUIModelByName(lua.toString(1));
+    if (idx < 0) return 0;
+    auto* st = s_sceneManager->getUIModelState(idx);
+    if (!st) return 0;
+    GameObject* go = s_sceneManager->findObjectByName(lua.toString(2));
+    if (!go) return 0;
+    // Walk the scene's GO vector to find the index matching this pointer.
+    size_t count = s_sceneManager->getGameObjectCount();
+    for (size_t i = 0; i < count; i++) {
+        if (s_sceneManager->getGameObject((uint16_t)i) == go) {
+            st->currentTargetObj = (uint16_t)i;
+            return 0;
+        }
+    }
+    return 0;
 }
 
 // ============================================================================
