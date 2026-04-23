@@ -128,6 +128,13 @@ public:
                  uint16_t& outObjectIndex,
                  psyqo::FixedPoint<12>& outDistance) const;
 
+    /// AABB overlap query against all registered Solid colliders. Writes up
+    /// to `maxResults` GameObject indices into `outObjectIndices` and returns
+    /// the count. Used by Lua Physics.OverlapBox for melee swing hitboxes.
+    int overlapBox(const AABB& query,
+                   uint16_t* outObjectIndices,
+                   int maxResults) const;
+
     const CollisionResult* getResults() const { return m_results; }
     int getResultCount() const { return m_resultCount; }
 

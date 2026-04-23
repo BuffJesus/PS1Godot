@@ -429,17 +429,50 @@ void psxsplash::SceneManager::GameTick(psyqo::GPU &gpu) {
         m_lastFrameTime = now;
     }
 
-    m_cutscenePlayer.tick(m_dt12);
-    m_animationPlayer.tick(m_dt12);
+    // Hit-stop: when paused, freeze gameplay-time systems but keep music
+    // and camera shake alive (music shouldn't stutter for a 6-frame freeze;
+    // shake provides the impact feedback the pause is selling). Render still
+    // fires below regardless.
+    bool paused = m_pauseFramesRemaining > 0;
+    if (paused) m_pauseFramesRemaining--;
+
+    if (!paused) {
+        m_cutscenePlayer.tick(m_dt12);
+        m_animationPlayer.tick(m_dt12);
+
+        // Tick skinned mesh animations
+        for (int i = 0; i < m_skinnedMeshCount; i++) {
+            SkinMesh_Tick(&m_skinAnimStates[i], L.getState().getState(), m_dt12);
+        }
+    }
     m_musicSequencer.tick(m_dt12);
 
-    // Tick skinned mesh animations
-    for (int i = 0; i < m_skinnedMeshCount; i++) {
-        SkinMesh_Tick(&m_skinAnimStates[i], L.getState().getState(), m_dt12);
-    }
-    
+    // Controls read/delta every frame (including paused) so button-state
+    // tracking stays in sync — otherwise the first post-pause frame would
+    // compare current input against pre-pause state and fire ghost edges.
+    // Button-event DISPATCH (into Lua onButtonPress / etc.) still lives
+    // below the pause short-circuit — we update the state, we just don't
+    // wake scripts.
+    m_controls.UpdateButtonStates();
+
+    // Camera shake advances every frame (even during pause) so the impact
+    // freeze still rattles the screen. Offset is read-only; applied as a
+    // render-only wrap around the render block below, so game logic that
+    // mutates m_position (camera-follow, Lua Camera.SetPosition) never
+    // clobbers the offset.
+    m_currentCamera.AdvanceShake();
+
     uint32_t renderingStart = gpu.now();
     auto& renderer = psxsplash::Renderer::GetInstance();
+
+    // Apply shake offset to the camera position for the render pass only.
+    const psyqo::Vec3& shakeOffset = m_currentCamera.GetShakeOffset();
+    {
+        auto& p = m_currentCamera.GetPosition();
+        p.x.value += shakeOffset.x.value;
+        p.y.value += shakeOffset.y.value;
+        p.z.value += shakeOffset.z.value;
+    }
 
     if (m_roomCount > 0 && m_rooms != nullptr) {
 
@@ -467,12 +500,29 @@ void psxsplash::SceneManager::GameTick(psyqo::GPU &gpu) {
     uint32_t renderingEnd = gpu.now();
     uint32_t renderingTime = renderingEnd - renderingStart;
 
+    // Revert the shake offset so game logic below (camera-follow, Lua
+    // Camera.GetPosition, collision setup) reads the clean position.
+    {
+        auto& p = m_currentCamera.GetPosition();
+        p.x.value -= shakeOffset.x.value;
+        p.y.value -= shakeOffset.y.value;
+        p.z.value -= shakeOffset.z.value;
+    }
+
 #ifdef PSXSPLASH_PROFILER
     psxsplash::debug::Profiler::getInstance().setSectionTime(psxsplash::debug::PROFILER_RENDERING, renderingTime);
 #endif
 
+    // Hit-stop short-circuit: skip the rest of the gameplay tick (collision,
+    // Lua onUpdate, player movement, button-event dispatch, scene-load
+    // processing) for `m_pauseFramesRemaining` frames after Scene.PauseFor.
+    // Render + camera shake + music + button-state tracking already ran
+    // above. Button-event DISPATCH is frozen — that's part of selling the
+    // impact crunch (player can't swing again mid-freeze).
+    if (paused) return;
+
     uint32_t collisionStart = gpu.now();
-    
+
     AABB playerAABB;
     {
         psyqo::FixedPoint<12> r;
@@ -537,10 +587,10 @@ void psxsplash::SceneManager::GameTick(psyqo::GPU &gpu) {
 
     
     uint32_t controlsStart = gpu.now();
-    
-    // Update button state tracking first
-    m_controls.UpdateButtonStates();
-    
+
+    // Button-state tracking already ran above the pause short-circuit so the
+    // delta stays in sync across hit-stops. Just dispatch events below.
+
     // Update interaction system (checks for interact button press)
     updateInteractionSystem();
     

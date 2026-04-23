@@ -5,6 +5,9 @@
 #include <psyqo/soft-math.hh>
 #include <psyqo/trigonometry.hh>
 
+#include "random.hh"
+#include "scenemanager.hh"
+
 psxsplash::Camera::Camera() {
     m_rotationMatrix = psyqo::SoftMath::generateRotationMatrix33(0, psyqo::SoftMath::Axis::X, m_trig);
 }
@@ -37,6 +40,60 @@ void psxsplash::Camera::SetRotation(psyqo::Angle x, psyqo::Angle y, psyqo::Angle
 }
 
 psyqo::Matrix33& psxsplash::Camera::GetRotation() { return m_rotationMatrix; }
+
+void psxsplash::Camera::Shake(psyqo::FixedPoint<12> intensity, int frames) {
+    if (frames <= 0) {
+        // Stop / clear any active shake.
+        m_shakeFramesRemaining = 0;
+        m_shakeFramesTotal = 0;
+        m_shakeOffset.x.value = 0;
+        m_shakeOffset.y.value = 0;
+        m_shakeOffset.z.value = 0;
+        return;
+    }
+    // Clamp intensity to ~128 world units so `ampFp12 * 2 + 1` in AdvanceShake
+    // can't overflow int32. Real screen-shakes are ~0.05-1.0 world units, so
+    // this cap only kicks in on bad author input.
+    constexpr int32_t MAX_INTENSITY_FP12 = 524288;  // 128.0 in fp12
+    if (intensity.value > MAX_INTENSITY_FP12)  intensity.value = MAX_INTENSITY_FP12;
+    if (intensity.value < -MAX_INTENSITY_FP12) intensity.value = -MAX_INTENSITY_FP12;
+    m_shakeIntensity = intensity;
+    m_shakeFramesRemaining = frames;
+    m_shakeFramesTotal = frames;
+}
+
+void psxsplash::Camera::AdvanceShake() {
+    // Clear offset by default — safe to call every frame even without an
+    // active shake. SceneManager always reads GetShakeOffset() after this.
+    m_shakeOffset.x.value = 0;
+    m_shakeOffset.y.value = 0;
+    m_shakeOffset.z.value = 0;
+
+    if (m_shakeFramesRemaining <= 0) return;
+
+    // Decay linearly: 1.0 at start, 0 at end. amplitude = intensity * decay.
+    // Stay in 32-bit math: PS1 toolchain doesn't link libgcc for __divdi3 /
+    // __muldi3, so a stray int64 here is a hard linker error. Shake()
+    // clamped intensity, so all the products below fit in int32.
+    int32_t decayFp12 = (m_shakeFramesRemaining * 4096) / m_shakeFramesTotal;
+    int32_t ampFp12 = (m_shakeIntensity.value * decayFp12) >> 12;
+    if (ampFp12 < 1) {
+        m_shakeFramesRemaining = 0;
+        return;
+    }
+
+    // Random in [-amp, +amp] per axis. Reuses the global SceneManager Random.
+    uint32_t span = (uint32_t)(ampFp12 * 2 + 1);
+    auto pick = [&]() -> int32_t {
+        uint32_t r = SceneManager::m_random.rand();
+        return ((int32_t)(r % span)) - ampFp12;
+    };
+    m_shakeOffset.x.value = pick();
+    m_shakeOffset.y.value = pick();
+    m_shakeOffset.z.value = pick();
+
+    m_shakeFramesRemaining--;
+}
 
 void psxsplash::Camera::ExtractFrustum(Frustum& frustum) const {
 

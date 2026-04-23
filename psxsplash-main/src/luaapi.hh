@@ -118,6 +118,11 @@ private:
     // Deactivates the object (fires onDisable). Lets the pool re-use it on
     // the next Entity.Spawn with the same tag.
     static int Entity_Destroy(lua_State* L);
+
+    // Entity.FindNearest({x,y,z}, tag) -> object or nil
+    // Linear scan of active GameObjects with matching tag, returns the
+    // closest. For lock-on, "closest enemy" AI queries, etc.
+    static int Entity_FindNearest(lua_State* L);
     
     // ========================================================================
     // VEC3 API - Vector math
@@ -236,6 +241,12 @@ private:
 
     // Camera.SetH(h) -> nil (set projection H register, clamped 1-1024)
     static int Camera_SetH(lua_State* L);
+
+    // Camera.Shake(intensity, frames) -> nil
+    // Adds random per-frame jitter to the camera position for `frames` frames,
+    // decaying linearly to zero. `intensity` is FP12 max offset in world
+    // units (e.g., 0.2 for a punchy hit, 0.05 for footstep ambience).
+    static int Camera_Shake(lua_State* L);
     
     // ========================================================================
     // AUDIO API - Sound playback (placeholder for SPU)
@@ -378,6 +389,13 @@ private:
     // Scene.GetIndex() -> number
     // Returns the index of the currently loaded scene.
     static int Scene_GetIndex(lua_State* L);
+
+    // Scene.PauseFor(frames) -> nil
+    // Hit-stop / freeze. Holds gameplay tick (animation, cutscene, skin,
+    // collision, Lua onUpdate, controls, player movement) for `frames`
+    // frames while keeping render + camera shake + music alive. Souls /
+    // Hades-style impact crunch. Stacks via max(remaining, requested).
+    static int Scene_PauseFor(lua_State* L);
     
     // ========================================================================
     // PERSIST API - Data that survives scene loads
@@ -450,6 +468,13 @@ private:
     // a roughly-unit direction so `distance` is in world units. Safe to call
     // a few times per frame; linear scan over up to 64 colliders.
     static int Physics_Raycast(lua_State* L);
+
+    // Physics.OverlapBox({x,y,z}, {x,y,z} [, tag]) -> array of object handles
+    // AABB-vs-AABB overlap query against active Solid colliders. Optional
+    // tag filter (0/nil = no filter). Used for melee swings, area damage,
+    // pickup proximity. Result table is empty if no hits. Hard-capped at 16
+    // results to bound the Lua table allocation on PSX RAM.
+    static int Physics_OverlapBox(lua_State* L);
 
     // Controls.SetEnabled(bool) - enable/disable all player input
     static int Controls_SetEnabled(lua_State* L);

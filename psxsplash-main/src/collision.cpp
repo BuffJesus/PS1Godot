@@ -377,4 +377,18 @@ bool CollisionSystem::raycast(const psyqo::Vec3& origin,
     return true;
 }
 
+int CollisionSystem::overlapBox(const AABB& query,
+                                uint16_t* outObjectIndices,
+                                int maxResults) const {
+    if (!outObjectIndices || maxResults <= 0) return 0;
+    int count = 0;
+    for (int i = 0; i < m_colliderCount && count < maxResults; i++) {
+        const CollisionData& col = m_colliders[i];
+        if (col.type != CollisionType::Solid) continue;
+        if (!query.intersects(col.bounds)) continue;
+        outObjectIndices[count++] = col.gameObjectIndex;
+    }
+    return count;
+}
+
 } // namespace psxsplash

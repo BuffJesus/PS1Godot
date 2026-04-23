@@ -103,6 +103,9 @@ void LuaAPI::RegisterAll(psyqo::Lua& L, SceneManager* scene, CutscenePlayer* cut
     L.push(Entity_Destroy);
     L.setField(-2, "Destroy");
 
+    L.push(Entity_FindNearest);
+    L.setField(-2, "FindNearest");
+
     L.setGlobal("Entity");
     
     // ========================================================================
@@ -226,7 +229,10 @@ void LuaAPI::RegisterAll(psyqo::Lua& L, SceneManager* scene, CutscenePlayer* cut
 
     L.push(Camera_SetH);
     L.setField(-2, "SetH");
-    
+
+    L.push(Camera_Shake);
+    L.setField(-2, "Shake");
+
     L.setGlobal("Camera");
     
     // ========================================================================
@@ -384,7 +390,10 @@ void LuaAPI::RegisterAll(psyqo::Lua& L, SceneManager* scene, CutscenePlayer* cut
     
     L.push(Scene_GetIndex);
     L.setField(-2, "GetIndex");
-    
+
+    L.push(Scene_PauseFor);
+    L.setField(-2, "PauseFor");
+
     L.setGlobal("Scene");
     
     // ========================================================================
@@ -461,6 +470,9 @@ void LuaAPI::RegisterAll(psyqo::Lua& L, SceneManager* scene, CutscenePlayer* cut
 
     L.push(Physics_Raycast);
     L.setField(-2, "Raycast");
+
+    L.push(Physics_OverlapBox);
+    L.setField(-2, "OverlapBox");
 
     L.setGlobal("Physics");
 
@@ -981,6 +993,40 @@ int LuaAPI::Entity_Destroy(lua_State* L) {
         s_sceneManager->setObjectActive(go, false);
     }
     return 0;
+}
+
+int LuaAPI::Entity_FindNearest(lua_State* L) {
+    psyqo::Lua lua(L);
+    if (!s_sceneManager || !lua.isTable(1) || !lua.isNumber(2)) {
+        lua.push();
+        return 1;
+    }
+    psyqo::Vec3 pos;
+    ReadVec3(lua, 1, pos.x, pos.y, pos.z);
+    uint16_t tag = (uint16_t)lua.toNumber(2);
+    if (tag == 0) { lua.push(); return 1; }
+
+    GameObject* best = nullptr;
+    // Cast a single 32-bit operand to int64 per multiply so the codegen stays
+    // inside MIPS's native 32×32→64 `mult` (same pattern as camera.cpp's
+    // frustum-extract). int64*int64 would pull in __muldi3, which isn't linked.
+    int64_t bestDistSq = INT64_MAX;
+    size_t count = s_sceneManager->getGameObjectCount();
+    for (size_t i = 0; i < count; i++) {
+        auto* go = s_sceneManager->getGameObject((uint16_t)i);
+        if (!go || !go->isActive() || go->tag != tag) continue;
+
+        int32_t dx = go->position.x.value - pos.x.value;
+        int32_t dy = go->position.y.value - pos.y.value;
+        int32_t dz = go->position.z.value - pos.z.value;
+        int64_t distSq = (int64_t)dx * dx + (int64_t)dy * dy + (int64_t)dz * dz;
+        if (distSq < bestDistSq) {
+            bestDistSq = distSq;
+            best = go;
+        }
+    }
+    PushGameObjectHandle(lua, best);
+    return 1;
 }
 
 // ============================================================================
@@ -1733,6 +1779,15 @@ int LuaAPI::Camera_SetH(lua_State* L) {
     return 0;
 }
 
+int LuaAPI::Camera_Shake(lua_State* L) {
+    psyqo::Lua lua(L);
+    if (!s_sceneManager) return 0;
+    psyqo::FixedPoint<12> intensity = readFP(lua, 1);
+    int frames = static_cast<int>(lua.toNumber(2));
+    s_sceneManager->getCamera().Shake(intensity, frames);
+    return 0;
+}
+
 // ============================================================================
 // AUDIO API IMPLEMENTATION
 // ============================================================================
@@ -2208,14 +2263,22 @@ int LuaAPI::Scene_Load(lua_State* L) {
 
 int LuaAPI::Scene_GetIndex(lua_State* L) {
     psyqo::Lua lua(L);
-    
+
     if (!s_sceneManager) {
         lua.pushNumber(0);
         return 1;
     }
-    
+
     lua.pushNumber(static_cast<lua_Number>(s_sceneManager->getCurrentSceneIndex()));
     return 1;
+}
+
+int LuaAPI::Scene_PauseFor(lua_State* L) {
+    psyqo::Lua lua(L);
+    if (!s_sceneManager) return 0;
+    int frames = static_cast<int>(lua.toNumber(1));
+    if (frames > 0) s_sceneManager->requestPauseFor(frames);
+    return 0;
 }
 
 // ============================================================================
@@ -2977,6 +3040,42 @@ int LuaAPI::Physics_Raycast(lua_State* L) {
         origin.y + dir.y * hitT,
         origin.z + dir.z * hitT);
     lua.setField(-2, "point");
+    return 1;
+}
+
+int LuaAPI::Physics_OverlapBox(lua_State* L) {
+    psyqo::Lua lua(L);
+    // Always return at least an empty table — Lua scripts iterate result with
+    // ipairs/for which crashes on nil but no-ops on empty.
+    if (!s_sceneManager || !lua.isTable(1) || !lua.isTable(2)) {
+        lua.newTable();
+        return 1;
+    }
+
+    AABB query;
+    ReadVec3(lua, 1, query.min.x, query.min.y, query.min.z);
+    ReadVec3(lua, 2, query.max.x, query.max.y, query.max.z);
+
+    bool hasTagFilter = !lua.isNoneOrNil(3);
+    uint16_t tagFilter = hasTagFilter ? (uint16_t)lua.toNumber(3) : 0;
+    // Tag 0 is the untagged sentinel (see Entity.SetTag); treat it as "no
+    // filter" rather than "match only tag-0 objects."
+    if (hasTagFilter && tagFilter == 0) hasTagFilter = false;
+
+    static constexpr int MAX_OVERLAP_RESULTS = 16;
+    uint16_t goIndices[MAX_OVERLAP_RESULTS];
+    int hitCount = s_sceneManager->getCollision().overlapBox(
+        query, goIndices, MAX_OVERLAP_RESULTS);
+
+    lua.newTable();
+    int outIdx = 1;
+    for (int i = 0; i < hitCount; i++) {
+        auto* go = s_sceneManager->getGameObject(goIndices[i]);
+        if (!go || !go->isActive()) continue;
+        if (hasTagFilter && go->tag != tagFilter) continue;
+        PushGameObjectHandle(lua, go);
+        lua.rawSetI(-2, outIdx++);
+    }
     return 1;
 }
 

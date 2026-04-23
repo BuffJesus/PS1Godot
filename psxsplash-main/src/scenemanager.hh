@@ -110,6 +110,16 @@ class SceneManager {
     MusicManager& getMusic() { return m_music; }
     CollisionSystem& getCollision() { return m_collisionSystem; }
 
+    // Hit-stop / freeze. Holds gameplay tick (animation / cutscene / skin /
+    // collision / Lua onUpdate) for `frames`, while still rendering and still
+    // ticking camera shake + controls. Souls/Hades-style impact crunch.
+    // Calling again before the previous pause expires extends to max(remain,
+    // newFrames) — short impacts don't shorten an in-flight long pause.
+    void requestPauseFor(int frames) {
+        if (frames > m_pauseFramesRemaining) m_pauseFramesRemaining = frames;
+    }
+    bool isPaused() const { return m_pauseFramesRemaining > 0; }
+
     // Controls enable/disable (Lua-driven)
     void setControlsEnabled(bool enabled) { m_controlsEnabled = enabled; }
     bool isControlsEnabled() const { return m_controlsEnabled; }
@@ -160,6 +170,9 @@ class SceneManager {
     
     // Scene type and render path: 0=exterior (BVH), 1=interior (room/portal)
     uint16_t m_sceneType = 0;
+
+    // Hit-stop frame counter — see requestPauseFor / isPaused.
+    int m_pauseFramesRemaining = 0;
     
     // Room/portal data (v11+ interior scenes). Pointers into splashpack data.
     const RoomData* m_rooms = nullptr;
