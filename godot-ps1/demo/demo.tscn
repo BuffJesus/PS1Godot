@@ -419,6 +419,22 @@ albedo_color = Color(0.98, 0.65, 0.15, 1)
 [sub_resource type="BoxMesh" id="BoxMesh_pillar"]
 size = Vector3(0.4, 6, 0.4)
 
+[sub_resource type="StandardMaterial3D" id="mat_enemy"]
+cull_mode = 2
+shading_mode = 0
+albedo_color = Color(0.85, 0.25, 0.25, 1)
+
+[sub_resource type="StandardMaterial3D" id="mat_bullet"]
+cull_mode = 2
+shading_mode = 0
+albedo_color = Color(1, 0.9, 0.3, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_bullet"]
+size = Vector3(0.3, 0.3, 0.3)
+
+[sub_resource type="BoxMesh" id="BoxMesh_tiny"]
+size = Vector3(0.01, 0.01, 0.01)
+
 [node name="Scene" type="Node3D" unique_id=1345701053]
 script = ExtResource("1_scene")
 SceneType = 2
@@ -790,5 +806,88 @@ script = ExtResource("12_portal")
 RoomA = NodePath("../PS1Room_A")
 RoomB = NodePath("../PS1Room_B")
 PortalSize = Vector2(2, 2.5)
+
+[node name="EnemyA" type="MeshInstance3D" parent="." unique_id=900000010]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6, 1, -2)
+material_override = SubResource("mat_enemy")
+extra_cull_margin = 2.0
+mesh = SubResource("BoxMesh_cube")
+script = ExtResource("2_mesh")
+Collision = 1
+Tag = 2
+
+[node name="EnemyB" type="MeshInstance3D" parent="." unique_id=900000011]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 1, -4)
+material_override = SubResource("mat_enemy")
+extra_cull_margin = 2.0
+mesh = SubResource("BoxMesh_cube")
+script = ExtResource("2_mesh")
+Collision = 1
+Tag = 2
+
+[node name="EnemyC" type="MeshInstance3D" parent="." unique_id=900000012]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, -8)
+material_override = SubResource("mat_enemy")
+extra_cull_margin = 2.0
+mesh = SubResource("BoxMesh_cube")
+script = ExtResource("2_mesh")
+Collision = 1
+Tag = 2
+
+[node name="BulletA" type="MeshInstance3D" parent="." unique_id=900000020]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -30, -10, -30)
+material_override = SubResource("mat_bullet")
+extra_cull_margin = 2.0
+mesh = SubResource("BoxMesh_bullet")
+script = ExtResource("2_mesh")
+Collision = 1
+Tag = 1
+StartsInactive = true
+
+[node name="BulletB" type="MeshInstance3D" parent="." unique_id=900000021]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -30, -10, -30)
+material_override = SubResource("mat_bullet")
+extra_cull_margin = 2.0
+mesh = SubResource("BoxMesh_bullet")
+script = ExtResource("2_mesh")
+Collision = 1
+Tag = 1
+StartsInactive = true
+
+[node name="BulletC" type="MeshInstance3D" parent="." unique_id=900000022]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -30, -10, -30)
+material_override = SubResource("mat_bullet")
+extra_cull_margin = 2.0
+mesh = SubResource("BoxMesh_bullet")
+script = ExtResource("2_mesh")
+Collision = 1
+Tag = 1
+StartsInactive = true
+
+[node name="BulletD" type="MeshInstance3D" parent="." unique_id=900000023]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -30, -10, -30)
+material_override = SubResource("mat_bullet")
+extra_cull_margin = 2.0
+mesh = SubResource("BoxMesh_bullet")
+script = ExtResource("2_mesh")
+Collision = 1
+Tag = 1
+StartsInactive = true
+
+[node name="BulletE" type="MeshInstance3D" parent="." unique_id=900000024]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -30, -10, -30)
+material_override = SubResource("mat_bullet")
+extra_cull_margin = 2.0
+mesh = SubResource("BoxMesh_bullet")
+script = ExtResource("2_mesh")
+Collision = 1
+Tag = 1
+StartsInactive = true
+
+[node name="CombatManager" type="MeshInstance3D" parent="." unique_id=900000050]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 50, 0)
+mesh = SubResource("BoxMesh_tiny")
+script = ExtResource("2_mesh")
+ScriptFile = "res://demo/scripts/combat_showcase.lua"
 
 [editable path="PS1Player/Humanoid"]
