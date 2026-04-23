@@ -564,24 +564,16 @@ public static class SceneCollector
 
         var theme = canvas.Theme;
         var elements = new System.Collections.Generic.List<UIElementRecord>();
-        foreach (var child in canvas.GetChildren())
+        // Walk through layout containers (HBox/VBox/SizeBox/Overlay/Spacer)
+        // and emit a flat list of (PS1UIElement, absolute-X/Y/W/H) tuples.
+        // Container nesting is purely an authoring convenience; the
+        // splashpack binary stores absolute coords just as it always did.
+        var placements = PS1UILayoutResolver.Flatten(canvas);
+        foreach (var p in placements)
         {
-            if (child is not PS1UIElement el)
-            {
-                GD.PushWarning($"[PS1Godot] Canvas '{name}' has non-UI child '{child.Name}' — ignored.");
-                continue;
-            }
+            var el = p.Element;
             string elName = string.IsNullOrWhiteSpace(el.ElementName) ? el.Name : el.ElementName;
             Color color = ResolveElementColor(el, theme);
-            // Resolve anchor + inset/offset to an absolute top-left in
-            // PSX coords. The runtime's UIElement still reads plain X/Y
-            // (anchor bytes in the binary stay zero, see SplashpackWriter
-            // WriteUISection); doing the math at export keeps the binary
-            // layout unchanged.
-            var (absX, absY) = PS1UIAnchoring.Resolve(el);
-            // Resolve the font reference to a runtime index (0 = system
-            // font, 1+ = one-based slot in data.UIFonts). Non-Text
-            // elements get 0 regardless.
             byte fontIndex = 0;
             if (el.Type == PS1UIElementType.Text && el.Font != null)
             {
@@ -592,10 +584,10 @@ public static class SceneCollector
                 Name = elName,
                 Type = el.Type,
                 VisibleOnLoad = el.VisibleOnLoad,
-                X = (short)Mathf.Clamp(absX, short.MinValue, short.MaxValue),
-                Y = (short)Mathf.Clamp(absY, short.MinValue, short.MaxValue),
-                W = (short)Mathf.Clamp(el.Width, short.MinValue, short.MaxValue),
-                H = (short)Mathf.Clamp(el.Height, short.MinValue, short.MaxValue),
+                X = (short)Mathf.Clamp(p.X, short.MinValue, short.MaxValue),
+                Y = (short)Mathf.Clamp(p.Y, short.MinValue, short.MaxValue),
+                W = (short)Mathf.Clamp(p.W, short.MinValue, short.MaxValue),
+                H = (short)Mathf.Clamp(p.H, short.MinValue, short.MaxValue),
                 ColorR = (byte)Mathf.Clamp((int)(color.R * 255f), 0, 255),
                 ColorG = (byte)Mathf.Clamp((int)(color.G * 255f), 0, 255),
                 ColorB = (byte)Mathf.Clamp((int)(color.B * 255f), 0, 255),

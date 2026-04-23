@@ -132,4 +132,18 @@ public partial class PS1UIElement : Node
     // Vertical alignment of the text stack inside the Height box.
     // Ignored for non-Text types.
     [Export] public PS1UITextVAlign TextVAlign { get; set; } = PS1UITextVAlign.Top;
+
+    [ExportGroup("Slot (when nested inside a container)")]
+    // These fields are read by PS1UIHBox / PS1UIVBox / PS1UISizeBox /
+    // PS1UIOverlay parents at export time. Ignored when the parent is a
+    // PS1UICanvas (use Anchor + X/Y in that case).
+    [Export] public PS1UISlotAlign SlotHAlign { get; set; } = PS1UISlotAlign.Inherit;
+    [Export] public PS1UISlotAlign SlotVAlign { get; set; } = PS1UISlotAlign.Inherit;
+    // 0 → use Width/Height as-is. >0 → take this proportional share of the
+    // leftover space on the parent's main axis (HBox: horizontal,
+    // VBox: vertical). Three flex-1 children split free space equally.
+    [Export(PropertyHint.Range, "0,16,1")] public int SlotFlex { get; set; } = 0;
+    // Inset margin around this element inside its slot. CSS order:
+    // X=Left, Y=Top, Z=Right, W=Bottom.
+    [Export] public Vector4I SlotPadding { get; set; } = Vector4I.Zero;
 }
