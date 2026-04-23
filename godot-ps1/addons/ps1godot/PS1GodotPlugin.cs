@@ -24,6 +24,7 @@ public partial class PS1GodotPlugin : EditorPlugin
     private const string AddSkinnedTestMenuLabel = "PS1Godot: Add Skinned Test Mesh (bullet 11 test asset)";
     private const string GenerateFontBitmapMenuLabel = "PS1Godot: Generate bitmap for selected PS1UIFontAsset";
     private const string RunMidiTestsMenuLabel = "PS1Godot: Run MIDI Serializer Tests";
+    private const string FrameModelMenuLabel = "PS1Godot: Frame Selected Model in Viewport";
 
     private PS1TriggerBoxGizmo? _triggerBoxGizmo;
     private PS1GodotDock? _dock;
@@ -42,6 +43,7 @@ public partial class PS1GodotPlugin : EditorPlugin
         AddToolMenuItem(AddSkinnedTestMenuLabel, Callable.From(OnAddSkinnedTestMesh));
         AddToolMenuItem(GenerateFontBitmapMenuLabel, Callable.From(OnGenerateFontBitmap));
         AddToolMenuItem(RunMidiTestsMenuLabel, Callable.From(OnRunMidiTests));
+        AddToolMenuItem(FrameModelMenuLabel, Callable.From(OnFrameSelectedModel));
 
         _triggerBoxGizmo = new PS1TriggerBoxGizmo();
         AddNode3DGizmoPlugin(_triggerBoxGizmo);
@@ -114,6 +116,7 @@ public partial class PS1GodotPlugin : EditorPlugin
         RemoveToolMenuItem(AddSkinnedTestMenuLabel);
         RemoveToolMenuItem(GenerateFontBitmapMenuLabel);
         RemoveToolMenuItem(RunMidiTestsMenuLabel);
+        RemoveToolMenuItem(FrameModelMenuLabel);
 
         SceneChanged -= OnSceneChanged;
         EditorInterface.Singleton.GetSelection().SelectionChanged -= OnEditorSelectionChanged;
@@ -494,6 +497,71 @@ public partial class PS1GodotPlugin : EditorPlugin
         {
             SetOwnerRecursive(child, owner);
         }
+    }
+
+    private void OnFrameSelectedModel()
+    {
+        var selected = EditorInterface.Singleton.GetSelection().GetSelectedNodes();
+        Node3D? target = null;
+        foreach (var n in selected)
+        {
+            if (n is Node3D n3) { target = n3; break; }
+        }
+        if (target == null)
+        {
+            GD.PushWarning("[PS1Godot] Frame Model: select a Node3D (the model you want to frame) in the Scene dock first.");
+            return;
+        }
+
+        // Default apparent width for now: 128 px (about 40% of the 320-wide
+        // screen — a decent splash / inventory-preview size). No modal
+        // dialog — author edits the value in code and re-runs, or copies
+        // the Lua snippet and edits at runtime.
+        const int apparentWidthPx = 128;
+
+        var r = PS1ModelFramer.Compute(target, apparentWidthPx);
+        if (r.Radius <= 0f)
+        {
+            GD.PushWarning($"[PS1Godot] Frame Model: '{target.Name}' has no MeshInstance3D descendants to measure.");
+            return;
+        }
+
+        // If the scene has exactly one Camera3D, position it — gives the
+        // author instant viewport feedback. Multiple cameras would be
+        // ambiguous; zero means no viewport camera to move.
+        var root = EditorInterface.Singleton.GetEditedSceneRoot();
+        Camera3D? activeCam = root == null ? null : FindSingleCamera3D(root);
+
+        GD.Print("");
+        GD.Print($"[PS1Godot] Framed '{target.Name}': radius={r.Radius:0.##}m " +
+                 $"→ camera distance={r.Distance:0.##}m, projection H={r.ProjectionH}.");
+        GD.Print($"[PS1Godot] Godot-space camera position: {r.CameraPosition}");
+        GD.Print("[PS1Godot] Lua snippet (paste into a scene script's onSceneCreationEnd):");
+        GD.Print(PS1ModelFramer.BuildLuaSnippet(r));
+
+        if (activeCam != null)
+        {
+            activeCam.GlobalPosition = r.CameraPosition;
+            activeCam.GlobalRotation = r.CameraRotationRadians;
+            GD.Print($"[PS1Godot] Moved Camera3D '{activeCam.Name}' to the computed transform.");
+        }
+        else
+        {
+            GD.Print("[PS1Godot] No single Camera3D in scene — left viewport alone.");
+        }
+    }
+
+    private static Camera3D? FindSingleCamera3D(Node root)
+    {
+        Camera3D? found = null;
+        int count = 0;
+        void Walk(Node n)
+        {
+            if (n is Camera3D c) { found = c; count++; }
+            foreach (var child in n.GetChildren()) Walk(child);
+        }
+        Walk(root);
+        return count == 1 ? found : null;
     }
 
     private void OnSubdivide()
