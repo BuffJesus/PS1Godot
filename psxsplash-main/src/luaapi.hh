@@ -362,8 +362,33 @@ private:
     // Math.Min(a, b)
     static int Math_Min(lua_State* L);
     
-    // Math.Max(a, b)  
+    // Math.Max(a, b)
     static int Math_Max(lua_State* L);
+
+    // Math.Floor(fp) -> integer
+    // Floors a FixedPoint<12> to the next integer toward -infinity.
+    // Accepts either a FixedPoint object or a plain integer (identity).
+    static int Math_Floor(lua_State* L);
+
+    // Math.Ceil(fp) -> integer
+    // Ceilings a FixedPoint<12> to the next integer toward +infinity.
+    static int Math_Ceil(lua_State* L);
+
+    // Math.Round(fp) -> integer
+    // Rounds a FixedPoint<12> to the nearest integer. Half-values tie
+    // toward +infinity so round(0.5) = 1, round(-0.5) = 0.
+    static int Math_Round(lua_State* L);
+
+    // Math.ToInt(fp) -> integer
+    // Truncates a FixedPoint<12> toward zero. Inverse of Math.ToFixed
+    // for non-negative whole values. Use Floor if you want the
+    // round-toward-minus-infinity semantics.
+    static int Math_ToInt(lua_State* L);
+
+    // Math.ToFixed(integer) -> FixedPoint
+    // Promotes a plain integer to a FixedPoint<12>. Equivalent to
+    // FixedPoint.new(integer, 0) but shorter.
+    static int Math_ToFixed(lua_State* L);
     
     // ========================================================================
     // RANDOM API - Get random numbers

@@ -357,7 +357,22 @@ void LuaAPI::RegisterAll(psyqo::Lua& L, SceneManager* scene, CutscenePlayer* cut
     
     L.push(Math_Max);
     L.setField(-2, "Max");
-    
+
+    L.push(Math_Floor);
+    L.setField(-2, "Floor");
+
+    L.push(Math_Ceil);
+    L.setField(-2, "Ceil");
+
+    L.push(Math_Round);
+    L.setField(-2, "Round");
+
+    L.push(Math_ToInt);
+    L.setField(-2, "ToInt");
+
+    L.push(Math_ToFixed);
+    L.setField(-2, "ToFixed");
+
     L.setGlobal("PSXMath");
     
     // ========================================================================
@@ -2175,11 +2190,58 @@ int LuaAPI::Math_Min(lua_State* L) {
 
 int LuaAPI::Math_Max(lua_State* L) {
     psyqo::Lua lua(L);
-    
+
     lua_Number a = lua.toNumber(1);
     lua_Number b = lua.toNumber(2);
-    
+
     lua.pushNumber(a > b ? a : b);
+    return 1;
+}
+
+// GCC emits arithmetic right shift on `>>` for signed integers, so the
+// sign bit propagates. That's the behavior we want: (-6144) >> 12 = -2,
+// which is floor(-1.5). Values here are fp12 raw ints.
+
+int LuaAPI::Math_Floor(lua_State* L) {
+    psyqo::Lua lua(L);
+    int32_t raw = readFP(lua, 1).raw();
+    lua.pushNumber(raw >> 12);
+    return 1;
+}
+
+int LuaAPI::Math_Ceil(lua_State* L) {
+    psyqo::Lua lua(L);
+    int32_t raw = readFP(lua, 1).raw();
+    // ceil(x) = -floor(-x). Avoids the overflow case of adding (1<<12)-1
+    // to INT32_MAX-ish raws.
+    lua.pushNumber(-((-raw) >> 12));
+    return 1;
+}
+
+int LuaAPI::Math_Round(lua_State* L) {
+    psyqo::Lua lua(L);
+    int32_t raw = readFP(lua, 1).raw();
+    // Add 0.5 in fp12 then floor. Ties round toward +infinity: 1.5 → 2,
+    // -0.5 → 0, -1.5 → -1. Authors who want round-half-away-from-zero
+    // can build it from Floor/Ceil.
+    lua.pushNumber((raw + (1 << 11)) >> 12);
+    return 1;
+}
+
+int LuaAPI::Math_ToInt(lua_State* L) {
+    psyqo::Lua lua(L);
+    int32_t raw = readFP(lua, 1).raw();
+    // Truncate toward zero: -1.5 → -1, 1.5 → 1.
+    int32_t result = raw >= 0 ? (raw >> 12) : -(((-raw)) >> 12);
+    lua.pushNumber(result);
+    return 1;
+}
+
+int LuaAPI::Math_ToFixed(lua_State* L) {
+    psyqo::Lua lua(L);
+    int32_t n = static_cast<int32_t>(lua.toNumber(1));
+    psyqo::FixedPoint<12> fp(n << 12, psyqo::FixedPoint<12>::RAW);
+    lua.push(fp);
     return 1;
 }
 
