@@ -323,9 +323,10 @@ bullets, pickups, particles, enemy waves, and voxel-style worlds.
       under `Entity` namespace (consistent with `Entity.Find`). Pool pattern:
       author sets `Tag` + `StartsInactive = true` on N template instances in
       the editor; Spawn scans for the first inactive match, activates it,
-      fires `onEnable`. Also ships `Entity.GetTag`/`SetTag`/`FindByTag`. No
-      splashpack version bump (repurposed the `_reserved0` u16 legacy slot).
-      Per-spawn reset logic should live in `onEnable`, not `onCreate`.
+      fires `onEnable`. Also ships `Entity.GetTag`/`SetTag`/`FindByTag`/
+      `FindNearest`. No splashpack version bump (repurposed the `_reserved0`
+      u16 legacy slot). Per-spawn reset logic should live in `onEnable`,
+      not `onCreate`.
 - [ ] `Mesh.Submit(verts, tris, tpage, aabb)` — Lua-built meshes submitted
       per-frame. Enables voxel chunks, procedural terrain, dynamic decals.
       **[runtime]**
@@ -411,7 +412,11 @@ The runtime already has a collider grid and nav regions — bind them to Lua.
       yet — compute from the hit face or the collider's world position until
       ray-vs-triangle lands. Unlocks projectiles, pickups, LoS-to-objects.
 - [ ] `Physics.Raycast` against BVH triangles — needed for walls-block-LoS.
-- [ ] `Physics.OverlapBox/Sphere(bounds)` → list of intersecting GameObjects.
+- [x] `Physics.OverlapBox({x,y,z}, {x,y,z} [, tag])` → array of object handles.
+      AABB-vs-AABB over Solid colliders, optional tag filter. Hard-capped at
+      16 results. Used for melee swing hitboxes / area damage.
+- [ ] `Physics.OverlapSphere(center, radius)` → list. (OverlapBox covers most
+      jam cases; sphere is bonus.)
 - [ ] `Physics.SweepSphere(origin, dir, radius)` for projectiles.
 - [ ] `Nav.Pathfind(from, to, maxSteps)` — portal-aware path across nav
       regions. Depends on Phase 2 bullet 7 landing the nav data.
@@ -748,7 +753,14 @@ modern, beautiful) — see `docs/ui-ux-plan.md` § UI authoring.
 Runtime has cutscene playback; Lua can't trigger it.
 
 - [ ] `Cutscene.Play(name)` / `Stop()` / `IsPlaying()`.
-- [ ] `Scene.SetPaused(bool)` — freeze game clock for menus / inventory.
+- [x] `Scene.PauseFor(frames)` — timed hit-stop freeze. Holds animation /
+      cutscene / skin / collision / Lua onUpdate while keeping render +
+      camera shake + music alive. Souls/Hades-style impact crunch. Stacks
+      via `max(remaining, requested)`.
+- [ ] `Scene.SetPaused(bool)` — indefinite freeze for menus / inventory
+      (PauseFor is the timed variant; this is the toggle).
+- [x] `Camera.Shake(intensity, frames)` — random per-frame camera jitter
+      with linear decay. Pairs with `Scene.PauseFor` for impact feedback.
 
 ### World simulation (day/night, weather)
 
