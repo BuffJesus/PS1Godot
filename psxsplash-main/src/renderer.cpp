@@ -356,6 +356,7 @@ void psxsplash::Renderer::Render(eastl::vector<GameObject*>& objects) {
     for (auto& obj : objects) {
         if (!obj->isActive()) continue;
         if (obj->isSkinned()) continue;
+        if (obj->isUIModelTarget()) continue;
         setupObjectTransform(obj, cameraPosition);
         for (int i = 0; i < obj->polyCount; i++)
             processTriangle(obj->polygons[i], fogFarSZ, ot, balloc);
@@ -401,6 +402,7 @@ void psxsplash::Renderer::RenderWithBVH(eastl::vector<GameObject*>& objects, con
         if (!obj->isActive()) continue;
         if (obj->isDynamicMoved()) continue;  // Skip dynamic objects in BVH pass — rendered below
         if (obj->isSkinned()) continue;  // Skip skinned objects — rendered in skinned pass
+        if (obj->isUIModelTarget()) continue;  // Skip UIModel targets — HUD pass renders them
         if (ref.triangleIndex >= obj->polyCount) continue;
         if (ref.objectIndex != lastObjectIndex) {
             lastObjectIndex = ref.objectIndex;
@@ -425,6 +427,7 @@ void psxsplash::Renderer::RenderWithBVH(eastl::vector<GameObject*>& objects, con
         GameObject* obj = objects[oi];
         if (!obj->isActive() || !obj->isDynamicMoved()) continue;
         if (obj->isSkinned()) continue;
+        if (obj->isUIModelTarget()) continue;
         BVHNode objBox;
         objBox.minX = obj->aabbMinX; objBox.minY = obj->aabbMinY; objBox.minZ = obj->aabbMinZ;
         objBox.maxX = obj->aabbMaxX; objBox.maxY = obj->aabbMaxY; objBox.maxZ = obj->aabbMaxZ;
@@ -729,6 +732,7 @@ void psxsplash::Renderer::RenderWithRooms(eastl::vector<GameObject*>& objects,
             if (!obj->isActive()) continue;
             if (obj->isDynamicMoved()) continue;  // Rendered in dynamic pass below
             if (obj->isSkinned()) continue;  // Rendered in skinned pass
+            if (obj->isUIModelTarget()) continue;  // Rendered in HUD pass
             if (ref.triangleIndex >= obj->polyCount) continue;
             if (ref.objectIndex != lastObj) {
                 lastObj = ref.objectIndex;
@@ -1113,6 +1117,7 @@ void psxsplash::Renderer::RenderWithRooms(eastl::vector<GameObject*>& objects,
         GameObject* obj = objects[oi];
         if (!obj->isActive() || !obj->isDynamicMoved()) continue;
         if (obj->isSkinned()) continue;
+        if (obj->isUIModelTarget()) continue;
         BVHNode objBox;
         objBox.minX = obj->aabbMinX; objBox.minY = obj->aabbMinY; objBox.minZ = obj->aabbMinZ;
         objBox.maxX = obj->aabbMaxX; objBox.maxY = obj->aabbMaxY; objBox.maxZ = obj->aabbMaxZ;
@@ -1164,6 +1169,7 @@ void psxsplash::Renderer::renderSkinnedObjects(
         if (animSet.gameObjectIndex >= objects.size()) continue;
         GameObject* obj = objects[animSet.gameObjectIndex];
         if (!obj->isActive()) continue;
+        if (obj->isUIModelTarget()) continue;
         if (animSet.clipCount == 0) continue;
 
         // Frustum cull using object AABB

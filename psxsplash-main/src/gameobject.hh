@@ -15,11 +15,15 @@ constexpr uint16_t NO_COMPONENT = 0xFFFF;
 
 /**
  * GameObject bitfield flags
- * 
+ *
  * Bit 0: isActive - whether object is active in scene
  * Bit 1: pendingEnable - flag for deferred enable (to batch Lua calls)
  * Bit 2: pendingDisable - flag for deferred disable
  * Bit 3: dynamicMoved - object position was changed at runtime (BVH stale)
+ * Bit 4: isSkinned - mesh uses bone weights
+ * Bit 5: isUIModelTarget - at least one PS1UIModel has this as its Target;
+ *        world render pass skips so the HUD preview is the only render.
+ *        Collision / Lua / physics still run — this is a visual-only flag.
  */
 class GameObject final {
     typedef Utilities::BitSpan<bool> IsActive;
@@ -27,7 +31,8 @@ class GameObject final {
     typedef Utilities::BitSpan<bool, 2> PendingDisable;
     typedef Utilities::BitSpan<bool, 3> DynamicMoved;
     typedef Utilities::BitSpan<bool, 4> IsSkinned;
-    typedef Utilities::BitField<IsActive, PendingEnable, PendingDisable, DynamicMoved, IsSkinned> GameObjectFlags;
+    typedef Utilities::BitSpan<bool, 5> IsUIModelTarget;
+    typedef Utilities::BitField<IsActive, PendingEnable, PendingDisable, DynamicMoved, IsSkinned, IsUIModelTarget> GameObjectFlags;
     
   public:
     union {
@@ -79,6 +84,10 @@ class GameObject final {
     
     // Skinned mesh flag (bit 4)
     bool isSkinned() const { return flags.get<IsSkinned>(); }
+
+    // UI model target flag (bit 5) — hidden from world render pass.
+    bool isUIModelTarget() const { return flags.get<IsUIModelTarget>(); }
+    void setUIModelTarget(bool v) { flags.set<IsUIModelTarget>(v); }
     
     // Component checks
     bool hasInteractable() const { return interactableIndex != NO_COMPONENT; }

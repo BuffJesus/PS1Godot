@@ -227,6 +227,14 @@ void psxsplash::SceneManager::InitializeScene(uint8_t* splashpackData, LoadingSc
         st.currentDistFp12  = disk.orbitDistFp12;
         st.currentTargetObj = disk.targetObjIndex;
         st.visible          = disk.visibleOnLoad;
+        // Flag the target so the world render pass skips it — the HUD
+        // preview becomes the only visible render of this mesh. Authors
+        // who want BOTH a world render and a UI preview should duplicate
+        // the mesh as two separate PS1MeshInstance / PS1MeshGroup nodes
+        // and target the dedicated one.
+        if (disk.targetObjIndex < m_gameObjects.size()) {
+            m_gameObjects[disk.targetObjIndex]->setUIModelTarget(true);
+        }
     }
     Renderer::GetInstance().SetUIModelData(
         m_uiModelCount > 0 ? m_uiModelsDisk : nullptr,
