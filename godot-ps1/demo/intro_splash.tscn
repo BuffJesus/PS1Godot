@@ -25,141 +25,70 @@
 script = ExtResource("2_clip")
 Stream = ExtResource("15_chime_stream")
 ClipName = "splash_chime"
+Loop = true
 metadata/_custom_type_script = "uid://cgk0vce50p3ph"
 
-[sub_resource type="Resource" id="Chan_lead"]
+[sub_resource type="Resource" id="Chan_ch0"]
 script = ExtResource("17_mchan")
 AudioClipName = "splash_chime"
 BaseNoteMidi = 69
-Volume = 110
+LoopSample = true
 metadata/_custom_type_script = "uid://3bx6n5sx7krl"
 
-[sub_resource type="Resource" id="Chan_bass_a"]
-script = ExtResource("17_mchan")
-MidiChannel = 1
-AudioClipName = "splash_chime"
-BaseNoteMidi = 69
-Volume = 95
-metadata/_custom_type_script = "uid://3bx6n5sx7krl"
-
-[sub_resource type="Resource" id="Chan_bass_b"]
+[sub_resource type="Resource" id="Chan_ch1"]
 script = ExtResource("17_mchan")
 MidiChannel = 1
 AudioClipName = "splash_chime"
 BaseNoteMidi = 69
-Volume = 95
+LoopSample = true
 metadata/_custom_type_script = "uid://3bx6n5sx7krl"
 
-[sub_resource type="Resource" id="Chan_triangle_a"]
+[sub_resource type="Resource" id="Chan_ch2_a"]
 script = ExtResource("17_mchan")
 MidiChannel = 2
 AudioClipName = "splash_chime"
 BaseNoteMidi = 69
-Volume = 75
+LoopSample = true
 metadata/_custom_type_script = "uid://3bx6n5sx7krl"
 
-[sub_resource type="Resource" id="Chan_triangle_b"]
+[sub_resource type="Resource" id="Chan_ch2_b"]
 script = ExtResource("17_mchan")
 MidiChannel = 2
 AudioClipName = "splash_chime"
 BaseNoteMidi = 69
-Volume = 75
+LoopSample = true
 metadata/_custom_type_script = "uid://3bx6n5sx7krl"
 
-[sub_resource type="Resource" id="Chan_triangle_c"]
+[sub_resource type="Resource" id="Chan_ch2_c"]
 script = ExtResource("17_mchan")
 MidiChannel = 2
 AudioClipName = "splash_chime"
 BaseNoteMidi = 69
-Volume = 75
+LoopSample = true
 metadata/_custom_type_script = "uid://3bx6n5sx7krl"
 
-[sub_resource type="Resource" id="Chan_pluck"]
+[sub_resource type="Resource" id="Chan_ch2_d"]
 script = ExtResource("17_mchan")
-MidiChannel = 6
+MidiChannel = 2
 AudioClipName = "splash_chime"
 BaseNoteMidi = 69
-Volume = 60
+LoopSample = true
 metadata/_custom_type_script = "uid://3bx6n5sx7krl"
 
-[sub_resource type="Resource" id="Chan_finalchime"]
-script = ExtResource("17_mchan")
-MidiChannel = 4
-AudioClipName = "splash_chime"
-BaseNoteMidi = 69
-Volume = 127
-metadata/_custom_type_script = "uid://3bx6n5sx7krl"
-
-[sub_resource type="Resource" id="Chan_filler3"]
+[sub_resource type="Resource" id="Chan_ch3"]
 script = ExtResource("17_mchan")
 MidiChannel = 3
 AudioClipName = "splash_chime"
 BaseNoteMidi = 69
-Volume = 80
-metadata/_custom_type_script = "uid://3bx6n5sx7krl"
-
-[sub_resource type="Resource" id="Chan_filler5"]
-script = ExtResource("17_mchan")
-MidiChannel = 5
-AudioClipName = "splash_chime"
-BaseNoteMidi = 69
-Volume = 80
-metadata/_custom_type_script = "uid://3bx6n5sx7krl"
-
-[sub_resource type="Resource" id="Chan_filler7"]
-script = ExtResource("17_mchan")
-MidiChannel = 7
-AudioClipName = "splash_chime"
-BaseNoteMidi = 69
-Volume = 70
-metadata/_custom_type_script = "uid://3bx6n5sx7krl"
-
-[sub_resource type="Resource" id="Chan_filler8"]
-script = ExtResource("17_mchan")
-MidiChannel = 8
-AudioClipName = "splash_chime"
-BaseNoteMidi = 69
-Volume = 70
-metadata/_custom_type_script = "uid://3bx6n5sx7krl"
-
-[sub_resource type="Resource" id="Chan_filler9"]
-script = ExtResource("17_mchan")
-MidiChannel = 9
-AudioClipName = "splash_chime"
-BaseNoteMidi = 69
-Volume = 70
-metadata/_custom_type_script = "uid://3bx6n5sx7krl"
-
-[sub_resource type="Resource" id="Chan_filler10"]
-script = ExtResource("17_mchan")
-MidiChannel = 10
-AudioClipName = "splash_chime"
-BaseNoteMidi = 69
-Volume = 70
-metadata/_custom_type_script = "uid://3bx6n5sx7krl"
-
-[sub_resource type="Resource" id="Chan_filler11"]
-script = ExtResource("17_mchan")
-MidiChannel = 11
-AudioClipName = "splash_chime"
-BaseNoteMidi = 69
-Volume = 70
-metadata/_custom_type_script = "uid://3bx6n5sx7krl"
-
-[sub_resource type="Resource" id="Chan_filler12"]
-script = ExtResource("17_mchan")
-MidiChannel = 12
-AudioClipName = "splash_chime"
-BaseNoteMidi = 69
-Volume = 80
+LoopSample = true
 metadata/_custom_type_script = "uid://3bx6n5sx7krl"
 
 [sub_resource type="Resource" id="Seq_splash"]
 script = ExtResource("18_mseq")
-MidiFile = "res://demo/audio/music/ps1_startup.mid"
+MidiFile = "res://demo/audio/music/bios_homage.mid"
 SequenceName = "ps1_startup"
 LoopStartBeat = -1
-Channels = Array[ExtResource("17_mchan")]([SubResource("Chan_lead"), SubResource("Chan_bass_a"), SubResource("Chan_bass_b"), SubResource("Chan_triangle_a"), SubResource("Chan_triangle_b"), SubResource("Chan_triangle_c"), SubResource("Chan_pluck"), SubResource("Chan_finalchime"), SubResource("Chan_filler3"), SubResource("Chan_filler5"), SubResource("Chan_filler7"), SubResource("Chan_filler8"), SubResource("Chan_filler9"), SubResource("Chan_filler10"), SubResource("Chan_filler11"), SubResource("Chan_filler12")])
+Channels = Array[ExtResource("17_mchan")]([SubResource("Chan_ch0"), SubResource("Chan_ch1"), SubResource("Chan_ch2_a"), SubResource("Chan_ch2_b"), SubResource("Chan_ch2_c"), SubResource("Chan_ch2_d"), SubResource("Chan_ch3")])
 metadata/_custom_type_script = "uid://c2oekhtvjyqlt"
 
 [node name="IntroSplash" type="Node3D" unique_id=510065409]
@@ -250,7 +179,7 @@ script = ExtResource("9_uiel")
 ElementName = "brand"
 Anchor = 2
 X = 0
-Y = 32
+Y = 35
 Width = 320
 ThemeSlot = 1
 Text = "HeadSpider Studios"
@@ -260,17 +189,14 @@ TextAlign = 1
 [node name="SpiderModelPreview" type="Node" parent="BrandCanvas" unique_id=900000001]
 script = ExtResource("20_uimodel")
 ModelName = "splash_spider"
-VisibleOnLoad = true
 Target = NodePath("../../HeadSpider")
 Anchor = 7
-X = 8
-Y = 8
+X = 114
+Y = 71
 Width = 96
 Height = 96
-OrbitYawDegrees = 0.0
 OrbitPitchDegrees = -10.0
 OrbitDistance = 5.0
-ProjectionH = 240
 
 [node name="LicensedCanvas" type="Node" parent="." unique_id=510065468]
 script = ExtResource("8_uican")
