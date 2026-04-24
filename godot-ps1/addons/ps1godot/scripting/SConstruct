@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import os
+import sys
 
 env = SConscript("lib/godot-cpp/SConstruct").Clone()
 
@@ -9,7 +10,31 @@ env.Append(CPPPATH=["src/"])
 if env.get("is_msvc", False):
     env.Append(CXXFLAGS=["/EHsc"])
 
-sources = Glob("src/*.cpp")
+# Auto-generate ApiData.gen.cpp from psxsplash-main/src/luaapi.hh. The
+# generated file feeds PS1LuaScriptLanguage::_complete_code so the
+# Godot script editor's autocomplete surface tracks luaapi.hh
+# automatically. Re-runs whenever luaapi.hh or gen_api_data.py changes.
+LUAAPI_HEADER = "#/../../../../psxsplash-main/src/luaapi.hh"
+GEN_SCRIPT    = "#/gen_api_data.py"
+GEN_OUTPUT    = "src/ApiData.gen.cpp"
+
+api_data_target = env.Command(
+    target=GEN_OUTPUT,
+    source=[LUAAPI_HEADER, GEN_SCRIPT],
+    action='"{py}" "{script}" "$SOURCE" "$TARGET"'.format(
+        py=sys.executable,
+        script=env.File(GEN_SCRIPT).abspath,
+    ),
+)
+
+# Glob() is evaluated at SConscript read time. On a fresh checkout
+# ApiData.gen.cpp doesn't exist yet, so the build would miss it; on
+# subsequent builds Glob picks it up and we'd double-link. Normalize
+# the glob-captured paths, drop any generated files, then re-add via
+# the api_data_target node.
+raw_sources = [os.path.normpath(str(f)) for f in Glob("src/*.cpp")]
+gen_norm = os.path.normpath(GEN_OUTPUT)
+sources = [s for s in raw_sources if s != gen_norm] + api_data_target
 
 target_path = "build/libps1lua{}{}".format(env["suffix"], env["SHLIBSUFFIX"])
 

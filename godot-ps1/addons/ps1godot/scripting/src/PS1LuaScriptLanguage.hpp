@@ -67,16 +67,11 @@ public:
 	Error _open_in_external_editor(const Ref<Script> &p_script, int32_t p_line, int32_t p_column) override { return ERR_UNAVAILABLE; }
 	ScriptLanguage::ScriptNameCasing _preferred_file_name_casing() const override { return ScriptLanguage::SCRIPT_NAME_CASING_SNAKE_CASE; }
 
-	Dictionary _complete_code(const String &p_code, const String &p_path, Object *p_owner) const override {
-		// No completion source yet (planned via EmmyLua stubs + Rider).
-		// Return an empty result so Godot's autocomplete just does nothing.
-		Dictionary d;
-		d["result"] = OK;
-		d["force"] = false;
-		d["call_hint"] = String();
-		d["options"] = TypedArray<Dictionary>();
-		return d;
-	}
+	// Drives the Godot script editor's autocomplete dropdown. Scans the
+	// tail of `p_code` for context (bare identifier prefix vs `ns.prefix`
+	// member access), walks the API table baked from luaapi.hh, and
+	// returns matching options. Implementation in PS1LuaScriptLanguage.cpp.
+	Dictionary _complete_code(const String &p_code, const String &p_path, Object *p_owner) const override;
 
 	Dictionary _lookup_code(const String &p_code, const String &p_symbol, const String &p_path, Object *p_owner) const override {
 		// Ctrl+Click / symbol lookup. Not wired yet; return "not found"

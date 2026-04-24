@@ -34,6 +34,9 @@ godot-ps1/addons/ps1godot/scripting/lib/godot-cpp/
 godot-ps1/addons/ps1godot/scripting/.sconsign.dblite
 godot-ps1/addons/ps1godot/scripting/**/*.o
 godot-ps1/addons/ps1godot/scripting/**/*.obj
+# Autocomplete data file is regenerated per scons build from luaapi.hh.
+# Kept out of git so the tree doesn't flap with every rebuild.
+godot-ps1/addons/ps1godot/scripting/src/ApiData.gen.cpp
 
 # ── psxsplash runtime build artifacts ──
 # Keep source + our patches; ignore compiled outputs.
