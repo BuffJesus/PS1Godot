@@ -32,6 +32,7 @@ public partial class PS1GodotPlugin : EditorPlugin
     private PS1TriggerBoxGizmo? _triggerBoxGizmo;
     private PS1GodotDock? _dock;
     private PS1UICanvasEditor? _uiCanvasEditor;
+    private EditorSyntaxHighlighter? _luaHighlighter;
 
     public override void _EnterTree()
     {
@@ -83,6 +84,23 @@ public partial class PS1GodotPlugin : EditorPlugin
         EditorInterface.Singleton.GetSelection().SelectionChanged += OnEditorSelectionChanged;
         OnEditorSelectionChanged();
 
+        // Lua syntax highlighting. The PS1LuaSyntaxHighlighter CLASS is
+        // defined in ps1lua.gdextension (C++) because C#-subclassed
+        // EditorSyntaxHighlighters aren't picked up by Godot's ScriptEditor.
+        // But we register the INSTANCE here because ScriptEditor isn't
+        // constructed yet when the GDExtension fires its EDITOR-level
+        // init — this _EnterTree is the earliest reliable moment.
+        if (ClassDB.ClassExists("PS1LuaSyntaxHighlighter"))
+        {
+            _luaHighlighter = ClassDB.Instantiate("PS1LuaSyntaxHighlighter")
+                .As<EditorSyntaxHighlighter>();
+            if (_luaHighlighter != null)
+            {
+                EditorInterface.Singleton.GetScriptEditor()
+                    .RegisterSyntaxHighlighter(_luaHighlighter);
+            }
+        }
+
         GD.Print("[PS1Godot] Plugin enabled.");
     }
 
@@ -132,6 +150,13 @@ public partial class PS1GodotPlugin : EditorPlugin
 
         SceneChanged -= OnSceneChanged;
         EditorInterface.Singleton.GetSelection().SelectionChanged -= OnEditorSelectionChanged;
+
+        if (_luaHighlighter != null)
+        {
+            EditorInterface.Singleton.GetScriptEditor()
+                .UnregisterSyntaxHighlighter(_luaHighlighter);
+            _luaHighlighter = null;
+        }
 
         if (_uiCanvasEditor != null)
         {

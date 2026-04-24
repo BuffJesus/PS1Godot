@@ -49,9 +49,63 @@ public:
 	void _finish() override {}
 	void _frame() override {}
 	void _reload_all_scripts() override {}
+	void _reload_scripts(const Array &p_scripts, bool p_soft_reload) override {}
 	void _reload_tool_script(const Ref<Script> &p_script, bool p_soft_reload) override {}
 	void _thread_enter() override {}
 	void _thread_exit() override {}
+
+	// Editor-integration stubs. Lua execution happens on the PSX; the Godot
+	// editor only needs highlighting + basic navigation, so these can be
+	// minimal. Omitting them triggers "Required virtual method … must be
+	// overridden" errors on 4.7 every time the user Ctrl+Clicks a symbol
+	// or the autocomplete kicks in.
+	Object *_create_script() const override { return nullptr; }
+	bool _has_named_classes() const override { return false; }
+	int32_t _find_function(const String &p_function, const String &p_code) const override { return -1; }
+	String _make_function(const String &p_class_name, const String &p_function_name, const PackedStringArray &p_function_args) const override { return String(); }
+	bool _can_make_function() const override { return false; }
+	Error _open_in_external_editor(const Ref<Script> &p_script, int32_t p_line, int32_t p_column) override { return ERR_UNAVAILABLE; }
+	ScriptLanguage::ScriptNameCasing _preferred_file_name_casing() const override { return ScriptLanguage::SCRIPT_NAME_CASING_SNAKE_CASE; }
+
+	Dictionary _complete_code(const String &p_code, const String &p_path, Object *p_owner) const override {
+		// No completion source yet (planned via EmmyLua stubs + Rider).
+		// Return an empty result so Godot's autocomplete just does nothing.
+		Dictionary d;
+		d["result"] = OK;
+		d["force"] = false;
+		d["call_hint"] = String();
+		d["options"] = TypedArray<Dictionary>();
+		return d;
+	}
+
+	Dictionary _lookup_code(const String &p_code, const String &p_symbol, const String &p_path, Object *p_owner) const override {
+		// Ctrl+Click / symbol lookup. Not wired yet; return "not found"
+		// so the editor just ignores it. Godot 4.7 needs BOTH "result"
+		// and "type" keys in the dict or it logs ERR_UNAVAILABLE on
+		// every click (see core/object/script_language_extension.h).
+		Dictionary d;
+		d["result"] = ERR_UNAVAILABLE;
+		d["type"] = 0; // LOOKUP_RESULT_SCRIPT_LOCATION, a safe default
+		return d;
+	}
+
+	String _auto_indent_code(const String &p_code, int32_t p_from_line, int32_t p_to_line) const override {
+		// Pass source through unchanged — CodeEdit has a built-in indenter
+		// that handles the basics fine without language-specific help.
+		return p_code;
+	}
+
+	void _add_global_constant(const StringName &p_name, const Variant &p_value) override {}
+	void _add_named_global_constant(const StringName &p_name, const Variant &p_value) override {}
+	void _remove_named_global_constant(const StringName &p_name) override {}
+
+	void *_debug_get_stack_level_instance(int32_t p_level) override { return nullptr; }
+
+	void _profiling_start() override {}
+	void _profiling_stop() override {}
+	void _profiling_set_save_native_calls(bool p_enable) override {}
+	int32_t _profiling_get_accumulated_data(ScriptLanguageExtensionProfilingInfo *p_info_array, int32_t p_info_max) override { return 0; }
+	int32_t _profiling_get_frame_data(ScriptLanguageExtensionProfilingInfo *p_info_array, int32_t p_info_max) override { return 0; }
 
 	String _debug_get_error() const override { return ""; }
 	int32_t _debug_get_stack_level_count() const override { return 0; }
