@@ -1,15 +1,19 @@
 # Editing Lua scripts — setup
 
-Godot's built-in editor doesn't know about Lua — it opens `.lua` files as
-plain text with no highlighting or completion. Two complementary paths
-fix that:
+Godot's built-in script editor highlights `.lua` files out of the box —
+the `ps1lua.gdextension` that ships with PS1Godot registers both the
+language and a `PS1 Lua` syntax highlighter. For day-to-day editing
+inside Godot, there's no setup.
 
-1. **Route `.lua` to an external editor** (Rider, VS Code, Zed, Sublime).
-   Double-click a Lua script in Godot's FileSystem dock and it opens in
-   your editor of choice with full syntax highlighting.
-2. **Auto-generated EmmyLua stubs** give the external editor real
-   autocomplete for the PS1Godot runtime API (`Entity.*`, `Camera.*`,
-   `Vec3.*`, etc.).
+For heavier work (multi-file navigation, autocomplete for the
+PS1Godot runtime API) route to an external editor:
+
+1. **In-Godot highlighting** — works automatically. If a `.lua` file
+   opens as plain text (the tab is stuck on a prior "Plain Text" choice),
+   pick `PS1 Lua` from the Syntax Highlighter dropdown in the script
+   editor toolbar. Godot remembers per tab.
+2. **External editor for autocomplete** — Rider / VS Code / Zed, using
+   the auto-generated EmmyLua stubs for `Entity.*`, `Camera.*`, etc.
 
 ## Step 1 — point Godot at your editor
 
@@ -76,24 +80,24 @@ In Rider / VS Code with the stubs loaded:
 
 ## What you DON'T get
 
-- **In-Godot highlighting**: blocked on the `lua-gdextension` install
-  (see below).
-- **In-Godot autocomplete**: same.
+- **In-Godot autocomplete**: Godot's built-in code-completion only
+  works for languages with a real semantic analyzer — our
+  ScriptLanguageExtension is a visual-only stub. Use the external
+  editor path for completion.
 - **Runtime execution in editor**: Lua runs on PSX, not in Godot. The
   cheatsheet explains which forms the rewriter skips.
 
-## Future: native Godot editing (Phase 3 backlog)
+## First-time Godot highlighter setup per file
 
-`lua-gdextension-main/` sits in the workspace as a vendored reference.
-Installing it into `godot-ps1/addons/lua-gdextension/` would give Godot
-full Lua support — highlighting, autocomplete, even execution. Blockers:
+Godot caches per-tab highlighter choices. If you edited a `.lua` file
+in Godot before `ps1lua.gdextension` shipped (pre-2026-04-23), its
+tab state remembers "Plain Text" and won't auto-switch to `PS1 Lua`.
+One-time fix per file:
 
-- No prebuilt binary in the vendored tree; needs CMake + Lua sources
-  to produce `build/libluagdextension.windows.*.dll`.
-- Its ScriptLanguageExtension defines its own Lua runtime, which
-  diverges from psxlua's NOPARSER build — authors could accidentally
-  write Lua that runs in-editor but fails at export.
+1. Open the `.lua` in the Godot script editor
+2. In the top-right toolbar (or the editor's `⋮` menu) find the
+   **Syntax Highlighter** dropdown
+3. Pick **PS1 Lua**
 
-When we cross that bridge, the plugin should wrap lua-gdextension's
-execution to match psxlua semantics (reject decimals pre-rewrite,
-document the delta). Tracked as Phase 3 polish.
+Godot persists the choice. Only needed once per previously-opened file
+— fresh files auto-match.
