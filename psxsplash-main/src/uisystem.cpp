@@ -419,8 +419,13 @@ void UISystem::renderOT(psyqo::GPU& gpu,
                         psyqo::BumpAllocator<Renderer::BUMP_ALLOCATOR_SIZE>& balloc) {
     m_pendingTextCount = 0;
 
-    // Canvases are pre-sorted by sortOrder (ascending = back first).
-    // Higher-sortOrder canvases insert at OT 0 later, appearing on top.
+    // Canvases are pre-sorted by sortOrder (ascending). They insert into
+    // the OT in that order, but psyqo's OT is LIFO at each depth: the
+    // GPU walks table[z] HEAD-to-TAIL, and the painter's algorithm makes
+    // the LAST-drawn pixel win. So the FIRST-inserted (lowest sortOrder)
+    // canvas ends up drawn LAST and appears ON TOP. To put a canvas on
+    // top of everything else, give it the LOWEST sortOrder, not the
+    // highest. (Full-screen overlays like title cards: sortOrder 0–10.)
     for (int i = 0; i < m_canvasCount; i++) {
         UICanvas& cv = m_canvases[i];
         if (!cv.visible) continue;
