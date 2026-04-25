@@ -350,6 +350,7 @@ void psxsplash::Renderer::Render(eastl::vector<GameObject*>& objects) {
     ditherCmd.primitive.attr.setDithering(true);
     ditherCmd.primitive.attr.set(psyqo::Prim::TPageAttr::FullBackAndFullFront);
     ot.insert(ditherCmd, ORDERING_TABLE_SIZE - 1);
+    renderSky(ot, balloc);
 
     psyqo::Vec3 cameraPosition = computeCameraViewPos();
     int32_t fogFarSZ = m_fog.fogFarSZ;
@@ -388,6 +389,7 @@ void psxsplash::Renderer::RenderWithBVH(eastl::vector<GameObject*>& objects, con
     ditherCmd2.primitive.attr.setDithering(true);
     ditherCmd2.primitive.attr.set(psyqo::Prim::TPageAttr::FullBackAndFullFront);
     ot.insert(ditherCmd2, ORDERING_TABLE_SIZE - 1);
+    renderSky(ot, balloc);
 
     Frustum frustum; m_currentCamera->ExtractFrustum(frustum);
     int visibleCount = bvh.cullFrustum(frustum, m_visibleRefs, MAX_VISIBLE_TRIANGLES);
@@ -685,6 +687,7 @@ void psxsplash::Renderer::RenderWithRooms(eastl::vector<GameObject*>& objects,
     ditherCmd3.primitive.attr.setDithering(true);
     ditherCmd3.primitive.attr.set(psyqo::Prim::TPageAttr::FullBackAndFullFront);
     ot.insert(ditherCmd3, ORDERING_TABLE_SIZE - 1);
+    renderSky(ot, balloc);
 
     psyqo::Vec3 cameraPosition = computeCameraViewPos();
     int32_t fogFarSZ = m_fog.fogFarSZ;
@@ -1525,4 +1528,72 @@ void psxsplash::Renderer::VramUpload(const uint16_t* imageData, int16_t posX,
                                      int16_t posY, int16_t width, int16_t height) {
     psyqo::Rect uploadRect{.a = {.x = posX, .y = posY}, .b = {width, height}};
     m_gpu.uploadToVRAM(imageData, uploadRect);
+}
+
+// v24+: scene skybox. Two GouraudTexturedTriangle primitives covering
+// the full 320×240 framebuffer with the sky texture's tpage/clut/UVs.
+// Inserted at OT depth ORDERING_TABLE_SIZE - 2 — one slot in front of
+// the dither TPage so the dither bits apply, but behind every scene
+// triangle (which insert at depth ≤ ORDERING_TABLE_SIZE - 3 via the
+// per-Z mapping). Reuses the same UI Image render shape so any pixels
+// that map to CLUT entry 0 = 0x0000 are skipped at the hardware level
+// (lets a partial-coverage sky texture have transparent regions).
+void psxsplash::Renderer::renderSky(
+    psyqo::OrderingTable<ORDERING_TABLE_SIZE>& ot,
+    psyqo::BumpAllocator<BUMP_ALLOCATOR_SIZE>& balloc)
+{
+    if (!m_sky.enabled) return;
+
+    psyqo::PrimPieces::TPageAttr tpage;
+    tpage.setPageX(m_sky.texpageX);
+    tpage.setPageY(m_sky.texpageY);
+    switch (m_sky.bitDepth) {
+    case 0:  tpage.set(psyqo::Prim::TPageAttr::Tex4Bits);  break;
+    case 1:  tpage.set(psyqo::Prim::TPageAttr::Tex8Bits);  break;
+    case 2:
+    default: tpage.set(psyqo::Prim::TPageAttr::Tex16Bits); break;
+    }
+    tpage.setDithering(false);
+
+    psyqo::PrimPieces::ClutIndex clut(m_sky.clutX, m_sky.clutY);
+    psyqo::Color tint = {.r = m_sky.tintR, .g = m_sky.tintG, .b = m_sky.tintB};
+
+    constexpr int16_t SCREEN_W = 320;
+    constexpr int16_t SCREEN_H = 240;
+    constexpr int SKY_DEPTH = ORDERING_TABLE_SIZE - 2;
+
+    // Triangle 0: top-left, top-right, bottom-left
+    {
+        auto& tri = balloc.allocateFragment<psyqo::Prim::GouraudTexturedTriangle>();
+        tri.primitive.pointA.x = 0;        tri.primitive.pointA.y = 0;
+        tri.primitive.pointB.x = SCREEN_W; tri.primitive.pointB.y = 0;
+        tri.primitive.pointC.x = 0;        tri.primitive.pointC.y = SCREEN_H;
+        tri.primitive.uvA.u = m_sky.u0; tri.primitive.uvA.v = m_sky.v0;
+        tri.primitive.uvB.u = m_sky.u1; tri.primitive.uvB.v = m_sky.v0;
+        tri.primitive.uvC.u = m_sky.u0; tri.primitive.uvC.v = m_sky.v1;
+        tri.primitive.tpage = tpage;
+        tri.primitive.clutIndex = clut;
+        tri.primitive.setColorA(tint);
+        tri.primitive.setColorB(tint);
+        tri.primitive.setColorC(tint);
+        tri.primitive.setOpaque();
+        ot.insert(tri, SKY_DEPTH);
+    }
+    // Triangle 1: top-right, bottom-right, bottom-left
+    {
+        auto& tri = balloc.allocateFragment<psyqo::Prim::GouraudTexturedTriangle>();
+        tri.primitive.pointA.x = SCREEN_W; tri.primitive.pointA.y = 0;
+        tri.primitive.pointB.x = SCREEN_W; tri.primitive.pointB.y = SCREEN_H;
+        tri.primitive.pointC.x = 0;        tri.primitive.pointC.y = SCREEN_H;
+        tri.primitive.uvA.u = m_sky.u1; tri.primitive.uvA.v = m_sky.v0;
+        tri.primitive.uvB.u = m_sky.u1; tri.primitive.uvB.v = m_sky.v1;
+        tri.primitive.uvC.u = m_sky.u0; tri.primitive.uvC.v = m_sky.v1;
+        tri.primitive.tpage = tpage;
+        tri.primitive.clutIndex = clut;
+        tri.primitive.setColorA(tint);
+        tri.primitive.setColorB(tint);
+        tri.primitive.setColorC(tint);
+        tri.primitive.setOpaque();
+        ot.insert(tri, SKY_DEPTH);
+    }
 }

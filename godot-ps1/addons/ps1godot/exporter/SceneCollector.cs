@@ -403,6 +403,12 @@ public static class SceneCollector
             // Canvas children are consumed here, not re-walked as siblings.
             return;
         }
+        else if (n is PS1Sky sky)
+        {
+            EmitSky(sky, data, textureCache);
+            // Sky has no meaningful children — don't recurse.
+            return;
+        }
         else if (n is PS1Animation anim)
         {
             EmitAnimation(anim, data);
@@ -551,6 +557,46 @@ public static class SceneCollector
             }
             CollectMergableMeshes(child, outList);
         }
+    }
+
+    // Collect a PS1Sky node into SceneData.Sky. Only the first PS1Sky
+    // wins — extras are silently dropped (with a warning) since the
+    // splashpack header carries one sky struct. The texture goes into
+    // the same atlas pool meshes + UI images use, so its tpage/clut
+    // coords resolve after VRAMPacker.Pack.
+    private static void EmitSky(PS1Sky sky, SceneData data,
+                                 Dictionary<(string, PSXBPP), int> textureCache)
+    {
+        if (data.Sky != null)
+        {
+            GD.PushWarning($"[PS1Godot] PS1Sky '{sky.Name}': scene already has a sky — only one is exported. " +
+                           "Delete or hide the extra PS1Sky nodes.");
+            return;
+        }
+        if (sky.Texture == null)
+        {
+            GD.PushWarning($"[PS1Godot] PS1Sky '{sky.Name}': no Texture assigned — sky disabled. " +
+                           "Drop a Texture2D onto the Texture property to enable.");
+            return;
+        }
+        int texIdx = ResolveUIImageTexture(sky.Texture, sky.BitDepth, data,
+                                            textureCache, elementName: "<sky>");
+        if (texIdx < 0)
+        {
+            GD.PushWarning($"[PS1Godot] PS1Sky '{sky.Name}': texture registration failed — sky disabled.");
+            return;
+        }
+        var tint = sky.Tint;
+        data.Sky = new SkyRecord
+        {
+            TextureIndex = texIdx,
+            BitDepthByte = (byte)sky.BitDepth,
+            TintR = (byte)Mathf.Clamp((int)(tint.R * 255f), 0, 255),
+            TintG = (byte)Mathf.Clamp((int)(tint.G * 255f), 0, 255),
+            TintB = (byte)Mathf.Clamp((int)(tint.B * 255f), 0, 255),
+        };
+        GD.Print($"[PS1Godot] PS1Sky '{sky.Name}': textureIndex={texIdx} bpp={sky.BitDepth} " +
+                 $"tint=({data.Sky.TintR},{data.Sky.TintG},{data.Sky.TintB})");
     }
 
     // Collect a canvas and its immediate PS1UIElement children. Nested

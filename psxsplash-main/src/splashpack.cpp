@@ -96,8 +96,26 @@ struct SPLASHPACKFileHeader {
     uint16_t uiModelCount;
     uint16_t pad_uimodel;
     uint32_t uiModelTableOffset;
+    // v24+: scene-level skybox. Layout matches the UI Image typeData
+    // union slot (uisystem.cpp:153) so the same tpage/clut/UV decode
+    // applies. skyEnabled = 0 → no sky in this scene; renderer skips
+    // the pass and the other 15 bytes are ignored.
+    uint8_t  skyTexpageX;
+    uint8_t  skyTexpageY;
+    uint16_t skyClutX;
+    uint16_t skyClutY;
+    uint8_t  skyU0;
+    uint8_t  skyV0;
+    uint8_t  skyU1;
+    uint8_t  skyV1;
+    uint8_t  skyBitDepth;
+    uint8_t  skyTintR;
+    uint8_t  skyTintG;
+    uint8_t  skyTintB;
+    uint8_t  skyEnabled;
+    uint8_t  pad_sky;
 };
-static_assert(sizeof(SPLASHPACKFileHeader) == 152, "SPLASHPACKFileHeader must be 152 bytes");
+static_assert(sizeof(SPLASHPACKFileHeader) == 168, "SPLASHPACKFileHeader must be 168 bytes");
 
 struct MusicTableEntry {
     uint32_t dataOffset;
@@ -127,7 +145,7 @@ void SplashPackLoader::LoadSplashpack(uint8_t *data, SplashpackSceneSetup &setup
     psyqo::Kernel::assert(data != nullptr, "Splashpack loading data pointer is null");
     psxsplash::SPLASHPACKFileHeader *header = reinterpret_cast<psxsplash::SPLASHPACKFileHeader *>(data);
     psyqo::Kernel::assert(__builtin_memcmp(header->magic, "SP", 2) == 0, "Splashpack has incorrect magic");
-    psyqo::Kernel::assert(header->version >= 22, "Splashpack version too old (need v22+): re-export from PS1Godot");
+    psyqo::Kernel::assert(header->version >= 24, "Splashpack version too old (need v24+): re-export from PS1Godot");
 
     setup.playerStartPosition = header->playerStartPos;
     setup.playerStartRotation = header->playerStartRot;
@@ -332,6 +350,24 @@ void SplashPackLoader::LoadSplashpack(uint8_t *data, SplashpackSceneSetup &setup
     if (header->version >= 23 && header->uiModelCount > 0 && header->uiModelTableOffset != 0) {
         setup.uiModels = reinterpret_cast<const SPLASHPACKUIModel *>(data + header->uiModelTableOffset);
         setup.uiModelCount = header->uiModelCount;
+    }
+
+    // v24+: scene skybox. The exporter zeros the whole 16-byte block
+    // when no PS1Sky was authored, so checking skyEnabled is enough.
+    if (header->version >= 24 && header->skyEnabled) {
+        setup.sky.texpageX = header->skyTexpageX;
+        setup.sky.texpageY = header->skyTexpageY;
+        setup.sky.clutX    = header->skyClutX;
+        setup.sky.clutY    = header->skyClutY;
+        setup.sky.u0       = header->skyU0;
+        setup.sky.v0       = header->skyV0;
+        setup.sky.u1       = header->skyU1;
+        setup.sky.v1       = header->skyV1;
+        setup.sky.bitDepth = header->skyBitDepth;
+        setup.sky.tintR    = header->skyTintR;
+        setup.sky.tintG    = header->skyTintG;
+        setup.sky.tintB    = header->skyTintB;
+        setup.sky.enabled  = true;
     }
 
     if (header->cutsceneCount > 0 && header->cutsceneTableOffset != 0) {

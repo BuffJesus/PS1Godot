@@ -95,6 +95,19 @@ class Renderer final {
         m_uiModelsDisk = disk; m_uiModelStates = states; m_uiModelCount = count;
     }
 
+    // v24+: scene skybox. SceneManager calls this once at scene init.
+    // Pass enabled=false to disable; texture coords are ignored when off.
+    void SetSky(uint8_t texpageX, uint8_t texpageY, uint16_t clutX, uint16_t clutY,
+                uint8_t u0, uint8_t v0, uint8_t u1, uint8_t v1, uint8_t bitDepth,
+                uint8_t tintR, uint8_t tintG, uint8_t tintB, bool enabled) {
+        m_sky.texpageX = texpageX; m_sky.texpageY = texpageY;
+        m_sky.clutX = clutX; m_sky.clutY = clutY;
+        m_sky.u0 = u0; m_sky.v0 = v0; m_sky.u1 = u1; m_sky.v1 = v1;
+        m_sky.bitDepth = bitDepth;
+        m_sky.tintR = tintR; m_sky.tintG = tintG; m_sky.tintB = tintB;
+        m_sky.enabled = enabled;
+    }
+
     static Renderer& GetInstance() {
         psyqo::Kernel::assert(instance != nullptr,
                               "Access to renderer was tried without prior initialization");
@@ -131,6 +144,24 @@ class Renderer final {
     const SPLASHPACKUIModel* m_uiModelsDisk = nullptr;
     const UIModelRuntimeState* m_uiModelStates = nullptr;
     int m_uiModelCount = 0;
+
+    // v24+: scene skybox. Drawn before main scene OT each frame; the
+    // exporter writes a UI-Image-shaped 16-byte block in the splashpack
+    // header so we reuse the same tpage/clut/UV decode.
+    struct SkyState {
+        uint8_t  texpageX;
+        uint8_t  texpageY;
+        uint16_t clutX;
+        uint16_t clutY;
+        uint8_t  u0, v0, u1, v1;
+        uint8_t  bitDepth;
+        uint8_t  tintR, tintG, tintB;
+        bool     enabled;
+    };
+    SkyState m_sky = {};
+
+    void renderSky(psyqo::OrderingTable<ORDERING_TABLE_SIZE>& ot,
+                   psyqo::BumpAllocator<BUMP_ALLOCATOR_SIZE>& balloc);
 
     TriangleRef m_visibleRefs[MAX_VISIBLE_TRIANGLES];
     int m_frameCount = 0;

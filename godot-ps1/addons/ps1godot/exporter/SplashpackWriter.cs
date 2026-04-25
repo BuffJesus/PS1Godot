@@ -28,10 +28,11 @@ namespace PS1Godot.Exporter;
 //                  Name table — referenced by header.nameTableOffset.
 public static class SplashpackWriter
 {
-    public const ushort SplashpackVersion = 23;
-    // Header layout grew by 8 bytes in v23 (uiModelCount + uiModelTableOffset).
-    // See WriteHeader / WriteUIModelSection.
-    public const int HeaderSize = 152;
+    public const ushort SplashpackVersion = 24;
+    // Header layout grew by 16 bytes in v24 (sky struct: tpage + clut + UVs
+    // + bitDepth + tint + enabled flag, mirroring the UI Image typeData
+    // union slot). See WriteHeader and the runtime's SPLASHPACKFileHeader.
+    public const int HeaderSize = 168;
     public const int GameObjectSize = 92;
     public const int TriSize = 52;
     public const int LuaFileSize = 8; // luaCodeOffset (u32) + length (u32)
@@ -1221,12 +1222,70 @@ public static class SplashpackWriter
         offsets.UiModelTableOffsetPos = w.BaseStream.Position;
         w.Write((uint)0);              // uiModelTableOffset (backfilled)
 
+        // v24: scene-level skybox (16 bytes). Layout matches the UI
+        // Image typeData union slot so the runtime can reuse the same
+        // tpage/clut/UV decode path. skyEnabled = 0 means the runtime
+        // skips the sky pass entirely; texture/clut/UV bytes are then
+        // ignored. Resolved here from VRAMPacker (already run before
+        // header write) so we can stamp final tpage/clut/UVs.
+        WriteSkyBytes(w, scene);
+
         long written = w.BaseStream.Position - headerStart;
         if (written != HeaderSize)
             throw new InvalidOperationException(
                 $"Splashpack header size mismatch: wrote {written} bytes, expected {HeaderSize}.");
 
         return offsets;
+    }
+
+    // Write the 16-byte sky struct at the end of the header. When the
+    // scene has no PS1Sky (or the sky's texture failed to register),
+    // emits 16 zero bytes — the runtime checks skyEnabled and skips.
+    private static void WriteSkyBytes(BinaryWriter w, SceneData scene)
+    {
+        if (scene.Sky == null || scene.Sky.TextureIndex < 0
+                              || scene.Sky.TextureIndex >= scene.Textures.Count)
+        {
+            for (int k = 0; k < 16; k++) w.Write((byte)0);
+            return;
+        }
+
+        var sky = scene.Sky;
+        var tex = scene.Textures[sky.TextureIndex];
+
+        // Same expander math as mesh + UI Image: 4bpp packs 4 source
+        // pixels per VRAM word horizontally, so byte-U coord =
+        // PackingX (in VRAM words) × expander. UV rect is the full
+        // texture (sky has no sub-region authoring; use entire image).
+        int expander = tex.BitDepth switch
+        {
+            PSXBPP.TEX_4BIT => 4,
+            PSXBPP.TEX_8BIT => 2,
+            _ => 1,
+        };
+        int u0 = tex.PackingX * expander;
+        int v0 = tex.PackingY;
+        int u1 = u0 + tex.Width;
+        int v1 = v0 + tex.Height;
+        u0 = Mathf.Clamp(u0, 0, 255);
+        v0 = Mathf.Clamp(v0, 0, 255);
+        u1 = Mathf.Clamp(u1, 0, 255);
+        v1 = Mathf.Clamp(v1, 0, 255);
+
+        w.Write(tex.TexpageX);              // skyTexpageX
+        w.Write(tex.TexpageY);              // skyTexpageY
+        w.Write((ushort)tex.ClutPackingX);  // skyClutX
+        w.Write((ushort)tex.ClutPackingY);  // skyClutY
+        w.Write((byte)u0);                  // skyU0
+        w.Write((byte)v0);                  // skyV0
+        w.Write((byte)u1);                  // skyU1
+        w.Write((byte)v1);                  // skyV1
+        w.Write(sky.BitDepthByte);          // skyBitDepth
+        w.Write(sky.TintR);                 // skyTintR
+        w.Write(sky.TintG);                 // skyTintG
+        w.Write(sky.TintB);                 // skyTintB
+        w.Write((byte)1);                   // skyEnabled
+        w.Write((byte)0);                   // pad_sky
     }
 
     // Meters/m-per-s → PSX fp12 ushort, clamped.

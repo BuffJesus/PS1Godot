@@ -386,6 +386,21 @@ public sealed class RoomCellRecord
     public required ushort TriRefCount { get; init; }
 }
 
+// One scene-level skybox. Index into SceneData.Textures; runtime
+// reads the texture's tpage/clut/UVs from the same atlas slot meshes
+// + UI images use, draws as a full-screen quad before the main OT.
+// Tint is per-RGB-channel uint8 (multiplied with the texture sample
+// at render time). When Sky is null the writer stamps an all-zero
+// 16-byte block in the header and the runtime skips the sky pass.
+public sealed class SkyRecord
+{
+    public required int TextureIndex { get; init; }
+    public required byte BitDepthByte { get; init; }
+    public required byte TintR { get; init; }
+    public required byte TintG { get; init; }
+    public required byte TintB { get; init; }
+}
+
 public sealed class SceneData
 {
     public List<SceneObject> Objects { get; } = new();
@@ -499,4 +514,10 @@ public sealed class SceneData
     public bool FogEnabled { get; set; } = false;
     public Color FogColor { get; set; } = new Color(0.5f, 0.5f, 0.6f);
     public byte FogDensity { get; set; } = 5;
+
+    // ─── Sky (pulled from a PS1Sky node, if any) ──
+    // Single skybox per scene. Null = no sky (writer stamps 16 zero
+    // bytes and runtime skips the pass). Set by SceneCollector when it
+    // walks past a PS1Sky node.
+    public SkyRecord? Sky { get; set; }
 }

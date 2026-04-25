@@ -241,6 +241,19 @@ void psxsplash::SceneManager::InitializeScene(uint8_t* splashpackData, LoadingSc
         m_uiModelCount > 0 ? m_uiModelStates : nullptr,
         m_uiModelCount);
 
+    // v24+: scene skybox. Hand the parsed sky struct to the renderer
+    // so its renderSky pass picks up the texture coords + tint. When
+    // the scene has no PS1Sky, sceneSetup.sky.enabled is false and the
+    // renderer skips the pass.
+    Renderer::GetInstance().SetSky(
+        sceneSetup.sky.texpageX, sceneSetup.sky.texpageY,
+        sceneSetup.sky.clutX,    sceneSetup.sky.clutY,
+        sceneSetup.sky.u0, sceneSetup.sky.v0,
+        sceneSetup.sky.u1, sceneSetup.sky.v1,
+        sceneSetup.sky.bitDepth,
+        sceneSetup.sky.tintR, sceneSetup.sky.tintG, sceneSetup.sky.tintB,
+        sceneSetup.sky.enabled);
+
     // Initialize UI system (v13+)
     // Custom-font glyph atlases live in the .splashpack (not the .vram
     // file) and must be uploaded to VRAM here, after loadFromSplashpack

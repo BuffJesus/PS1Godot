@@ -170,6 +170,22 @@ struct SplashpackSceneSetup {
     // them in-place (no copy into scene manager).
     const SPLASHPACKUIModel *uiModels = nullptr;
     uint16_t uiModelCount = 0;
+
+    // v24+: scene skybox. Renderer draws a full-screen textured quad
+    // at OT depth (ORDERING_TABLE_SIZE - 2) before scene geometry. The
+    // 16-byte field layout matches a UI Image typeData union slot:
+    // texpage + clut + UVs + bitDepth + tint + enabled flag.
+    struct SkySetup {
+        uint8_t  texpageX;
+        uint8_t  texpageY;
+        uint16_t clutX;
+        uint16_t clutY;
+        uint8_t  u0, v0, u1, v1;
+        uint8_t  bitDepth;  // 0 = 4bpp, 1 = 8bpp, 2 = 16bpp
+        uint8_t  tintR, tintG, tintB;
+        bool     enabled;
+    };
+    SkySetup sky = {};  // enabled=false by default
 };
 
 class SplashPackLoader {
