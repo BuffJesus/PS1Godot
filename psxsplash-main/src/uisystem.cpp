@@ -727,6 +727,26 @@ void UISystem::getSize(int handle, int16_t& w, int16_t& h) const {
     h = rh;
 }
 
+void UISystem::setImageUV(int handle, uint8_t u0, uint8_t v0, uint8_t u1, uint8_t v1) {
+    if (handle < 0 || handle >= m_elementCount) return;
+    UIElement& el = m_elements[handle];
+    if (el.type != UIElementType::Image) return;
+    el.image.u0 = u0;
+    el.image.v0 = v0;
+    el.image.u1 = u1;
+    el.image.v1 = v1;
+}
+
+void UISystem::getImageUV(int handle, uint8_t& u0, uint8_t& v0, uint8_t& u1, uint8_t& v1) const {
+    if (handle < 0 || handle >= m_elementCount) { u0 = v0 = u1 = v1 = 0; return; }
+    const UIElement& el = m_elements[handle];
+    if (el.type != UIElementType::Image) { u0 = v0 = u1 = v1 = 0; return; }
+    u0 = el.image.u0;
+    v0 = el.image.v0;
+    u1 = el.image.u1;
+    v1 = el.image.v1;
+}
+
 void UISystem::setProgressColors(int handle, uint8_t bgR, uint8_t bgG, uint8_t bgB,
                                   uint8_t fillR, uint8_t fillG, uint8_t fillB) {
     if (handle < 0 || handle >= m_elementCount) return;

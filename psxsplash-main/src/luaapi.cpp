@@ -573,6 +573,12 @@ void LuaAPI::RegisterAll(psyqo::Lua& L, SceneManager* scene, CutscenePlayer* cut
     L.push(UI_GetSize);
     L.setField(-2, "GetSize");
 
+    L.push(UI_SetImageUV);
+    L.setField(-2, "SetImageUV");
+
+    L.push(UI_GetImageUV);
+    L.setField(-2, "GetImageUV");
+
     L.push(UI_SetProgressColors);
     L.setField(-2, "SetProgressColors");
 
@@ -2961,6 +2967,41 @@ int LuaAPI::UI_GetSize(lua_State* L) {
     lua.pushNumber(static_cast<lua_Number>(w));
     lua.pushNumber(static_cast<lua_Number>(h));
     return 2;
+}
+
+int LuaAPI::UI_SetImageUV(lua_State* L) {
+    psyqo::Lua lua(L);
+    if (!s_uiSystem || !lua.isNumber(1)) return 0;
+    int handle = static_cast<int>(lua.toNumber(1));
+    int u0 = static_cast<int>(lua.toNumber(2));
+    int v0 = static_cast<int>(lua.toNumber(3));
+    int u1 = static_cast<int>(lua.toNumber(4));
+    int v1 = static_cast<int>(lua.toNumber(5));
+    if (u0 < 0) u0 = 0; else if (u0 > 255) u0 = 255;
+    if (v0 < 0) v0 = 0; else if (v0 > 255) v0 = 255;
+    if (u1 < 0) u1 = 0; else if (u1 > 255) u1 = 255;
+    if (v1 < 0) v1 = 0; else if (v1 > 255) v1 = 255;
+    s_uiSystem->setImageUV(handle,
+        static_cast<uint8_t>(u0), static_cast<uint8_t>(v0),
+        static_cast<uint8_t>(u1), static_cast<uint8_t>(v1));
+    return 0;
+}
+
+int LuaAPI::UI_GetImageUV(lua_State* L) {
+    psyqo::Lua lua(L);
+    if (!s_uiSystem || !lua.isNumber(1)) {
+        lua.pushNumber(0); lua.pushNumber(0);
+        lua.pushNumber(0); lua.pushNumber(0);
+        return 4;
+    }
+    int handle = static_cast<int>(lua.toNumber(1));
+    uint8_t u0, v0, u1, v1;
+    s_uiSystem->getImageUV(handle, u0, v0, u1, v1);
+    lua.pushNumber(static_cast<lua_Number>(u0));
+    lua.pushNumber(static_cast<lua_Number>(v0));
+    lua.pushNumber(static_cast<lua_Number>(u1));
+    lua.pushNumber(static_cast<lua_Number>(v1));
+    return 4;
 }
 
 int LuaAPI::UI_SetProgressColors(lua_State* L) {

@@ -116,6 +116,14 @@ public:
     void getSize(int handle, int16_t& w, int16_t& h) const;
     void setProgressColors(int handle, uint8_t bgR, uint8_t bgG, uint8_t bgB,
                            uint8_t fillR, uint8_t fillG, uint8_t fillB);
+    // Mutate the source-texture UV rect on an Image element, in tpage-byte
+    // coords (0..255). Caller is responsible for staying inside the
+    // element's atlas slot — sampling outside the texture's footprint
+    // reads neighbour-atlas pixels and shows as garbage. Useful for
+    // scrolling overlays (scanlines, marquee text strips). No-op for
+    // non-Image handles.
+    void setImageUV(int handle, uint8_t u0, uint8_t v0, uint8_t u1, uint8_t v1);
+    void getImageUV(int handle, uint8_t& u0, uint8_t& v0, uint8_t& u1, uint8_t& v1) const;
     uint8_t getProgress(int handle) const;
     UIElementType getElementType(int handle) const;
     int getCanvasElementCount(int canvasIdx) const;

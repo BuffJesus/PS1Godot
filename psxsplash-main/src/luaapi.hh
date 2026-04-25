@@ -555,6 +555,8 @@ private:
     static int UI_GetPosition(lua_State* L);
     static int UI_SetSize(lua_State* L);
     static int UI_GetSize(lua_State* L);
+    static int UI_SetImageUV(lua_State* L);
+    static int UI_GetImageUV(lua_State* L);
     static int UI_SetProgressColors(lua_State* L);
     static int UI_GetElementType(lua_State* L);
     static int UI_GetElementCount(lua_State* L);
