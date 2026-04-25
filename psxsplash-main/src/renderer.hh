@@ -159,6 +159,7 @@ class Renderer final {
         bool     enabled;
     };
     SkyState m_sky = {};
+    int m_skyScrollFrame = 0;  // monotonic counter; renderSky uses for U pan drift
 
     void renderSky(psyqo::OrderingTable<ORDERING_TABLE_SIZE>& ot,
                    psyqo::BumpAllocator<BUMP_ALLOCATOR_SIZE>& balloc);

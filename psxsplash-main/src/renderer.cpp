@@ -1562,6 +1562,22 @@ void psxsplash::Renderer::renderSky(
     constexpr int16_t SCREEN_H = 240;
     constexpr int SKY_DEPTH = ORDERING_TABLE_SIZE - 2;
 
+    // Sky pan = yaw-driven base + slow continuous drift. Combined with a
+    // horizontally-tileable texture and dual-quad seam handling below,
+    // the sky behaves like a 360° sphere: rotating the camera pans the
+    // visible window, AND the sphere itself slowly rotates over time.
+    //
+    // yaw is psyqo's 16-bit signed angle in fp10 pi-units. 2048 raw =
+    // 360°. For a texture covering 360° in 256 bytes, pan = yaw / 8.
+    // Drift: 1 px every SKY_DRIFT_EVERY frames adds slow earth-rotation
+    // feel on top of the camera-driven part.
+    constexpr int SKY_DRIFT_EVERY = 8;  // frames per drift pixel (lower = faster)
+    constexpr int TEX_W = 256;          // tileable texture width in U bytes
+    int32_t yaw = m_currentCamera ? (int32_t)m_currentCamera->GetAngleY() : 0;
+    m_skyScrollFrame++;
+    int32_t panRaw = (yaw / 8) + (m_skyScrollFrame / SKY_DRIFT_EVERY);
+    int panU = ((panRaw % TEX_W) + TEX_W) % TEX_W;  // normalize to [0, TEX_W)
+
     uint8_t baseU0 = m_sky.u0;
     uint8_t baseU1 = m_sky.u1;
     uint8_t v0 = m_sky.v0;
@@ -1599,9 +1615,19 @@ void psxsplash::Renderer::renderSky(
         ot.insert(b, SKY_DEPTH);
     };
 
-    // Single full-screen quad covering the entire texture. The follow-up
-    // commit replaces this with a yaw-driven panU + dual-quad seam wrap;
-    // for now this is a no-behavior-change refactor of the previous
-    // inline two-triangle code.
-    emitQuad(0, SCREEN_W, baseU0, baseU1);
+    if (panU == 0) {
+        // No wrap needed — single quad covers the full screen with the
+        // entire texture.
+        emitQuad(0, SCREEN_W, baseU0, baseU1);
+    } else {
+        // Wrap split: visible window crosses the texture's right edge.
+        // Left half samples [baseU0+panU, baseU1] (the "back" of the
+        // texture); right half samples [baseU0, baseU0+panU-1] (the
+        // "front"). Pre-faded edges in the PNG make the seam invisible.
+        int leftSplit = ((TEX_W - panU) * SCREEN_W) / TEX_W;
+        if (leftSplit < 1) leftSplit = 1;
+        if (leftSplit > SCREEN_W - 1) leftSplit = SCREEN_W - 1;
+        emitQuad(0, (int16_t)leftSplit, (uint8_t)(baseU0 + panU), baseU1);
+        emitQuad((int16_t)leftSplit, SCREEN_W, baseU0, (uint8_t)(baseU0 + panU - 1));
+    }
 }
