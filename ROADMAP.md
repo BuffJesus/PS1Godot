@@ -547,6 +547,33 @@ PS1 BIOS has memory-card syscalls; nothing in psxsplash surfaces them today.
       (psxsplash channel, 2026-04, 2 upvotes, "considered").
       **[runtime]**
 
+### Fixed-camera presets (`PS1FixedCamera` node)
+
+For CCTV / Resident-Evil-style scenes with N pre-authored camera angles
+the player or script switches between. Authoring a fixed cam today is a
+3-bug obstacle course (`docs/fixed-camera-authoring.md` is the full
+write-up): manual PSX coord conversion, `Camera.LookAt` is a no-op stub,
+and psyqo's pitch sign is inverted vs author intuition.
+
+- [ ] **`PS1FixedCamera.cs` Tool node** alongside `PS1Room.cs`. Authored
+      in Godot world space with optional `LookAtTarget` Node3D ref and
+      `ProjectionH` int. Editor gizmo previews the runtime FOV at the
+      authored position so framing is WYSIWYG.
+- [ ] **`SceneCollector.CollectCameras`** bakes each node into a
+      `CameraPresetRecord` with PSX-frame position + sign-corrected
+      pitch/yaw + projH + name + optional shake config. New splashpack
+      block; bumps version.
+- [ ] **`Camera.LoadPreset(name_or_index)` Lua API** in psxsplash applies
+      position + rotation + H + shake from the baked record. Ships
+      alongside the splashpack version bump. **[runtime]**
+- [ ] Migrate `monitor.tscn` (jam game) off the hand-tuned `FEEDS`
+      table to four `PS1FixedCamera` nodes once the above lands. That
+      proves the migration story.
+
+Bug-source memories that informed this: `project_camera_lua_coord_frame.md`,
+`project_camera_lookat_stub.md`, `project_camera_pitch_sign.md`. Adding
+the node prevents all three from biting future authors.
+
 ### Camera modes (1st/3rd/Orbit)
 
 `PS1Player.CameraMode` already ships as an authoring-side enum, but the
