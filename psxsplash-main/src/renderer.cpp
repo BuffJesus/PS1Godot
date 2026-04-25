@@ -1562,38 +1562,46 @@ void psxsplash::Renderer::renderSky(
     constexpr int16_t SCREEN_H = 240;
     constexpr int SKY_DEPTH = ORDERING_TABLE_SIZE - 2;
 
-    // Triangle 0: top-left, top-right, bottom-left
-    {
-        auto& tri = balloc.allocateFragment<psyqo::Prim::GouraudTexturedTriangle>();
-        tri.primitive.pointA.x = 0;        tri.primitive.pointA.y = 0;
-        tri.primitive.pointB.x = SCREEN_W; tri.primitive.pointB.y = 0;
-        tri.primitive.pointC.x = 0;        tri.primitive.pointC.y = SCREEN_H;
-        tri.primitive.uvA.u = m_sky.u0; tri.primitive.uvA.v = m_sky.v0;
-        tri.primitive.uvB.u = m_sky.u1; tri.primitive.uvB.v = m_sky.v0;
-        tri.primitive.uvC.u = m_sky.u0; tri.primitive.uvC.v = m_sky.v1;
-        tri.primitive.tpage = tpage;
-        tri.primitive.clutIndex = clut;
-        tri.primitive.setColorA(tint);
-        tri.primitive.setColorB(tint);
-        tri.primitive.setColorC(tint);
-        tri.primitive.setOpaque();
-        ot.insert(tri, SKY_DEPTH);
-    }
-    // Triangle 1: top-right, bottom-right, bottom-left
-    {
-        auto& tri = balloc.allocateFragment<psyqo::Prim::GouraudTexturedTriangle>();
-        tri.primitive.pointA.x = SCREEN_W; tri.primitive.pointA.y = 0;
-        tri.primitive.pointB.x = SCREEN_W; tri.primitive.pointB.y = SCREEN_H;
-        tri.primitive.pointC.x = 0;        tri.primitive.pointC.y = SCREEN_H;
-        tri.primitive.uvA.u = m_sky.u1; tri.primitive.uvA.v = m_sky.v0;
-        tri.primitive.uvB.u = m_sky.u1; tri.primitive.uvB.v = m_sky.v1;
-        tri.primitive.uvC.u = m_sky.u0; tri.primitive.uvC.v = m_sky.v1;
-        tri.primitive.tpage = tpage;
-        tri.primitive.clutIndex = clut;
-        tri.primitive.setColorA(tint);
-        tri.primitive.setColorB(tint);
-        tri.primitive.setColorC(tint);
-        tri.primitive.setOpaque();
-        ot.insert(tri, SKY_DEPTH);
-    }
+    uint8_t baseU0 = m_sky.u0;
+    uint8_t baseU1 = m_sky.u1;
+    uint8_t v0 = m_sky.v0;
+    uint8_t v1 = m_sky.v1;
+
+    // Helper: emit one textured-quad pair (two GouraudTexturedTriangles)
+    // covering the screen rect [x0..x1] with UV span [u0..u1]. All sky
+    // tris insert at SKY_DEPTH, share tpage / clut / tint.
+    auto emitQuad = [&](int16_t x0, int16_t x1, uint8_t u0v, uint8_t u1v) {
+        // Triangle 0: top-left, top-right, bottom-left
+        auto& a = balloc.allocateFragment<psyqo::Prim::GouraudTexturedTriangle>();
+        a.primitive.pointA.x = x0; a.primitive.pointA.y = 0;
+        a.primitive.pointB.x = x1; a.primitive.pointB.y = 0;
+        a.primitive.pointC.x = x0; a.primitive.pointC.y = SCREEN_H;
+        a.primitive.uvA.u = u0v; a.primitive.uvA.v = v0;
+        a.primitive.uvB.u = u1v; a.primitive.uvB.v = v0;
+        a.primitive.uvC.u = u0v; a.primitive.uvC.v = v1;
+        a.primitive.tpage = tpage;
+        a.primitive.clutIndex = clut;
+        a.primitive.setColorA(tint); a.primitive.setColorB(tint); a.primitive.setColorC(tint);
+        a.primitive.setOpaque();
+        ot.insert(a, SKY_DEPTH);
+        // Triangle 1: top-right, bottom-right, bottom-left
+        auto& b = balloc.allocateFragment<psyqo::Prim::GouraudTexturedTriangle>();
+        b.primitive.pointA.x = x1; b.primitive.pointA.y = 0;
+        b.primitive.pointB.x = x1; b.primitive.pointB.y = SCREEN_H;
+        b.primitive.pointC.x = x0; b.primitive.pointC.y = SCREEN_H;
+        b.primitive.uvA.u = u1v; b.primitive.uvA.v = v0;
+        b.primitive.uvB.u = u1v; b.primitive.uvB.v = v1;
+        b.primitive.uvC.u = u0v; b.primitive.uvC.v = v1;
+        b.primitive.tpage = tpage;
+        b.primitive.clutIndex = clut;
+        b.primitive.setColorA(tint); b.primitive.setColorB(tint); b.primitive.setColorC(tint);
+        b.primitive.setOpaque();
+        ot.insert(b, SKY_DEPTH);
+    };
+
+    // Single full-screen quad covering the entire texture. The follow-up
+    // commit replaces this with a yaw-driven panU + dual-quad seam wrap;
+    // for now this is a no-behavior-change refactor of the previous
+    // inline two-triangle code.
+    emitQuad(0, SCREEN_W, baseU0, baseU1);
 }
