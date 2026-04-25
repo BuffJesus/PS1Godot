@@ -399,7 +399,7 @@ public static class SceneCollector
         }
         else if (n is PS1UICanvas canvas)
         {
-            EmitUICanvas(canvas, data);
+            EmitUICanvas(canvas, data, textureCache);
             // Canvas children are consumed here, not re-walked as siblings.
             return;
         }
@@ -556,7 +556,8 @@ public static class SceneCollector
     // Collect a canvas and its immediate PS1UIElement children. Nested
     // canvases / non-PS1UIElement children are ignored with a warning so
     // the scene tree stays honest.
-    private static void EmitUICanvas(PS1UICanvas canvas, SceneData data)
+    private static void EmitUICanvas(PS1UICanvas canvas, SceneData data,
+                                      Dictionary<(string, PSXBPP), int> textureCache)
     {
         string name = string.IsNullOrWhiteSpace(canvas.CanvasName)
             ? canvas.Name
@@ -579,6 +580,14 @@ public static class SceneCollector
             {
                 fontIndex = ResolveFontIndex(el.Font, data, elementName: elName);
             }
+
+            int textureIndex = -1;
+            if (el.Type == PS1UIElementType.Image && el.Texture != null)
+            {
+                textureIndex = ResolveUIImageTexture(el.Texture, el.BitDepth, data,
+                                                     textureCache, elementName: elName);
+            }
+
             elements.Add(new UIElementRecord
             {
                 Name = elName,
@@ -595,6 +604,9 @@ public static class SceneCollector
                 HAlign = (byte)el.TextAlign,
                 VAlign = (byte)el.TextVAlign,
                 Text = el.Text ?? "",
+                TextureIndex = textureIndex,
+                UVRect = el.UVRect,
+                BitDepthByte = (byte)el.BitDepth,
             });
         }
 
@@ -2566,6 +2578,76 @@ public static class SceneCollector
     private static int ResolveSurfaceTextureRaw(MeshInstance3D mi, int surfaceIdx,
         SceneData data, Dictionary<(string, PSXBPP), int> cache)
         => ResolveSurfaceTextureCore(mi, PSXBPP.TEX_8BIT, surfaceIdx, data, cache);
+
+    // Register a Texture2D into the scene's texture pool for UI Image
+    // elements. Mirrors ResolveSurfaceTextureCore but skips the
+    // material-extraction pipeline (the texture is already in hand) and
+    // the mesh-only nominal-name disambiguation. Returns the Textures
+    // list index, or -1 if the texture is unusable. Reuses the same
+    // (path, bpp) cache so a texture used by both a UI element and a
+    // mesh shares a single VRAM atlas slot.
+    private static int ResolveUIImageTexture(Texture2D tex, PSXBPP bitDepth,
+        SceneData data, Dictionary<(string, PSXBPP), int> cache, string elementName)
+    {
+        string path = tex.ResourcePath ?? "";
+        if (string.IsNullOrEmpty(path))
+        {
+            GD.PushWarning($"[PS1Godot] UI element '{elementName}': image texture has no resource path " +
+                           "(in-memory only) — can't dedup; element will render untextured. " +
+                           "Save the texture as an asset (.png + .import) and re-assign.");
+            return -1;
+        }
+
+        var key = (path, bitDepth);
+        if (cache.TryGetValue(key, out int existing)) return existing;
+
+        Image? img = tex.GetImage();
+        if (img == null || img.IsEmpty())
+        {
+            GD.PushWarning($"[PS1Godot] UI element '{elementName}': image '{path}' has no image data — skipping.");
+            return -1;
+        }
+
+        if (img.IsCompressed())
+        {
+            img.Decompress();
+        }
+
+        // Same 256×256 max + multiple-of-(4|2) constraints as mesh
+        // textures — UI atlases live in the same VRAM tpages.
+        const int MaxDim = 256;
+        if (img.GetWidth() > MaxDim || img.GetHeight() > MaxDim)
+        {
+            int srcW = img.GetWidth();
+            int srcH = img.GetHeight();
+            int newW = Mathf.Min(srcW, MaxDim);
+            int newH = Mathf.Min(srcH, MaxDim);
+            img.Resize(newW, newH, Image.Interpolation.Nearest);
+            GD.PushWarning($"[PS1Godot] UI element '{elementName}': texture '{path}' was {srcW}×{srcH}; " +
+                           $"auto-downscaled to {newW}×{newH} (PSX VRAM page max). " +
+                           $"Author UI art at {MaxDim}×{MaxDim} or smaller.");
+        }
+
+        int requiredMultiple = bitDepth switch
+        {
+            PSXBPP.TEX_4BIT => 4,
+            PSXBPP.TEX_8BIT => 2,
+            _ => 1,
+        };
+        if (img.GetWidth() % requiredMultiple != 0)
+        {
+            GD.PushError($"[PS1Godot] UI element '{elementName}': texture '{path}' width {img.GetWidth()} " +
+                         $"not a multiple of {requiredMultiple} (required for {bitDepth}). " +
+                         "Resize the source PNG, lower BitDepth, or pad transparent pixels.");
+            return -1;
+        }
+
+        var psxTex = PSXTexture.FromGodotImage(img, bitDepth, path);
+        int idx = data.Textures.Count;
+        data.Textures.Add(psxTex);
+        cache[key] = idx;
+        return idx;
+    }
 
     private static int ResolveSurfaceTextureCore(MeshInstance3D mi, PSXBPP bitDepth, int surfaceIdx,
         SceneData data, Dictionary<(string, PSXBPP), int> cache)

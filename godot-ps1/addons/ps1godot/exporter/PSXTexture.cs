@@ -62,6 +62,33 @@ public sealed class PSXTexture
             _ => t.Width,
         };
 
+        // Detect alpha-key transparency. Treat any pixel with α below
+        // ~0.5 as fully transparent — matches the PS1's binary
+        // "drawn / not drawn" model (no per-pixel alpha blending).
+        // Authors get cleaner edges on quantized 4bpp art than they
+        // would with a hard α==0 cutoff.
+        const float AlphaKeyThreshold = 0.5f;
+        bool[,]? transparentMask = null;
+        bool hasAlphaKey = false;
+        for (int y = 0; y < t.Height && !hasAlphaKey; y++)
+        {
+            for (int x = 0; x < t.Width; x++)
+            {
+                if (img.GetPixel(x, y).A < AlphaKeyThreshold)
+                {
+                    hasAlphaKey = true;
+                    break;
+                }
+            }
+        }
+        if (hasAlphaKey)
+        {
+            transparentMask = new bool[t.Width, t.Height];
+            for (int y = 0; y < t.Height; y++)
+                for (int x = 0; x < t.Width; x++)
+                    transparentMask[x, y] = img.GetPixel(x, y).A < AlphaKeyThreshold;
+        }
+
         if (bpp == PSXBPP.TEX_16BIT)
         {
             t.ImageData = new VRAMPixel[t.Width, t.Height];
@@ -72,18 +99,56 @@ public sealed class PSXTexture
                     // Godot Image origin is top-left, same as PSX VRAM — direct
                     // copy, no Y-flip needed. (SplashEdit flipped here because
                     // Unity UVs put (0,0) at bottom-left; Godot UVs match PSX.)
-                    var c = img.GetPixel(x, y);
-                    t.ImageData[x, y] = VRAMPixel.FromColor01(c.R, c.G, c.B);
+                    if (hasAlphaKey && transparentMask![x, y])
+                    {
+                        t.ImageData[x, y] = VRAMPixel.Transparent();
+                    }
+                    else
+                    {
+                        var c = img.GetPixel(x, y);
+                        t.ImageData[x, y] = VRAMPixel.FromColor01(c.R, c.G, c.B);
+                    }
                 }
             }
             t.ColorPalette = null;
             return t;
         }
 
+        // Alpha-key path for paletted modes: reserve palette index 0 as
+        // the transparent sentinel (0x0000), quantize visible pixels into
+        // the remaining (maxColors - 1) slots, then map masked input
+        // pixels back to index 0. Quantizer is only fed opaque pixels so
+        // its centroid placement isn't dragged toward the masked colors.
         int maxColors = bpp.PaletteSize();
-        var q = ImageProcessing.Quantize(img, maxColors);
+        ImageProcessing.QuantizedResult q;
+        if (hasAlphaKey)
+        {
+            // Build an opaque-only image for the quantizer. Masked pixels
+            // get replaced with the centroid color of their nearest
+            // opaque neighbor (or just (0,0,0) when the whole row is
+            // masked) — they'll be overridden to index 0 afterward, but
+            // Floyd-Steinberg dithering still propagates error through
+            // these cells, so a sane stand-in keeps speckles down.
+            var opaqueOnly = (Image)img.Duplicate();
+            for (int y = 0; y < t.Height; y++)
+                for (int x = 0; x < t.Width; x++)
+                    if (transparentMask![x, y])
+                        opaqueOnly.SetPixel(x, y, new Color(0f, 0f, 0f, 1f));
+
+            q = ImageProcessing.Quantize(opaqueOnly, maxColors - 1);
+            // Shift quantized indices by +1 so palette[0] is reserved.
+            for (int y = 0; y < t.Height; y++)
+                for (int x = 0; x < t.Width; x++)
+                    q.Indices[x, y] = transparentMask![x, y] ? 0 : (q.Indices[x, y] + 1);
+        }
+        else
+        {
+            q = ImageProcessing.Quantize(img, maxColors);
+        }
 
         t.ColorPalette = new List<VRAMPixel>(maxColors);
+        if (hasAlphaKey)
+            t.ColorPalette.Add(VRAMPixel.Transparent()); // index 0 = 0x0000
         foreach (var c in q.Palette)
             t.ColorPalette.Add(VRAMPixel.FromColor01(c.X, c.Y, c.Z));
 

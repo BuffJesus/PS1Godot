@@ -105,6 +105,7 @@ godot-ps1/lua/monitor/
 godot-ps1/assets/monitor/
 docs/the-monitor-*.md
 scripts/regen-monitor-assets.py
+scripts/regen-monitor-audio.py
 # Recent handoff notes — pre-jam handoffs (≤2026-04-21) are tracked.
 docs/handoff-2026-04-22.md
 docs/handoff-2026-04-23.md

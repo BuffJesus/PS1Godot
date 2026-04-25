@@ -1,15 +1,21 @@
 using Godot;
+using PS1Godot.Exporter;
 
 namespace PS1Godot;
 
 // A single widget inside a PS1UICanvas. Must be a direct child of a
 // PS1UICanvas to be picked up by the exporter. Widget type selects
 // which fields are meaningful:
-//   - Text: renders `Text` in `Color`. Font is the runtime's built-in
-//     system font in MVP (custom fonts = Phase 2 of this bullet).
+//   - Text: renders `Text` in `Color`. Built-in system font (slot 0) by
+//     default, or a generated PS1UIFontAsset assigned to `Font`.
 //   - Box: solid-color rectangle in `Color`.
-//   - Image / Progress: runtime supports these but exporter MVP skips
-//     them.
+//   - Image: textured quad. Set `Texture` (Texture2D), `UVRect`
+//     (sub-region within the texture; default = full), `BitDepth`
+//     (4/8/16). `Color` modulates as a tint (white = unmodified).
+//   - Progress: runtime supports these but exporter MVP skips them.
+//
+// Enum values match the runtime's UIElementType in
+// psxsplash-main/src/uisystem.hh — do not renumber.
 //
 // Coordinates are in PS1 screen pixels (320×240). See the `Anchor`
 // property's doc for how X/Y are interpreted — Custom (default) means
@@ -17,6 +23,7 @@ namespace PS1Godot;
 // anchored edges / offsets from the anchored center.
 public enum PS1UIElementType
 {
+    Image = 0,
     Box = 1,
     Text = 2,
 }
@@ -132,6 +139,25 @@ public partial class PS1UIElement : Node
     // Vertical alignment of the text stack inside the Height box.
     // Ignored for non-Text types.
     [Export] public PS1UITextVAlign TextVAlign { get; set; } = PS1UITextVAlign.Top;
+
+    [ExportGroup("Image (when Type = Image)")]
+    // Source texture for Image-type elements. Must have a resource path
+    // (i.e. saved as an asset, not generated in-memory) so the exporter
+    // can dedupe across elements + meshes. Ignored for non-Image types.
+    [Export] public Texture2D? Texture { get; set; }
+
+    // Sub-region of `Texture` to display, normalized 0..1 with origin
+    // top-left. Default (0,0,1,1) shows the whole texture. Useful for
+    // packing multiple icons into one source PNG and addressing each
+    // by UV. Ignored for non-Image types.
+    [Export] public Rect2 UVRect { get; set; } = new Rect2(0f, 0f, 1f, 1f);
+
+    // PSX bit-depth this image gets quantized to: 4bpp = 16-color
+    // palette (cheapest VRAM), 8bpp = 256-color, 16bpp = direct RGB
+    // (no CLUT, ~most VRAM). Match the source asset's color complexity:
+    // CRT bezels and HUD icons usually fit 4bpp comfortably; photo-
+    // realistic textures want 8bpp+. Ignored for non-Image types.
+    [Export] public PSXBPP BitDepth { get; set; } = PSXBPP.TEX_8BIT;
 
     [ExportGroup("Slot (when nested inside a container)")]
     // These fields are read by PS1UIHBox / PS1UIVBox / PS1UISizeBox /

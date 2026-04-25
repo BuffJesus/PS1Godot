@@ -903,17 +903,23 @@ public static class SplashpackWriter
                 w.Write(el.ColorR); w.Write(el.ColorG); w.Write(el.ColorB);
                 w.Write((byte)0);                            // pad1
 
-                // Type-specific (16 B). Text = fontIndex (0 = system,
-                // 1+ = custom font slot) + hAlign + vAlign + 13 pad;
-                // Box = all zeros. Runtime uisystem.cpp reads hAlign/
-                // vAlign in renderProportionalText to shift each line's
-                // starting X/Y by the measured text dimensions.
+                // Type-specific (16 B). Layout matches the runtime's
+                // UIImageData / UITextData / UIProgressData unions in
+                // uisystem.hh / uisystem.cpp:loadFromSplashpack.
+                //   Text:  fontIndex(1) hAlign(1) vAlign(1) + 13 pad
+                //   Image: texpageX(1) texpageY(1) clutX(2) clutY(2)
+                //          u0(1) v0(1) u1(1) v1(1) bitDepth(1) + 5 pad
+                //   Box / unmapped: 16 zero bytes
                 if (el.Type == PS1UIElementType.Text)
                 {
                     w.Write(el.FontIndex);
                     w.Write(el.HAlign);
                     w.Write(el.VAlign);
                     for (int k = 0; k < 13; k++) w.Write((byte)0);
+                }
+                else if (el.Type == PS1UIElementType.Image)
+                {
+                    WriteUIImageTypeData(w, el, scene);
                 }
                 else
                 {
@@ -976,6 +982,64 @@ public static class SplashpackWriter
             w.Write(scene.UIFonts[fi].PixelData4bpp);
             BackfillUInt32(w, fontDataOffPositions[fi], (uint)dataOff);
         }
+    }
+
+    // Stamp the 16-byte type-specific block for a UI Image element.
+    // Reads PSXTexture placement (TexpageX/Y, ClutPackingX/Y, PackingX/Y)
+    // populated by VRAMPacker.Pack earlier in this writer's pipeline,
+    // converts the element's normalized UVRect into PSX-byte UV coords
+    // inside the tpage, and writes the layout the runtime parses in
+    // uisystem.cpp:153-163. Falls back to all-zeros when the texture
+    // is missing — runtime then renders a tinted untextured triangle
+    // pair (a flat-colored rect, basically).
+    private static void WriteUIImageTypeData(BinaryWriter w, UIElementRecord el, SceneData scene)
+    {
+        if (el.TextureIndex < 0 || el.TextureIndex >= scene.Textures.Count)
+        {
+            for (int k = 0; k < 16; k++) w.Write((byte)0);
+            return;
+        }
+
+        var tex = scene.Textures[el.TextureIndex];
+
+        // expander: source-pixels per VRAM word horizontally, matching
+        // the mesh UV pipeline (WriteUvByte). For 4bpp 4 source pixels
+        // pack into one VRAM word, so PackingX (in VRAM words) → byte
+        // U coord = PackingX * 4. 8bpp = ×2; 16bpp = ×1.
+        int expander = tex.BitDepth switch
+        {
+            PSXBPP.TEX_4BIT => 4,
+            PSXBPP.TEX_8BIT => 2,
+            _ => 1,
+        };
+        int baseU = tex.PackingX * expander;
+        int baseV = tex.PackingY;
+
+        // UV rect in source-texture-pixel space, then offset by the
+        // texture's tpage-local origin. Clamp to byte range — the GPU
+        // wraps modulo 256 within a tpage, so an out-of-range UV would
+        // silently sample garbage.
+        var uv = el.UVRect;
+        int u0 = baseU + Mathf.RoundToInt(uv.Position.X * tex.Width);
+        int v0 = baseV + Mathf.RoundToInt(uv.Position.Y * tex.Height);
+        int u1 = baseU + Mathf.RoundToInt((uv.Position.X + uv.Size.X) * tex.Width);
+        int v1 = baseV + Mathf.RoundToInt((uv.Position.Y + uv.Size.Y) * tex.Height);
+
+        u0 = Mathf.Clamp(u0, 0, 255);
+        v0 = Mathf.Clamp(v0, 0, 255);
+        u1 = Mathf.Clamp(u1, 0, 255);
+        v1 = Mathf.Clamp(v1, 0, 255);
+
+        w.Write(tex.TexpageX);              // typeData[0]
+        w.Write(tex.TexpageY);              // typeData[1]
+        w.Write((ushort)tex.ClutPackingX);  // typeData[2..3]
+        w.Write((ushort)tex.ClutPackingY);  // typeData[4..5]
+        w.Write((byte)u0);                  // typeData[6]
+        w.Write((byte)v0);                  // typeData[7]
+        w.Write((byte)u1);                  // typeData[8]
+        w.Write((byte)v1);                  // typeData[9]
+        w.Write(el.BitDepthByte);           // typeData[10]
+        for (int k = 0; k < 5; k++) w.Write((byte)0);  // typeData[11..15] pad
     }
 
     // ─── Header (120 bytes) ──────────────────────────────────────────────

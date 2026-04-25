@@ -35,4 +35,11 @@ public struct VRAMPixel
         }
         return p;
     }
+
+    // Explicit 0x0000 sentinel — the PSX GPU skips any textured-prim
+    // pixel whose VRAM word is the all-zero pattern (regardless of
+    // opaque/semi-trans mode). Use for palette index 0 of textures
+    // with alpha-key transparency, and for 16bpp direct pixels whose
+    // input alpha was 0.
+    public static VRAMPixel Transparent() => new VRAMPixel();
 }

@@ -238,6 +238,16 @@ public sealed class UIElementRecord
     public required byte HAlign { get; init; }
     public required byte VAlign { get; init; }
     public required string Text { get; init; }  // empty for non-Text types
+
+    // Image-type fields. -1 = no texture (untextured fallback). Index
+    // into SceneData.Textures so the writer can pull TexpageX/Y +
+    // ClutPackingX/Y + PackingX/Y after VRAMPacker has run. UVRect is
+    // normalized 0..1 within the source texture; defaults to full.
+    // BitDepth byte matches the runtime UIImageData.bitDepth field
+    // (0=4bpp, 1=8bpp, 2=16bpp). All ignored for non-Image types.
+    public int TextureIndex { get; init; } = -1;
+    public Rect2 UVRect { get; init; } = new Rect2(0f, 0f, 1f, 1f);
+    public byte BitDepthByte { get; init; } = 1; // 8bpp default
 }
 
 // A custom UI font ready for splashpack emission. Built by
