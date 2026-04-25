@@ -93,3 +93,22 @@ dist/
 .env
 .env.local
 *.local.json
+
+# ── "The Monitor" jam game (out-of-tree project) ──
+# The PSXSplash Game Jam 2026 entry built on top of PS1Godot. Engine +
+# plugin live in the repo; the jam game's scene, Lua, assets, the
+# monitor-specific docs, and the placeholder regenerator script stay
+# local. The general lessons learned (PS1FixedCamera proposal, memory
+# entries) DO get committed since they apply project-wide.
+godot-ps1/scenes/monitor/
+godot-ps1/lua/monitor/
+godot-ps1/assets/monitor/
+docs/the-monitor-*.md
+scripts/regen-monitor-assets.py
+# Recent handoff notes — pre-jam handoffs (≤2026-04-21) are tracked.
+docs/handoff-2026-04-22.md
+docs/handoff-2026-04-23.md
+docs/handoff-2026-04-24.md
+docs/handoff-2026-04-25.md
+# Original jam-game source files staging area (Unity export, audio, etc.).
+SaunaGameSourceFiles/
