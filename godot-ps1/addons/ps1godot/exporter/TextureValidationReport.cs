@@ -33,6 +33,7 @@ public static class TextureValidationReport
         PSXBPP Bpp,
         long EstVramBytes,
         bool HasAlphaKey,
+        int UseCount,
         string? Warning);
 
     public static void EmitForScene(SceneData data, int sceneIndex)
@@ -43,18 +44,41 @@ public static class TextureValidationReport
             return;
         }
 
+        // Count how many distinct GameObjects reference each texture index.
+        // Used by the reuse auditor: a texture used by exactly one mesh is
+        // a candidate for baking into a shared world/character atlas
+        // instead of carrying its own atlas slot + CLUT.
+        var useCounts = new int[data.Textures.Count];
+        foreach (var obj in data.Objects)
+        {
+            if (obj.Mesh == null) continue;
+            // Object can hit multiple texture indices via different
+            // surface materials; count each distinct index once per obj.
+            var seenForObj = new HashSet<int>();
+            foreach (var tri in obj.Mesh.Triangles)
+            {
+                int ti = tri.TextureIndex;
+                if (ti >= 0 && ti < useCounts.Length && seenForObj.Add(ti))
+                {
+                    useCounts[ti]++;
+                }
+            }
+        }
+
         var rows = new List<Row>(data.Textures.Count);
         long totalVram = 0;
         int warnCount = 0;
 
-        foreach (var t in data.Textures)
+        for (int i = 0; i < data.Textures.Count; i++)
         {
+            var t = data.Textures[i];
             long vramBytes = EstimateVramBytes(t);
             totalVram += vramBytes;
 
             bool hasAlphaKey = t.HasAlphaKey;
+            int useCount = useCounts[i];
 
-            string? warning = ClassifyRisk(t, vramBytes, hasAlphaKey);
+            string? warning = ClassifyRisk(t, vramBytes, hasAlphaKey, useCount);
             if (warning != null) warnCount++;
 
             rows.Add(new Row(
@@ -64,6 +88,7 @@ public static class TextureValidationReport
                 Bpp: t.BitDepth,
                 EstVramBytes: vramBytes,
                 HasAlphaKey: hasAlphaKey,
+                UseCount: useCount,
                 Warning: warning));
         }
 
@@ -71,7 +96,7 @@ public static class TextureValidationReport
         rows.Sort((a, b) => b.EstVramBytes.CompareTo(a.EstVramBytes));
 
         GD.Print($"[PS1Godot] Texture report scene[{sceneIndex}]: {rows.Count} unique textures, {totalVram} B total VRAM, {warnCount} warning(s).");
-        GD.Print("[PS1Godot]   name                                          dim     bpp   alpha   est VRAM  warn");
+        GD.Print("[PS1Godot]   name                                          dim     bpp   alpha    uses  est VRAM  warn");
         foreach (var r in rows)
         {
             string dim = $"{r.Width}x{r.Height}";
@@ -85,7 +110,7 @@ public static class TextureValidationReport
             string alpha = r.HasAlphaKey ? "cutout" : "opaque";
             string vramKb = $"{r.EstVramBytes / 1024.0:F1} KB";
             string warn = r.Warning ?? "";
-            GD.Print($"[PS1Godot]   {Truncate(r.Name, 45),-45} {dim,-7} {bpp,-5} {alpha,-7} {vramKb,9}  {warn}");
+            GD.Print($"[PS1Godot]   {Truncate(r.Name, 45),-45} {dim,-7} {bpp,-5} {alpha,-7}  {r.UseCount,4}  {vramKb,9}  {warn}");
         }
     }
 
@@ -114,7 +139,7 @@ public static class TextureValidationReport
         return pixelBytes + clutBytes;
     }
 
-    private static string? ClassifyRisk(PSXTexture t, long vramBytes, bool hasAlphaKey)
+    private static string? ClassifyRisk(PSXTexture t, long vramBytes, bool hasAlphaKey, int useCount)
     {
         // Source dim above the page max — exporter auto-downscales but the
         // author is paying VRAM for a bigger source than they need.
@@ -136,6 +161,15 @@ public static class TextureValidationReport
             && t.Width <= 128 && t.Height <= 128)
         {
             return "small cutout at 8bpp — try 4bpp first (4× VRAM saving)";
+        }
+
+        // Reuse auditor: textures used by exactly one mesh are atlas
+        // candidates. Skip the warn for tiny ones (< 4 KB) where atlas
+        // overhead would cancel out the saving, and for cutouts that
+        // need their own CLUT[0]=transparent slot anyway.
+        if (useCount == 1 && vramBytes >= 4 * 1024 && !hasAlphaKey)
+        {
+            return $"used by 1 mesh ({vramBytes / 1024} KB) — bake into world atlas?";
         }
 
         return null;
