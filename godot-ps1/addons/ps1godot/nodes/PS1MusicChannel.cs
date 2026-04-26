@@ -42,19 +42,34 @@ public partial class PS1MusicChannel : Resource
     public int MidiNoteMax { get; set; } = 127;
 
     [ExportGroup("Sample")]
+    // Phase 1 instrument data path (see
+    // docs/handoff-true-sequenced-audio-plan.md). Optional reference to a
+    // PS1Instrument; when set, AudioClipName / BaseNoteMidi / LoopSample
+    // are sourced from the instrument's first region instead of the
+    // direct fields below — those direct fields stay around for legacy
+    // bindings and are silently overridden when Instrument != null.
+    // Multi-region keymap selection (per-note Region picking) is
+    // Phase 2 territory and requires a splashpack format bump; for now
+    // a one-region instrument is wire-equivalent to the legacy direct
+    // binding, so this is purely an authoring convenience.
+    [Export] public PS1Instrument? Instrument { get; set; }
+
     // Name of a PS1AudioClip on PS1Scene.AudioClips. Empty entries are
-    // skipped (and warned about) at export.
+    // skipped (and warned about) at export. Ignored when Instrument is
+    // set.
     [Export] public string AudioClipName { get; set; } = "";
 
     // The MIDI note number that plays the sample at its native pitch.
     // Middle C = 60. Used to compute (incomingNote - BaseNoteMidi)
     // semitones of shift, then converted to fp12 SPU pitch at runtime.
+    // Ignored when Instrument is set (resolved from Regions[0].RootKey).
     [Export(PropertyHint.Range, "0,127,1")]
     public int BaseNoteMidi { get; set; } = 60;
 
     // Loop the sample for the duration of the held note (held drones,
     // pads). When false, the sample plays once and stops on key-off
-    // or natural end.
+    // or natural end. Ignored when Instrument is set (resolved from
+    // Regions[0].LoopEnabled).
     [Export] public bool LoopSample { get; set; } = false;
 
     // Percussion mode: ignore note pitch shift, always play the sample
