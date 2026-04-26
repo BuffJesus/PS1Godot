@@ -40,4 +40,26 @@ public partial class PS1SkinnedMesh : PS1MeshInstance
     // AnimationPlayer is baked. Authored as clip names so renaming
     // the AnimationPlayer doesn't silently change the export.
     [Export] public string[] ClipNames { get; set; } = System.Array.Empty<string>();
+
+    // Skinned characters use a snap-disabled variant of the PS1 shader.
+    // The 320×240 vertex snap collapses bone-driven verts onto the same
+    // grid cell at typical editor / gameplay camera distances, fragmenting
+    // the body into grey-patched triangles. World geometry keeps snap on
+    // (that's where the PS1 wobble belongs); skinned meshes opt out by
+    // default. Override this by setting an explicit MaterialOverride
+    // (the editor-applied default only kicks in when none is set).
+    public override void _EnterTree()
+    {
+        if (MaterialOverride == null)
+        {
+            var mat = ResourceLoader.Load<Material>(
+                "res://addons/ps1godot/shaders/ps1_skinned.tres");
+            if (mat != null) MaterialOverride = mat;
+        }
+        // base._EnterTree sees MaterialOverride set above, skips its own
+        // default-material apply, then runs the AABB padding pass — which
+        // skinned meshes still need because bone motion expands the
+        // rendered footprint beyond the static mesh AABB.
+        base._EnterTree();
+    }
 }
