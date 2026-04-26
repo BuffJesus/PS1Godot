@@ -116,6 +116,19 @@ struct SplashpackSceneSetup {
         // CDDA clip has track 0.
         uint8_t cddaTrack = 0;
     };
+
+    // v27: XA sidecar table. One entry per Route=XA clip; each points
+    // at a byte range inside the per-scene `scene.<n>.xa` file produced
+    // by psxavenc. Keys are clip names (looked up from the audio table)
+    // — runtime joins them via name match. The `.xa` file is loaded
+    // separately at scene init (alongside .splashpack/.vram/.spu) and
+    // streamed into the SPU XA voice when Audio.PlayMusic dispatches.
+    struct XaClipEntry {
+        const char* name;        // points into splashpack data
+        uint32_t sidecarOffset;
+        uint32_t sidecarSize;
+    };
+    eastl::vector<XaClipEntry> xaClips;
     eastl::vector<AudioClipSetup> audioClips;
 
     eastl::vector<const char*> audioClipNames;

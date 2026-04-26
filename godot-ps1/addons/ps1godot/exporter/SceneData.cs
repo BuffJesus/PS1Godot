@@ -77,6 +77,12 @@ public sealed class AudioClipRecord
     // here so PS1AudioClip authoring metadata can flow to the runtime
     // Audio.PlayMusic dispatcher.
     public byte CddaTrackNumber { get; init; } = 0;
+
+    // v27: XA-ADPCM payload bytes from psxavenc. Non-null only for
+    // Route=XA clips when psxavenc was available at export time. Goes
+    // into the per-scene `scene.<n>.xa` sidecar; the splashpack XA
+    // table records offset+size into that sidecar by clip name.
+    public byte[]? XaPayload { get; init; }
 }
 
 // One pre-serialized PS1M sequenced-music blob. Lua picks it by name

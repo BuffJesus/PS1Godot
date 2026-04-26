@@ -101,6 +101,13 @@ class SceneManager {
         return 0;
     }
 
+    // v27: XA sidecar lookup. Returns true and fills (offset, size) if
+    // `name` was packaged with an XA-ADPCM payload. Audio.PlayMusic uses
+    // this to decide whether to attempt XA streaming or report "no
+    // payload" — the latter happens when psxavenc was missing at export.
+    bool getXaClipInfo(const char* name, uint32_t &outOffset, uint32_t &outSize) const;
+    int getXaClipCount() const { return m_xaClipNames.size(); }
+
     // Music sequence lookup by name (returns -1 if not found). Names
     // come from the splashpack music table and are stored at load time.
     int findMusicSequenceByName(const char* name) const;
@@ -233,6 +240,13 @@ class SceneManager {
     // v26: parallel to m_audioClipNames. CD audio track number for
     // CDDA-routed clips. 0 = unset.
     eastl::vector<uint8_t> m_audioClipCddaTrack;
+
+    // v27: XA sidecar table. Names are pointers into the splashpack
+    // data (same lifetime as m_audioClipNames). Offsets/sizes index
+    // into the per-scene `scene.<n>.xa` file.
+    eastl::vector<const char*> m_xaClipNames;
+    eastl::vector<uint32_t>    m_xaClipOffsets;
+    eastl::vector<uint32_t>    m_xaClipSizes;
 
     // Music sequence name table (v22+). Parallel to the sequencer's
     // registered sequences. Populated from the splashpack music table

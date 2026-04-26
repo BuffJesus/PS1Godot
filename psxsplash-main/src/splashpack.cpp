@@ -114,8 +114,14 @@ struct SPLASHPACKFileHeader {
     uint8_t  skyTintB;
     uint8_t  skyEnabled;
     uint8_t  pad_sky;
+    // v27+: XA clip table. One entry per Route=XA audio clip; entries
+    // point into `scene.<n>.xa` (Form-2 XA-ADPCM payload produced by
+    // psxavenc). xaClipCount=0 = no XA clips in this scene.
+    uint16_t xaClipCount;
+    uint16_t pad_xa;
+    uint32_t xaTableOffset;
 };
-static_assert(sizeof(SPLASHPACKFileHeader) == 168, "SPLASHPACKFileHeader must be 168 bytes");
+static_assert(sizeof(SPLASHPACKFileHeader) == 176, "SPLASHPACKFileHeader must be 176 bytes");
 
 struct MusicTableEntry {
     uint32_t dataOffset;
@@ -145,7 +151,7 @@ void SplashPackLoader::LoadSplashpack(uint8_t *data, SplashpackSceneSetup &setup
     psyqo::Kernel::assert(data != nullptr, "Splashpack loading data pointer is null");
     psxsplash::SPLASHPACKFileHeader *header = reinterpret_cast<psxsplash::SPLASHPACKFileHeader *>(data);
     psyqo::Kernel::assert(__builtin_memcmp(header->magic, "SP", 2) == 0, "Splashpack has incorrect magic");
-    psyqo::Kernel::assert(header->version >= 26, "Splashpack version too old (need v26+): re-export from PS1Godot");
+    psyqo::Kernel::assert(header->version >= 27, "Splashpack version too old (need v27+): re-export from PS1Godot");
 
     setup.playerStartPosition = header->playerStartPos;
     setup.playerStartRotation = header->playerStartRot;
@@ -323,8 +329,32 @@ void SplashPackLoader::LoadSplashpack(uint8_t *data, SplashpackSceneSetup &setup
                 ? static_cast<SplashpackSceneSetup::AudioRouting>(routing)
                 : SplashpackSceneSetup::AudioRouting::SPU;
             clip.cddaTrack = cddaTrack;
+            (void)dataOff;  // silence unused warning until we restore inline data path
             setup.audioClips.push_back(clip);
             setup.audioClipNames.push_back(clip.name);
+        }
+    }
+
+    // v27 XA table. One 24-byte entry per Route=XA clip:
+    //   sidecarOffset(u32) sidecarSize(u32) name[16 chars, null-padded]
+    // The runtime joins XA clips to audio clips by name string match.
+    // xaClipCount can be 0 when the scene has no XA-routed clips OR
+    // when psxavenc was unavailable at export time (the Godot side
+    // logs that case and falls back to SPU silence for those clips).
+    if (header->version >= 27 && header->xaClipCount > 0 && header->xaTableOffset != 0) {
+        uint8_t* xaTable = data + header->xaTableOffset;
+        setup.xaClips.reserve(header->xaClipCount);
+        for (uint16_t i = 0; i < header->xaClipCount; i++) {
+            uint32_t sidOff  = *reinterpret_cast<uint32_t*>(xaTable); xaTable += 4;
+            uint32_t sidSize = *reinterpret_cast<uint32_t*>(xaTable); xaTable += 4;
+            // 16-byte inline name; null-padded so direct char* read is safe.
+            const char* inlineName = reinterpret_cast<const char*>(xaTable);
+            xaTable += 16;
+            SplashpackSceneSetup::XaClipEntry e;
+            e.name = inlineName;
+            e.sidecarOffset = sidOff;
+            e.sidecarSize   = sidSize;
+            setup.xaClips.push_back(e);
         }
     }
 

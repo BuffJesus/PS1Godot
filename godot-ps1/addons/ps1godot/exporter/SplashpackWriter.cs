@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 using Godot;
 using FileAccess = System.IO.FileAccess; // Disambiguate from Godot.FileAccess
@@ -28,11 +29,11 @@ namespace PS1Godot.Exporter;
 //                  Name table — referenced by header.nameTableOffset.
 public static class SplashpackWriter
 {
-    public const ushort SplashpackVersion = 26;
+    public const ushort SplashpackVersion = 27;
     // Header layout grew by 16 bytes in v24 (sky struct: tpage + clut + UVs
     // + bitDepth + tint + enabled flag, mirroring the UI Image typeData
     // union slot). See WriteHeader and the runtime's SPLASHPACKFileHeader.
-    public const int HeaderSize = 168;
+    public const int HeaderSize = 176;
     public const int GameObjectSize = 92;
     public const int TriSize = 52;
     public const int LuaFileSize = 8; // luaCodeOffset (u32) + length (u32)
@@ -58,6 +59,11 @@ public static class SplashpackWriter
         WriteSplashpack(splashpackPath, scene);
         WriteVram(Path.ChangeExtension(splashpackPath, ".vram"), scene);
         WriteSpu(Path.ChangeExtension(splashpackPath, ".spu"), scene);
+        // v27: per-scene XA-ADPCM sidecar. Emitted only when at least one
+        // clip carries an XaPayload (i.e. psxavenc converted successfully).
+        // Splashpack XA table records (offset, size, name) into this file
+        // by clip name; runtime joins them at boot.
+        WriteXaSidecar(Path.ChangeExtension(splashpackPath, ".xa"), scene);
     }
 
     // ─── Splashpack file ─────────────────────────────────────────────────
@@ -289,6 +295,31 @@ public static class SplashpackWriter
                 w.Write((byte)0); // null terminator
                 BackfillUInt32(w, nameOffsetPositions[i], (uint)nameStart);
             }
+        }
+
+        // v27 XA clip table — per Route=XA clip with successful psxavenc
+        // conversion. Each entry is 24 B: sidecarOffset(u32) sidecarSize(u32)
+        // name[16, null-padded]. Sidecar offsets are running byte counts
+        // into scene.<n>.xa, computed in the same order WriteXaSidecar
+        // appends payloads — i.e. AudioClips iteration order.
+        int xaClipCount = 0;
+        long xaTableStart = 0;
+        if (scene.AudioClips.Any(c => c.XaPayload != null))
+        {
+            AlignTo4(w);
+            xaTableStart = w.BaseStream.Position;
+            uint runningOffset = 0;
+            foreach (var clip in scene.AudioClips)
+            {
+                if (clip.XaPayload == null) continue;
+                w.Write(runningOffset);                  // sidecarOffset
+                w.Write((uint)clip.XaPayload.Length);    // sidecarSize
+                WriteFixedAsciiName(w, clip.Name, 16);   // name[16]
+                runningOffset += (uint)clip.XaPayload.Length;
+                xaClipCount++;
+            }
+            BackfillUInt16(w, headerOffsets.XaCountPos, (ushort)xaClipCount);
+            BackfillUInt32(w, headerOffsets.XaTableOffsetPos, (uint)xaTableStart);
         }
 
         // ── UI section ──
@@ -1068,6 +1099,8 @@ public static class SplashpackWriter
         public long SkinTableOffsetPos;
         public long MusicTableOffsetPos;
         public long UiModelTableOffsetPos;
+        public long XaCountPos;
+        public long XaTableOffsetPos;
     }
 
     private static HeaderOffsets WriteHeader(BinaryWriter w, SceneData scene, int atlasCount, int clutCount, int colliderCount,
@@ -1241,6 +1274,15 @@ public static class SplashpackWriter
         // ignored. Resolved here from VRAMPacker (already run before
         // header write) so we can stamp final tpage/clut/UVs.
         WriteSkyBytes(w, scene);
+
+        // v27: XA clip table — count + offset (8 bytes). Backfilled
+        // after the audio section is written; 0 means "no XA-routed
+        // clips OR psxavenc unavailable, fall back to SPU silence".
+        offsets.XaCountPos = w.BaseStream.Position;
+        w.Write((ushort)0);   // xaClipCount   (backfilled)
+        w.Write((ushort)0);   // pad_xa
+        offsets.XaTableOffsetPos = w.BaseStream.Position;
+        w.Write((uint)0);     // xaTableOffset (backfilled)
 
         long written = w.BaseStream.Position - headerStart;
         if (written != HeaderSize)
@@ -1784,5 +1826,48 @@ public static class SplashpackWriter
         w.Seek((int)position, SeekOrigin.Begin);
         w.Write(value);
         w.Seek((int)curPos, SeekOrigin.Begin);
+    }
+
+    private static void BackfillUInt16(BinaryWriter w, long position, ushort value)
+    {
+        long curPos = w.BaseStream.Position;
+        w.Seek((int)position, SeekOrigin.Begin);
+        w.Write(value);
+        w.Seek((int)curPos, SeekOrigin.Begin);
+    }
+
+    // Write a fixed-width null-padded ASCII name. Truncates source bytes
+    // beyond `width-1` so there's always at least one trailing null
+    // byte, making the result safe to read as a C string at runtime.
+    private static void WriteFixedAsciiName(BinaryWriter w, string name, int width)
+    {
+        byte[] src = Encoding.ASCII.GetBytes(name ?? "");
+        int n = Math.Min(src.Length, width - 1);
+        for (int i = 0; i < n; i++) w.Write(src[i]);
+        for (int i = n; i < width; i++) w.Write((byte)0);
+    }
+
+    // ─── XA sidecar (`scene.<n>.xa`) ─────────────────────────────────────
+    // Concatenated XA-ADPCM payloads in AudioClips iteration order. The
+    // splashpack's XA table stamps (offset, size, name) per converted
+    // clip, in the same order — runtime joins them at boot. File is
+    // skipped entirely when no clip has an XaPayload (no XA-routed clip
+    // OR psxavenc was missing OR conversion failed for all clips).
+    private static void WriteXaSidecar(string path, SceneData scene)
+    {
+        bool any = scene.AudioClips.Any(c => c.XaPayload != null);
+        if (!any)
+        {
+            // Don't leave a stale .xa file behind from a previous export.
+            if (File.Exists(path)) File.Delete(path);
+            return;
+        }
+        using var fs = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.ReadWrite);
+        using var w = new BinaryWriter(fs);
+        foreach (var clip in scene.AudioClips)
+        {
+            if (clip.XaPayload == null) continue;
+            w.Write(clip.XaPayload);
+        }
     }
 }

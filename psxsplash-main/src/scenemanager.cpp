@@ -146,6 +146,21 @@ void psxsplash::SceneManager::InitializeScene(uint8_t* splashpackData, LoadingSc
         m_audioClipCddaTrack.push_back(clip.cddaTrack);
     }
 
+    // v27 XA sidecar — parallel arrays for fast name lookup. Empty when
+    // the scene has no XA-routed clips OR psxavenc wasn't available at
+    // export time.
+    m_xaClipNames.clear();
+    m_xaClipOffsets.clear();
+    m_xaClipSizes.clear();
+    m_xaClipNames.reserve(sceneSetup.xaClips.size());
+    m_xaClipOffsets.reserve(sceneSetup.xaClips.size());
+    m_xaClipSizes.reserve(sceneSetup.xaClips.size());
+    for (const auto &xa : sceneSetup.xaClips) {
+        m_xaClipNames.push_back(xa.name);
+        m_xaClipOffsets.push_back(xa.sidecarOffset);
+        m_xaClipSizes.push_back(xa.sidecarSize);
+    }
+
     if (loading && loading->isActive()) loading->updateProgress(gpu, 55);
 
     // v22+: sequenced music. Bind each sequence blob to the
@@ -1386,6 +1401,18 @@ int psxsplash::SceneManager::findAudioClipByName(const char* name) const {
         }
     }
     return -1;
+}
+
+bool psxsplash::SceneManager::getXaClipInfo(const char* name, uint32_t &outOffset, uint32_t &outSize) const {
+    if (!name || m_xaClipNames.empty()) return false;
+    for (size_t i = 0; i < m_xaClipNames.size(); i++) {
+        if (m_xaClipNames[i] && streq(m_xaClipNames[i], name)) {
+            outOffset = m_xaClipOffsets[i];
+            outSize   = m_xaClipSizes[i];
+            return true;
+        }
+    }
+    return false;
 }
 
 int psxsplash::SceneManager::findMusicSequenceByName(const char* name) const {

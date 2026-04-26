@@ -2014,10 +2014,18 @@ int LuaAPI::Audio_PlayMusic(lua_State* L) {
             s_sceneManager->getAudio().play(idx, 100, 64);
             lua.pushNumber(0);
             return 1;
-        case 1:  // XA — scaffold
-            ramsyscall_printf("[Audio] PlayMusic('%s'): XA streaming not implemented yet (Phase 3). Silence.\n", name);
+        case 1: { // XA — table lookup; backend not yet wired
+            uint32_t xaOff = 0, xaSize = 0;
+            bool have = s_sceneManager->getXaClipInfo(name, xaOff, xaSize);
+            if (have) {
+                ramsyscall_printf("[Audio] PlayMusic('%s'): XA table entry found (offset=%u size=%u) - XaAudioBackend not wired yet (Phase 3). Silence.\n",
+                                  name, (unsigned)xaOff, (unsigned)xaSize);
+            } else {
+                ramsyscall_printf("[Audio] PlayMusic('%s'): XA-routed clip but no XA payload in scene (psxavenc missing at export?). Silence.\n", name);
+            }
             lua.pushNumber(-1);
             return 1;
+        }
         case 2: { // CDDA — auto-dispatch to PlayCDDA via the clip's track
             uint8_t track = s_sceneManager->getAudioClipCddaTrack(idx);
             if (track == 0) {

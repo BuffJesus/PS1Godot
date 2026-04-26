@@ -43,12 +43,16 @@ Auto **never** picks CDDA — disc layout impact is too project-shaped to guess.
 | Splashpack v25 binary field        | shipped    | `routing` byte in audio table entry |
 | Runtime route table (SceneManager) | shipped    | `getAudioClipRouting(idx)` |
 | `Audio.PlaySfx(name, vol?, pan?)`  | shipped    | warns if clip is non-SPU |
-| `Audio.PlayMusic(name)`            | partial    | SPU + CDDA work end-to-end (CDDA auto-dispatches via `PS1AudioClip.CddaTrackNumber`); XA logs "not implemented" |
+| `Audio.PlayMusic(name)`            | partial    | SPU + CDDA work end-to-end (CDDA auto-dispatches via `PS1AudioClip.CddaTrackNumber`); XA reports table state but doesn't play |
 | `Audio.StopMusic()`                | shipped    | stops sequencer + CDDA; no-op for XA |
 | `Audio.PlayCDDA(track)` etc.       | shipped    | unchanged — direct CDDA control |
 | psxavenc detection                 | shipped    | `PsxAvEnc.Detect()` — env `PSXAVENC` or PATH |
-| psxavenc XA conversion             | **TODO**   | conversion step is not wired; XA clips ship as ADPCM into `.spu` even though runtime won't play them |
-| XA streaming runtime               | **TODO**   | `Audio.PlayMusic` for XA-routed clips logs and returns -1 |
+| psxavenc XA conversion             | shipped    | `PsxAvEnc.ConvertWavToXa()` shells out per Route=XA clip; output goes to `scene.<n>.xa` sidecar |
+| Splashpack v27 XA table            | shipped    | per-clip (offset, size, name) into the sidecar; runtime parses on scene load |
+| `scene.<n>.xa` sidecar emission    | shipped    | `WriteXaSidecar()` concatenates psxavenc outputs in audio-clip order |
+| Runtime XA table accessor          | shipped    | `SceneManager::getXaClipInfo(name, &offset, &size)` |
+| **XA streaming backend**           | **TODO**   | next session: `XaAudioBackend` C++ class — SETMODE + sector reader coroutine + SPU XA voice DMA. PSYQo gives us the building blocks (cdrom-device.hh sector reads, spu.hh DMA) but no XA-specific helpers. Estimate ~150-300 lines wrapping CDRomDevice + SPU. |
+| **ISO build pipeline**             | **TODO**   | XA needs a real ISO (mkpsxiso with XA sector flag). PCdrv is XA-blind. Add `mkpsxiso/build-iso.py` with `.xa` files routed as Mode-2 Form-2 sectors. |
 
 > Anything marked **TODO** is the Phase 3 finish line. Today, marking a clip XA
 > means the splashpack records the intent and the runtime knows it; playback is
@@ -80,26 +84,78 @@ Music.Play(name), Music.Stop(), Music.IsPlaying() -- PS1M sequenced music
 ambient loop" — the runtime decides whether to route through SPU or stream from
 disc based on what the exporter wrote.
 
-## Build pipeline TODO (Phase 3 finish)
+## What still needs to happen (next session)
 
-1. `PsxAvEnc.cs` already detects the binary; the missing piece is invoking it.
-   Pseudocode for the conversion step in `SplashpackWriter`:
+The build pipeline + format are now complete. Two pieces remain:
 
-   ```text
-   for clip in audioClips where Routing == XA:
-       psxavenc -t xa -f 18900 -b 4 -c 1 in.wav out.xa
-       collect into scene_<n>.xa sidecar
-       record (clip.name, byteOffset, byteSize) in v26 XA table
-   ```
+### 1. `XaAudioBackend` runtime class (~150-300 lines)
 
-2. Runtime side: `XaAudioBackend` class wrapping `psyqo::CDRomDevice` sector
-   reads + XA-ADPCM decode (PSYQo has the sector machinery; the decoder needs
-   to be ported from the Sony XA reference).
+PSYQo doesn't ship a turn-key XA player. We have the primitives: sector
+reads via `CDRomDevice::readSectors()` (callback / Task / coroutine
+flavors), generic SPU DMA via `psyqo::SPU::dmaWrite()`. Glue:
 
-3. Splashpack v26: per-clip XA file offset + size.
+- **SETMODE 0x24** via `cdrom.test()` with raw command buffer to put
+  the drive in XA-Form 2 mode.
+- **Coroutine reader loop** that `co_await`s `readSectors()` for the
+  next batch of XA sectors, fills a small ring buffer.
+- **SPU feeder task** that DMAs the ring buffer into SPU XA voice
+  area at the rate the hardware needs (PSX SPU decodes XA in voice 4
+  hardware-natively — no software decode).
+- **MusicManager wrapper** so `Audio.PlayMusic` can dispatch to it.
 
-4. mkpsxiso: include the `.xa` sidecar in the data track when building a real
-   ISO.
+Sketch:
+
+```cpp
+class XaAudioBackend {
+public:
+    bool init(psyqo::CDRomDevice* cdrom, psyqo::SPU* spu);
+    bool play(uint32_t lba, uint32_t lengthSectors);  // start XA stream at LBA
+    void stop();
+    bool isPlaying() const;
+private:
+    // coroutine reader, ring buffer, DMA feeder...
+};
+```
+
+### 2. ISO build pipeline (mkpsxiso)
+
+XA only plays from a real CD layout. PCdrv is XA-blind. We need:
+
+- `mkpsxiso/<scene>.xml` config that includes `scene.<n>.xa` as an
+  XA file (Mode-2 Form-2 sectors, file/channel = 0/0 default).
+- A build script (`scripts/build-iso.py` or similar) that:
+  - Builds the splashpack triplet (we already have this).
+  - Runs mkpsxiso with the XA sector flag set on each `.xa` file.
+  - Outputs `game.bin/game.cue` ready to mount in PCSX-Redux's full CD
+    emulator.
+
+Run path becomes: build.exe → splashpack + .vram + .spu + .xa →
+mkpsxiso → game.bin → PCSX-Redux (CD mode, not PCdrv).
+
+## Installing psxavenc (Wonderful Toolchain)
+
+```
+# Windows: download a release binary from
+#   https://github.com/WonderfulToolchain/psxavenc/releases
+# extract somewhere, then either:
+#   set PSXAVENC=C:\tools\psxavenc\psxavenc.exe
+# or put psxavenc.exe on PATH.
+```
+
+Verify with `psxavenc -h` from a shell. After install, re-export from
+PS1Godot — the export log should report
+`psxavenc detected (PATH: ...) — psxavenc <version>` and start
+emitting the `scene.<n>.xa` sidecar.
+
+## Authoring an XA clip today
+
+1. Drop the WAV onto a `PS1AudioClip` resource as usual.
+2. Set `Route = XA` (Auto also picks XA for clips > 24 KB ADPCM
+   non-loop / > 32 KB loop).
+3. Re-export. Without psxavenc the clip silences with a clear log;
+   with psxavenc the clip lands in `scene.<n>.xa` and the splashpack
+   carries the table entry. `Audio.PlayMusic("name")` reports the
+   table entry size; the runtime backend wires up next session.
 
 ## CDDA strategy
 
@@ -116,11 +172,15 @@ disc based on what the exporter wrote.
 
 ## Migration notes
 
-- Splashpack version went **v24 → v25 → v26**. Loader hard-asserts `>= 26`.
-  Re-export any pack older than that.
-- AudioClipEntry stride is **20 B** (v25 added routing + 3-byte pad; v26
-  claims one of the pad bytes for `cddaTrack`, so the layout is now
-  `... routing(u8) cddaTrack(u8) _pad(2)`).
+- Splashpack version is now **v27**. Loader hard-asserts `>= 27`. Re-export
+  any pack older than that.
+- AudioClipEntry stride is **20 B** (`... routing(u8) cddaTrack(u8) _pad(2)`).
+- Header gained 8 bytes at the end for `xaClipCount + pad + xaTableOffset`;
+  total header size went 168 → 176 B.
+- New per-scene sidecar `scene.<n>.xa` (Mode-2 Form-2 XA-ADPCM payload).
+  Empty when no Route=XA clip OR psxavenc was missing.
+- Per-XA-clip table entry is **24 B** in the splashpack:
+  `sidecarOffset(u32) sidecarSize(u32) name[16, null-padded]`.
 - Existing exports without `Route` set on every clip default to **Auto**, which
   resolves to **SPU** for everything below the size threshold — i.e. the same
   behavior as before for typical jam-scale audio.

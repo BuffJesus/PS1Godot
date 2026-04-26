@@ -1673,10 +1673,24 @@ public static class SceneCollector
             ushort rate = (ushort)Mathf.Clamp(wav.MixRate, 1000, 44100);
             byte resolvedRoute = ResolveAudioRoute(clip.Route, adpcm.Length, clip.Loop);
             if (resolvedRoute == 1) xaCount++;
+
+            // v27: when an XA clip is resolved AND psxavenc is available,
+            // run the conversion now so the splashpack writer can stamp
+            // sidecar offsets into the XA table. If the binary is missing,
+            // XaPayload stays null and the writer emits an empty XA table
+            // — runtime silences those clips with a clear log message.
+            byte[]? xaPayload = null;
+            if (resolvedRoute == 1)
+            {
+                xaPayload = PsxAvEnc.ConvertWavToXa(pcm, rate, 1, name);
+            }
+
             string routeLabel = resolvedRoute switch
             {
                 0 => "SPU",
-                1 => "XA(scaffold)",
+                1 => xaPayload != null
+                    ? $"XA({xaPayload.Length}B)"
+                    : "XA(skipped, no psxavenc)",
                 2 => "CDDA(scaffold)",
                 _ => "SPU(fallback)",
             };
@@ -1689,6 +1703,7 @@ public static class SceneCollector
                 Name = name,
                 Routing = resolvedRoute,
                 CddaTrackNumber = (byte)Mathf.Clamp(clip.CddaTrackNumber, 0, 255),
+                XaPayload = xaPayload,
             });
             GD.Print($"[PS1Godot] Audio clip '{name}': {pcm.Length} samples @ {rate}Hz → {adpcm.Length} bytes ADPCM (loop={clip.Loop}, route={routeLabel}, index {data.AudioClips.Count - 1})");
         }
