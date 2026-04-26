@@ -155,20 +155,31 @@ public static class PsxAvEnc
             WriteMonoWav(wavPath, pcm, sourceRate);
             using var p = new Process();
             p.StartInfo.FileName = probe.Path!;
-            p.StartInfo.Arguments = $"-t xa -f {xaRate} -b 4 -c {channels} -F 0 -C 0 \"{wavPath}\" \"{xaPath}\"";
+            // -q suppresses progress messages; smaller pipe-buffer load
+            // makes deadlocks impossible regardless of stream-read order.
+            p.StartInfo.Arguments = $"-q -t xa -f {xaRate} -b 4 -c {channels} -F 0 -C 0 \"{wavPath}\" \"{xaPath}\"";
             p.StartInfo.UseShellExecute = false;
+            p.StartInfo.RedirectStandardInput = true;   // close immediately; psxavenc shouldn't block on stdin but be safe
             p.StartInfo.RedirectStandardError = true;
             p.StartInfo.RedirectStandardOutput = true;
             p.StartInfo.CreateNoWindow = true;
             p.Start();
-            string stdoutText = p.StandardOutput.ReadToEnd();
-            string stderrText = p.StandardError.ReadToEnd();
-            if (!p.WaitForExit(30_000))
+            p.StandardInput.Close();
+            // Drain both streams concurrently. ReadToEnd in series can
+            // deadlock if the child fills one pipe buffer (~4 KB on
+            // Windows) while we're blocked reading the other — for
+            // long XA clips psxavenc emits enough text to hit that
+            // limit, which is what froze the export at clip 8 of 23.
+            var stdoutTask = System.Threading.Tasks.Task.Run(() => p.StandardOutput.ReadToEnd());
+            var stderrTask = System.Threading.Tasks.Task.Run(() => p.StandardError.ReadToEnd());
+            if (!p.WaitForExit(15_000))
             {
                 p.Kill();
-                GD.PushWarning($"[PS1Godot] XA convert '{clipName}': psxavenc timed out (>30s).");
+                GD.PushWarning($"[PS1Godot] XA convert '{clipName}': psxavenc timed out (>15s).");
                 return null;
             }
+            string stdoutText = stdoutTask.Result;
+            string stderrText = stderrTask.Result;
             if (p.ExitCode != 0 || !File.Exists(xaPath))
             {
                 GD.PushWarning(
