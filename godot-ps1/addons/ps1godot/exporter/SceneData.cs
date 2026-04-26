@@ -239,6 +239,11 @@ public sealed class UIElementRecord
     public required byte VAlign { get; init; }
     public required string Text { get; init; }  // empty for non-Text types
 
+    // PSX hardware semi-transparency (50/50 blend with framebuffer).
+    // Currently honored by Box-type elements only — Text/Image ignore
+    // for now. Stored as bit 1 of the on-disk eFlags byte.
+    public bool Translucent { get; init; } = false;
+
     // Image-type fields. -1 = no texture (untextured fallback). Index
     // into SceneData.Textures so the writer can pull TexpageX/Y +
     // ClutPackingX/Y + PackingX/Y after VRAMPacker has run. UVRect is

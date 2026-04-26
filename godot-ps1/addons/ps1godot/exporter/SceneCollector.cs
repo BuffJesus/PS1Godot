@@ -659,6 +659,7 @@ public static class SceneCollector
                 HAlign = (byte)el.TextAlign,
                 VAlign = (byte)el.TextVAlign,
                 Text = el.Text ?? "",
+                Translucent = el.Translucent,
                 TextureIndex = textureIndex,
                 UVRect = el.UVRect,
                 BitDepthByte = (byte)el.BitDepth,

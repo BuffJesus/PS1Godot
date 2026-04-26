@@ -115,7 +115,8 @@ void UISystem::loadFromSplashpack(uint8_t* data, uint16_t canvasCount,
             // Identity (8 bytes)
             el.type    = static_cast<UIElementType>(*elemPtr++);
             uint8_t eFlags = *elemPtr++;
-            el.visible = (eFlags & 0x01) != 0;
+            el.visible     = (eFlags & 0x01) != 0;
+            el.translucent = (eFlags & 0x02) != 0;
             uint8_t eNameLen = *elemPtr++;
             elemPtr++; // pad0
             uint32_t eNameOff = *reinterpret_cast<uint32_t*>(elemPtr); elemPtr += 4;
@@ -283,7 +284,14 @@ void UISystem::renderElement(UIElement& el,
         frag.primitive.setColor(psyqo::Color{.r = el.colorR, .g = el.colorG, .b = el.colorB});
         frag.primitive.position = {.x = x, .y = y};
         frag.primitive.size = {.x = w, .y = h};
-        frag.primitive.setOpaque();
+        // Translucent boxes use PSX hardware blend mode 0 (50/50 with
+        // framebuffer) — perfect for darkened HUD name plates that don't
+        // fully block the camera view behind them.
+        if (el.translucent) {
+            frag.primitive.setSemiTrans();
+        } else {
+            frag.primitive.setOpaque();
+        }
         ot.insert(frag, 0);
         break;
     }

@@ -45,6 +45,7 @@ struct UITextData {
 struct UIElement {
     UIElementType type;
     bool          visible;
+    bool          translucent; // PSX hardware semi-transparency (Box only)
     const char*   name;        // points into splashpack data
     int16_t x, y, w, h;       // pixel rect / offset in PS1 screen space
     uint8_t anchorMinX, anchorMinY, anchorMaxX, anchorMaxY; // 8.8 fixed

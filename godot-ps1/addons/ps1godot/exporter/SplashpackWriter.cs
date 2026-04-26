@@ -886,7 +886,11 @@ public static class SplashpackWriter
 
                 // Identity (8 B)
                 w.Write((byte)el.Type);
-                w.Write((byte)(el.VisibleOnLoad ? 1 : 0));   // flags
+                // flags: bit 0 = visible, bit 1 = translucent (semi-trans box)
+                byte uiFlags = 0;
+                if (el.VisibleOnLoad) uiFlags |= 0x01;
+                if (el.Translucent)   uiFlags |= 0x02;
+                w.Write(uiFlags);
                 byte elNameLen = (byte)Math.Min(Encoding.UTF8.GetByteCount(el.Name ?? ""), 255);
                 w.Write(elNameLen);
                 w.Write((byte)0);                            // pad0

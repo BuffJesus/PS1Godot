@@ -109,6 +109,13 @@ public partial class PS1UIElement : Node
     // Tint. Text = foreground color, Box = fill color.
     [Export] public Color Color { get; set; } = new Color(1f, 1f, 1f, 1f);
 
+    // Render this element with PSX hardware semi-transparency (blend
+    // mode 0: 0.5*B + 0.5*F). Lets you place a darkened "name plate"
+    // behind HUD text without fully blocking the camera view. Currently
+    // implemented for Box only — other types ignore. Stored as bit 1 of
+    // the on-disk eFlags byte (bit 0 = visible), so no format bump.
+    [Export] public bool Translucent { get; set; } = false;
+
     // When non-Custom AND the owning PS1UICanvas has a Theme assigned,
     // the exporter uses `theme.<Slot>Color` instead of `Color`. If the
     // slot has no match (or no theme), falls back to `Color`. Change the
