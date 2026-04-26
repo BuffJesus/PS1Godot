@@ -1540,9 +1540,14 @@ public static class SplashpackWriter
         w.Write((ushort)obj.Mesh.Triangles.Count);
         w.Write((short)obj.LuaFileIndex); // -1 = no script attached
 
-        // flags — bit 0 = isActive. StartsInactive=true for pool templates
-        // that Lua's GameObject.Spawn will activate at runtime.
-        w.Write(obj.StartsInactive ? (uint)0 : (uint)1);
+        // flags — bit 0 = isActive (StartsInactive=true → pool templates
+        // that Lua's GameObject.Spawn activates), bit 6 = isTranslucent
+        // (alpha-keyed semi-trans render). Bits 1-5 are runtime-only or
+        // post-load (skinned/UIModelTarget) and stay 0 here.
+        uint flags = 0;
+        if (!obj.StartsInactive) flags |= 0x01;
+        if (obj.Translucent)     flags |= 0x40;
+        w.Write(flags);
 
         w.Write(NoComponent);           // interactableIndex
         w.Write(obj.Tag);               // gameplay tag (0 = untagged)

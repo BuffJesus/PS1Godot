@@ -36,6 +36,12 @@ public sealed class SceneObject
 
     // When true, writer emits GameObject.flags with isActive = 0.
     public bool StartsInactive { get; set; } = false;
+
+    // Alpha-keyed semi-trans rendering (CLUT[0]=0x0000 disappears).
+    // Writer packs into bit 6 of the on-disk flags uint; runtime reads
+    // it via GameObject.isTranslucent() and switches setOpaque →
+    // setSemiTrans on the textured tri emit.
+    public bool Translucent { get; set; } = false;
 }
 
 // One entry in the splashpack's lua-file table. Runtime v20 (full-parser

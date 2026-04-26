@@ -24,6 +24,11 @@ constexpr uint16_t NO_COMPONENT = 0xFFFF;
  * Bit 5: isUIModelTarget - at least one PS1UIModel has this as its Target;
  *        world render pass skips so the HUD preview is the only render.
  *        Collision / Lua / physics still run — this is a visual-only flag.
+ * Bit 6: isTranslucent - render the mesh's textured tris with PSX hardware
+ *        semi-trans (alpha-keyed via CLUT[0]=0x0000). Use for decals,
+ *        foliage, hair, glass overlays. Authored on PS1MeshInstance /
+ *        PS1MeshGroup.Translucent. Writer packs bit 6 into the on-disk
+ *        flags uint; loader reads it for free.
  */
 class GameObject final {
     typedef Utilities::BitSpan<bool> IsActive;
@@ -32,7 +37,8 @@ class GameObject final {
     typedef Utilities::BitSpan<bool, 3> DynamicMoved;
     typedef Utilities::BitSpan<bool, 4> IsSkinned;
     typedef Utilities::BitSpan<bool, 5> IsUIModelTarget;
-    typedef Utilities::BitField<IsActive, PendingEnable, PendingDisable, DynamicMoved, IsSkinned, IsUIModelTarget> GameObjectFlags;
+    typedef Utilities::BitSpan<bool, 6> IsTranslucent;
+    typedef Utilities::BitField<IsActive, PendingEnable, PendingDisable, DynamicMoved, IsSkinned, IsUIModelTarget, IsTranslucent> GameObjectFlags;
     
   public:
     union {
@@ -88,6 +94,10 @@ class GameObject final {
     // UI model target flag (bit 5) — hidden from world render pass.
     bool isUIModelTarget() const { return flags.get<IsUIModelTarget>(); }
     void setUIModelTarget(bool v) { flags.set<IsUIModelTarget>(v); }
+
+    // Translucent flag (bit 6) — alpha-keyed semi-trans rendering.
+    bool isTranslucent() const { return flags.get<IsTranslucent>(); }
+    void setTranslucent(bool v) { flags.set<IsTranslucent>(v); }
     
     // Component checks
     bool hasInteractable() const { return interactableIndex != NO_COMPONENT; }

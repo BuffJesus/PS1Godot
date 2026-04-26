@@ -166,6 +166,10 @@ class Renderer final {
 
     TriangleRef m_visibleRefs[MAX_VISIBLE_TRIANGLES];
     int m_frameCount = 0;
+    // Set by each top-level render loop right before processTriangle
+    // calls so the per-tri primitive emission can pick setSemiTrans
+    // vs setOpaque without an extra parameter through every call site.
+    bool m_currentObjTranslucent = false;
 
     psyqo::Vec3 computeCameraViewPos();
     void setupObjectTransform(GameObject* obj, const psyqo::Vec3& cameraPosition);

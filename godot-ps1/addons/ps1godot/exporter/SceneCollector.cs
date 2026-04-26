@@ -296,6 +296,7 @@ public static class SceneCollector
                 LuaFileIndex = ResolveLuaScript(pmi.Name, pmi.ScriptFile, data, luaCache),
                 Tag = (ushort)Mathf.Clamp(pmi.Tag, 0, 65535),
                 StartsInactive = pmi.StartsInactive,
+                Translucent = pmi.Translucent,
             });
 
             EmitCollisionFor(pmi, objectIndex, data);
@@ -497,9 +498,23 @@ public static class SceneCollector
                 // Per-surface tint = groupTint * material.AlbedoColor. Critical
                 // for Kenney-style kits where every surface has a distinct
                 // albedo_color but no texture — without this, untextured
-                // surfaces would all flat-shade to groupTint (usually white)
-                // and the model would render as a single uniform blob.
-                Color surfaceColor = groupTint * ExtractAlbedoColor(GetSurfaceMaterial(sub, s));
+                // surfaces would all flat-shade to groupTint (usually white).
+                // PSX vertex-color quirk: hardware treats vertex color 128
+                // as 1.0× modulation, 255 as 2.0× (overbright). For TEXTURED
+                // surfaces with white tint (the default StandardMaterial3D),
+                // sending 255 doubles the texture brightness → washout.
+                // Halve the tint when there's a texture so 1.0 maps to 128
+                // (= 1.0× = unmodulated). Untextured surfaces keep the full
+                // tint range (255 = 2× = brighter solids, matching the
+                // existing pipeline convention used elsewhere).
+                Material? surfMat = GetSurfaceMaterial(sub, s);
+                Color surfaceColor = groupTint * ExtractAlbedoColor(surfMat);
+                if (texIdx >= 0)
+                {
+                    surfaceColor = new Color(surfaceColor.R * 0.5f,
+                                             surfaceColor.G * 0.5f,
+                                             surfaceColor.B * 0.5f, 1f);
+                }
                 byte rByte = PSXTrig.ColorChannelToPSX(surfaceColor.R);
                 byte gByte = PSXTrig.ColorChannelToPSX(surfaceColor.G);
                 byte bByte = PSXTrig.ColorChannelToPSX(surfaceColor.B);
@@ -537,6 +552,7 @@ public static class SceneCollector
             LuaFileIndex = ResolveLuaScript(displayName, group.ScriptFile, data, luaCache),
             Tag = (ushort)Mathf.Clamp(group.Tag, 0, 65535),
             StartsInactive = group.StartsInactive,
+            Translucent = group.Translucent,
         });
 
         GD.Print(

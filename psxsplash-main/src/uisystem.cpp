@@ -280,19 +280,25 @@ void UISystem::renderElement(UIElement& el,
 
     switch (el.type) {
     case UIElementType::Box: {
-        auto& frag = balloc.allocateFragment<psyqo::Prim::Rectangle>();
-        frag.primitive.setColor(psyqo::Color{.r = el.colorR, .g = el.colorG, .b = el.colorB});
-        frag.primitive.position = {.x = x, .y = y};
-        frag.primitive.size = {.x = w, .y = h};
-        // Translucent boxes use PSX hardware blend mode 0 (50/50 with
-        // framebuffer) — perfect for darkened HUD name plates that don't
-        // fully block the camera view behind them.
-        if (el.translucent) {
-            frag.primitive.setSemiTrans();
-        } else {
-            frag.primitive.setOpaque();
+        // Translucent boxes use PSX hardware blend mode 0 (0.5*B + 0.5*F).
+        // A single pass = 50% darken (felt too sheer). 3-pass = 87.5%
+        // darken (felt too dark, blocked the camera view). 2-pass lands
+        // at 75% — clear enough to read text against, but the camera
+        // feed still bleeds through ~25% so the plate doesn't feel like
+        // a solid block.
+        const int passes = el.translucent ? 2 : 1;
+        for (int i = 0; i < passes; i++) {
+            auto& frag = balloc.allocateFragment<psyqo::Prim::Rectangle>();
+            frag.primitive.setColor(psyqo::Color{.r = el.colorR, .g = el.colorG, .b = el.colorB});
+            frag.primitive.position = {.x = x, .y = y};
+            frag.primitive.size = {.x = w, .y = h};
+            if (el.translucent) {
+                frag.primitive.setSemiTrans();
+            } else {
+                frag.primitive.setOpaque();
+            }
+            ot.insert(frag, 0);
         }
-        ot.insert(frag, 0);
         break;
     }
 
@@ -324,6 +330,18 @@ void UISystem::renderElement(UIElement& el,
         psyqo::PrimPieces::TPageAttr tpage = makeTPage(el.image);
         psyqo::PrimPieces::ClutIndex clut(el.image.clutX, el.image.clutY);
         psyqo::Color tint = {.r = el.colorR, .g = el.colorG, .b = el.colorB};
+        // Translucent + a 4/8bpp texture whose palette[0] is 0x0000 gives
+        // alpha-keyed transparency: index-0 pixels disappear, rest blend
+        // 50/50 with the framebuffer. Useful for hair, foliage, decals,
+        // fog/static overlays.
+        const bool semi = el.translucent;
+        // Multi-pass for translucent Image too — single 50/50 with dim
+        // overlay textures (fog/static) was barely visible. 2 passes ≈
+        // 75% blend strength which reads cleanly without fully blocking
+        // the camera view behind. Alpha-key pixels (CLUT[0]=0x0000) stay
+        // transparent across all passes — they're discarded before blend.
+        const int passes = semi ? 2 : 1;
+        for (int pass = 0; pass < passes; pass++) {
 
         // Triangle 0: top-left, top-right, bottom-left
         {
@@ -339,7 +357,7 @@ void UISystem::renderElement(UIElement& el,
             tri.primitive.setColorA(tint);
             tri.primitive.setColorB(tint);
             tri.primitive.setColorC(tint);
-            tri.primitive.setOpaque();
+            if (semi) tri.primitive.setSemiTrans(); else tri.primitive.setOpaque();
             ot.insert(tri, 0);
         }
         // Triangle 1: top-right, bottom-right, bottom-left
@@ -356,9 +374,10 @@ void UISystem::renderElement(UIElement& el,
             tri.primitive.setColorA(tint);
             tri.primitive.setColorB(tint);
             tri.primitive.setColorC(tint);
-            tri.primitive.setOpaque();
+            if (semi) tri.primitive.setSemiTrans(); else tri.primitive.setOpaque();
             ot.insert(tri, 0);
         }
+        }  // end pass loop
         break;
     }
 

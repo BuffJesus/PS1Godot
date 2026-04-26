@@ -69,82 +69,82 @@ local lockedEnemy = nil
 -- (near-)straight up or down, in which case there's no well-defined
 -- horizontal heading. Callers should early-out.
 local function flatForward()
-    local f = Camera.GetForward()
-    local fx = f.x
-    local fz = f.z
-    -- FixedPoint supports ==; exact zero is fine because the common
-    -- degenerate case is the camera snapped straight up/down.
-    if fx == 0 and fz == 0 then return nil end
-    return Vec3.normalize(Vec3.new(fx, 0, fz))
+	local f = Camera.GetForward()
+	local fx = f.x
+	local fz = f.z
+	-- FixedPoint supports ==; exact zero is fine because the common
+	-- degenerate case is the camera snapped straight up/down.
+	if fx == 0 and fz == 0 then return nil end
+	return Vec3.normalize(Vec3.new(fx, 0, fz))
 end
 
 -- Clear lockedEnemy if the handle matches victim. Called whenever we
 -- destroy an enemy so toggleLock doesn't SetTag a dead entity later.
 local function clearLockIf(victim)
-    if lockedEnemy ~= nil and victim == lockedEnemy then
-        lockedEnemy = nil
-    end
+	if lockedEnemy ~= nil and victim == lockedEnemy then
+		lockedEnemy = nil
+	end
 end
 
 -- ── L2: spawn + fly a bullet ──────────────────────────────────────
 local function spawnBullet()
-    local camPos = Player.GetPosition()
-    local fwd = flatForward()
-    if fwd == nil then
-        Debug.Log("combat: L2 ignored — camera has no horizontal forward")
-        return
-    end
+	local camPos = Player.GetPosition()
+	local fwd = flatForward()
+	if fwd == nil then
+		Debug.Log("combat: L2 ignored — camera has no horizontal forward")
+		return
+	end
 
-    -- MUZZLE_AHEAD steps past the 3rd-person rig to the player's front.
-    local spawnPos = Vec3.new(
-        camPos.x + fwd.x * MUZZLE_AHEAD,
-        camPos.y + MUZZLE_DROP,
-        camPos.z + fwd.z * MUZZLE_AHEAD)
+	-- MUZZLE_AHEAD steps past the 3rd-person rig to the player's front.
+	local spawnPos = Vec3.new(
+		camPos.x + fwd.x * MUZZLE_AHEAD,
+		camPos.y + MUZZLE_DROP,
+		camPos.z + fwd.z * MUZZLE_AHEAD)
 
-    local bullet = Entity.Spawn(TAG_BULLET, spawnPos)
-    if bullet == nil then
-        Debug.Log("combat: L2 bullet pool exhausted")
-        return
-    end
+	local bullet = Entity.Spawn(TAG_BULLET, spawnPos)
+	if bullet == nil then
+		Debug.Log("combat: L2 bullet pool exhausted")
+		return
+	end
 
-    bullets[#bullets + 1] = { handle = bullet, dir = fwd, ttl = 90 }
-    Camera.ShakeRaw(SHAKE_SHOT, 6)
-    Audio.Play("sc_hey", 90, 64)
-    Debug.Log("combat: L2 shot fired")
+	bullets[#bullets + 1] = { handle = bullet, dir = fwd, ttl = 90 }
+	Camera.ShakeRaw(SHAKE_SHOT, 6)
+	Audio.Play("sc_hey", 90, 64)
+	Debug.Log("combat: L2 shot fired")
 end
 
 -- Per-frame bullet tick: fly forward, raycast one step ahead, destroy
 -- on hit. Physics.Raycast returns { object, distance, point } or nil,
 -- where `object` is an array index that FindByIndex resolves.
 local function tickBullets()
-    for i = #bullets, 1, -1 do
-        local b = bullets[i]
-        b.ttl = b.ttl - 1
+	for i = #bullets, 1, -1 do
+		local b = bullets[i]
+		b.ttl = b.ttl - 1
 
-        local cur = Entity.GetPosition(b.handle)
-        local origin = Vec3.new(cur.x, cur.y, cur.z)
-        local dirV   = Vec3.new(b.dir.x, b.dir.y, b.dir.z)
-        local hit = Physics.Raycast(origin, dirV, BULLET_RAYCAST_DIST)
-        if hit ~= nil then
-            local victim = Entity.FindByIndex(hit.object)
-            if victim ~= nil and Entity.GetTag(victim) == TAG_ENEMY then
-                clearLockIf(victim)
-                Entity.Destroy(victim)
-                Camera.ShakeRaw(SHAKE_HIT, 14)
-                Scene.PauseFor(4)
-                Debug.Log("combat: bullet killed enemy")
-            end
-            Entity.Destroy(b.handle)
-            table.remove(bullets, i)
-        elseif b.ttl <= 0 then
-            Entity.Destroy(b.handle)
-            table.remove(bullets, i)
-        else
-            local nextX = cur.x + b.dir.x * BULLET_SPEED_UNITS
-            local nextZ = cur.z + b.dir.z * BULLET_SPEED_UNITS
-            Entity.SetPosition(b.handle, Vec3.new(nextX, cur.y, nextZ))
-        end
-    end
+		local cur = Entity.GetPosition(b.handle)
+		local origin = Vec3.new(cur.x, cur.y, cur.z)
+		local dirV   = Vec3.new(b.dir.x, b.dir.y, b.dir.z)
+		local hit = Physics.Raycast(origin, dirV, BULLET_RAYCAST_DIST)
+		if hit ~= nil then
+			local victim = Entity.FindByIndex(hit.object)
+			if victim ~= nil and Entity.GetTag(victim) == TAG_ENEMY then
+				clearLockIf(victim)
+				Entity.Destroy(victim)
+				Camera.ShakeRaw(SHAKE_HIT, 14)
+				Scene.PauseFor(4)
+				Debug.Log("combat: bullet killed enemy")
+			end
+			Entity.Destroy(b.handle)
+			table.remove(bullets, i)
+		elseif b.ttl <= 0 then
+			Entity.Destroy(b.handle)
+			table.remove(bullets, i)
+		else
+			local nextX = cur.x + b.dir.x * BULLET_SPEED_UNITS
+			local nextZ = cur.z + b.dir.z * BULLET_SPEED_UNITS
+			Entity.SetPosition(b.handle, Vec3.new(nextX, cur.y, nextZ))
+		end
+	end
 end
 
 -- ── R2: melee swing ───────────────────────────────────────────────
@@ -152,78 +152,78 @@ end
 -- roughly 1 unit in front of the player body). Vertical range spans
 -- head-to-feet so the swing catches enemies at body height.
 local function meleeSwing()
-    if meleeCooldown > 0 then return end
-    meleeCooldown = MELEE_COOLDOWN
+	if meleeCooldown > 0 then return end
+	meleeCooldown = MELEE_COOLDOWN
 
-    local camPos = Player.GetPosition()
-    local fwd = flatForward()
-    if fwd == nil then
-        Debug.Log("combat: R2 ignored — camera has no horizontal forward")
-        return
-    end
-    local cx = camPos.x + fwd.x * MUZZLE_AHEAD
-    local cz = camPos.z + fwd.z * MUZZLE_AHEAD
-    -- Y is inverted: head at camPos.y, feet at camPos.y + ~2 (below).
-    local minV = Vec3.new(cx - 1, camPos.y,     cz - 1)
-    local maxV = Vec3.new(cx + 1, camPos.y + 2, cz + 1)
+	local camPos = Player.GetPosition()
+	local fwd = flatForward()
+	if fwd == nil then
+		Debug.Log("combat: R2 ignored — camera has no horizontal forward")
+		return
+	end
+	local cx = camPos.x + fwd.x * MUZZLE_AHEAD
+	local cz = camPos.z + fwd.z * MUZZLE_AHEAD
+	-- Y is inverted: head at camPos.y, feet at camPos.y + ~2 (below).
+	local minV = Vec3.new(cx - 1, camPos.y,     cz - 1)
+	local maxV = Vec3.new(cx + 1, camPos.y + 2, cz + 1)
 
-    local hits = Physics.OverlapBox(minV, maxV, TAG_ENEMY)
-    local hitCount = #hits
-    if hitCount > 0 then
-        for i = 1, hitCount do
-            clearLockIf(hits[i])
-            Entity.Destroy(hits[i])
-        end
-        Camera.ShakeRaw(SHAKE_MELEE + SHAKE_MELEE_PER * hitCount,
-                        14 + 2 * hitCount)
-        Scene.PauseFor(5 + hitCount)
-        Debug.Log("combat: R2 melee connected")
-    else
-        -- No Debug.Log here — R2 whiffs fire on every missed press, and
-        -- PSX stdout (TTY UART write) is slow enough that rapid R2 spam
-        -- was causing perceptible frame dips. Shake alone is the feedback.
-        Camera.ShakeRaw(SHAKE_WHIFF, 5)
-    end
+	local hits = Physics.OverlapBox(minV, maxV, TAG_ENEMY)
+	local hitCount = #hits
+	if hitCount > 0 then
+		for i = 1, hitCount do
+			clearLockIf(hits[i])
+			Entity.Destroy(hits[i])
+		end
+		Camera.ShakeRaw(SHAKE_MELEE + SHAKE_MELEE_PER * hitCount,
+						14 + 2 * hitCount)
+		Scene.PauseFor(5 + hitCount)
+		Debug.Log("combat: R2 melee connected")
+	else
+		-- No Debug.Log here — R2 whiffs fire on every missed press, and
+		-- PSX stdout (TTY UART write) is slow enough that rapid R2 spam
+		-- was causing perceptible frame dips. Shake alone is the feedback.
+		Camera.ShakeRaw(SHAKE_WHIFF, 5)
+	end
 end
 
 -- ── R3: lock onto nearest enemy ───────────────────────────────────
 local function toggleLock()
-    if lockedEnemy ~= nil then
-        -- Guard: the locked enemy may have been destroyed by an
-        -- earlier melee/bullet hit. clearLockIf is called from every
-        -- kill path, but a race between destroy and the next R3
-        -- is still conceivable — Entity.GetTag on a destroyed handle
-        -- should return 0 or error; belt-and-braces, just null out.
-        Entity.SetTag(lockedEnemy, TAG_ENEMY)
-        lockedEnemy = nil
-        Camera.ShakeRaw(SHAKE_LOCK, 4)
-        Debug.Log("combat: R3 lock cleared")
-        return
-    end
+	if lockedEnemy ~= nil then
+		-- Guard: the locked enemy may have been destroyed by an
+		-- earlier melee/bullet hit. clearLockIf is called from every
+		-- kill path, but a race between destroy and the next R3
+		-- is still conceivable — Entity.GetTag on a destroyed handle
+		-- should return 0 or error; belt-and-braces, just null out.
+		Entity.SetTag(lockedEnemy, TAG_ENEMY)
+		lockedEnemy = nil
+		Camera.ShakeRaw(SHAKE_LOCK, 4)
+		Debug.Log("combat: R3 lock cleared")
+		return
+	end
 
-    local p = Player.GetPosition()
-    local nearest = Entity.FindNearest(Vec3.new(p.x, p.y, p.z), TAG_ENEMY)
-    if nearest == nil then
-        Debug.Log("combat: R3 no enemy in range")
-        return
-    end
-    lockedEnemy = nearest
-    Entity.SetTag(nearest, TAG_LOCKED)
-    Camera.ShakeRaw(SHAKE_LOCK, 4)
-    Debug.Log("combat: R3 locked onto enemy")
+	local p = Player.GetPosition()
+	local nearest = Entity.FindNearest(Vec3.new(p.x, p.y, p.z), TAG_ENEMY)
+	if nearest == nil then
+		Debug.Log("combat: R3 no enemy in range")
+		return
+	end
+	lockedEnemy = nearest
+	Entity.SetTag(nearest, TAG_LOCKED)
+	Camera.ShakeRaw(SHAKE_LOCK, 4)
+	Debug.Log("combat: R3 locked onto enemy")
 end
 
 -- ── Lifecycle ─────────────────────────────────────────────────────
 
 function onCreate(self)
-    Debug.Log("combat_showcase: ready — L2 shoot, R2 melee, R3 lock")
+	Debug.Log("combat_showcase: ready — L2 shoot, R2 melee, R3 lock")
 end
 
 function onUpdate(self, dt)
-    if meleeCooldown > 0 then meleeCooldown = meleeCooldown - 1 end
-    tickBullets()
+	if meleeCooldown > 0 then meleeCooldown = meleeCooldown - 1 end
+	tickBullets()
 
-    if Input.IsPressed(Input.L2) then spawnBullet() end
-    if Input.IsPressed(Input.R2) then meleeSwing()  end
-    if Input.IsPressed(Input.R3) then toggleLock()  end
+	if Input.IsPressed(Input.L2) then spawnBullet() end
+	if Input.IsPressed(Input.R2) then meleeSwing()  end
+	if Input.IsPressed(Input.R3) then toggleLock()  end
 end

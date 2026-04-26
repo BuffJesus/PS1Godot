@@ -51,7 +51,12 @@ struct SkinAnimSet {
     uint8_t      clipCount;
     uint8_t      boneCount;        // from the skin data (shared across clips)
     uint16_t     gameObjectIndex;  // index into m_gameObjects (still used for transform)
-    uint16_t     _pad;
+    // BIGHEAD cheat support: bone index of the character's "head" bone
+    // (auto-detected at export time by name match — "head", "mixamorig:head"
+    // etc). 0xFFFF = no head bone identified, BIGHEAD becomes a no-op for
+    // this mesh. Repurposed from the prior 16-bit _pad slot — same struct
+    // size, no splashpack format bump.
+    uint16_t     headBoneIndex;
     SkinAnimClip clips[SKINMESH_MAX_CLIPS];
 };
 

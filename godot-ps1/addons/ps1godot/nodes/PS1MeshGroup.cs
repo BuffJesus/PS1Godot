@@ -72,6 +72,10 @@ public partial class PS1MeshGroup : Node3D
     // PS1MeshInstance.StartsInactive.
     [Export] public bool StartsInactive { get; set; } = false;
 
+    // PSX hardware semi-trans + alpha-keyed CLUT[0]=0x0000 — see
+    // PS1MeshInstance.Translucent.
+    [Export] public bool Translucent { get; set; } = false;
+
     [ExportGroup("PS1 / Naming")]
     // Exported GameObject name. Empty → falls back to the node's own Name,
     // which is what most scenes want. Set explicitly only when you need

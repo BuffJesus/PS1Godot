@@ -57,6 +57,15 @@ public partial class PS1MeshInstance : MeshInstance3D
     // scripts activate them via GameObject.Spawn at runtime.
     [Export] public bool StartsInactive { get; set; } = false;
 
+    // Render this mesh's textured tris with PSX hardware semi-trans
+    // (alpha-keyed via CLUT[0]=0x0000). Use for decals (blood splatter,
+    // graffiti), foliage planes, hair cards, glass overlays. The
+    // exporter writes CLUT[0]=0 automatically when the source texture
+    // has alpha; authors just set Translucent=true on the mesh node.
+    // Untextured tris are unaffected — PS1 hardware can't alpha them
+    // without a texture sample.
+    [Export] public bool Translucent { get; set; } = false;
+
     [ExportGroup("PS1 / Interactable")]
     // When true, the runtime treats this mesh as an interactable. Pressing
     // InteractButton within InteractionRadiusMeters fires onInteract on

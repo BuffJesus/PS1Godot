@@ -72,6 +72,11 @@ psyqo::Vec3 psxsplash::Renderer::computeCameraViewPos() {
 
 void psxsplash::Renderer::setupObjectTransform(
     GameObject* obj, const psyqo::Vec3& cameraPosition) {
+    // Latch the current obj's translucent flag here so processTriangle
+    // can pick semi-trans vs opaque without an extra param through the
+    // 9 call sites. Every render path calls setupObjectTransform before
+    // its tri loop, so this stays in sync automatically.
+    m_currentObjTranslucent = obj->isTranslucent();
     ::clear<Register::TRX, Safe>();
     ::clear<Register::TRY, Safe>();
     ::clear<Register::TRZ, Safe>();
@@ -330,7 +335,11 @@ void psxsplash::Renderer::processTriangle(
         psyqo::PrimPieces::ClutIndex clut(tri.clutX, tri.clutY);
         p.primitive.clutIndex = clut;
         p.primitive.setColorA(cA); p.primitive.setColorB(cB); p.primitive.setColorC(cC);
-        p.primitive.setOpaque();
+        // Per-object translucent flag: enables PSX hardware semi-trans
+        // for textured tris. Combined with CLUT[0]=0x0000 in the texture,
+        // gives alpha-keyed (transparent index 0) decals/foliage/glass.
+        if (m_currentObjTranslucent) p.primitive.setSemiTrans();
+        else                         p.primitive.setOpaque();
         ot.insert(p, zIndex);
     }
 }
@@ -1353,11 +1362,16 @@ void psxsplash::Renderer::renderSkinnedObjects(
             // Off-screen reject
             if (isCompletelyOutside(projected0, projected1, projected2)) continue;
 
-            // Backface cull (SXY FIFO holds A,B,C after 3 sequential rtps calls)
+            // No backface cull on skinned meshes: FBX/GLTF rigs frequently
+            // ship inconsistent winding (mirrored bones, asymmetric exports),
+            // so we render both sides. The PSX GPU rasterizes triangles
+            // regardless of winding — nclip is purely a CPU-side cull, so
+            // skipping it just costs an extra rasterize on backfacing tris.
+            // Drop zero-area degenerates only.
             Kernels::nclip();
             int32_t mac0 = 0;
             read<Register::MAC0>(reinterpret_cast<uint32_t*>(&mac0));
-            if (mac0 <= 0) continue;
+            if (mac0 == 0) continue;
 
             clampForRasterizer(projected0);
             clampForRasterizer(projected1);
