@@ -92,3 +92,12 @@ persists, suspect #2 is still in play.
 - World geometry keeps `snap_enabled=true` — the PSX wobble lives there.
 - Diagnostic script remains at `godot-ps1/dev/inspect_skin_weights.gd`
   for future skinned-mesh issues that aren't snap-related.
+
+## Related dev helper: bulk TilingUV applicator
+
+`godot-ps1/dev/apply_tiling_uv.gd` walks `monitor.tscn`, finds every
+`PS1MeshGroup` whose descendants match the Kenney offender list (the 21
+meshes the UV linter flagged), and sets `TilingUV=true` on each group.
+Run from Godot's `File → Run...` menu. Idempotent. Mutes the linter
+without changing rendered output — see `docs/ps1-texture-strategy.md`
+on the TilingUV caveat (PSX still doesn't wrap; muting is intent-only).
