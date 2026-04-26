@@ -261,23 +261,112 @@ public partial class PS1GodotPlugin : EditorPlugin
 
     private void OnRunOnPsx()
     {
-        // The full one-click loop. Stops at the first failure so the user sees
-        // a clear "do this next" rather than a cascade of errors.
+        // The full one-click loop. Stops at the first failure so the user
+        // sees a clear "do this next" rather than a cascade of errors.
         //
-        // launch-emulator.cmd prefers psxsplash.ps-exe (raw PSX-EXE format) over
-        // psxsplash.elf — PCSX-Redux's ELF loader left the CPU executing
-        // garbage on this build. Check for either; absence of both means
-        // we need to build.
+        // Two run modes, picked by what the export produced:
+        //   - PCdrv (default): no .xa sidecars in build/. Boot the
+        //     PCdrv-loader runtime with the host filesystem mounted.
+        //   - CD-ROM ISO: any scene_*.xa exists. XA-ADPCM streaming
+        //     needs the disc bus, so we build a CDROM-loader runtime,
+        //     run mkpsxiso, and boot via -iso. PCdrv won't see XA.
         OnExportEmptySplashpack();
         string buildDir = System.IO.Path.Combine(RepoRoot(), "godot-ps1", "build");
+        if (HasAnyXaSidecar(buildDir))
+        {
+            RunIsoMode(buildDir);
+        }
+        else
+        {
+            RunPcdrvMode(buildDir);
+        }
+    }
+
+    private static bool HasAnyXaSidecar(string buildDir)
+    {
+        if (!System.IO.Directory.Exists(buildDir)) return false;
+        foreach (var path in System.IO.Directory.EnumerateFiles(buildDir, "scene_*.xa"))
+        {
+            // Treat a present file (even zero-byte) as "XA route is in
+            // play"; the writer only emits this file when at least one
+            // clip's psxavenc conversion succeeded.
+            if (new System.IO.FileInfo(path).Length > 0) return true;
+        }
+        return false;
+    }
+
+    private void RunPcdrvMode(string buildDir)
+    {
         bool hasPsExe = System.IO.File.Exists(System.IO.Path.Combine(buildDir, "psxsplash.ps-exe"));
-        bool hasElf = System.IO.File.Exists(System.IO.Path.Combine(buildDir, "psxsplash.elf"));
+        bool hasElf   = System.IO.File.Exists(System.IO.Path.Combine(buildDir, "psxsplash.elf"));
         if (!hasPsExe && !hasElf)
         {
-            GD.Print("[PS1Godot] psxsplash binary missing — building first…");
+            GD.Print("[PS1Godot] psxsplash PCdrv binary missing — building first…");
             OnBuildPsxsplash();
         }
         OnLaunchEmulator();
+    }
+
+    private void RunIsoMode(string buildDir)
+    {
+        GD.Print("[PS1Godot] XA-routed clips detected — switching to CD-ROM ISO run mode.");
+
+        // 1. Ensure the CDROM-loader runtime exists. Build only when
+        //    missing; the user can manually re-run scripts/build-
+        //    psxsplash-cdrom.cmd to refresh after source edits.
+        string cdromExe = System.IO.Path.Combine(buildDir, "psxsplash-cdrom.ps-exe");
+        if (!System.IO.File.Exists(cdromExe))
+        {
+            GD.Print("[PS1Godot] CDROM-loader runtime missing — building (this clears the PCdrv build cache)…");
+            int code = RunScript("scripts/build-psxsplash-cdrom.cmd", "Build psxsplash CDROM");
+            if (code != 0)
+            {
+                GD.PushError($"[PS1Godot] CDROM build failed (exit {code}). Falling back to PCdrv (XA clips will be silent).");
+                RunPcdrvMode(buildDir);
+                return;
+            }
+        }
+
+        // 2. Build the ISO via tools/build_iso/build_iso.py. Pass the
+        //    CDROM-loader runtime explicitly so the script doesn't pick
+        //    up the (potentially stale) PCdrv .ps-exe.
+        GD.Print("[PS1Godot] Building ISO via tools/build_iso/build_iso.py…");
+        int isoCode = RunBuildIso(buildDir, cdromExe);
+        if (isoCode != 0)
+        {
+            GD.PushError($"[PS1Godot] ISO build failed (exit {isoCode}). See log above.");
+            return;
+        }
+
+        // 3. Launch PCSX-Redux with the ISO mounted.
+        string isoLauncher = System.IO.Path.Combine(RepoRoot(), "scripts", "launch-emulator-iso.cmd").Replace('/', '\\');
+        if (!System.IO.File.Exists(isoLauncher))
+        {
+            GD.PushError($"[PS1Godot] launch-emulator-iso.cmd missing at {isoLauncher}");
+            return;
+        }
+        GD.Print("[PS1Godot] Launching PCSX-Redux (CD-ROM ISO mode)…");
+        OS.CreateProcess("cmd.exe", new[] { "/c", isoLauncher });
+    }
+
+    // Run tools/build_iso/build_iso.py with explicit psxexec override so
+    // the ISO uses the CDROM build, not the PCdrv build that lives next
+    // to it as psxsplash.ps-exe.
+    private static int RunBuildIso(string buildDir, string psxexecPath)
+    {
+        string script = System.IO.Path.Combine(RepoRoot(), "tools", "build_iso", "build_iso.py").Replace('/', '\\');
+        if (!System.IO.File.Exists(script))
+        {
+            GD.PushError($"[PS1Godot] build_iso.py missing at {script}");
+            return -1;
+        }
+        var output = new Godot.Collections.Array();
+        int code = OS.Execute("python",
+            new[] { script, "--build-dir", buildDir, "--psxexec", psxexecPath, "--out", System.IO.Path.Combine(buildDir, "game.bin") },
+            output, /* readStderr */ true);
+        foreach (var line in output)
+            GD.Print(line.AsString().TrimEnd('\r', '\n'));
+        return code;
     }
 
     private void OnExportEmptySplashpack()
