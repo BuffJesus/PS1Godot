@@ -11,11 +11,15 @@ namespace PS1Godot.UI;
 // splashpacks). Runs on every scene-change tick so it must stay cheap.
 public static class SceneStats
 {
-    // Rough hardware totals. Real authorable headroom is a bit less
-    // (frame buffers eat some VRAM, SPU reverb + BIOS reserve eat some
-    // SPU). For a "how close to limit" hint the gross totals are fine.
-    public const int VramBudgetBytes = 1024 * 1024;  // 1 MB PSX VRAM
-    public const int SpuBudgetBytes  = 512 * 1024;   // 512 KB PSX SPU RAM
+    // PSX VRAM is 1 MB total but the framebuffer (double-buffered 320×240
+    // ×16bpp ≈ 300 KB) and a few system rects eat the back half — the
+    // exporter's atlas only fills the front 1024×256 = 512 KB. SPU RAM is
+    // 512 KB but the back 256 KB is reverb buffer + reserved, so usable
+    // sample storage caps at 256 KB. Match what the exporter actually
+    // packs so the dock bars predict over-budget exports instead of
+    // greenlighting them.
+    public const int VramBudgetBytes = 512 * 1024;
+    public const int SpuBudgetBytes  = 256 * 1024;
 
     public readonly struct Result
     {
@@ -72,6 +76,7 @@ public static class SceneStats
         long spuBytes = EstimateSpuBytes(scene);
 
         WalkMeshes(root, ref meshes, ref tris, textureKeys, ref vramBytes);
+        WalkUIAndSky(root, textureKeys, ref vramBytes);
 
         return new Result(
             hasScene: true,
@@ -90,6 +95,17 @@ public static class SceneStats
     private static void WalkMeshes(Node n, ref int meshes, ref int tris,
                                    HashSet<string> textureKeys, ref long vramBytes)
     {
+        if (n is PS1MeshGroup group)
+        {
+            // PS1MeshGroup merges every descendant MeshInstance3D into a
+            // single exported GameObject — those children are typically
+            // plain MeshInstance3D (FBX-decomposed body parts), not
+            // PS1MeshInstance, so the regular branch below misses them.
+            WalkMeshGroupDescendants(group, group.BitDepth, ref meshes,
+                                     ref tris, textureKeys, ref vramBytes);
+            return;  // Don't recurse — the group owns its subtree.
+        }
+
         if (n is PS1MeshInstance pmi && pmi.Mesh != null)
         {
             meshes++;
@@ -119,6 +135,74 @@ public static class SceneStats
         foreach (var child in n.GetChildren())
         {
             WalkMeshes(child, ref meshes, ref tris, textureKeys, ref vramBytes);
+        }
+    }
+
+    private static void WalkMeshGroupDescendants(Node n, PSXBPP groupBpp,
+                                                 ref int meshes, ref int tris,
+                                                 HashSet<string> textureKeys,
+                                                 ref long vramBytes)
+    {
+        if (n is MeshInstance3D mi && mi.Mesh != null)
+        {
+            meshes++;
+            int surfaceCount = mi.Mesh.GetSurfaceCount();
+            for (int s = 0; s < surfaceCount; s++)
+            {
+                var arrays = mi.Mesh.SurfaceGetArrays(s);
+                var indices = arrays[(int)Mesh.ArrayType.Index].AsInt32Array();
+                tris += indices.Length > 0 ? indices.Length / 3 : 0;
+
+                var tex = ExtractAlbedoTexture(mi.MaterialOverride
+                    ?? mi.GetSurfaceOverrideMaterial(s)
+                    ?? mi.Mesh.SurfaceGetMaterial(s));
+                if (tex != null && !string.IsNullOrEmpty(tex.ResourcePath))
+                {
+                    string key = $"{tex.ResourcePath}|{groupBpp}";
+                    if (textureKeys.Add(key))
+                    {
+                        vramBytes += EstimateTextureVramBytes(tex, groupBpp);
+                    }
+                }
+            }
+        }
+
+        foreach (var child in n.GetChildren())
+        {
+            WalkMeshGroupDescendants(child, groupBpp, ref meshes, ref tris,
+                                     textureKeys, ref vramBytes);
+        }
+    }
+
+    // UI Image elements + PS1Sky textures live in the same VRAM atlas as
+    // mesh textures. The mesh walker only sees PS1MeshInstance / PS1MeshGroup,
+    // so without this pass the dock under-reports VRAM by however much UI +
+    // sky art consumes — typically the bezel, HUD plates, font, and skybox.
+    private static void WalkUIAndSky(Node n, HashSet<string> textureKeys,
+                                     ref long vramBytes)
+    {
+        if (n is PS1UIElement ui && ui.Type == PS1UIElementType.Image
+            && ui.Texture != null && !string.IsNullOrEmpty(ui.Texture.ResourcePath))
+        {
+            string key = $"{ui.Texture.ResourcePath}|{ui.BitDepth}";
+            if (textureKeys.Add(key))
+            {
+                vramBytes += EstimateTextureVramBytes(ui.Texture, ui.BitDepth);
+            }
+        }
+        else if (n is PS1Sky sky && sky.Texture != null
+                 && !string.IsNullOrEmpty(sky.Texture.ResourcePath))
+        {
+            string key = $"{sky.Texture.ResourcePath}|{sky.BitDepth}";
+            if (textureKeys.Add(key))
+            {
+                vramBytes += EstimateTextureVramBytes(sky.Texture, sky.BitDepth);
+            }
+        }
+
+        foreach (var child in n.GetChildren())
+        {
+            WalkUIAndSky(child, textureKeys, ref vramBytes);
         }
     }
 
