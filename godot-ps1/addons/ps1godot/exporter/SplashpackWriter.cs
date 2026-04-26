@@ -29,11 +29,11 @@ namespace PS1Godot.Exporter;
 //                  Name table — referenced by header.nameTableOffset.
 public static class SplashpackWriter
 {
-    public const ushort SplashpackVersion = 27;
+    public const ushort SplashpackVersion = 28;
     // Header layout grew by 16 bytes in v24 (sky struct: tpage + clut + UVs
     // + bitDepth + tint + enabled flag, mirroring the UI Image typeData
     // union slot). See WriteHeader and the runtime's SPLASHPACKFileHeader.
-    public const int HeaderSize = 176;
+    public const int HeaderSize = 200;
     public const int GameObjectSize = 92;
     public const int TriSize = 52;
     public const int LuaFileSize = 8; // luaCodeOffset (u32) + length (u32)
@@ -1101,6 +1101,18 @@ public static class SplashpackWriter
         public long UiModelTableOffsetPos;
         public long XaCountPos;
         public long XaTableOffsetPos;
+        // v28+: scene-wide instrument bank backfill positions. All four
+        // tables are independent; counts of 0 and offsets of 0 mean "no
+        // bank for this scene", in which case Phase 2.5 Stage A's
+        // header-write keeps writing zeros and Stage B fills them in.
+        public long InstrumentCountPos;
+        public long RegionCountPos;
+        public long DrumKitCountPos;
+        public long DrumMappingCountPos;
+        public long InstrumentTableOffsetPos;
+        public long RegionTableOffsetPos;
+        public long DrumKitTableOffsetPos;
+        public long DrumMappingTableOffsetPos;
     }
 
     private static HeaderOffsets WriteHeader(BinaryWriter w, SceneData scene, int atlasCount, int clutCount, int colliderCount,
@@ -1283,6 +1295,27 @@ public static class SplashpackWriter
         w.Write((ushort)0);   // pad_xa
         offsets.XaTableOffsetPos = w.BaseStream.Position;
         w.Write((uint)0);     // xaTableOffset (backfilled)
+
+        // v28: scene-wide instrument bank — counts (8 bytes) + table
+        // offsets (16 bytes). All zero today (Stage B will populate);
+        // when zero, the runtime treats the scene as having no bank
+        // and sequences stay on the legacy direct-binding path.
+        offsets.InstrumentCountPos = w.BaseStream.Position;
+        w.Write((ushort)0);    // instrumentCount   (backfilled)
+        offsets.RegionCountPos = w.BaseStream.Position;
+        w.Write((ushort)0);    // regionCount       (backfilled)
+        offsets.DrumKitCountPos = w.BaseStream.Position;
+        w.Write((ushort)0);    // drumKitCount      (backfilled)
+        offsets.DrumMappingCountPos = w.BaseStream.Position;
+        w.Write((ushort)0);    // drumMappingCount  (backfilled)
+        offsets.InstrumentTableOffsetPos = w.BaseStream.Position;
+        w.Write((uint)0);      // instrumentTableOffset   (backfilled)
+        offsets.RegionTableOffsetPos = w.BaseStream.Position;
+        w.Write((uint)0);      // regionTableOffset       (backfilled)
+        offsets.DrumKitTableOffsetPos = w.BaseStream.Position;
+        w.Write((uint)0);      // drumKitTableOffset      (backfilled)
+        offsets.DrumMappingTableOffsetPos = w.BaseStream.Position;
+        w.Write((uint)0);      // drumMappingTableOffset  (backfilled)
 
         long written = w.BaseStream.Position - headerStart;
         if (written != HeaderSize)

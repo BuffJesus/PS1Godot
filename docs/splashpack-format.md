@@ -1,4 +1,4 @@
-# Splashpack format v27
+# Splashpack format v28
 
 Extracted from `psxsplash-main/src/splashpack.{hh,cpp}` and
 `godot-ps1/addons/ps1godot/exporter/SplashpackWriter.cs`. Keep this in sync when
@@ -44,7 +44,7 @@ for the sequenced-music table (`musicSequenceCount` + `pad_music` +
 | Offset | Type | Field | Notes |
 |-------:|------|-------|-------|
 | 0 | `char[2]` | `magic` | `"SP"` |
-| 2 | `u16` | `version` | `27`; loader asserts `>= 27` |
+| 2 | `u16` | `version` | `28`; loader asserts `>= 28` |
 | 4 | `u16` | `luaFileCount` | |
 | 6 | `u16` | `gameObjectCount` | |
 | 8 | `u16` | `textureAtlasCount` | |
@@ -240,6 +240,24 @@ export-time, not runtime.
   `XaAudioBackend` (`xaaudio.cpp`) drives Form-2 disc streaming via
   `psyqo::CDRomDevice::Action` for SETMODE 0x24 → SETLOC → READS. See
   `splashpack.hh:120`.
+- v28: scene-wide instrument bank for sequenced music. Header gains
+  `instrumentCount` / `regionCount` / `drumKitCount` /
+  `drumMappingCount` (u16 each) plus four u32 table offsets — total
+  +24 bytes, header now 200 B. Records:
+    - `SPLASHPACKInstrumentRecord` (16 B): `firstRegionIndex` +
+      `regionCount` + `programId` + mix + voice budget + default ADSR.
+    - `SPLASHPACKRegionRecord` (16 B): `audioClipIndex`, `rootKey`,
+      `keyMin`/`keyMax`, `velocityMin`/`velocityMax`, `tuneCents`,
+      mix, optional ADSR override.
+    - `SPLASHPACKDrumKitRecord` (8 B): `firstMappingIndex` +
+      `mappingCount` + `midiChannel`.
+    - `SPLASHPACKDrumMappingRecord` (8 B): `midiNote` +
+      `audioClipIndex` + per-drum mix + `chokeGroup` + `priority`.
+  Stage A scaffold: counts/offsets emit as zero, runtime loads the
+  fields but doesn't dispatch through them. Stage B/C of Phase 2.5
+  will populate the bank from author-side `PS1Instrument` /
+  `PS1DrumKit` and wire the runtime resolution chain. See
+  `splashpack.hh:73`.
 
 ## When porting the writer to Godot
 

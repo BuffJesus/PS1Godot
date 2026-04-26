@@ -70,6 +70,75 @@ struct SPLASHPACKCollider {
 };
 static_assert(sizeof(SPLASHPACKCollider) == 32, "SPLASHPACKCollider must be 32 bytes");
 
+// v28+: scene-wide instrument bank for sequenced music. The splashpack
+// holds one shared bank that every PS1MusicSequence in the scene draws
+// from — lets a town theme + battle theme + fanfare share the same
+// instruments without duplicating samples in the SPU. Layout must match
+// the C# writer in SplashpackWriter.WriteMusicBankSection.
+//
+// Bank section layout:
+//   instrumentCount × SPLASHPACKInstrumentRecord (16 B each)
+//   regionCount     × SPLASHPACKRegionRecord     (16 B each)
+//   drumKitCount    × SPLASHPACKDrumKitRecord    (8 B each)
+//   drumMappingCount× SPLASHPACKDrumMappingRecord(8 B each)
+//
+// Each instrument owns a contiguous slice of the region table
+// ([firstRegionIndex, firstRegionIndex+regionCount)). Each drum kit
+// owns a contiguous slice of the drum mapping table.
+struct SPLASHPACKInstrumentRecord {
+    uint16_t firstRegionIndex;  // index into region table
+    uint16_t regionCount;       // contiguous regions belonging to this instrument
+    uint8_t  programId;         // 0-127, MIDI ProgramChange selector
+    uint8_t  volume;            // 0-127
+    uint8_t  pan;               // 0-127, 64=centre
+    uint8_t  priority;          // voice-stealing priority (0-255)
+    uint8_t  polyphonyLimit;    // 0 = unlimited; else max simultaneous voices
+    uint8_t  pitchBendRange;    // semitones
+    uint8_t  defaultAttackRate;
+    uint8_t  defaultDecayRate;
+    uint8_t  defaultSustainLevel;
+    uint8_t  defaultReleaseRate;
+    uint16_t pad;
+};
+static_assert(sizeof(SPLASHPACKInstrumentRecord) == 16, "SPLASHPACKInstrumentRecord must be 16 bytes");
+
+struct SPLASHPACKRegionRecord {
+    uint16_t audioClipIndex;
+    uint8_t  rootKey;
+    uint8_t  flags;            // bit 0 = LoopEnabled, bit 1 = OverrideADSR
+    uint8_t  keyMin;
+    uint8_t  keyMax;
+    uint8_t  velocityMin;
+    uint8_t  velocityMax;
+    int16_t  tuneCents;        // -100..+100
+    uint8_t  volume;
+    uint8_t  pan;
+    uint8_t  attackRate;       // used only when flags bit 1 set
+    uint8_t  decayRate;
+    uint8_t  sustainLevel;
+    uint8_t  releaseRate;
+};
+static_assert(sizeof(SPLASHPACKRegionRecord) == 16, "SPLASHPACKRegionRecord must be 16 bytes");
+
+struct SPLASHPACKDrumKitRecord {
+    uint16_t firstMappingIndex; // index into drum mapping table
+    uint16_t mappingCount;
+    uint8_t  midiChannel;       // which MIDI channel this kit catches (9 = GM)
+    uint8_t  pad[3];
+};
+static_assert(sizeof(SPLASHPACKDrumKitRecord) == 8, "SPLASHPACKDrumKitRecord must be 8 bytes");
+
+struct SPLASHPACKDrumMappingRecord {
+    uint8_t  midiNote;          // 0-127
+    uint8_t  pad0;
+    uint16_t audioClipIndex;
+    uint8_t  volume;
+    uint8_t  pan;
+    uint8_t  chokeGroup;        // 0 = no choke; non-zero = matching-group voices key off on hit
+    uint8_t  priority;
+};
+static_assert(sizeof(SPLASHPACKDrumMappingRecord) == 8, "SPLASHPACKDrumMappingRecord must be 8 bytes");
+
 struct SPLASHPACKTriggerBox {
     int32_t minX, minY, minZ;
     int32_t maxX, maxY, maxZ;
@@ -216,6 +285,20 @@ struct SplashpackSceneSetup {
         bool     enabled;
     };
     SkySetup sky = {};  // enabled=false by default
+
+    // v28+: scene-wide instrument bank. Loader leaves these pointing
+    // into the splashpack data so the runtime can index them in-place.
+    // Non-null only when the splashpack version is >= 28 AND the scene
+    // exported with at least one instrument; otherwise nullptr/0 and
+    // sequences fall back to the legacy direct-clip binding path.
+    const SPLASHPACKInstrumentRecord*  instruments = nullptr;
+    const SPLASHPACKRegionRecord*      regions = nullptr;
+    const SPLASHPACKDrumKitRecord*     drumKits = nullptr;
+    const SPLASHPACKDrumMappingRecord* drumMappings = nullptr;
+    uint16_t instrumentCount = 0;
+    uint16_t regionCount = 0;
+    uint16_t drumKitCount = 0;
+    uint16_t drumMappingCount = 0;
 };
 
 class SplashPackLoader {

@@ -62,12 +62,28 @@ public static class MidiParser
         public int Aftertouch { get; set; }      // 0xA0 (poly) + 0xD0 (channel)
     }
 
+    // 0xC0 program change. MIDI Channel (0-15) selects a new program
+    // (0-127, GM-mapped on a stock synth). PS1Godot uses the program id
+    // as an opaque index into a sequence's instrument bank — see Phase
+    // 2.5 of docs/handoff-true-sequenced-audio-plan.md. Phase 2.5 Stage A
+    // preserves these events into the wire stream as kind=4 so the
+    // runtime can act on them once the bank wiring lands; today the
+    // runtime's default-skip handler drops them silently.
+    public readonly struct MidiProgramChangeEvent
+    {
+        public uint AbsoluteTick { get; init; }
+        public byte Channel { get; init; }
+        public byte Program { get; init; }
+        public int  Track { get; init; }
+    }
+
     public sealed class ParsedMidi
     {
         public int TicksPerQuarter { get; init; }
         public int TrackCount { get; init; }
         public List<MidiNoteEvent> Notes { get; init; } = new();
         public List<MidiTempoEvent> Tempos { get; init; } = new();
+        public List<MidiProgramChangeEvent> ProgramChanges { get; init; } = new();
         public SkippedEventCounts SkippedCounts { get; init; } = new();
     }
 

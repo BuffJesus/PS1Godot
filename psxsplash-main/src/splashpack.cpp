@@ -120,8 +120,20 @@ struct SPLASHPACKFileHeader {
     uint16_t xaClipCount;
     uint16_t pad_xa;
     uint32_t xaTableOffset;
+    // v28+: scene-wide instrument bank. See SPLASHPACK*Record types in
+    // splashpack.hh for layouts. instrumentCount=0 means the scene
+    // shipped no bank — sequences fall back to legacy
+    // direct-channel-to-clip bindings (PS1M format).
+    uint16_t instrumentCount;
+    uint16_t regionCount;
+    uint16_t drumKitCount;
+    uint16_t drumMappingCount;
+    uint32_t instrumentTableOffset;
+    uint32_t regionTableOffset;
+    uint32_t drumKitTableOffset;
+    uint32_t drumMappingTableOffset;
 };
-static_assert(sizeof(SPLASHPACKFileHeader) == 176, "SPLASHPACKFileHeader must be 176 bytes");
+static_assert(sizeof(SPLASHPACKFileHeader) == 200, "SPLASHPACKFileHeader must be 200 bytes");
 
 struct MusicTableEntry {
     uint32_t dataOffset;
@@ -151,7 +163,7 @@ void SplashPackLoader::LoadSplashpack(uint8_t *data, SplashpackSceneSetup &setup
     psyqo::Kernel::assert(data != nullptr, "Splashpack loading data pointer is null");
     psxsplash::SPLASHPACKFileHeader *header = reinterpret_cast<psxsplash::SPLASHPACKFileHeader *>(data);
     psyqo::Kernel::assert(__builtin_memcmp(header->magic, "SP", 2) == 0, "Splashpack has incorrect magic");
-    psyqo::Kernel::assert(header->version >= 27, "Splashpack version too old (need v27+): re-export from PS1Godot");
+    psyqo::Kernel::assert(header->version >= 28, "Splashpack version too old (need v28+): re-export from PS1Godot");
 
     setup.playerStartPosition = header->playerStartPos;
     setup.playerStartRotation = header->playerStartRot;
@@ -355,6 +367,45 @@ void SplashPackLoader::LoadSplashpack(uint8_t *data, SplashpackSceneSetup &setup
             e.sidecarOffset = sidOff;
             e.sidecarSize   = sidSize;
             setup.xaClips.push_back(e);
+        }
+    }
+
+    // v28+: scene-wide instrument bank. Loader points the setup struct
+    // at the on-disk record arrays — runtime parses in-place, no copy.
+    // Each table is independent; an instrument with no regions, or a
+    // drum kit with no mappings, simply has count 0 in its parent
+    // record. instrumentCount=0 → no bank for this scene; sequences
+    // stay on the legacy direct-binding path (PS1M format). Phase 2.5
+    // Stage A leaves these load-but-unused; Stage C dispatches NoteOn
+    // through the bank for PS2M-format sequences.
+    setup.instrumentCount  = 0;
+    setup.regionCount      = 0;
+    setup.drumKitCount     = 0;
+    setup.drumMappingCount = 0;
+    setup.instruments  = nullptr;
+    setup.regions      = nullptr;
+    setup.drumKits     = nullptr;
+    setup.drumMappings = nullptr;
+    if (header->version >= 28) {
+        if (header->instrumentCount > 0 && header->instrumentTableOffset != 0) {
+            setup.instruments = reinterpret_cast<const SPLASHPACKInstrumentRecord*>(
+                data + header->instrumentTableOffset);
+            setup.instrumentCount = header->instrumentCount;
+        }
+        if (header->regionCount > 0 && header->regionTableOffset != 0) {
+            setup.regions = reinterpret_cast<const SPLASHPACKRegionRecord*>(
+                data + header->regionTableOffset);
+            setup.regionCount = header->regionCount;
+        }
+        if (header->drumKitCount > 0 && header->drumKitTableOffset != 0) {
+            setup.drumKits = reinterpret_cast<const SPLASHPACKDrumKitRecord*>(
+                data + header->drumKitTableOffset);
+            setup.drumKitCount = header->drumKitCount;
+        }
+        if (header->drumMappingCount > 0 && header->drumMappingTableOffset != 0) {
+            setup.drumMappings = reinterpret_cast<const SPLASHPACKDrumMappingRecord*>(
+                data + header->drumMappingTableOffset);
+            setup.drumMappingCount = header->drumMappingCount;
         }
     }
 
