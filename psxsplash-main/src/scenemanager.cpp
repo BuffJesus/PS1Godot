@@ -48,8 +48,12 @@ void psxsplash::SceneManager::InitializeScene(uint8_t* splashpackData, LoadingSc
     L.Reset();
 
 #ifdef LOADER_CDROM
-    m_music.setCDRomDevice(static_cast<psxsplash::FileLoaderCDRom&>(
-        psxsplash::FileLoader::Get()).getCDRomDevice());
+    {
+        auto* cdromDev = static_cast<psxsplash::FileLoaderCDRom&>(
+            psxsplash::FileLoader::Get()).getCDRomDevice();
+        m_music.setCDRomDevice(cdromDev);
+        m_xa.init(cdromDev);
+    }
 #endif
 
     // Register the Lua API
@@ -1203,6 +1207,22 @@ void psxsplash::SceneManager::loadScene(psyqo::GPU& gpu, int sceneIndex, bool is
     }
 
     if (loading.isActive()) loading.updateProgress(gpu, 35);
+
+    // ── Step 4: Resolve SCENE_<n>.XA's starting LBA while the drive
+    // is still awake. XA streaming bypasses the file API and drives
+    // SETLOC/READS directly, so all the runtime needs is the LBA.
+    // 0 from GetFileLbaSync = no XA file in this scene's layout
+    // (i.e. the export wrote no XA-routed clips); play() will
+    // short-circuit and report the miss.
+#if defined(LOADER_CDROM)
+    {
+        char xaFilename[32];
+        FileLoader::BuildXaFilename(sceneIndex, xaFilename, sizeof(xaFilename));
+        uint32_t xaLba = static_cast<psxsplash::FileLoaderCDRom&>(
+            FileLoader::Get()).GetFileLbaSync(xaFilename);
+        m_xa.setSceneXaLba(xaLba);
+    }
+#endif
 
     // Stop the CD-ROM motor and mask all interrupts for gameplay.
 #if defined(LOADER_CDROM)

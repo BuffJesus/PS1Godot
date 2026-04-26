@@ -207,6 +207,40 @@ class FileLoaderCDRom final : public FileLoader {
     // ── FreeFile ─────────────────────────────────────────────────
     void FreeFile(uint8_t* data) override { delete[] data; }
 
+    // ── GetFileLbaSync ────────────────────────────────────────────
+    // Resolves an ISO9660 path to its starting LBA without reading any
+    // sectors. Used by the XA backend to seed setSceneXaLba — XA
+    // playback drives the disc directly via SETLOC/READS rather than
+    // reading file bytes through the parser, so we only need the
+    // starting sector number.
+    //
+    // Returns 0 if the parser is uninitialised, the file is missing,
+    // or the lookup is rejected. 0 is a sentinel — XA files are never
+    // placed in the leadin area, so a real file always has LBA > 0.
+    uint32_t GetFileLbaSync(const char* filename) {
+        if (!m_isoParser.initialized()) return 0;
+
+        psyqo::ISO9660Parser::DirEntry entry;
+        bool found = false;
+
+        m_syncQueue
+            .startWith(m_isoParser.scheduleGetDirentry(filename, &entry))
+            .then([&found](psyqo::TaskQueue::Task* t) {
+                found = true;
+                t->resolve();
+            })
+            .butCatch([](psyqo::TaskQueue*) {})
+            .run();
+
+        while (m_syncQueue.isRunning()) {
+            m_gpu->pumpCallbacks();
+        }
+
+        if (!found || entry.type == psyqo::ISO9660Parser::DirEntry::INVALID)
+            return 0;
+        return entry.LBA;
+    }
+
     const char* Name() const override { return "cdrom"; }
 
     /** Stash the GPU pointer so LoadFileSync can spin on pumpCallbacks. */

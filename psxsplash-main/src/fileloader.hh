@@ -115,6 +115,9 @@ class FileLoader {
     /** scene_N.loading  or  SCENE_N.LDG;1 */
     static void BuildLoadingFilename(int sceneIndex, char* out, int maxLen);
 
+    /** scene_N.xa  or  SCENE_N.XA;1 */
+    static void BuildXaFilename(int sceneIndex, char* out, int maxLen);
+
     // ── Singleton ─────────────────────────────────────────────────
     static FileLoader& Get();
 };

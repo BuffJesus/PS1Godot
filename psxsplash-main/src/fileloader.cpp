@@ -59,4 +59,12 @@ void FileLoader::BuildLoadingFilename(int sceneIndex, char* out, int maxLen) {
 #endif
 }
 
+void FileLoader::BuildXaFilename(int sceneIndex, char* out, int maxLen) {
+#if defined(LOADER_CDROM)
+    snprintf(out, maxLen, "SCENE_%d.XA;1", sceneIndex);
+#else
+    snprintf(out, maxLen, "scene_%d.xa", sceneIndex);
+#endif
+}
+
 }  // namespace psxsplash
