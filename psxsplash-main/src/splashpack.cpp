@@ -145,7 +145,7 @@ void SplashPackLoader::LoadSplashpack(uint8_t *data, SplashpackSceneSetup &setup
     psyqo::Kernel::assert(data != nullptr, "Splashpack loading data pointer is null");
     psxsplash::SPLASHPACKFileHeader *header = reinterpret_cast<psxsplash::SPLASHPACKFileHeader *>(data);
     psyqo::Kernel::assert(__builtin_memcmp(header->magic, "SP", 2) == 0, "Splashpack has incorrect magic");
-    psyqo::Kernel::assert(header->version >= 24, "Splashpack version too old (need v24+): re-export from PS1Godot");
+    psyqo::Kernel::assert(header->version >= 25, "Splashpack version too old (need v25+): re-export from PS1Godot");
 
     setup.playerStartPosition = header->playerStartPos;
     setup.playerStartRotation = header->playerStartRot;
@@ -297,6 +297,10 @@ void SplashPackLoader::LoadSplashpack(uint8_t *data, SplashpackSceneSetup &setup
         uint8_t* audioTable = data + header->audioTableOffset;
         setup.audioClips.reserve(header->audioClipCount);
         setup.audioClipNames.reserve(header->audioClipCount);
+        // v25 entry layout (20 bytes): dataOff(u32) size(u32) rate(u16)
+        // loop(u8) nameLen(u8) nameOff(u32) routing(u8) _pad(3). The
+        // 3-byte tail keeps the next entry on a 4-byte boundary so the
+        // u32 reads at offset 0 of each entry stay aligned on MIPS.
         for (uint16_t i = 0; i < header->audioClipCount; i++) {
             uint32_t dataOff   = *reinterpret_cast<uint32_t*>(audioTable); audioTable += 4;
             uint32_t size      = *reinterpret_cast<uint32_t*>(audioTable); audioTable += 4;
@@ -304,6 +308,8 @@ void SplashPackLoader::LoadSplashpack(uint8_t *data, SplashpackSceneSetup &setup
             uint8_t  loop      = *audioTable++;
             uint8_t  nameLen   = *audioTable++;
             uint32_t nameOff   = *reinterpret_cast<uint32_t*>(audioTable); audioTable += 4;
+            uint8_t  routing   = *audioTable++;
+            audioTable += 3;  // align pad
             SplashpackSceneSetup::AudioClipSetup clip;
             // v20: ADPCM data is in a separate .spu file; dataOff is 0.
             clip.adpcmData = nullptr;
@@ -311,6 +317,9 @@ void SplashPackLoader::LoadSplashpack(uint8_t *data, SplashpackSceneSetup &setup
             clip.sampleRate = rate;
             clip.loop = (loop != 0);
             clip.name = (nameLen > 0 && nameOff != 0) ? reinterpret_cast<const char*>(data + nameOff) : nullptr;
+            clip.routing = (routing <= static_cast<uint8_t>(SplashpackSceneSetup::AudioRouting::AutoUnresolved))
+                ? static_cast<SplashpackSceneSetup::AudioRouting>(routing)
+                : SplashpackSceneSetup::AudioRouting::SPU;
             setup.audioClips.push_back(clip);
             setup.audioClipNames.push_back(clip.name);
         }

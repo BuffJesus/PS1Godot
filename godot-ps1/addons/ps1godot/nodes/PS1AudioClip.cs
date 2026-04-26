@@ -2,6 +2,29 @@ using Godot;
 
 namespace PS1Godot;
 
+// v25 audio routing — declares which PS1 backend a clip should ride on.
+// Authors pick the intent; the build pipeline resolves Auto into a
+// concrete route and emits the chosen backend per-clip into the
+// splashpack. Only SPU is implemented end-to-end today; XA + CDDA paths
+// are scaffolded (runtime logs "not implemented" and falls back to SPU
+// or silence) so we can author with the right intent now and finish
+// streaming in Phase 3 without touching every clip again.
+//
+// Auto rules (resolved in PS1Audio.ResolveRoute):
+//   Loop + size > 32 KB ADPCM ........... XA  (long ambient / music)
+//   Non-loop + size > 24 KB ............. XA  (long stingers / narration)
+//   Otherwise ........................... SPU (short SFX, UI, footsteps)
+//
+// CDDA is never auto-selected — it has to be requested explicitly so
+// disc layout doesn't surprise anyone.
+public enum PS1AudioRoute
+{
+    Auto = 0,
+    SPU = 1,
+    XA = 2,
+    CDDA = 3,
+}
+
 // When this clip is expected to live in SPU RAM. Only `Gameplay` clips
 // count against the scene's SPU budget — MenuOnly and LoadOnDemand
 // clips are either resident during a menu state or streamed/loaded on
@@ -59,4 +82,14 @@ public partial class PS1AudioClip : Resource
     // event-triggered dialog and menu-specific SFX explicitly to reclaim
     // the budget.
     [Export] public PS1AudioClipResidency Residency { get; set; } = PS1AudioClipResidency.Gameplay;
+
+    [ExportGroup("Routing (v25)")]
+    // Which PS1 audio backend should play this clip. Auto lets the build
+    // pipeline pick SPU vs XA based on size/loop heuristics; mark a clip
+    // SPU explicitly when it MUST stay in SPU RAM (latency-sensitive
+    // SFX), or CDDA for title/credits-grade music. XA is the right pick
+    // for long ambient loops, dialog, and large stingers — but XA
+    // playback is still scaffolded; runtime currently logs a warning and
+    // falls back to SPU residency.
+    [Export] public PS1AudioRoute Route { get; set; } = PS1AudioRoute.Auto;
 }

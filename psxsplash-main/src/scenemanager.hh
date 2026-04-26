@@ -84,6 +84,14 @@ class SceneManager {
         return nullptr;
     }
 
+    // v25: routing byte for an audio clip (0=SPU, 1=XA, 2=CDDA, 3=Auto).
+    // Returns 0 (SPU) for unknown indices so missing data plays through
+    // the existing path rather than going silent.
+    uint8_t getAudioClipRouting(int index) const {
+        if (index >= 0 && index < (int)m_audioClipRouting.size()) return m_audioClipRouting[index];
+        return 0;
+    }
+
     // Music sequence lookup by name (returns -1 if not found). Names
     // come from the splashpack music table and are stored at load time.
     int findMusicSequenceByName(const char* name) const;
@@ -206,6 +214,12 @@ class SceneManager {
     
     // Audio clip name table (v10+): parallel to audio clips, points into splashpack data
     eastl::vector<const char*> m_audioClipNames;
+
+    // v25: parallel to m_audioClipNames. One byte per clip, value matches
+    // SplashpackSceneSetup::AudioRouting (0=SPU, 1=XA, 2=CDDA). Lua's
+    // PlayMusic/PlaySfx use this to dispatch to the right backend so the
+    // game script doesn't have to know how each clip was authored.
+    eastl::vector<uint8_t> m_audioClipRouting;
 
     // Music sequence name table (v22+). Parallel to the sequencer's
     // registered sequences. Populated from the splashpack music table

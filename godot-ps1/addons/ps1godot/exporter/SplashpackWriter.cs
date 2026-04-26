@@ -28,7 +28,7 @@ namespace PS1Godot.Exporter;
 //                  Name table — referenced by header.nameTableOffset.
 public static class SplashpackWriter
 {
-    public const ushort SplashpackVersion = 24;
+    public const ushort SplashpackVersion = 25;
     // Header layout grew by 16 bytes in v24 (sky struct: tpage + clut + UVs
     // + bitDepth + tint + enabled flag, mirroring the UI Image typeData
     // union slot). See WriteHeader and the runtime's SPLASHPACKFileHeader.
@@ -249,10 +249,13 @@ public static class SplashpackWriter
         }
 
         // ── Audio clip table + name strings ──
-        // Table entry (16 B): dataOff(u32) size(u32) rate(u16) loop(u8) nameLen(u8) nameOff(u32)
-        // v20: dataOff is 0 (ADPCM is in the .spu sidecar); nameOff points
-        // at a null-terminated C string elsewhere in this splashpack. Name
-        // strings are written right after the table.
+        // v25 table entry (20 B): dataOff(u32) size(u32) rate(u16)
+        // loop(u8) nameLen(u8) nameOff(u32) routing(u8) _pad(3).
+        // dataOff is 0 (ADPCM lives in the .spu sidecar); nameOff points
+        // at a null-terminated C string elsewhere in this splashpack.
+        // routing is the resolved AudioRouting (0=SPU, 1=XA, 2=CDDA);
+        // the build resolves Auto -> concrete route before write, so
+        // AutoUnresolved should never reach the runtime in practice.
         if (scene.AudioClips.Count > 0)
         {
             AlignTo4(w);
@@ -269,6 +272,8 @@ public static class SplashpackWriter
                 w.Write((byte)clip.Name.Length);        // nameLen
                 nameOffsetPositions.Add(w.BaseStream.Position);
                 w.Write((uint)0);                       // nameOff (backfilled)
+                w.Write((byte)clip.Routing);            // v25 routing
+                w.Write((byte)0); w.Write((byte)0); w.Write((byte)0); // align pad
             }
 
             // Name strings (null-terminated). Runtime reads nameLen bytes then

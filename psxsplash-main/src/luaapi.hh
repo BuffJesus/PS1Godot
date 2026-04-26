@@ -279,6 +279,27 @@ private:
     // Audio.GetClipDuration(nameOrIndex) -> frames (60 Hz) or 0 if unknown/looped
     static int Audio_GetClipDuration(lua_State* L);
 
+    // v25 routing-aware shortcuts. They look up the clip's routing byte
+    // (set by the Godot exporter / PS1AudioClip.Route) and dispatch to
+    // the right backend so gameplay scripts don't have to know whether
+    // a sound lives in SPU RAM or streams from disc.
+    //
+    // Audio.PlaySfx(name, volume?, pan?) -> channelId
+    //   Plays SPU-routed clips. Logs a warning if `name` was authored
+    //   as XA/CDDA — call PlayMusic for those instead.
+    static int Audio_PlaySfx(lua_State* L);
+
+    // Audio.PlayMusic(name) -> 0 on success, -1 on failure
+    //   Resolves clip routing and dispatches: SPU plays via the SFX
+    //   path, CDDA logs an error (use PlayCDDA(track) directly), XA
+    //   logs "not implemented" (Phase 3 streaming work).
+    static int Audio_PlayMusic(lua_State* L);
+
+    // Audio.StopMusic()
+    //   Scaffold: stops the music sequencer + CDDA playback. XA path is
+    //   a no-op until streaming lands.
+    static int Audio_StopMusic(lua_State* L);
+
     // Audio.PlayCDDA(trackNo)
     static int Audio_PlayCDDA(lua_State* L);
 

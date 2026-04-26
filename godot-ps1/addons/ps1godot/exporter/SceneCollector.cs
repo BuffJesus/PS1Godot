@@ -1631,6 +1631,7 @@ public static class SceneCollector
     {
         if (scene.AudioClips == null) return;
         var seen = new HashSet<string>();
+        int xaCount = 0;
         foreach (var clip in scene.AudioClips)
         {
             if (clip == null || clip.Stream == null)
@@ -1669,6 +1670,15 @@ public static class SceneCollector
 
             byte[] adpcm = ADPCMEncoder.Encode(pcm, clip.Loop);
             ushort rate = (ushort)Mathf.Clamp(wav.MixRate, 1000, 44100);
+            byte resolvedRoute = ResolveAudioRoute(clip.Route, adpcm.Length, clip.Loop);
+            if (resolvedRoute == 1) xaCount++;
+            string routeLabel = resolvedRoute switch
+            {
+                0 => "SPU",
+                1 => "XA(scaffold)",
+                2 => "CDDA(scaffold)",
+                _ => "SPU(fallback)",
+            };
 
             data.AudioClips.Add(new AudioClipRecord
             {
@@ -1676,8 +1686,48 @@ public static class SceneCollector
                 SampleRate = rate,
                 Loop = clip.Loop,
                 Name = name,
+                Routing = resolvedRoute,
             });
-            GD.Print($"[PS1Godot] Audio clip '{name}': {pcm.Length} samples @ {rate}Hz → {adpcm.Length} bytes ADPCM (loop={clip.Loop}, index {data.AudioClips.Count - 1})");
+            GD.Print($"[PS1Godot] Audio clip '{name}': {pcm.Length} samples @ {rate}Hz → {adpcm.Length} bytes ADPCM (loop={clip.Loop}, route={routeLabel}, index {data.AudioClips.Count - 1})");
+        }
+
+        // v25 routing: ping psxavenc once per scene if any clip resolved
+        // to XA. Conversion isn't wired yet; this just surfaces missing
+        // tooling early so authors can install before Phase 3 lands.
+        PsxAvEnc.ReportIfXaPresent(xaCount);
+    }
+
+    // v25 audio routing: resolve the authored PS1AudioRoute (Auto / SPU /
+    // XA / CDDA) to the concrete byte the splashpack writer emits. The
+    // wire format matches `SplashpackSceneSetup::AudioRouting` in
+    // splashpack.hh — keep them in sync.
+    //
+    //   0 = SPU
+    //   1 = XA   (scaffolded — runtime logs "not implemented")
+    //   2 = CDDA (scaffolded — runtime delegates to Audio.PlayCDDA)
+    //   3 = AutoUnresolved (never written — caller must commit)
+    //
+    // Auto rules (heuristic, deliberately conservative so we never
+    // promote a short SFX to disc streaming):
+    //   - Loop + size > 32 KB ADPCM     -> XA  (long ambient / music)
+    //   - Non-loop + size > 24 KB ADPCM -> XA  (long stingers / dialog)
+    //   - Otherwise                      -> SPU (short SFX, UI, footsteps)
+    //
+    // Adjust thresholds as the asset library shifts; stay above the
+    // ~16 KB/clip range typical of PS1-era SFX so menu blips never get
+    // streamed.
+    private static byte ResolveAudioRoute(PS1AudioRoute authored, int adpcmLen, bool loop)
+    {
+        switch (authored)
+        {
+            case PS1AudioRoute.SPU:  return 0;
+            case PS1AudioRoute.XA:   return 1;
+            case PS1AudioRoute.CDDA: return 2;
+            case PS1AudioRoute.Auto:
+            default:
+                if (loop && adpcmLen > 32 * 1024) return 1;       // long loop -> XA
+                if (!loop && adpcmLen > 24 * 1024) return 1;      // long one-shot -> XA
+                return 0;                                          // SPU
         }
     }
 

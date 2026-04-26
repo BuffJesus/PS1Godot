@@ -10,6 +10,7 @@
 #include "uisystem.hh"
 
 #include <psyqo/soft-math.hh>
+#include <psyqo/xprintf.h>
 #include <psyqo/trigonometry.hh>
 #include <psyqo/fixed-point.hh>
 #include "gtemath.hh"
@@ -260,6 +261,16 @@ void LuaAPI::RegisterAll(psyqo::Lua& L, SceneManager* scene, CutscenePlayer* cut
 
     L.push(Audio_GetClipDuration);
     L.setField(-2, "GetClipDuration");
+
+    // v25 routing-aware shortcuts
+    L.push(Audio_PlaySfx);
+    L.setField(-2, "PlaySfx");
+
+    L.push(Audio_PlayMusic);
+    L.setField(-2, "PlayMusic");
+
+    L.push(Audio_StopMusic);
+    L.setField(-2, "StopMusic");
 
     L.push(Audio_PlayCDDA);
     L.setField(-2, "PlayCDDA");
@@ -1938,6 +1949,94 @@ int LuaAPI::Audio_GetClipDuration(lua_State* L) {
         lua.pushNumber(static_cast<lua_Number>(frames));
     }
     return 1;
+}
+
+// v25 routing-aware Audio.PlaySfx — same signature as Audio.Play but
+// checks the clip's routing first and warns if it's not SPU. Routing
+// mismatches are still played (so authoring mistakes don't go silent),
+// they're just logged to the kernel log so scripters notice.
+int LuaAPI::Audio_PlaySfx(lua_State* L) {
+    psyqo::Lua lua(L);
+    if (!s_sceneManager) {
+        lua.pushNumber(-1);
+        return 1;
+    }
+
+    int soundId = -1;
+    if (lua.isNumber(1)) {
+        soundId = static_cast<int>(lua.toNumber(1));
+    } else if (lua.isString(1)) {
+        soundId = s_sceneManager->findAudioClipByName(lua.toString(1));
+    }
+    if (soundId < 0) {
+        lua.pushNumber(-1);
+        return 1;
+    }
+
+    uint8_t route = s_sceneManager->getAudioClipRouting(soundId);
+    if (route != 0) {
+        // 1 = XA, 2 = CDDA — call PlaySfx anyway but warn so the author
+        // can correct the authoring side (PS1AudioClip.Route).
+        ramsyscall_printf("[Audio] PlaySfx on non-SPU clip (routing=%d, index=%d) - falling through to SPU.\n",
+                          static_cast<int>(route), soundId);
+    }
+
+    int volume = static_cast<int>(lua.optNumber(2, 100));
+    int pan    = static_cast<int>(lua.optNumber(3, 64));
+    int voice  = s_sceneManager->getAudio().play(soundId, volume, pan);
+    lua.pushNumber(voice);
+    return 1;
+}
+
+// v25 Audio.PlayMusic — dispatch by routing.
+//   SPU  -> play via the SFX path (warn: this is musically large for SPU)
+//   XA   -> NOT IMPLEMENTED. Logged + returns -1. Phase 3 work item.
+//   CDDA -> use Audio.PlayCDDA(track) directly; this entry point only
+//           warns, since the splashpack doesn't carry a name->track map.
+int LuaAPI::Audio_PlayMusic(lua_State* L) {
+    psyqo::Lua lua(L);
+    if (!s_sceneManager || !lua.isString(1)) {
+        lua.pushNumber(-1);
+        return 1;
+    }
+
+    const char* name = lua.toString(1);
+    int idx = s_sceneManager->findAudioClipByName(name);
+    if (idx < 0) {
+        ramsyscall_printf("[Audio] PlayMusic: clip '%s' not found\n", name);
+        lua.pushNumber(-1);
+        return 1;
+    }
+
+    uint8_t route = s_sceneManager->getAudioClipRouting(idx);
+    switch (route) {
+        case 0:  // SPU
+            s_sceneManager->getAudio().play(idx, 100, 64);
+            lua.pushNumber(0);
+            return 1;
+        case 1:  // XA — scaffold
+            ramsyscall_printf("[Audio] PlayMusic('%s'): XA streaming not implemented yet (Phase 3). Silence.\n", name);
+            lua.pushNumber(-1);
+            return 1;
+        case 2:  // CDDA — must use track-based API
+            ramsyscall_printf("[Audio] PlayMusic('%s'): CDDA-routed clip - call Audio.PlayCDDA(track) directly.\n", name);
+            lua.pushNumber(-1);
+            return 1;
+        default:
+            lua.pushNumber(-1);
+            return 1;
+    }
+}
+
+// v25 Audio.StopMusic — best-effort blanket stop. Stops the music
+// sequencer (PS1M) and any CDDA track. XA streaming is a no-op until
+// the Phase 3 backend lands.
+int LuaAPI::Audio_StopMusic(lua_State* L) {
+    (void)L;
+    if (!s_sceneManager) return 0;
+    s_sceneManager->getMusicSequencer().stop();
+    s_sceneManager->getMusic().stopCDDA();
+    return 0;
 }
 
 int LuaAPI::Audio_PlayCDDA(lua_State *L) {

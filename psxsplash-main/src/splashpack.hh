@@ -91,13 +91,26 @@ struct SplashpackSceneSetup {
 
     eastl::vector<const char *> objectNames;
 
-    // Audio clips (v10+): ADPCM data with metadata
+    // Audio clips (v10+): ADPCM data with metadata.
+    // v25+: per-clip routing — declares which backend the clip should go
+    // through. SPU is the only backend that actually plays today; XA and
+    // CDDA are scaffolded for Phase 3 streaming work and currently log a
+    // "not implemented" warning when invoked. AutoUnresolved means the
+    // build pipeline failed to commit to a route; runtime treats it as
+    // SPU so authoring mistakes don't silence audio.
+    enum class AudioRouting : uint8_t {
+        SPU = 0,
+        XA = 1,
+        CDDA = 2,
+        AutoUnresolved = 3,
+    };
     struct AudioClipSetup {
         const uint8_t* adpcmData;
         uint32_t sizeBytes;
         uint16_t sampleRate;
         bool loop;
         const char* name;   // Points into splashpack data (null-terminated)
+        AudioRouting routing = AudioRouting::SPU;
     };
     eastl::vector<AudioClipSetup> audioClips;
 

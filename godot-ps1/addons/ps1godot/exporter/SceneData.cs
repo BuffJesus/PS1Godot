@@ -64,6 +64,13 @@ public sealed class AudioClipRecord
     public required ushort SampleRate { get; init; }
     public required bool Loop { get; init; }
     public required string Name { get; init; }
+
+    // v25: resolved backend route. Splashpack writer emits this as a
+    // concrete u8 matching SplashpackSceneSetup::AudioRouting in
+    // splashpack.hh — 0=SPU, 1=XA, 2=CDDA. Auto must be resolved to a
+    // concrete value before write. Default 0 = SPU preserves existing
+    // export behavior for clips that don't opt in to routing.
+    public byte Routing { get; init; } = 0;
 }
 
 // One pre-serialized PS1M sequenced-music blob. Lua picks it by name
