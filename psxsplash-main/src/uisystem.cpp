@@ -2,6 +2,7 @@
 
 #include <psyqo/kernel.hh>
 #include <psyqo/primitives/common.hh>
+#include <psyqo/primitives/control.hh>
 #include <psyqo/primitives/misc.hh>
 #include <psyqo/primitives/rectangles.hh>
 #include <psyqo/primitives/sprites.hh>
@@ -298,6 +299,18 @@ void UISystem::renderElement(UIElement& el,
                 frag.primitive.setOpaque();
             }
             ot.insert(frag, 0);
+            // Untextured Rectangle primitives don't carry a tpage — they
+            // inherit the GPU drawing-mode state set by the most recent
+            // textured primitive. The 3D pass forces abr=FullBackAndFullFront
+            // (additive) on every world tri, so a setSemiTrans rectangle
+            // with color (0,0,0) blends as B+0=B → invisible. Insert a
+            // standalone TPage at depth 0 AFTER the rectangle so OT LIFO
+            // dispatches it FIRST, resetting abr to HalfBackAndHalfFront
+            // (default 0.5*B+0.5*F) before the rect draws.
+            if (el.translucent) {
+                auto& tpage = balloc.allocateFragment<psyqo::Prim::TPage>();
+                ot.insert(tpage, 0);
+            }
         }
         break;
     }
