@@ -1821,14 +1821,17 @@ public static class SceneCollector
             // Map authored channels to PS1MSerializer.ChannelBinding.
             // Skip channels whose AudioClipName doesn't resolve.
             //
-            // Phase 1 (see docs/handoff-true-sequenced-audio-plan.md):
-            // PS1MusicChannel.Instrument optionally replaces the direct
-            // (AudioClipName + BaseNoteMidi + LoopSample) trio. When set,
-            // resolve from the instrument's first region. Multi-region
-            // selection is Phase 2 + a splashpack format bump; for now a
-            // one-region instrument produces wire-equivalent PS1M to the
-            // direct binding so existing sequences re-export byte-for-byte
-            // identically.
+            // Phase 1: PS1MusicChannel.Instrument optionally replaces the
+            // direct (AudioClipName + BaseNoteMidi + LoopSample) trio.
+            //
+            // Phase 2 (see docs/handoff-true-sequenced-audio-plan.md):
+            // Multi-region instruments expand to N bindings (one per
+            // PS1SampleRegion) with the region's KeyMin/KeyMax becoming
+            // the binding's MidiNoteMin/Max. The existing PS1M
+            // pitch-range routing in PS1MSerializer routes each NoteOn
+            // to the matching region. Wire-format unchanged — pure
+            // exporter expansion. PS1MusicSequence.DrumKit similarly
+            // expands kit mappings into bindings on DrumMidiChannel.
             var bindings = new List<PS1MSerializer.ChannelBinding>();
             if (seq.Channels != null)
             {
@@ -1836,13 +1839,6 @@ public static class SceneCollector
                 {
                     if (ch == null) continue;
 
-                    // Resolution: Instrument wins over direct fields when
-                    // both are populated. We log a warning rather than
-                    // GD.PushError so authors can migrate at their own
-                    // pace without breaking the export.
-                    string clipName;
-                    int baseNoteMidi;
-                    bool loopSample;
                     if (ch.Instrument != null)
                     {
                         if (ch.Instrument.Regions == null || ch.Instrument.Regions.Count == 0)
@@ -1850,70 +1846,179 @@ public static class SceneCollector
                             GD.PushError($"[PS1Godot] PS1MusicSequence '{name}': MIDI channel {ch.MidiChannel} references instrument '{ch.Instrument.InstrumentName}' with no regions — skipped. Add at least one PS1SampleRegion to the instrument.");
                             continue;
                         }
-                        var region = ch.Instrument.Regions[0];
-                        if (region == null)
-                        {
-                            GD.PushError($"[PS1Godot] PS1MusicSequence '{name}': MIDI channel {ch.MidiChannel} references instrument '{ch.Instrument.InstrumentName}' whose first region slot is empty — skipped.");
-                            continue;
-                        }
-                        clipName     = region.AudioClipName;
-                        baseNoteMidi = region.RootKey;
-                        loopSample   = region.LoopEnabled;
-
                         if (!string.IsNullOrEmpty(ch.AudioClipName))
                         {
                             GD.PushWarning($"[PS1Godot] PS1MusicSequence '{name}': MIDI channel {ch.MidiChannel} has both Instrument and a direct AudioClipName='{ch.AudioClipName}' — using Instrument. Clear AudioClipName to silence this warning.");
                         }
+
+                        int expandedThisChannel = 0;
+                        for (int ri = 0; ri < ch.Instrument.Regions.Count; ri++)
+                        {
+                            var region = ch.Instrument.Regions[ri];
+                            if (region == null)
+                            {
+                                GD.PushWarning($"[PS1Godot] PS1MusicSequence '{name}': MIDI channel {ch.MidiChannel} instrument '{ch.Instrument.InstrumentName}' region #{ri} is empty — skipped.");
+                                continue;
+                            }
+                            if (string.IsNullOrEmpty(region.AudioClipName))
+                            {
+                                GD.PushWarning($"[PS1Godot] PS1MusicSequence '{name}': MIDI channel {ch.MidiChannel} instrument '{ch.Instrument.InstrumentName}' region #{ri} has no AudioClipName — skipped.");
+                                continue;
+                            }
+                            if (!clipIndexByName.TryGetValue(region.AudioClipName, out int regionClipIdx))
+                            {
+                                GD.PushError($"[PS1Godot] PS1MusicSequence '{name}': instrument '{ch.Instrument.InstrumentName}' region #{ri} references unknown audio clip '{region.AudioClipName}'.");
+                                continue;
+                            }
+                            // Collision flag: regions only back SPU-routed
+                            // clips. XA streams the disc bus directly,
+                            // CDDA bypasses SPU entirely — sequencer
+                            // can't drive either.
+                            byte regionRouting = data.AudioClips[regionClipIdx].Routing;
+                            if (regionRouting != 0)
+                            {
+                                string routeName = regionRouting == 1 ? "XA" : (regionRouting == 2 ? "CDDA" : $"unknown({regionRouting})");
+                                GD.PushError($"[PS1Godot] PS1MusicSequence '{name}': instrument '{ch.Instrument.InstrumentName}' region #{ri} clip '{region.AudioClipName}' is Route={routeName} — instrument regions only back SPU-routed clips. Skipped.");
+                                continue;
+                            }
+
+                            // Intersect the region's key range with the
+                            // channel's MidiNoteMin/Max filter. If the
+                            // intersection is empty, this region won't
+                            // catch any notes from this channel — skip
+                            // with a warning so authors can spot
+                            // miswired key ranges.
+                            int keyMin = System.Math.Max(ch.MidiNoteMin, region.KeyMin);
+                            int keyMax = System.Math.Min(ch.MidiNoteMax, region.KeyMax);
+                            if (keyMin > keyMax)
+                            {
+                                GD.PushWarning($"[PS1Godot] PS1MusicSequence '{name}': instrument '{ch.Instrument.InstrumentName}' region #{ri} key range [{region.KeyMin}-{region.KeyMax}] doesn't overlap channel filter [{ch.MidiNoteMin}-{ch.MidiNoteMax}] — region won't play.");
+                                continue;
+                            }
+
+                            // Combine channel + region mix. Volume is
+                            // multiplicative (both 0-127, normalised by
+                            // /127). Pan is additive offset from centre
+                            // (region.Pan - 64), clamped.
+                            int combVol = (ch.Volume * region.Volume) / 127;
+                            int combPan = System.Math.Clamp(ch.Pan + (region.Pan - 64), 0, 127);
+
+                            bindings.Add(new PS1MSerializer.ChannelBinding
+                            {
+                                MidiChannel    = ch.MidiChannel,
+                                MidiTrackIndex = ch.MidiTrackIndex,
+                                MidiNoteMin    = keyMin,
+                                MidiNoteMax    = keyMax,
+                                AudioClipIndex = regionClipIdx,
+                                BaseNoteMidi   = region.RootKey,
+                                Volume         = combVol,
+                                Pan            = combPan,
+                                LoopSample     = region.LoopEnabled,
+                                Percussion     = ch.Percussion,
+                            });
+                            expandedThisChannel++;
+                        }
+                        if (expandedThisChannel == 0)
+                        {
+                            GD.PushError($"[PS1Godot] PS1MusicSequence '{name}': MIDI channel {ch.MidiChannel} instrument '{ch.Instrument.InstrumentName}' produced 0 valid bindings — channel is silent.");
+                        }
                     }
                     else
                     {
-                        clipName     = ch.AudioClipName;
-                        baseNoteMidi = ch.BaseNoteMidi;
-                        loopSample   = ch.LoopSample;
-                    }
-
-                    if (string.IsNullOrEmpty(clipName))
-                    {
-                        GD.PushWarning($"[PS1Godot] PS1MusicSequence '{name}': MIDI channel {ch.MidiChannel} has no AudioClipName — skipped.");
-                        continue;
-                    }
-                    if (!clipIndexByName.TryGetValue(clipName, out int clipIdx))
-                    {
-                        GD.PushError($"[PS1Godot] PS1MusicSequence '{name}': MIDI channel {ch.MidiChannel} references unknown audio clip '{clipName}'. Add it to PS1Scene.AudioClips.");
-                        continue;
-                    }
-
-                    // Plan collision flag: instrument regions can only
-                    // back SPU-routed clips. XA streams off the disc bus
-                    // through xaaudio.cpp, not the SPU voice path the
-                    // sequencer drives — pointing an instrument at an XA
-                    // clip would silently produce nothing. CDDA is even
-                    // further removed (red-book audio bypasses the SPU
-                    // voice path entirely).
-                    if (ch.Instrument != null)
-                    {
-                        byte routing = data.AudioClips[clipIdx].Routing;
-                        if (routing != 0)
+                        // Legacy path — direct AudioClipName binding,
+                        // wire-equivalent to pre-Phase 1 behaviour.
+                        if (string.IsNullOrEmpty(ch.AudioClipName))
                         {
-                            string routeName = routing == 1 ? "XA" : (routing == 2 ? "CDDA" : $"unknown({routing})");
-                            GD.PushError($"[PS1Godot] PS1MusicSequence '{name}': instrument '{ch.Instrument.InstrumentName}' first region references audio clip '{clipName}' with Route={routeName} — instrument regions only back SPU-routed clips. Skipped.");
+                            GD.PushWarning($"[PS1Godot] PS1MusicSequence '{name}': MIDI channel {ch.MidiChannel} has no AudioClipName — skipped.");
                             continue;
                         }
+                        if (!clipIndexByName.TryGetValue(ch.AudioClipName, out int clipIdx))
+                        {
+                            GD.PushError($"[PS1Godot] PS1MusicSequence '{name}': MIDI channel {ch.MidiChannel} references unknown audio clip '{ch.AudioClipName}'. Add it to PS1Scene.AudioClips.");
+                            continue;
+                        }
+                        bindings.Add(new PS1MSerializer.ChannelBinding
+                        {
+                            MidiChannel    = ch.MidiChannel,
+                            MidiTrackIndex = ch.MidiTrackIndex,
+                            MidiNoteMin    = ch.MidiNoteMin,
+                            MidiNoteMax    = ch.MidiNoteMax,
+                            AudioClipIndex = clipIdx,
+                            BaseNoteMidi   = ch.BaseNoteMidi,
+                            Volume         = ch.Volume,
+                            Pan            = ch.Pan,
+                            LoopSample     = ch.LoopSample,
+                            Percussion     = ch.Percussion,
+                        });
                     }
+                }
+            }
+
+            // Phase 2: drum kit expansion. Each kit mapping becomes a
+            // binding on the drum MIDI channel with a single-note
+            // MidiNoteMin == MidiNoteMax filter and Percussion=true so
+            // the runtime doesn't pitch-shift the sample. Choke groups
+            // and per-drum priority are tracked on the kit but unused
+            // by the runtime today (Phase 2.5+ work — needs a runtime
+            // voice scanner to silence matching-group voices on hit).
+            if (seq.DrumKit != null && seq.DrumMidiChannel >= 0)
+            {
+                var kit = seq.DrumKit;
+                int kitChan = seq.DrumMidiChannel;
+                int kitN = kit.MidiNotes?.Count ?? 0;
+                if (kitN == 0)
+                {
+                    GD.PushWarning($"[PS1Godot] PS1MusicSequence '{name}': DrumKit '{kit.KitName}' has no MidiNotes mappings — drum channel {kitChan} will be silent.");
+                }
+                int kitExpanded = 0;
+                for (int i = 0; i < kitN; i++)
+                {
+                    int note = kit.MidiNotes![i];
+                    if (note < 0 || note > 127)
+                    {
+                        GD.PushError($"[PS1Godot] PS1MusicSequence '{name}': DrumKit '{kit.KitName}' mapping #{i} note={note} is out of range [0-127] — skipped.");
+                        continue;
+                    }
+                    string drumClip = (kit.AudioClipNames != null && i < kit.AudioClipNames.Count) ? kit.AudioClipNames[i] : "";
+                    if (string.IsNullOrEmpty(drumClip))
+                    {
+                        GD.PushWarning($"[PS1Godot] PS1MusicSequence '{name}': DrumKit '{kit.KitName}' note {note} has no AudioClipName — skipped.");
+                        continue;
+                    }
+                    if (!clipIndexByName.TryGetValue(drumClip, out int drumClipIdx))
+                    {
+                        GD.PushError($"[PS1Godot] PS1MusicSequence '{name}': DrumKit '{kit.KitName}' note {note} references unknown audio clip '{drumClip}'.");
+                        continue;
+                    }
+                    byte drumRouting = data.AudioClips[drumClipIdx].Routing;
+                    if (drumRouting != 0)
+                    {
+                        string routeName = drumRouting == 1 ? "XA" : (drumRouting == 2 ? "CDDA" : $"unknown({drumRouting})");
+                        GD.PushError($"[PS1Godot] PS1MusicSequence '{name}': DrumKit '{kit.KitName}' note {note} clip '{drumClip}' is Route={routeName} — drum mappings only back SPU-routed clips. Skipped.");
+                        continue;
+                    }
+
+                    int drumVol = (kit.Volumes != null && i < kit.Volumes.Count) ? kit.Volumes[i] : 100;
+                    int drumPan = (kit.Pans != null && i < kit.Pans.Count) ? kit.Pans[i] : 64;
 
                     bindings.Add(new PS1MSerializer.ChannelBinding
                     {
-                        MidiChannel = ch.MidiChannel,
-                        MidiTrackIndex = ch.MidiTrackIndex,
-                        MidiNoteMin = ch.MidiNoteMin,
-                        MidiNoteMax = ch.MidiNoteMax,
-                        AudioClipIndex = clipIdx,
-                        BaseNoteMidi = baseNoteMidi,
-                        Volume = ch.Volume,
-                        Pan = ch.Pan,
-                        LoopSample = loopSample,
-                        Percussion = ch.Percussion,
+                        MidiChannel    = kitChan,
+                        MidiTrackIndex = -1,             // any track — drums are typically on one channel across all tracks
+                        MidiNoteMin    = note,
+                        MidiNoteMax    = note,
+                        AudioClipIndex = drumClipIdx,
+                        BaseNoteMidi   = note,           // BaseNoteMidi == note + Percussion=true → no pitch shift
+                        Volume         = drumVol,
+                        Pan            = drumPan,
+                        LoopSample     = false,          // drums never loop
+                        Percussion     = true,
                     });
+                    kitExpanded++;
+                }
+                if (kitExpanded > 0)
+                {
+                    GD.Print($"[PS1Godot] PS1MusicSequence '{name}': expanded DrumKit '{kit.KitName}' on MIDI channel {kitChan} into {kitExpanded} binding(s).");
                 }
             }
             if (bindings.Count == 0)

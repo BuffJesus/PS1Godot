@@ -70,32 +70,69 @@ to today.
 using instruments produce identical PS1M bytes to the equivalent direct
 binding.
 
-## Phase 2 — Multi-region keymaps + program changes + drum kits (§21 steps 4-5)
+## Phase 2 — Multi-region keymaps + drum kits via exporter expansion
 
-This is the format change. Group steps 4 and 5 into one **splashpack v28** bump.
+**Status (shipped):** simplified slice that delivers multi-region keymaps
++ drum kits without any format change. Original Phase 2's runtime
+instrument bank + program changes were deferred to Phase 2.5.
 
-- New PS1M2 sequence format (or in-place: bump magic `PS1M` → `PS2M`, add
-  `instrumentBankOffset` to header) — recommend a sibling format because
-  `MusicSequenceHeader` is 16 bytes load-bearing (`musicsequencer.hh:19`). Add:
-  - Instrument bank table per sequence (Instruments[], Regions[], DrumKits[]).
-  - Channel entries gain `programId` instead of (or alongside) raw
-    `audioClipIndex`.
-  - Event kinds 4 (ProgramChange), 5 (PitchBend), 7 (Controller), 8 (Marker),
-    9 (LoopStart), 10 (LoopEnd) per strategy §5.2.
+The simplification: `PS1MSerializer` already routes per-note via
+`MidiNoteMin/MidiNoteMax + MidiChannel + MidiTrackIndex` filters
+(`PS1MSerializer.cs:166-187`). So a multi-region instrument expands at
+export time into one `ChannelBinding` per region, with each binding's
+`MidiNoteMin/Max` taken from the region's `KeyMin/KeyMax`. The
+existing per-note router picks the right region. Pure exporter
+expansion — runtime, splashpack format, and PS1M wire format are all
+unchanged.
+
+Drum kits expand the same way: one binding per kit mapping with
+`MidiNoteMin == MidiNoteMax == kit-mapping note`, `Percussion=true`
+to inhibit pitch shift, `MidiChannel = PS1MusicSequence.DrumMidiChannel`
+(default 9 = GM convention). Choke groups and per-drum priority stay on
+the kit resource but the runtime ignores them today (Phase 2.5+).
+
+Voice budget caveat: a 4-region instrument used on one MIDI channel
+reserves 4 SPU voices, not 1. The Phase 0 voice-pressure diagnostics
+already count post-expansion bindings, so the warnings still fire
+correctly.
+
+## Phase 2.5 — Program changes + scene-wide instrument bank (deferred)
+
+The original Phase 2 plan (instrument bank in the splashpack header,
+PS1M2 sibling format with new event kinds, runtime
+channel→program→instrument resolution) is still the right move when
+program changes start mattering — typically when a scene wants the same
+sample bank reused across multiple sequences (one town theme + one
+battle theme + one fanfare, all using the same 8-instrument bank
+without duplicating samples in the SPU).
+
+When this lands:
+
+- New PS1M2 sequence format (sibling magic `PS2M`) because
+  `MusicSequenceHeader` is 16 bytes load-bearing
+  (`musicsequencer.hh:19`). Add:
+  - Per-sequence channel→program table.
+  - Event kinds 4 (ProgramChange), 5 (PitchBend), 7 (Controller),
+    8 (Marker), 9 (LoopStart), 10 (LoopEnd) per strategy §5.2.
+- Splashpack header: bump version 27→28; add Instrument/Region/DrumKit
+  table offsets in `SPLASHPACKFileHeader` (`splashpack.cpp:21-123`).
+  Loader (`splashpack.cpp:154`) raises minimum to 28.
 - Runtime (`musicsequencer.cpp`): teach `dispatchEvent` the new kinds;
-  `noteOn` resolves channel→program→instrument→region→clip; pitch shift uses
-  `note - region.RootKey` instead of `note - cfg.baseNoteMidi` at `:243`.
-- Splashpack header: bump version 27→28; add `static_assert` for new size; add
-  Instrument/Region/DrumKit table offsets in `SPLASHPACKFileHeader`
-  (`splashpack.cpp:21-123`). Loader (`splashpack.cpp:154`) raises minimum to
-  28; writer (`SplashpackWriter.cs:391` `WriteMusicSection`) emits both old
-  and new tables for one transitional version, then drops the old.
+  `noteOn` resolves channel→program→instrument→region→clip; pitch
+  shift uses `note - region.RootKey` instead of
+  `note - cfg.baseNoteMidi` at `:243`.
 
-**Green-build checkpoint:** `PS1MusicSequence` assets re-export and play;
-sequences using only one-region instruments produce wire-equivalent runtime
-behaviour.
+**Green-build checkpoint:** `PS1MusicSequence` assets re-export and
+play; sequences using only one-region instruments produce
+wire-equivalent runtime behaviour.
 
 ## Phase 3 — ADSR + loop metadata wired to SPU hardware (§21 step 6)
+
+Depends on Phase 2.5 (format bump) — `MusicChannelEntry` is 8 bytes
+load-bearing today with no room to pack per-region ADSR overrides.
+Once PS1M2 ships, region records carry their own ADSR fields and
+this phase becomes "stop using `DEFAULT_ADSR` at
+`audiomanager.cpp:170`; read from the region instead."
 
 Hardware ADSR is already free — it's a 32-bit register pair
 (`audiomanager.hh:14` `DEFAULT_ADSR=0x000A000F`, written at
@@ -175,13 +212,28 @@ top of PS1M2; defer.
   globals. `Music`, `Sound`, `Audio` are all C-side `setGlobal` registrations,
   not author-side state. Safe.
 
-## What to ship first
+## Shipped to date (2026-04-26)
 
-Land Phase 0 as one commit: stale-comment fixes, exporter diagnostics, three
-scaffold-only `[GlobalClass]` resources (`PS1Instrument`, `PS1SampleRegion`,
-`PS1DrumKit`), exporter warnings for the six conditions in strategy §19, and
-a doc append to `docs/sequenced-music-format.md` linking the strategy. Zero
-runtime change, zero format bump, zero risk to existing scenes — but the
-scaffold gives Phase 1 something to build on without re-litigating the data
-model. Phase 1 (one-region instruments wired through the exporter, still
-emitting v27 PS1M) is the second commit.
+- **Phase 0** (commit `92a925b`): scaffold resources, exporter
+  diagnostics, stale-comment fixes.
+- **Phase 1** (commit `11a28eb`): single-region instrument data path
+  via optional `PS1MusicChannel.Instrument`, byte-equivalent to
+  legacy direct binding for the no-instrument case.
+- **Phase 2** (this commit): multi-region instrument expansion + drum
+  kit expansion in the exporter. No format bump — leans on the
+  existing per-note `MidiNoteMin/Max` router. Choke groups + per-drum
+  priority stored on `PS1DrumKit` but ignored by the runtime today.
+
+## What to ship next
+
+Phase 2.5 (program changes + scene-wide instrument bank, splashpack
+v28) only when there's a concrete need — a scene with multiple
+sequences sharing one instrument bank, or a sequence whose source MIDI
+relies on program-change events to swap timbres. Until then, the
+exporter expansion path covers the authoring use cases without paying
+the format-bump cost.
+
+Phases 4 (voice allocator) and 5 (Sound.PlayMacro / Sound.PlayFamily)
+are independent of the format bump and can land any time. Phase 4 is a
+runtime-only change to AudioManager; Phase 5 is a new Lua global plus
+two scaffold resource types.
