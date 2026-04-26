@@ -152,42 +152,37 @@ public static class PsxAvEnc
 
         try
         {
+            GD.Print($"[PsxAvEnc] '{clipName}': writing WAV ({pcm.Length} samples @ {sourceRate}Hz) -> {wavPath}");
             WriteMonoWav(wavPath, pcm, sourceRate);
-            using var p = new Process();
-            p.StartInfo.FileName = probe.Path!;
-            // -q suppresses progress messages; smaller pipe-buffer load
-            // makes deadlocks impossible regardless of stream-read order.
-            p.StartInfo.Arguments = $"-q -t xa -f {xaRate} -b 4 -c {channels} -F 0 -C 0 \"{wavPath}\" \"{xaPath}\"";
-            p.StartInfo.UseShellExecute = false;
-            p.StartInfo.RedirectStandardInput = true;   // close immediately; psxavenc shouldn't block on stdin but be safe
-            p.StartInfo.RedirectStandardError = true;
-            p.StartInfo.RedirectStandardOutput = true;
-            p.StartInfo.CreateNoWindow = true;
-            p.Start();
-            p.StandardInput.Close();
-            // Drain both streams concurrently. ReadToEnd in series can
-            // deadlock if the child fills one pipe buffer (~4 KB on
-            // Windows) while we're blocked reading the other — for
-            // long XA clips psxavenc emits enough text to hit that
-            // limit, which is what froze the export at clip 8 of 23.
-            var stdoutTask = System.Threading.Tasks.Task.Run(() => p.StandardOutput.ReadToEnd());
-            var stderrTask = System.Threading.Tasks.Task.Run(() => p.StandardError.ReadToEnd());
-            if (!p.WaitForExit(15_000))
+            long wavSize = new FileInfo(wavPath).Length;
+            GD.Print($"[PsxAvEnc] '{clipName}': WAV written ({wavSize} B). Spawning psxavenc -> {xaPath}");
+
+            // Switched from System.Diagnostics.Process to Godot's
+            // OS.Execute — same code path used by the rest of the
+            // plugin's shell-outs (build-psxsplash.cmd etc.) and avoids
+            // a hang we saw with Process.Start in [Tool] context where
+            // the export froze on the first XA-routed clip.
+            var output = new Godot.Collections.Array();
+            string args = $"-q -t xa -f {xaRate} -b 4 -c {channels} -F 0 -C 0 \"{wavPath}\" \"{xaPath}\"";
+            GD.Print($"[PsxAvEnc] cmd: {probe.Path} {args}");
+            int exit = OS.Execute(probe.Path!,
+                new[] { "-q", "-t", "xa", "-f", xaRate.ToString(), "-b", "4",
+                        "-c", channels.ToString(), "-F", "0", "-C", "0",
+                        wavPath, xaPath },
+                output, /* readStderr */ true);
+            foreach (var line in output)
             {
-                p.Kill();
-                GD.PushWarning($"[PS1Godot] XA convert '{clipName}': psxavenc timed out (>15s).");
+                string text = line.AsString().TrimEnd('\r', '\n');
+                if (text.Length > 0) GD.Print($"[psxavenc] {text}");
+            }
+            if (exit != 0 || !File.Exists(xaPath))
+            {
+                GD.PushWarning($"[PS1Godot] XA convert '{clipName}': psxavenc exit {exit}.");
                 return null;
             }
-            string stdoutText = stdoutTask.Result;
-            string stderrText = stderrTask.Result;
-            if (p.ExitCode != 0 || !File.Exists(xaPath))
-            {
-                GD.PushWarning(
-                    $"[PS1Godot] XA convert '{clipName}': psxavenc exit {p.ExitCode}. " +
-                    $"stderr: {stderrText.Trim()} stdout: {stdoutText.Trim()}");
-                return null;
-            }
-            return File.ReadAllBytes(xaPath);
+            byte[] result = File.ReadAllBytes(xaPath);
+            GD.Print($"[PsxAvEnc] '{clipName}': psxavenc OK ({result.Length} B XA).");
+            return result;
         }
         catch (Exception ex)
         {
