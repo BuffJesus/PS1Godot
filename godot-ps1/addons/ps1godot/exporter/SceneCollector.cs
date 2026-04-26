@@ -1630,11 +1630,15 @@ public static class SceneCollector
 
     private static void CollectAudioClips(PS1Scene scene, SceneData data)
     {
+        GD.Print("[CollectAudioClips] BUILD-TAG-2026-04-26-A enter");  // verify fresh DLL
         if (scene.AudioClips == null) return;
         var seen = new HashSet<string>();
         int xaCount = 0;
+        int iter = -1;
         foreach (var clip in scene.AudioClips)
         {
+            iter++;
+            GD.Print($"[CollectAudioClips] iter={iter} stream={(clip?.Stream?.ResourcePath ?? "<null>")}");
             if (clip == null || clip.Stream == null)
             {
                 GD.PushWarning("[PS1Godot] PS1Scene.AudioClips has an empty slot or a clip with no Stream — skipping.");
@@ -1662,7 +1666,9 @@ public static class SceneCollector
                 continue;
             }
 
+            GD.Print($"[CollectAudioClips]   '{name}': reading PCM…");
             short[] pcm = ReadAudioStreamAsMono16(wav);
+            GD.Print($"[CollectAudioClips]   '{name}': PCM ok ({pcm.Length} samples). encoding ADPCM…");
             if (pcm.Length == 0)
             {
                 GD.PushWarning($"[PS1Godot] Audio clip '{name}' has no sample data — skipping.");
@@ -1670,9 +1676,11 @@ public static class SceneCollector
             }
 
             byte[] adpcm = ADPCMEncoder.Encode(pcm, clip.Loop);
+            GD.Print($"[CollectAudioClips]   '{name}': ADPCM ok ({adpcm.Length} B). resolving route…");
             ushort rate = (ushort)Mathf.Clamp(wav.MixRate, 1000, 44100);
             byte resolvedRoute = ResolveAudioRoute(clip.Route, adpcm.Length, clip.Loop);
             if (resolvedRoute == 1) xaCount++;
+            GD.Print($"[CollectAudioClips]   '{name}': route={resolvedRoute}");
 
             // v27: when an XA clip is resolved AND psxavenc is available,
             // run the conversion now so the splashpack writer can stamp
@@ -1682,7 +1690,9 @@ public static class SceneCollector
             byte[]? xaPayload = null;
             if (resolvedRoute == 1)
             {
+                GD.Print($"[CollectAudioClips]   '{name}': calling PsxAvEnc.ConvertWavToXa…");
                 xaPayload = PsxAvEnc.ConvertWavToXa(pcm, rate, 1, name);
+                GD.Print($"[CollectAudioClips]   '{name}': ConvertWavToXa returned ({(xaPayload?.Length.ToString() ?? "null")} bytes)");
             }
 
             string routeLabel = resolvedRoute switch

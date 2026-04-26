@@ -61,27 +61,13 @@ public static class PsxAvEnc
 
     private static Probe ProbeBinary(string path, string source)
     {
-        try
-        {
-            using var p = new Process();
-            p.StartInfo.FileName = path;
-            p.StartInfo.Arguments = "-h";  // psxavenc prints usage banner with version
-            p.StartInfo.UseShellExecute = false;
-            p.StartInfo.RedirectStandardError = true;
-            p.StartInfo.RedirectStandardOutput = true;
-            p.StartInfo.CreateNoWindow = true;
-            p.Start();
-            string banner = p.StandardError.ReadToEnd() + p.StandardOutput.ReadToEnd();
-            p.WaitForExit(2000);
-            // banner first line is usually "psxavenc <version>"; just keep first 80 chars
-            string version = banner.Split('\n', 2)[0].Trim();
-            if (version.Length > 80) version = version[..80];
-            return new Probe(true, path, version, source, null);
-        }
-        catch (Exception ex)
-        {
-            return new Probe(false, path, null, source, $"psxavenc launch failed: {ex.Message}");
-        }
+        // Used to spawn `psxavenc -h` to capture the version banner, but
+        // System.Diagnostics.Process running synchronously in Godot's
+        // [Tool] context plus psxavenc's >4 KB help output deadlocked
+        // ConvertWavToXa on every export. We don't actually need the
+        // version string — File.Exists already proved the binary is
+        // there. Treat any reachable file as available.
+        return new Probe(true, path, "<banner skipped>", source, null);
     }
 
     // One-shot reporter — called from SceneCollector when any clip in
