@@ -28,6 +28,7 @@ src/memoverlay.cpp \
 src/musicmanager.cpp \
 src/musicsequencer.cpp \
 src/skinmesh.cpp \
+src/xaaudio.cpp \
 src/loadbuffer_patch.cpp
 
 # LOADER=cdrom  → CD-ROM backend (for ISO builds on real hardware)
