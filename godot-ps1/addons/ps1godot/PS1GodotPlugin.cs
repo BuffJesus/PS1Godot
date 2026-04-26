@@ -311,13 +311,18 @@ public partial class PS1GodotPlugin : EditorPlugin
     {
         GD.Print("[PS1Godot] XA-routed clips detected — switching to CD-ROM ISO run mode.");
 
-        // 1. Ensure the CDROM-loader runtime exists. Build only when
-        //    missing; the user can manually re-run scripts/build-
-        //    psxsplash-cdrom.cmd to refresh after source edits.
+        // 1. Ensure the CDROM-loader runtime exists AND is newer than
+        //    every psxsplash-main source file. The build script does
+        //    `make clean` so re-running it costs ~30 s; we only do it
+        //    when sources actually changed.
         string cdromExe = System.IO.Path.Combine(buildDir, "psxsplash-cdrom.ps-exe");
-        if (!System.IO.File.Exists(cdromExe))
+        bool needsBuild = !System.IO.File.Exists(cdromExe) || IsCdromBuildStale(cdromExe);
+        if (needsBuild)
         {
-            GD.Print("[PS1Godot] CDROM-loader runtime missing — building (this clears the PCdrv build cache)…");
+            string reason = !System.IO.File.Exists(cdromExe)
+                ? "CDROM-loader runtime missing"
+                : "CDROM-loader runtime older than psxsplash sources";
+            GD.Print($"[PS1Godot] {reason} — rebuilding (this clears the PCdrv build cache)…");
             int code = RunScript("scripts/build-psxsplash-cdrom.cmd", "Build psxsplash CDROM");
             if (code != 0)
             {
@@ -347,6 +352,33 @@ public partial class PS1GodotPlugin : EditorPlugin
         }
         GD.Print("[PS1Godot] Launching PCSX-Redux (CD-ROM ISO mode)…");
         OS.CreateProcess("cmd.exe", new[] { "/c", isoLauncher });
+    }
+
+    // True if any psxsplash-main/src/*.{cpp,hh,h} or the Makefile is
+    // newer than the cached CDROM binary. Walking src/ takes <50 ms
+    // even on a cold filesystem; checking on every Run-on-PSX click is
+    // cheap, and the false-negative cost (running with stale runtime)
+    // is high — silent XA misbehavior, hard to debug.
+    private static bool IsCdromBuildStale(string cdromExe)
+    {
+        var binStamp = System.IO.File.GetLastWriteTimeUtc(cdromExe);
+        string srcDir = System.IO.Path.Combine(RepoRoot(), "psxsplash-main", "src");
+        if (!System.IO.Directory.Exists(srcDir)) return false;
+        try
+        {
+            foreach (var path in System.IO.Directory.EnumerateFiles(srcDir, "*.*", System.IO.SearchOption.AllDirectories))
+            {
+                string ext = System.IO.Path.GetExtension(path).ToLowerInvariant();
+                if (ext != ".cpp" && ext != ".hh" && ext != ".h") continue;
+                if (System.IO.File.GetLastWriteTimeUtc(path) > binStamp) return true;
+            }
+            // Makefile changes (LOADER guards, sources list) also invalidate.
+            string makefile = System.IO.Path.Combine(RepoRoot(), "psxsplash-main", "Makefile");
+            if (System.IO.File.Exists(makefile)
+                && System.IO.File.GetLastWriteTimeUtc(makefile) > binStamp) return true;
+        }
+        catch { /* unreadable file — fail open, treat as not stale */ }
+        return false;
     }
 
     // Run tools/build_iso/build_iso.py with explicit psxexec override so
