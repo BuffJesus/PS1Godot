@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using Godot;
 
 namespace PS1Godot.Exporter;
@@ -46,13 +47,31 @@ public static class PS1MSerializer
         public required bool Percussion { get; init; }
     }
 
-    // Produce a PS1M blob.  bindings = the user's PS1MusicChannel list
-    // (already resolved against the audio clip table).  loopStartBeat
-    // is in beats (quarter-notes); -1 = no loop.
+    // Produce a PS1M (legacy) or PS2M (Phase 2.5 bank-driven) blob.
+    //
+    //   bindings           = the user's PS1MusicChannel list, already
+    //                        resolved against the audio clip table.
+    //   bpmOverride        = optional tempo override; null uses the
+    //                        source MIDI's first SetTempo meta event.
+    //   loopStartBeat      = in quarter-notes; -1 = no loop.
+    //   channelDefaultPrograms = when non-null, switches the writer to
+    //                        PS2M (magic "PS2M") and emits a u8[N]
+    //                        default-program table after the channel
+    //                        table. Length MUST equal bindings.Count
+    //                        OR be empty (interpreted as "no per-channel
+    //                        default; runtime defaults to 0"). When
+    //                        null, emits legacy PS1M.
+    //   programChanges     = source MIDI's preserved program-change
+    //                        events. Only emitted into the wire stream
+    //                        when channelDefaultPrograms is non-null
+    //                        (PS2M). Pass null OR an empty list to
+    //                        suppress.
     public static byte[] Serialize(MidiParser.ParsedMidi midi,
                                     IReadOnlyList<ChannelBinding> bindings,
                                     int? bpmOverride,
-                                    int loopStartBeat)
+                                    int loopStartBeat,
+                                    IReadOnlyList<byte>? channelDefaultPrograms = null,
+                                    IReadOnlyList<MidiParser.MidiProgramChangeEvent>? programChanges = null)
     {
         if (bindings.Count == 0)
             throw new InvalidOperationException("PS1MSerializer needs at least one channel binding.");
@@ -233,6 +252,40 @@ public static class PS1MSerializer
             events.Add(EncodeEvent(Rescale(n.AbsoluteTick), (byte)packed, kind, n.Note, n.Velocity));
         }
 
+        // PS2M only: inject ProgramChange events (kind=4) into the
+        // event stream. One source MIDI ProgramChange fans out to one
+        // event per binding listening on that MIDI channel — runtime
+        // m_channels state is indexed by runtime channel, not by source
+        // MIDI channel, so each binding tracks its own currentProgram.
+        bool emitPS2M = channelDefaultPrograms != null;
+        if (emitPS2M && programChanges != null && programChanges.Count > 0)
+        {
+            foreach (var pc in programChanges)
+            {
+                for (int i = 0; i < bindings.Count; i++)
+                {
+                    if (bindings[i].MidiChannel != pc.Channel) continue;
+                    // Track filter applies the same way as NoteOn: a
+                    // track-specific binding only catches program
+                    // changes from its track; a wildcard binding (-1)
+                    // catches all.
+                    if (bindings[i].MidiTrackIndex >= 0
+                        && bindings[i].MidiTrackIndex != pc.Track) continue;
+                    events.Add(EncodeEvent(Rescale(pc.AbsoluteTick), (byte)i, (byte)4, pc.Program, 0));
+                }
+            }
+            // Re-sort so kind=4 events interleave correctly with note
+            // events. Decode each event's first 4 bytes as little-
+            // endian tick, sort by that. Stable sort preserves
+            // declaration order at ties so NoteOff-before-NoteOn (same
+            // tick) is preserved.
+            events = events
+                .Select((bytes, idx) => new { bytes, tick = (uint)(bytes[0] | (bytes[1] << 8) | (bytes[2] << 16) | (bytes[3] << 24)), idx })
+                .OrderBy(x => x.tick).ThenBy(x => x.idx)
+                .Select(x => x.bytes)
+                .ToList();
+        }
+
         if (events.Count == 0)
             throw new InvalidOperationException(
                 "PS1MSerializer: parsed MIDI has no playable notes (after channel filtering). Check the MIDI channel bindings.");
@@ -243,7 +296,7 @@ public static class PS1MSerializer
         // warning. Fail loud instead with an actionable message.
         if (events.Count > ushort.MaxValue)
             throw new InvalidOperationException(
-                $"PS1MSerializer: {events.Count} events exceeds the PS1M format's u16 event-count limit ({ushort.MaxValue}). Split the sequence into shorter segments or drop some channels.");
+                $"PS1MSerializer: {events.Count} events exceeds the format's u16 event-count limit ({ushort.MaxValue}). Split the sequence into shorter segments or drop some channels.");
 
         // Convert loopStartBeat → loopStartTick. -1 → 0xFFFFFFFF (no loop).
         // Rescale through the tempo map so "beat N" lands at the same
@@ -256,8 +309,17 @@ public static class PS1MSerializer
         using var ms = new MemoryStream();
         using var w = new BinaryWriter(ms);
 
-        // Header (16 bytes).
-        w.Write((byte)'P'); w.Write((byte)'S'); w.Write((byte)'1'); w.Write((byte)'M');
+        // Header (16 bytes). Magic differs PS1M / PS2M; the rest of
+        // the header is identical so the runtime parser can share the
+        // 16-byte struct read.
+        if (emitPS2M)
+        {
+            w.Write((byte)'P'); w.Write((byte)'S'); w.Write((byte)'2'); w.Write((byte)'M');
+        }
+        else
+        {
+            w.Write((byte)'P'); w.Write((byte)'S'); w.Write((byte)'1'); w.Write((byte)'M');
+        }
         w.Write((ushort)bpm);
         w.Write((ushort)tpq);
         w.Write((byte)bindings.Count);
@@ -278,6 +340,23 @@ public static class PS1MSerializer
             w.Write((byte)Math.Clamp(b.Pan, 0, 127));
             w.Write(flags);
             w.Write((ushort)0);                   // pad
+        }
+
+        // PS2M only: u8[N] default-program table, padded to 4-byte
+        // alignment. Caller supplies one entry per binding (or empty
+        // → all 0). When the runtime parses this, each channel state
+        // gets its currentProgram seeded at sequence start.
+        if (emitPS2M)
+        {
+            int n = bindings.Count;
+            for (int i = 0; i < n; i++)
+            {
+                byte prog = 0;
+                if (channelDefaultPrograms!.Count > i) prog = channelDefaultPrograms[i];
+                w.Write(prog);
+            }
+            int pad = ((n + 3) & ~3) - n;
+            for (int p = 0; p < pad; p++) w.Write((byte)0);
         }
 
         // Events (8 bytes each), already encoded.

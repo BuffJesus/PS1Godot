@@ -5,10 +5,29 @@
 namespace psxsplash {
 
 class AudioManager;
+struct SPLASHPACKInstrumentRecord;
+struct SPLASHPACKRegionRecord;
+struct SPLASHPACKDrumKitRecord;
+struct SPLASHPACKDrumMappingRecord;
 
 // On-disk format — see docs/sequenced-music-format.md.
+//
+// Two magic values are accepted:
+//   "PS1M" — legacy format. Channel direct-binding: each channel
+//            entry's audioClipIndex selects the SPU sample. Pitch
+//            shift derived from baseNoteMidi.
+//   "PS2M" — bank-driven format (Phase 2.5). Same 16-byte header,
+//            same ChannelEntry layout, BUT followed by a parallel
+//            u8[channelCount] default-program table (ProgramId per
+//            channel at sequence start). Plus event kind 4
+//            (ProgramChange) is valid; the runtime swaps the
+//            channel's current program mid-sequence and routes
+//            NoteOn through the scene-wide instrument bank
+//            (SPLASHPACKInstrumentRecord / SPLASHPACKRegionRecord
+//            in splashpack.hh) instead of the channel entry's
+//            audioClipIndex.
 struct MusicSequenceHeader {
-    char magic[4];          // "PS1M"
+    char magic[4];          // "PS1M" or "PS2M"
     uint16_t bpm;
     uint16_t ticksPerBeat;
     uint8_t channelCount;
@@ -44,6 +63,21 @@ static_assert(sizeof(MusicEvent) == 8, "MusicEvent must be 8 bytes");
 class MusicSequencer {
 public:
     void init(AudioManager *audio);
+
+    // v28+: hand the scene-wide instrument bank (loaded by
+    // SplashPackLoader into SplashpackSceneSetup) to the sequencer so
+    // PS2M sequences can resolve channel→program→instrument→region→clip
+    // at NoteOn time. Pass nullptr/0 for scenes without a bank — PS2M
+    // sequences then fall back to the legacy ChannelEntry.audioClipIndex
+    // path. PS1M sequences ignore the bank regardless.
+    void setBank(const SPLASHPACKInstrumentRecord*  instruments,
+                 uint16_t                           instrumentCount,
+                 const SPLASHPACKRegionRecord*      regions,
+                 uint16_t                           regionCount,
+                 const SPLASHPACKDrumKitRecord*     drumKits,
+                 uint16_t                           drumKitCount,
+                 const SPLASHPACKDrumMappingRecord* drumMappings,
+                 uint16_t                           drumMappingCount);
 
     // Bind a sequence loaded from the splashpack. Pointer must remain
     // valid for the sequence's lifetime (lives in splashpack data).
@@ -82,6 +116,11 @@ private:
         const MusicSequenceHeader *header;
         const MusicChannelEntry *channels;
         const MusicEvent *events;
+        // PS2M-only: parallel u8[channelCount] table sitting between
+        // channels and events, holding each channel's default ProgramId
+        // at sequence start. Null for PS1M sequences.
+        const uint8_t *channelPrograms;
+        bool isPS2M;  // magic was "PS2M" (vs "PS1M")
     };
 
     void dispatchEvent(const MusicEvent &e);
@@ -89,9 +128,27 @@ private:
     void noteOff(uint8_t channel, uint8_t note);
     static uint16_t pitchForOffset(int semitoneOffset);
 
+    // PS2M bank dispatch: walk the scene-wide instrument bank to find
+    // the region matching (channel.currentProgram, note, velocity).
+    // Returns nullptr if no instrument matches the program OR no
+    // region matches the (note, velocity) within the picked instrument.
+    const SPLASHPACKRegionRecord* resolveBankRegion(uint8_t programId, uint8_t note, uint8_t velocity) const;
+
     AudioManager *m_audio = nullptr;
     Sequence m_sequences[MAX_SEQUENCES] = {};
     int m_sequenceCount = 0;
+
+    // v28+: scene-wide instrument bank, set by SceneManager via
+    // setBank() at scene init. nullptr → no bank for this scene; PS2M
+    // sequences fall back to legacy direct-binding.
+    const SPLASHPACKInstrumentRecord*  m_bankInstruments = nullptr;
+    const SPLASHPACKRegionRecord*      m_bankRegions = nullptr;
+    const SPLASHPACKDrumKitRecord*     m_bankDrumKits = nullptr;
+    const SPLASHPACKDrumMappingRecord* m_bankDrumMappings = nullptr;
+    uint16_t m_bankInstrumentCount = 0;
+    uint16_t m_bankRegionCount = 0;
+    uint16_t m_bankDrumKitCount = 0;
+    uint16_t m_bankDrumMappingCount = 0;
 
     const Sequence *m_active = nullptr;
     uint32_t m_currentTick = 0;
@@ -101,11 +158,18 @@ private:
 
     // Per-channel state. activeVoice == -1 means the channel has no
     // note playing right now.
+    //
+    // PS2M extras (currentProgram, lastClipIndex) are unused on PS1M
+    // sequences but always live in the struct — keeps the runtime
+    // path branch-free when switching formats and costs 2 bytes per
+    // channel at MAX_CHANNELS=24 → 48 B total. Worth it.
     struct ChannelState {
         int8_t activeVoice;
         uint8_t activeNote;
         uint8_t volume;   // mirrors channel entry, mutable via channelVolume event
         uint8_t pan;
+        uint8_t currentProgram;  // PS2M: the program the channel is currently set to
+        uint8_t lastClipIndex;   // PS2M: clip resolved at the last NoteOn (for pitch reuse)
     };
     ChannelState m_channels[MAX_CHANNELS] = {};
 

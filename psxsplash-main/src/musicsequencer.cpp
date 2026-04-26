@@ -1,6 +1,7 @@
 #include "musicsequencer.hh"
 
 #include "audiomanager.hh"
+#include "splashpack.hh"
 #include "common/hardware/spu.h"
 #include <psyqo/spu.hh>
 #include <psyqo/xprintf.h>
@@ -35,12 +36,66 @@ void MusicSequencer::init(AudioManager *audio) {
     m_subTick12 = 0;
     m_nextEventIdx = 0;
     m_masterVolume = 100;
+    m_bankInstruments = nullptr;
+    m_bankRegions = nullptr;
+    m_bankDrumKits = nullptr;
+    m_bankDrumMappings = nullptr;
+    m_bankInstrumentCount = 0;
+    m_bankRegionCount = 0;
+    m_bankDrumKitCount = 0;
+    m_bankDrumMappingCount = 0;
     for (int i = 0; i < MAX_CHANNELS; i++) {
         m_channels[i].activeVoice = -1;
         m_channels[i].activeNote = 0;
         m_channels[i].volume = 100;
         m_channels[i].pan = 64;
+        m_channels[i].currentProgram = 0;
+        m_channels[i].lastClipIndex = 0;
     }
+}
+
+void MusicSequencer::setBank(const SPLASHPACKInstrumentRecord*  instruments,
+                             uint16_t                           instrumentCount,
+                             const SPLASHPACKRegionRecord*      regions,
+                             uint16_t                           regionCount,
+                             const SPLASHPACKDrumKitRecord*     drumKits,
+                             uint16_t                           drumKitCount,
+                             const SPLASHPACKDrumMappingRecord* drumMappings,
+                             uint16_t                           drumMappingCount) {
+    m_bankInstruments      = instruments;
+    m_bankRegions          = regions;
+    m_bankDrumKits         = drumKits;
+    m_bankDrumMappings     = drumMappings;
+    m_bankInstrumentCount  = instrumentCount;
+    m_bankRegionCount      = regionCount;
+    m_bankDrumKitCount     = drumKitCount;
+    m_bankDrumMappingCount = drumMappingCount;
+}
+
+const SPLASHPACKRegionRecord* MusicSequencer::resolveBankRegion(uint8_t programId, uint8_t note, uint8_t velocity) const {
+    if (!m_bankInstruments || m_bankInstrumentCount == 0) return nullptr;
+    if (!m_bankRegions     || m_bankRegionCount == 0)     return nullptr;
+    // Linear scan for the matching program. With <=128 instruments per
+    // bank in practice (MIDI program range) this is effectively O(N)
+    // but N is small.
+    for (uint16_t i = 0; i < m_bankInstrumentCount; i++) {
+        const SPLASHPACKInstrumentRecord& inst = m_bankInstruments[i];
+        if (inst.programId != programId) continue;
+        // Walk this instrument's region slice. First region whose
+        // (key, velocity) bracket the incoming note wins —
+        // declaration-order priority, matches the exporter and the
+        // strategy doc.
+        uint16_t end = inst.firstRegionIndex + inst.regionCount;
+        if (end > m_bankRegionCount) end = m_bankRegionCount;
+        for (uint16_t r = inst.firstRegionIndex; r < end; r++) {
+            const SPLASHPACKRegionRecord& region = m_bankRegions[r];
+            if (note < region.keyMin || note > region.keyMax) continue;
+            if (velocity < region.velocityMin || velocity > region.velocityMax) continue;
+            return &region;
+        }
+        return nullptr;  // program matched but no region caught the note
+    }
+    return nullptr;  // no instrument matches programId
 }
 
 uint16_t MusicSequencer::pitchForOffset(int semitoneOffset) {
@@ -55,16 +110,29 @@ void MusicSequencer::registerSequence(int index, const uint8_t *data, uint32_t s
     if (!data || sizeBytes < sizeof(MusicSequenceHeader)) return;
 
     auto *hdr = reinterpret_cast<const MusicSequenceHeader *>(data);
-    if (__builtin_memcmp(hdr->magic, "PS1M", 4) != 0) {
+    bool isPS2M = false;
+    if (__builtin_memcmp(hdr->magic, "PS1M", 4) == 0) {
+        isPS2M = false;
+    } else if (__builtin_memcmp(hdr->magic, "PS2M", 4) == 0) {
+        isPS2M = true;
+    } else {
         printf("[music] sequence %d bad magic\n", index);
         return;
     }
+
+    // PS2M packs a u8[channelCount] default-program table between the
+    // channel table and the event table, padded to 4-byte alignment so
+    // the event stride stays naturally aligned.
+    uint32_t channelTableSize = (uint32_t)sizeof(MusicChannelEntry) * hdr->channelCount;
+    uint32_t channelProgramTableSize = isPS2M ? hdr->channelCount : 0u;
+    uint32_t paddedProgramTable = (channelProgramTableSize + 3u) & ~3u;
 
     // Bail before reinterpreting past the buffer. Exporter always writes a
     // matching size; this catches splashpack corruption or future format
     // drift with a single printf instead of silently UB-reading.
     uint32_t expected = sizeof(MusicSequenceHeader)
-                      + (uint32_t)sizeof(MusicChannelEntry) * hdr->channelCount
+                      + channelTableSize
+                      + paddedProgramTable
                       + (uint32_t)sizeof(MusicEvent) * hdr->eventCount;
     if (sizeBytes < expected) {
         printf("[music] sequence %d truncated (have %u, need %u)\n",
@@ -72,14 +140,15 @@ void MusicSequencer::registerSequence(int index, const uint8_t *data, uint32_t s
         return;
     }
 
-    auto *channels = reinterpret_cast<const MusicChannelEntry *>(data + sizeof(MusicSequenceHeader));
-    auto *events = reinterpret_cast<const MusicEvent *>(
-        data + sizeof(MusicSequenceHeader)
-             + sizeof(MusicChannelEntry) * hdr->channelCount);
+    const uint8_t* afterHeader   = data + sizeof(MusicSequenceHeader);
+    const uint8_t* afterChannels = afterHeader + channelTableSize;
+    const uint8_t* afterPrograms = afterChannels + paddedProgramTable;
 
-    m_sequences[index].header = hdr;
-    m_sequences[index].channels = channels;
-    m_sequences[index].events = events;
+    m_sequences[index].header           = hdr;
+    m_sequences[index].channels         = reinterpret_cast<const MusicChannelEntry*>(afterHeader);
+    m_sequences[index].channelPrograms  = isPS2M ? afterChannels : nullptr;
+    m_sequences[index].events           = reinterpret_cast<const MusicEvent*>(afterPrograms);
+    m_sequences[index].isPS2M           = isPS2M;
     if (index >= m_sequenceCount) m_sequenceCount = index + 1;
 }
 
@@ -118,6 +187,12 @@ bool MusicSequencer::playByIndex(int index, uint8_t masterVolume) {
         m_channels[i].activeNote = 0;
         m_channels[i].volume = m_active->channels[i].volume;
         m_channels[i].pan = m_active->channels[i].pan;
+        // PS2M: seed currentProgram from the per-channel default table.
+        // PS1M sequences leave it 0 (unused — bank dispatch off).
+        m_channels[i].currentProgram = m_active->isPS2M && m_active->channelPrograms
+            ? m_active->channelPrograms[i]
+            : (uint8_t)0;
+        m_channels[i].lastClipIndex = 0;
         // Pre-silence the voice so the next noteOn starts cleanly.
         psyqo::SPU::silenceChannels(1u << i);
     }
@@ -210,6 +285,11 @@ void MusicSequencer::dispatchEvent(const MusicEvent &e) {
         case 3:
             if (e.channel < MAX_CHANNELS) m_channels[e.channel].pan = e.data1;
             break;
+        case 4:
+            // ProgramChange (PS2M only). data1 = new ProgramId. PS1M
+            // sequences silently ignore it — no bank, no resolution.
+            if (e.channel < MAX_CHANNELS) m_channels[e.channel].currentProgram = e.data1;
+            break;
         default:
             // Unknown event kind — skip silently for forward compat.
             break;
@@ -221,26 +301,57 @@ void MusicSequencer::noteOn(uint8_t channel, uint8_t note, uint8_t velocity) {
     if (channel >= m_active->header->channelCount || channel >= MAX_CHANNELS) return;
     if (!m_audio) return;
 
-    // Look up the clip for this channel.
     const MusicChannelEntry &cfg = m_active->channels[channel];
-    int clipIdx = cfg.audioClipIndex;
+
+    // Resolve clip + base note. PS2M sequences with a populated bank
+    // route through channel→program→instrument→region; everything else
+    // falls back to the channel entry's audioClipIndex + baseNoteMidi
+    // (the legacy path).
+    int     clipIdx       = cfg.audioClipIndex;
+    int     baseNoteMidi  = cfg.baseNoteMidi;
+    bool    percussion    = (cfg.flags & 0x02) != 0;
+    int     regionVolume  = 127;
+    int     regionPan     = 64;
+    if (m_active->isPS2M && m_bankInstruments) {
+        const SPLASHPACKRegionRecord* region =
+            resolveBankRegion(m_channels[channel].currentProgram, note, velocity);
+        if (region) {
+            clipIdx      = region->audioClipIndex;
+            baseNoteMidi = region->rootKey;
+            regionVolume = region->volume;
+            regionPan    = region->pan;
+        }
+        // No region match → fall back to the channel entry's
+        // audioClipIndex (still useful for "default clip when no
+        // program is mapped" sequences).
+    }
+
     if (clipIdx < 0 || clipIdx >= MAX_AUDIO_CLIPS) return;
 
-    int combinedVol = ((int)m_channels[channel].volume * (int)velocity * (int)m_masterVolume)
-                      / (127 * 127); // 0..128
+    // Compose final volume: channel × velocity × master × region.
+    // Each factor is 0-127 except master (0-128). Normalised to 0..128.
+    int combinedVol = ((int)m_channels[channel].volume * (int)velocity)
+                      / 127;                                    // 0..127
+    combinedVol = (combinedVol * regionVolume) / 127;            // 0..127
+    combinedVol = (combinedVol * (int)m_masterVolume) / 127;     // 0..127
     if (combinedVol > 128) combinedVol = 128;
     if (combinedVol < 1) combinedVol = 1;
+
+    // Pan: channel pan + region pan offset from centre, clamped.
+    int finalPan = (int)m_channels[channel].pan + (regionPan - 64);
+    if (finalPan < 0) finalPan = 0;
+    if (finalPan > 127) finalPan = 127;
 
     // Each music channel owns voice index = channel index (claimed in
     // playByIndex via reserveVoices). playOnVoice retriggers it
     // unconditionally, key-cycling cleanly without the search-and-
     // possibly-steal-dialog risk of plain play().
     int voice = (int)channel;
-    if (m_audio->playOnVoice(voice, clipIdx, combinedVol, m_channels[channel].pan) < 0) return;
+    if (m_audio->playOnVoice(voice, clipIdx, combinedVol, finalPan) < 0) return;
 
     // Apply pitch shift unless this is a percussion channel.
-    if ((cfg.flags & 0x02) == 0) {
-        int semitoneOffset = (int)note - (int)cfg.baseNoteMidi;
+    if (!percussion) {
+        int semitoneOffset = (int)note - baseNoteMidi;
         uint16_t basePitch = SPU_VOICES[voice].sampleRate;
         uint32_t shifted = ((uint32_t)basePitch * pitchForOffset(semitoneOffset)) >> 12;
         if (shifted < 1) shifted = 1;
@@ -248,8 +359,9 @@ void MusicSequencer::noteOn(uint8_t channel, uint8_t note, uint8_t velocity) {
         SPU_VOICES[voice].sampleRate = (uint16_t)shifted;
     }
 
-    m_channels[channel].activeVoice = (int8_t)voice;
-    m_channels[channel].activeNote = note;
+    m_channels[channel].activeVoice   = (int8_t)voice;
+    m_channels[channel].activeNote    = note;
+    m_channels[channel].lastClipIndex = (uint8_t)clipIdx;
 }
 
 void MusicSequencer::noteOff(uint8_t channel, uint8_t note) {

@@ -38,9 +38,25 @@ sequences per scene (`MusicSequencer::MAX_SEQUENCES`).
 
 ### `MusicSequenceHeader` — 16 bytes
 
+Two magic values are accepted, sharing the same 16-byte header layout:
+
+- **PS1M** — legacy format. Channel direct-binding via `audioClipIndex`,
+  pitch derived from `baseNoteMidi`. No bank dispatch, no
+  `ProgramChange` events.
+- **PS2M** — Phase 2.5 bank-driven. Identical 16-byte header. After the
+  channel table, a `u8 × channelCount` default-program table (padded
+  to 4-byte alignment) seeds each channel's `currentProgram` at
+  sequence start. Event kind `4 = ProgramChange` (data1 = new
+  program id) is valid; runtime swaps the channel's program and
+  routes subsequent `NoteOn`s through the scene-wide instrument bank
+  (`SPLASHPACKInstrumentRecord` / `SPLASHPACKRegionRecord` defined in
+  `splashpack.hh`). Bank lookup: `(currentProgram, note, velocity)` →
+  first instrument with matching `programId` → first region whose
+  `keyMin`/`keyMax` and `velocityMin`/`velocityMax` bracket the note.
+
 | Offset | Type | Field | Notes |
 |-------:|------|-------|-------|
-| 0 | char[4] | `magic` | `"PS1M"` |
+| 0 | char[4] | `magic` | `"PS1M"` or `"PS2M"` |
 | 4 | u16 | `bpm` | Tempo in beats per minute. Constant — variable tempo is post-MVP. |
 | 6 | u16 | `ticksPerBeat` | MIDI standard division. 96 or 480 typical. |
 | 8 | u8 | `channelCount` | 1–24 (runtime cap matches SPU `MAX_VOICES`). Each channel maps to one SPU voice (mono per channel). |

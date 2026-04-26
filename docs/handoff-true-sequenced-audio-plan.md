@@ -96,7 +96,7 @@ reserves 4 SPU voices, not 1. The Phase 0 voice-pressure diagnostics
 already count post-expansion bindings, so the warnings still fire
 correctly.
 
-## Phase 2.5 — Program changes + scene-wide instrument bank (deferred)
+## Phase 2.5 — Program changes + scene-wide instrument bank (shipped)
 
 The original Phase 2 plan (instrument bank in the splashpack header,
 PS1M2 sibling format with new event kinds, runtime
@@ -212,28 +212,39 @@ top of PS1M2; defer.
   globals. `Music`, `Sound`, `Audio` are all C-side `setGlobal` registrations,
   not author-side state. Safe.
 
-## Shipped to date (2026-04-26)
+## Shipped to date
 
 - **Phase 0** (commit `92a925b`): scaffold resources, exporter
   diagnostics, stale-comment fixes.
 - **Phase 1** (commit `11a28eb`): single-region instrument data path
   via optional `PS1MusicChannel.Instrument`, byte-equivalent to
   legacy direct binding for the no-instrument case.
-- **Phase 2** (this commit): multi-region instrument expansion + drum
-  kit expansion in the exporter. No format bump — leans on the
-  existing per-note `MidiNoteMin/Max` router. Choke groups + per-drum
-  priority stored on `PS1DrumKit` but ignored by the runtime today.
+- **Phase 2** (commit `59ef8b8`): multi-region instrument expansion +
+  drum kit expansion in the exporter. No format bump — leans on the
+  existing per-note `MidiNoteMin/Max` router.
+- **Phase 2.5 Stage A** (commit `f8c44fc`): splashpack v28 with
+  scene-wide instrument bank tables (`SPLASHPACKInstrumentRecord` etc.).
+  Loader-but-unused; existing scenes must re-export.
+- **Phase 2.5 Stage B** (commit `34aebf7`): exporter walks
+  `PS1Scene.Instruments` / `PS1Scene.DrumKits`, validates SPU-routing,
+  packs the bank into the splashpack.
+- **Phase 2.5 Stage C** (this commit): PS2M wire format magic + runtime
+  resolution chain. PS2M sequences route NoteOn through
+  channel→program→instrument→region→clip; ProgramChange events (kind
+  4) swap the channel's current program mid-sequence. PS1M sequences
+  unchanged.
 
 ## What to ship next
 
-Phase 2.5 (program changes + scene-wide instrument bank, splashpack
-v28) only when there's a concrete need — a scene with multiple
-sequences sharing one instrument bank, or a sequence whose source MIDI
-relies on program-change events to swap timbres. Until then, the
-exporter expansion path covers the authoring use cases without paying
-the format-bump cost.
+Phases 4 (voice allocator extension) and 5
+(Sound.PlayMacro / Sound.PlayFamily) are independent of the format
+bump and can land any time. Phase 4 is a runtime-only change to
+AudioManager; Phase 5 is a new Lua global plus two scaffold resource
+types.
 
-Phases 4 (voice allocator) and 5 (Sound.PlayMacro / Sound.PlayFamily)
-are independent of the format bump and can land any time. Phase 4 is a
-runtime-only change to AudioManager; Phase 5 is a new Lua global plus
-two scaffold resource types.
+Phase 2.6 follow-ups (deferred): PitchBend / Controller / Marker /
+LoopStart / LoopEnd event kinds in PS2M; runtime drum-kit dispatch
+(currently kits expand to bindings at export time, but choke groups
++ per-drum priority on `PS1DrumKit` are runtime-driven by design and
+need a voice-scanner that watches active music voices for matching
+choke groups).

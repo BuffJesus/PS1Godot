@@ -2039,6 +2039,14 @@ public static class SceneCollector
             // exporter expansion. PS1MusicSequence.DrumKit similarly
             // expands kit mappings into bindings on DrumMidiChannel.
             var bindings = new List<PS1MSerializer.ChannelBinding>();
+            // Phase 2.5 Stage C: parallel array tracking each binding's
+            // default ProgramId for the PS2M wire format. Filled in
+            // lockstep with bindings; entry 0 means "no program / bank
+            // dispatch off" (legacy direct-binding behaviour). When
+            // any entry is non-zero the serializer emits PS2M; otherwise
+            // PS1M (wire-equivalent to pre-bank exports).
+            var bindingDefaultPrograms = new List<byte>();
+            bool sequenceUsesBank = false;
             if (seq.Channels != null)
             {
                 foreach (var ch in seq.Channels)
@@ -2122,6 +2130,19 @@ public static class SceneCollector
                                 LoopSample     = region.LoopEnabled,
                                 Percussion     = ch.Percussion,
                             });
+                            // PS2M default-program: if the channel's
+                            // Instrument is in the scene-wide bank,
+                            // grab its ProgramId so this binding's
+                            // currentProgram is seeded correctly at
+                            // sequence start. If not in the bank
+                            // (legacy fallback), default to 0.
+                            byte defaultProg = 0;
+                            if (data.InstrumentResourceToBankIndex.TryGetValue(ch.Instrument, out int bankIdx))
+                            {
+                                defaultProg = data.Instruments[bankIdx].ProgramId;
+                                sequenceUsesBank = true;
+                            }
+                            bindingDefaultPrograms.Add(defaultProg);
                             expandedThisChannel++;
                         }
                         if (expandedThisChannel == 0)
@@ -2156,6 +2177,7 @@ public static class SceneCollector
                             LoopSample     = ch.LoopSample,
                             Percussion     = ch.Percussion,
                         });
+                        bindingDefaultPrograms.Add(0);  // legacy path; no bank dispatch
                     }
                 }
             }
@@ -2220,6 +2242,7 @@ public static class SceneCollector
                         LoopSample     = false,          // drums never loop
                         Percussion     = true,
                     });
+                    bindingDefaultPrograms.Add(0);  // drum bindings don't use bank programs
                     kitExpanded++;
                 }
                 if (kitExpanded > 0)
@@ -2233,11 +2256,17 @@ public static class SceneCollector
                 continue;
             }
 
+            // PS2M emission: only when this sequence actually uses the
+            // bank (at least one binding from a bank instrument). A
+            // sequence with only legacy direct bindings keeps shipping
+            // PS1M — wire-equivalent to pre-Phase-2.5 behaviour.
             byte[] ps1m;
             try
             {
                 int? bpm = seq.BpmOverride > 0 ? seq.BpmOverride : null;
-                ps1m = PS1MSerializer.Serialize(parsed, bindings, bpm, seq.LoopStartBeat);
+                IReadOnlyList<byte>? defaultPrograms = sequenceUsesBank ? bindingDefaultPrograms : null;
+                IReadOnlyList<MidiParser.MidiProgramChangeEvent>? pgmChanges = sequenceUsesBank ? parsed.ProgramChanges : null;
+                ps1m = PS1MSerializer.Serialize(parsed, bindings, bpm, seq.LoopStartBeat, defaultPrograms, pgmChanges);
             }
             catch (System.Exception ex)
             {
@@ -2250,7 +2279,8 @@ public static class SceneCollector
                 Ps1mData = ps1m,
                 Name = name,
             });
-            GD.Print($"[PS1Godot] Music sequence '{name}': {parsed.Notes.Count} notes, {bindings.Count} channels, {ps1m.Length} bytes (index {data.MusicSequences.Count - 1}).");
+            string fmt = sequenceUsesBank ? "PS2M" : "PS1M";
+            GD.Print($"[PS1Godot] Music sequence '{name}' [{fmt}]: {parsed.Notes.Count} notes, {bindings.Count} channels, {ps1m.Length} bytes (index {data.MusicSequences.Count - 1}).");
 
             // ── Phase 0 diagnostics — see docs/handoff-true-sequenced-audio-plan.md ──
             // Surface what the runtime is going to do that the source MIDI
@@ -2289,11 +2319,14 @@ public static class SceneCollector
             // Source-MIDI features the parser drops on the floor. The
             // runtime sequencer doesn't act on these yet (Phase 2/3
             // territory) — surface so the author knows their .mid's
-            // intent isn't fully reaching the SPU.
+            // intent isn't fully reaching the SPU. ProgramChange events
+            // are preserved into the PS2M wire stream when the sequence
+            // uses the scene bank, so the warning only fires for legacy
+            // PS1M sequences.
             var sk = parsed.SkippedCounts;
-            if (sk.ProgramChange > 0)
+            if (sk.ProgramChange > 0 && !sequenceUsesBank)
             {
-                GD.PushWarning($"[PS1Godot] Music sequence '{name}': {sk.ProgramChange} MIDI ProgramChange event(s) ignored — runtime has no instrument bank yet (Phase 2).");
+                GD.PushWarning($"[PS1Godot] Music sequence '{name}': {sk.ProgramChange} MIDI ProgramChange event(s) ignored — sequence has no bank-backed channels (legacy PS1M emission). Add PS1Scene.Instruments and reference them from PS1MusicChannel.Instrument to enable program-change dispatch.");
             }
             if (sk.Controller > 0)
             {

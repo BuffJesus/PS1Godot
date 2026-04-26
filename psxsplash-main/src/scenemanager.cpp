@@ -171,6 +171,15 @@ void psxsplash::SceneManager::InitializeScene(uint8_t* splashpackData, LoadingSc
     // MusicSequencer. MusicManager keeps ADPCM samples already loaded
     // in SPU RAM; the sequencer references clip indices directly.
     m_musicSequencer.init(&m_audio);
+    // v28+: hand the sequencer the scene-wide instrument bank so
+    // PS2M sequences can resolve channel→program→instrument→region
+    // at NoteOn. Bank pointers are nullptr/0 when the scene has none
+    // — PS2M sequences then fall back to the channel entry's clip.
+    m_musicSequencer.setBank(
+        sceneSetup.instruments,  sceneSetup.instrumentCount,
+        sceneSetup.regions,      sceneSetup.regionCount,
+        sceneSetup.drumKits,     sceneSetup.drumKitCount,
+        sceneSetup.drumMappings, sceneSetup.drumMappingCount);
     m_musicSequenceNames.clear();
     m_musicSequenceNames.reserve(sceneSetup.musicSequenceCount);
     for (int i = 0; i < sceneSetup.musicSequenceCount && i < 8; i++) {

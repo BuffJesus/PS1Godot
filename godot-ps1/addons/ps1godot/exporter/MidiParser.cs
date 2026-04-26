@@ -115,6 +115,7 @@ public static class MidiParser
         int tpq = division;
         var notes = new List<MidiNoteEvent>();
         var tempos = new List<MidiTempoEvent>();
+        var programChanges = new List<MidiProgramChangeEvent>();
         var skipped = new SkippedEventCounts();
 
         for (int t = 0; t < trackCount; t++)
@@ -129,7 +130,7 @@ public static class MidiParser
             }
             uint trackLen = ReadU32BE(r);
             long trackEnd = r.BaseStream.Position + trackLen;
-            ParseTrack(r, trackEnd, notes, tempos, skipped, t);
+            ParseTrack(r, trackEnd, notes, tempos, programChanges, skipped, t);
         }
 
         // Sort events by absolute tick (format 1 tracks started at 0 each).
@@ -155,12 +156,17 @@ public static class MidiParser
             .OrderBy(t => t.AbsoluteTick)
             .ToList();
 
+        // Sort program changes by tick so the serializer can interleave
+        // them with notes in tick order without an extra merge step.
+        programChanges = programChanges.OrderBy(p => p.AbsoluteTick).ToList();
+
         return new ParsedMidi
         {
             TicksPerQuarter = tpq,
             TrackCount = trackCount,
             Notes = notes,
             Tempos = tempos,
+            ProgramChanges = programChanges,
             SkippedCounts = skipped,
         };
     }
@@ -168,6 +174,7 @@ public static class MidiParser
     private static void ParseTrack(BinaryReader r, long trackEnd,
                                     List<MidiNoteEvent> notes,
                                     List<MidiTempoEvent> tempos,
+                                    List<MidiProgramChangeEvent> programChanges,
                                     SkippedEventCounts skipped,
                                     int trackIndex)
     {
@@ -290,10 +297,22 @@ public static class MidiParser
                         r.ReadByte(); r.ReadByte();
                         skipped.PitchBend++;
                         break;
-                    case 0xC0: // Program change — skip, 1 data byte
-                        r.ReadByte();
+                    case 0xC0: // Program change — preserve into the
+                               // parsed model; serialised as event
+                               // kind=4 (PS2M only) so the runtime
+                               // bank can dispatch through it.
+                    {
+                        byte program = r.ReadByte();
+                        programChanges.Add(new MidiProgramChangeEvent
+                        {
+                            AbsoluteTick = absTick,
+                            Channel = channel,
+                            Program = program,
+                            Track = trackIndex,
+                        });
                         skipped.ProgramChange++;
                         break;
+                    }
                     case 0xD0: // Channel aftertouch — skip, 1 data byte
                         r.ReadByte();
                         skipped.Aftertouch++;
