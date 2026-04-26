@@ -40,8 +40,9 @@ public partial class PS1MusicSequence : Resource
     // Per-MIDI-channel bindings to PS1AudioClips. Channels not listed
     // here are silent — drop a PS1MusicChannel per MIDI channel the
     // .mid uses, match MidiChannel to the source, and point AudioClipName
-    // at an entry in PS1Scene.AudioClips. Max 8 per sequence (runtime
-    // MusicSequencer::MAX_CHANNELS).
+    // at an entry in PS1Scene.AudioClips. Max 24 per sequence (runtime
+    // MusicSequencer::MAX_CHANNELS, matches SPU MAX_VOICES). Up to
+    // MAX_SEQUENCES=8 sequences may coexist in one splashpack.
     [Export]
     public Godot.Collections.Array<PS1MusicChannel> Channels { get; set; } = new();
 }

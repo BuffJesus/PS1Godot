@@ -43,7 +43,7 @@ sequences per scene (`MusicSequencer::MAX_SEQUENCES`).
 | 0 | char[4] | `magic` | `"PS1M"` |
 | 4 | u16 | `bpm` | Tempo in beats per minute. Constant — variable tempo is post-MVP. |
 | 6 | u16 | `ticksPerBeat` | MIDI standard division. 96 or 480 typical. |
-| 8 | u8 | `channelCount` | 1–16. Each channel maps to one SPU voice (mono per channel). |
+| 8 | u8 | `channelCount` | 1–24 (runtime cap matches SPU `MAX_VOICES`). Each channel maps to one SPU voice (mono per channel). |
 | 9 | u8 | `_pad` | |
 | 10 | u16 | `eventCount` | Total events in the sequence. |
 | 12 | u32 | `loopStartTick` | Tick the playhead jumps to after the last event. `0xFFFFFFFF` = no loop (one-shot). |
@@ -245,3 +245,33 @@ the note wins.
 - **Sort order convention** (parser-side): NoteOff fires before NoteOn
   at the same tick. Otherwise `Off(60) + On(60)` at one tick
   silences the freshly-started note via the mono-per-channel cut.
+
+## True sequenced audio: phased migration
+
+The current format is a **MIDI-note → PS1AudioClip** binding system —
+useful for short jingles and looping menu themes, but not a full
+PS1-style sequenced engine. Strategy doc:
+[`ps1_true_sequenced_audio_strategy.md`](ps1_true_sequenced_audio_strategy.md).
+Phased plan with concrete file changes:
+[`handoff-true-sequenced-audio-plan.md`](handoff-true-sequenced-audio-plan.md).
+
+**Phase 0 (landed)** — scaffold-only. Three new resource types are
+authorable in the inspector but the runtime ignores them; no on-disk
+format change, no `Music.Play` behaviour change.
+
+  - `PS1Instrument` — bank-style instrument definition.
+  - `PS1SampleRegion` — per-instrument note/velocity range mapping
+    to a single PS1AudioClip with optional ADSR override and loop
+    points.
+  - `PS1DrumKit` — MIDI-note-keyed drum mapping with per-drum
+    volume / pan / choke group / priority.
+
+  Plus exporter diagnostics in `CollectMusicSequences`: voice-pressure
+  warnings (>12 channels = RPG-budget warning, >16 = error), peak
+  simultaneous-note estimate vs binding count, and per-sequence
+  warnings for MIDI ProgramChange / Controller / PitchBend /
+  Aftertouch events the parser silently drops.
+
+**Phase 1+** — instrument data path, format bumps, ADSR wiring, voice
+allocator extension, and `Sound.PlayMacro` separation. See the plan
+doc for ordering and per-phase format-bump grouping.

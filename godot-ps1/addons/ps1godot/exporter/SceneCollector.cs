@@ -1875,6 +1875,62 @@ public static class SceneCollector
                 Name = name,
             });
             GD.Print($"[PS1Godot] Music sequence '{name}': {parsed.Notes.Count} notes, {bindings.Count} channels, {ps1m.Length} bytes (index {data.MusicSequences.Count - 1}).");
+
+            // ── Phase 0 diagnostics — see docs/handoff-true-sequenced-audio-plan.md ──
+            // Surface what the runtime is going to do that the source MIDI
+            // doesn't expect. The author can spot in the export log when a
+            // .mid is going to behave differently on PSX than in their DAW.
+
+            // Voice pressure: each binding reserves one music voice. The
+            // SPU has 24 voices total; an RPG-friendly budget leaves >=8
+            // for SFX/dialog. Warn at >12 (RPG-budget cap), error at >16
+            // (less than 8 SFX voices left).
+            if (bindings.Count > 16)
+            {
+                GD.PushError($"[PS1Godot] Music sequence '{name}': {bindings.Count} channels reserve too many SPU voices — only {24 - bindings.Count} left for SFX/dialog. Cap at 16 (8 SFX voices) or split across multiple sequences.");
+            }
+            else if (bindings.Count > 12)
+            {
+                GD.PushWarning($"[PS1Godot] Music sequence '{name}': {bindings.Count} channels — RPG voice budget recommends <=12 to leave headroom for SFX and dialog.");
+            }
+
+            // Estimated max simultaneous notes. NoteOn +1, NoteOff -1,
+            // track the high-water mark. parsed.Notes is already sorted
+            // by tick with NoteOff ordered before NoteOn at same tick
+            // (see MidiParser.cs:103-118), so this is exact.
+            int active = 0, peakNotes = 0;
+            foreach (var n in parsed.Notes)
+            {
+                if (n.Kind == MidiParser.MidiEventKind.NoteOn) active++;
+                else if (active > 0) active--;
+                if (active > peakNotes) peakNotes = active;
+            }
+            if (peakNotes > bindings.Count)
+            {
+                GD.PushWarning($"[PS1Godot] Music sequence '{name}': peak {peakNotes} simultaneous notes vs {bindings.Count} channel bindings — overlapping notes on the same channel will steal each other (mono-per-channel runtime). Consider adding bindings or simplifying the source.");
+            }
+
+            // Source-MIDI features the parser drops on the floor. The
+            // runtime sequencer doesn't act on these yet (Phase 2/3
+            // territory) — surface so the author knows their .mid's
+            // intent isn't fully reaching the SPU.
+            var sk = parsed.SkippedCounts;
+            if (sk.ProgramChange > 0)
+            {
+                GD.PushWarning($"[PS1Godot] Music sequence '{name}': {sk.ProgramChange} MIDI ProgramChange event(s) ignored — runtime has no instrument bank yet (Phase 2).");
+            }
+            if (sk.Controller > 0)
+            {
+                GD.PushWarning($"[PS1Godot] Music sequence '{name}': {sk.Controller} MIDI Controller event(s) ignored (volume / pan / expression / sustain / etc.) — runtime channel state is static today (Phase 2).");
+            }
+            if (sk.PitchBend > 0)
+            {
+                GD.PushWarning($"[PS1Godot] Music sequence '{name}': {sk.PitchBend} MIDI PitchBend event(s) ignored — runtime has no pitch-bend pipeline yet (Phase 2).");
+            }
+            if (sk.Aftertouch > 0)
+            {
+                GD.PushWarning($"[PS1Godot] Music sequence '{name}': {sk.Aftertouch} MIDI Aftertouch event(s) ignored — not on the roadmap.");
+            }
         }
     }
 

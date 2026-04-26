@@ -46,12 +46,29 @@ public static class MidiParser
         public uint MicrosPerQuarter { get; init; }
     }
 
+    // Counts of MIDI channel events the parser intentionally discards.
+    // Surfaced by the exporter as scaffold-stage warnings — the planned
+    // sequenced-audio engine will consume these (program changes select
+    // instruments, controllers drive channel volume/pan/expression,
+    // pitch bend feeds the SPU pitch register), but until that lands
+    // the source MIDI's intent is silently lost. The counters let the
+    // author spot when a .mid is going to behave differently on PSX
+    // than in their DAW.
+    public sealed class SkippedEventCounts
+    {
+        public int ProgramChange { get; set; }   // 0xC0
+        public int Controller { get; set; }      // 0xB0 (volume, pan, sustain, expression, ...)
+        public int PitchBend { get; set; }       // 0xE0
+        public int Aftertouch { get; set; }      // 0xA0 (poly) + 0xD0 (channel)
+    }
+
     public sealed class ParsedMidi
     {
         public int TicksPerQuarter { get; init; }
         public int TrackCount { get; init; }
         public List<MidiNoteEvent> Notes { get; init; } = new();
         public List<MidiTempoEvent> Tempos { get; init; } = new();
+        public SkippedEventCounts SkippedCounts { get; init; } = new();
     }
 
     public static ParsedMidi Parse(byte[] bytes)
@@ -82,6 +99,7 @@ public static class MidiParser
         int tpq = division;
         var notes = new List<MidiNoteEvent>();
         var tempos = new List<MidiTempoEvent>();
+        var skipped = new SkippedEventCounts();
 
         for (int t = 0; t < trackCount; t++)
         {
@@ -95,7 +113,7 @@ public static class MidiParser
             }
             uint trackLen = ReadU32BE(r);
             long trackEnd = r.BaseStream.Position + trackLen;
-            ParseTrack(r, trackEnd, notes, tempos, t);
+            ParseTrack(r, trackEnd, notes, tempos, skipped, t);
         }
 
         // Sort events by absolute tick (format 1 tracks started at 0 each).
@@ -127,12 +145,14 @@ public static class MidiParser
             TrackCount = trackCount,
             Notes = notes,
             Tempos = tempos,
+            SkippedCounts = skipped,
         };
     }
 
     private static void ParseTrack(BinaryReader r, long trackEnd,
                                     List<MidiNoteEvent> notes,
                                     List<MidiTempoEvent> tempos,
+                                    SkippedEventCounts skipped,
                                     int trackIndex)
     {
         uint absTick = 0;
@@ -243,13 +263,24 @@ public static class MidiParser
                         break;
                     }
                     case 0xA0: // Poly aftertouch — skip, 2 data bytes
+                        r.ReadByte(); r.ReadByte();
+                        skipped.Aftertouch++;
+                        break;
                     case 0xB0: // CC — skip, 2 data bytes
+                        r.ReadByte(); r.ReadByte();
+                        skipped.Controller++;
+                        break;
                     case 0xE0: // Pitch bend — skip, 2 data bytes
                         r.ReadByte(); r.ReadByte();
+                        skipped.PitchBend++;
                         break;
                     case 0xC0: // Program change — skip, 1 data byte
+                        r.ReadByte();
+                        skipped.ProgramChange++;
+                        break;
                     case 0xD0: // Channel aftertouch — skip, 1 data byte
                         r.ReadByte();
+                        skipped.Aftertouch++;
                         break;
                     default:
                         // Unreachable: status is verified 0x80..0xEF above.
