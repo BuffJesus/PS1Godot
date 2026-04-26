@@ -125,6 +125,7 @@ scripts/inspect_kenney_fbx.gd
 scripts/install_kenney_skinned.gd
 scripts/revert_kenney_skinned.gd
 scripts/regen_backroom_tone.py
+scripts/recenter_decals.py
 # UVgami CLI binaries + per-model unwrap intermediates (large + jam-specific).
 tools/uvgami/
 # Recent handoff notes — pre-jam handoffs (≤2026-04-21) are tracked.
