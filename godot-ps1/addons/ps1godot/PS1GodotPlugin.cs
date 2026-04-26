@@ -382,8 +382,22 @@ public partial class PS1GodotPlugin : EditorPlugin
             long spuBytes = new System.IO.FileInfo(System.IO.Path.ChangeExtension(absPath, ".spu")).Length;
             GD.Print($"[PS1Godot] Splashpack written: {absPath}");
             GD.Print($"[PS1Godot]   .splashpack = {packBytes}B");
-            GD.Print($"[PS1Godot]   .vram       = {vramBytes}B");
-            GD.Print($"[PS1Godot]   .spu        = {spuBytes}B");
+            GD.Print($"[PS1Godot]   .vram       = {vramBytes}B  (cap {UI.SceneStats.VramBudgetBytes}B)");
+            GD.Print($"[PS1Godot]   .spu        = {spuBytes}B  (cap {UI.SceneStats.SpuBudgetBytes}B)");
+
+            // Cap warnings: explicit PushWarning when a bus is over its
+            // hardware-usable cap so authors don't have to do the math.
+            // Cross-references the dock's red bars but works even when the
+            // dock isn't open. Real cap values live in SceneStats so this
+            // file and the dock can't drift.
+            if (vramBytes > UI.SceneStats.VramBudgetBytes)
+            {
+                GD.PushWarning($"[PS1Godot] Scene[{sceneIndex}] VRAM OVER BUDGET: {vramBytes} B vs {UI.SceneStats.VramBudgetBytes} B cap (over by {vramBytes - UI.SceneStats.VramBudgetBytes} B). See texture report rows for the biggest offenders.");
+            }
+            if (spuBytes > UI.SceneStats.SpuBudgetBytes)
+            {
+                GD.PushWarning($"[PS1Godot] Scene[{sceneIndex}] SPU OVER BUDGET: {spuBytes} B vs {UI.SceneStats.SpuBudgetBytes} B cap (over by {spuBytes - UI.SceneStats.SpuBudgetBytes} B). Mark long ambient/dialog clips Route=XA (Phase 3) or trim duration/sample rate.");
+            }
         }
         catch (System.Exception e)
         {
