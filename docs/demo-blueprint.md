@@ -1,5 +1,12 @@
 # Demo blueprint
 
+> **Status:** forward-looking. Phase 2 demo (navigation + cutscenes + UI +
+> audio + skinned mesh) shipped. The richer demo described below is a
+> Phase 3+ aspiration; sections that match Phase 3 roadmap bullets are
+> implementable today, others wait on engine work. See
+> `docs/ps1godot_current_implementation_review_next_steps.md` for the
+> near-term roadmap.
+
 A long-term target for what the shipped demo grows into — not a plan to build
 all of it now. Each section tags which roadmap bullets it leans on so we can
 grow the demo in lockstep with the exporter instead of waiting for everything.

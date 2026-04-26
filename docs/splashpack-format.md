@@ -1,4 +1,4 @@
-# Splashpack format v22
+# Splashpack format v27
 
 Extracted from `psxsplash-main/src/splashpack.{hh,cpp}` and
 `godot-ps1/addons/ps1godot/exporter/SplashpackWriter.cs`. Keep this in sync when
@@ -6,6 +6,13 @@ either side bumps the version.
 
 > **Authoritative source:** the C++ structs with `static_assert(sizeof(...) == N)`
 > in `splashpack.hh`. If this doc disagrees with the code, the code wins.
+>
+> **Doc currency:** the field tables below detail the v22 baseline. v23-v27
+> additions (UI 3D models, scene skybox, per-clip audio routing, CDDA track,
+> XA sidecar table) are summarised in the version history at the bottom but
+> not yet expanded into per-field tables — read `splashpack.hh` directly
+> for the v23+ field layouts. If you bump the format again, please also
+> expand the relevant table here.
 
 ## File split
 
@@ -37,7 +44,7 @@ for the sequenced-music table (`musicSequenceCount` + `pad_music` +
 | Offset | Type | Field | Notes |
 |-------:|------|-------|-------|
 | 0 | `char[2]` | `magic` | `"SP"` |
-| 2 | `u16` | `version` | `22`; loader asserts `>= 22` |
+| 2 | `u16` | `version` | `27`; loader asserts `>= 27` |
 | 4 | `u16` | `luaFileCount` | |
 | 6 | `u16` | `gameObjectCount` | |
 | 8 | `u16` | `textureAtlasCount` | |
@@ -194,7 +201,7 @@ All fp12 fields are stored as `u16` with range 0–65535; the writer has overflo
 guards that log an error but write a clamped value, so corrupt scenes fail at
 export-time, not runtime.
 
-## Version history (as of v22)
+## Version history (as of v27)
 
 - v10: audio clips
 - v11: fog config
@@ -215,6 +222,24 @@ export-time, not runtime.
   Format documented in `docs/sequenced-music-format.md`. Runtime adds a
   `MusicSequencer` class on top of `AudioManager` (with voice
   reservation so dialog can't steal music notes).
+- v23: UI 3D-model widgets — per-canvas `UIModelEntry[]` table with
+  per-instance mutable runtime state. Renderer composes a HUD pass for
+  these on top of the main scene. See `splashpack.hh:34` for layout.
+- v24: scene skybox — full-screen textured quad with optional tint and
+  rotation. Header gains `skyEnabled` flag + sky descriptor block. See
+  `splashpack.hh:204`.
+- v25: per-`AudioClip` `Route` byte (0=SPU, 1=XA, 2=CDDA, 3=Auto).
+  Authoring side picks intent; build pipeline resolves to a concrete
+  backend. See `PS1AudioClip.cs:94` and `splashpack.hh:95`.
+- v26: per-`AudioClip` `cddaTrack` byte for CDDA-routed clips so Lua
+  code doesn't have to know which physical disc track a song landed
+  on. 0 = unset. See `splashpack.hh:114`.
+- v27: XA sidecar table — `xaClipCount` + `xaTableOffset` in the
+  header, with per-XA-clip `(name, sidecarOffset, sidecarSize)` rows
+  pointing into the per-scene `scene.<n>.xa` file. Runtime
+  `XaAudioBackend` (`xaaudio.cpp`) drives Form-2 disc streaming via
+  `psyqo::CDRomDevice::Action` for SETMODE 0x24 → SETLOC → READS. See
+  `splashpack.hh:120`.
 
 ## When porting the writer to Godot
 
