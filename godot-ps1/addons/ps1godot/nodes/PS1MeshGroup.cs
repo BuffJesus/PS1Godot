@@ -76,6 +76,13 @@ public partial class PS1MeshGroup : Node3D
     // PS1MeshInstance.Translucent.
     [Export] public bool Translucent { get; set; } = false;
 
+    // Mute the UV out-of-range linter — see PS1MeshInstance.TilingUV.
+    // PSX still doesn't wrap; flag is for authoring intent only. Apply
+    // when the underlying FBX ships with UVs scaled past [0, 1] AND
+    // chaotic rasterisation is acceptable (e.g. small props where the
+    // mistexture isn't visible at PSX resolution).
+    [Export] public bool TilingUV { get; set; } = false;
+
     [ExportGroup("PS1 / Naming")]
     // Exported GameObject name. Empty → falls back to the node's own Name,
     // which is what most scenes want. Set explicitly only when you need

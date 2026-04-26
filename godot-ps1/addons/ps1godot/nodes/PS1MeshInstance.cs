@@ -66,6 +66,20 @@ public partial class PS1MeshInstance : MeshInstance3D
     // without a texture sample.
     [Export] public bool Translucent { get; set; } = false;
 
+    // The PS1 GPU rasterises UVs as 8-bit texel coords within the bound
+    // texture page — out-of-range source UVs sample neighbouring atlas
+    // data as garbage (no wrap, no clamp). The MeshLinter warns by
+    // default. Set TilingUV=true on meshes whose authoring genuinely
+    // expects UV repeats (e.g. some Kenney FBX furniture ships with
+    // tiled-atlas UVs scaled past [0, 1]) to silence the warning.
+    //
+    // NOTE: this only mutes the diagnostic. PSX still doesn't wrap, so
+    // the rendered sampling is whatever the per-vertex linear UV interp
+    // happens to land on — usually visibly chaotic. Real PS1 tiling
+    // requires subdividing the mesh at integer UV boundaries; that's
+    // not done here. Use the flag knowingly.
+    [Export] public bool TilingUV { get; set; } = false;
+
     [ExportGroup("PS1 / Interactable")]
     // When true, the runtime treats this mesh as an interactable. Pressing
     // InteractButton within InteractionRadiusMeters fires onInteract on

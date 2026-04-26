@@ -102,7 +102,8 @@ public sealed class PSXMesh
             var uvs = arrays[(int)Mesh.ArrayType.TexUV].AsVector2Array();
             var indices = arrays[(int)Mesh.ArrayType.Index].AsInt32Array();
 
-            MeshLinter.RecordSurface(node.Name, uvs);
+            MeshLinter.RecordSurface(node.Name, uvs,
+                tilingExpected: node is PS1MeshInstance tilingPmi && tilingPmi.TilingUV);
 
             int triCount = indices.Length > 0 ? indices.Length / 3 : verts.Length / 3;
 
@@ -152,7 +153,8 @@ public sealed class PSXMesh
     // per-triangle front/back matches regardless of which path produced it.
     public void AppendFromGodotSurface(MeshInstance3D sub, int surfaceIdx,
         Transform3D subToGroup, int texIdx, PSXTexture? tex,
-        float gteScaling, byte rByte, byte gByte, byte bByte)
+        float gteScaling, byte rByte, byte gByte, byte bByte,
+        bool tilingExpected = false)
     {
         var mesh = sub.Mesh;
         if (mesh == null || surfaceIdx >= mesh.GetSurfaceCount()) return;
@@ -163,7 +165,7 @@ public sealed class PSXMesh
         var uvs = arrays[(int)Mesh.ArrayType.TexUV].AsVector2Array();
         var indices = arrays[(int)Mesh.ArrayType.Index].AsInt32Array();
 
-        MeshLinter.RecordSurface(sub.Name, uvs);
+        MeshLinter.RecordSurface(sub.Name, uvs, tilingExpected);
 
         // Orthonormalize for normals so non-uniform child scales don't
         // warp the lighting vector. Positions still use the full transform

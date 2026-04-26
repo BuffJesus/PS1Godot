@@ -520,7 +520,8 @@ public static class SceneCollector
                 byte bByte = PSXTrig.ColorChannelToPSX(surfaceColor.B);
 
                 merged.AppendFromGodotSurface(sub, s, subToGroup, texIdx, tex,
-                    data.GteScaling, rByte, gByte, bByte);
+                    data.GteScaling, rByte, gByte, bByte,
+                    tilingExpected: group.TilingUV);
             }
 
             // Extend the AABB with this sub-mesh's footprint in group space.

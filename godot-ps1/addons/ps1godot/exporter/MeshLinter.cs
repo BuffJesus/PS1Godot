@@ -44,9 +44,10 @@ public static class MeshLinter
     // accumulator. `meshName` is the GameObject-level name so the
     // emitted report points at the same identifier the user sees in
     // the export log.
-    public static void RecordSurface(string meshName, Vector2[] uvs)
+    public static void RecordSurface(string meshName, Vector2[] uvs, bool tilingExpected = false)
     {
         if (uvs == null || uvs.Length == 0) return;
+        if (tilingExpected) return;  // author flagged this mesh as intentionally tiling
         if (!_stats.TryGetValue(meshName, out var s))
         {
             s = new MeshStat();
