@@ -381,6 +381,18 @@ public static class SplashpackWriter
         {
             WriteUIModelSection(w, scene, headerOffsets.UiModelTableOffsetPos);
         }
+
+        // ── Music bank section (v28+) ──
+        // Four parallel tables — instruments / regions / drum kits /
+        // drum mappings — emitted in fixed order so the runtime can
+        // index them with a single base pointer per table. Header
+        // counts/offsets get backfilled here. Skipped on scenes
+        // without an authored bank (header counts stay 0, runtime
+        // falls back to legacy direct-binding sequences).
+        if (scene.Instruments.Count > 0 || scene.DrumKits.Count > 0)
+        {
+            WriteMusicBankSection(w, scene, headerOffsets);
+        }
     }
 
     // ─── Music sequence section ─────────────────────────────────────────
@@ -418,6 +430,112 @@ public static class SplashpackWriter
             long blobStart = w.BaseStream.Position;
             w.Write(scene.MusicSequences[i].Ps1mData);
             BackfillUInt32(w, dataOffPositions[i], (uint)blobStart);
+        }
+    }
+
+    // ─── Music bank section (v28+) ──────────────────────────────────────
+    //
+    // Four parallel tables, each preceded by a 4-byte alignment pad:
+    //   Instruments  — 16 B × instrumentCount (SPLASHPACKInstrumentRecord)
+    //   Regions      — 16 B × regionCount     (SPLASHPACKRegionRecord)
+    //   DrumKits     —  8 B × drumKitCount    (SPLASHPACKDrumKitRecord)
+    //   DrumMappings —  8 B × drumMappingCount(SPLASHPACKDrumMappingRecord)
+    //
+    // Counts and offsets are backfilled into the header reservations
+    // (HeaderOffsets.{Instrument,Region,DrumKit,DrumMapping}*Pos).
+    // Layouts must match the C++ structs in psxsplash-main/src/splashpack.hh.
+    private static void WriteMusicBankSection(BinaryWriter w, SceneData scene, HeaderOffsets headerOffsets)
+    {
+        // Instruments
+        if (scene.Instruments.Count > 0)
+        {
+            AlignTo4(w);
+            long start = w.BaseStream.Position;
+            BackfillUInt16(w, headerOffsets.InstrumentCountPos, (ushort)scene.Instruments.Count);
+            BackfillUInt32(w, headerOffsets.InstrumentTableOffsetPos, (uint)start);
+            foreach (var inst in scene.Instruments)
+            {
+                w.Write(inst.FirstRegionIndex);   // u16
+                w.Write(inst.RegionCount);        // u16
+                w.Write(inst.ProgramId);          // u8
+                w.Write(inst.Volume);             // u8
+                w.Write(inst.Pan);                // u8
+                w.Write(inst.Priority);           // u8
+                w.Write(inst.PolyphonyLimit);     // u8
+                w.Write(inst.PitchBendRange);     // u8
+                w.Write(inst.AttackRate);         // u8
+                w.Write(inst.DecayRate);          // u8
+                w.Write(inst.SustainLevel);       // u8
+                w.Write(inst.ReleaseRate);        // u8
+                w.Write((ushort)0);               // pad
+                // 16 bytes total — matches SPLASHPACKInstrumentRecord.
+            }
+        }
+
+        // Regions
+        if (scene.Regions.Count > 0)
+        {
+            AlignTo4(w);
+            long start = w.BaseStream.Position;
+            BackfillUInt16(w, headerOffsets.RegionCountPos, (ushort)scene.Regions.Count);
+            BackfillUInt32(w, headerOffsets.RegionTableOffsetPos, (uint)start);
+            foreach (var region in scene.Regions)
+            {
+                w.Write(region.AudioClipIndex);   // u16
+                w.Write(region.RootKey);          // u8
+                w.Write(region.Flags);            // u8
+                w.Write(region.KeyMin);           // u8
+                w.Write(region.KeyMax);           // u8
+                w.Write(region.VelocityMin);      // u8
+                w.Write(region.VelocityMax);      // u8
+                w.Write(region.TuneCents);        // i16
+                w.Write(region.Volume);           // u8
+                w.Write(region.Pan);              // u8
+                w.Write(region.AttackRate);       // u8
+                w.Write(region.DecayRate);        // u8
+                w.Write(region.SustainLevel);     // u8
+                w.Write(region.ReleaseRate);      // u8
+                // 16 bytes total — matches SPLASHPACKRegionRecord.
+            }
+        }
+
+        // DrumKits
+        if (scene.DrumKits.Count > 0)
+        {
+            AlignTo4(w);
+            long start = w.BaseStream.Position;
+            BackfillUInt16(w, headerOffsets.DrumKitCountPos, (ushort)scene.DrumKits.Count);
+            BackfillUInt32(w, headerOffsets.DrumKitTableOffsetPos, (uint)start);
+            foreach (var kit in scene.DrumKits)
+            {
+                w.Write(kit.FirstMappingIndex);   // u16
+                w.Write(kit.MappingCount);        // u16
+                w.Write(kit.MidiChannel);         // u8
+                w.Write((byte)0);                 // pad[0]
+                w.Write((byte)0);                 // pad[1]
+                w.Write((byte)0);                 // pad[2]
+                // 8 bytes total — matches SPLASHPACKDrumKitRecord.
+            }
+        }
+
+        // DrumMappings
+        if (scene.DrumMappings.Count > 0)
+        {
+            AlignTo4(w);
+            long start = w.BaseStream.Position;
+            BackfillUInt16(w, headerOffsets.DrumMappingCountPos, (ushort)scene.DrumMappings.Count);
+            BackfillUInt32(w, headerOffsets.DrumMappingTableOffsetPos, (uint)start);
+            foreach (var dm in scene.DrumMappings)
+            {
+                w.Write(dm.MidiNote);             // u8
+                w.Write((byte)0);                 // pad0
+                w.Write(dm.AudioClipIndex);       // u16
+                w.Write(dm.Volume);               // u8
+                w.Write(dm.Pan);                  // u8
+                w.Write(dm.ChokeGroup);           // u8
+                w.Write(dm.Priority);             // u8
+                // 8 bytes total — matches SPLASHPACKDrumMappingRecord.
+            }
         }
     }
 

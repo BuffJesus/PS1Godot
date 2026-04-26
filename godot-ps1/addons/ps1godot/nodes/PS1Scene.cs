@@ -87,6 +87,27 @@ public partial class PS1Scene : Node3D
     [Export]
     public Godot.Collections.Array<PS1MusicSequence> MusicSequences { get; set; } = new();
 
+    // Phase 2.5: scene-wide instrument bank. Sequences in this scene
+    // can reference any instrument here by ProgramId. Multiple
+    // sequences sharing instruments avoid duplicating samples in SPU
+    // RAM — useful for variations on a town theme that all use the
+    // same string + bell + bass kit.
+    //
+    // The bank is exporter-deduplicated: same PS1Instrument resource
+    // referenced from multiple PS1MusicChannel.Instrument fields
+    // becomes one record in the splashpack. Drop instruments here
+    // explicitly when you want a sequence to ProgramChange-swap
+    // between them at runtime; one-off instruments referenced only
+    // from a channel field can also live here for clarity.
+    [Export]
+    public Godot.Collections.Array<PS1Instrument> Instruments { get; set; } = new();
+
+    // Drum kits (note → sample mappings) shared across sequences.
+    // Same dedup behaviour as Instruments — referenced from
+    // PS1MusicSequence.DrumKit fields, exporter collapses repeats.
+    [Export]
+    public Godot.Collections.Array<PS1DrumKit> DrumKits { get; set; } = new();
+
     [ExportGroup("Scene loading")]
     // Additional scenes that ship in the same splashpack drop. The currently-
     // open scene exports as scene_0; entries here export as scene_1, scene_2,

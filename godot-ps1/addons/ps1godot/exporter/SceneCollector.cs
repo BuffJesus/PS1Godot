@@ -60,6 +60,10 @@ public static class SceneCollector
         if (root is PS1Scene sceneWithAudio)
         {
             CollectAudioClips(sceneWithAudio, data);
+            // v28+: scene-wide instrument bank. Must be collected before
+            // sequences so PS1MSerializer can translate channel.Instrument
+            // references into program ids during sequence emission.
+            CollectMusicBank(sceneWithAudio, data);
             // Music sequences depend on AudioClips (channels reference clip
             // names) — collect after audio so the lookup table is populated.
             CollectMusicSequences(sceneWithAudio, data);
@@ -1755,6 +1759,208 @@ public static class SceneCollector
                 if (loop && adpcmLen > 32 * 1024) return 1;       // long loop -> XA
                 if (!loop && adpcmLen > 24 * 1024) return 1;      // long one-shot -> XA
                 return 0;                                          // SPU
+        }
+    }
+
+    // v28+: walks PS1Scene.Instruments and PS1Scene.DrumKits + their
+    // referenced regions/mappings, validates each clip reference, and
+    // populates SceneData.{Instruments,Regions,DrumKits,DrumMappings}
+    // along with the resource→bank-index dictionaries that
+    // CollectMusicSequences uses to translate
+    // PS1MusicChannel.Instrument → ProgramId.
+    //
+    // Skipped on scenes with no bank (both arrays empty) — header
+    // bank counts/offsets stay 0 and the runtime falls back to legacy
+    // direct-binding sequences.
+    private static void CollectMusicBank(PS1Scene scene, SceneData data)
+    {
+        bool hasInstruments = scene.Instruments != null && scene.Instruments.Count > 0;
+        bool hasKits = scene.DrumKits != null && scene.DrumKits.Count > 0;
+        if (!hasInstruments && !hasKits) return;
+
+        var clipIndexByName = new Dictionary<string, int>(data.AudioClips.Count);
+        for (int i = 0; i < data.AudioClips.Count; i++)
+            clipIndexByName[data.AudioClips[i].Name] = i;
+
+        // ProgramId is the lookup key for ProgramChange events at
+        // runtime. Two instruments with the same ProgramId would
+        // make the resolution ambiguous — first one wins, second
+        // is unreachable via program change.
+        var seenPrograms = new HashSet<int>();
+
+        if (scene.Instruments != null)
+        {
+            for (int i = 0; i < scene.Instruments.Count; i++)
+            {
+                var inst = scene.Instruments[i];
+                if (inst == null) continue;
+                if (data.InstrumentResourceToBankIndex.ContainsKey(inst))
+                {
+                    GD.PushWarning($"[PS1Godot] PS1Scene.Instruments[{i}] '{inst.InstrumentName}' is duplicated — using first occurrence.");
+                    continue;
+                }
+                if (!seenPrograms.Add(inst.ProgramId))
+                {
+                    GD.PushWarning($"[PS1Godot] PS1Scene.Instruments[{i}] '{inst.InstrumentName}' shares ProgramId={inst.ProgramId} with another instrument — MIDI ProgramChange resolution will pick whichever was added first.");
+                }
+
+                int firstRegion = data.Regions.Count;
+                int regionsAdded = 0;
+                if (inst.Regions != null)
+                {
+                    for (int ri = 0; ri < inst.Regions.Count; ri++)
+                    {
+                        var region = inst.Regions[ri];
+                        if (region == null)
+                        {
+                            GD.PushWarning($"[PS1Godot] Instrument '{inst.InstrumentName}' region #{ri} is empty — skipped.");
+                            continue;
+                        }
+                        if (string.IsNullOrEmpty(region.AudioClipName))
+                        {
+                            GD.PushWarning($"[PS1Godot] Instrument '{inst.InstrumentName}' region #{ri} has no AudioClipName — skipped.");
+                            continue;
+                        }
+                        if (!clipIndexByName.TryGetValue(region.AudioClipName, out int clipIdx))
+                        {
+                            GD.PushError($"[PS1Godot] Instrument '{inst.InstrumentName}' region #{ri} references unknown audio clip '{region.AudioClipName}'.");
+                            continue;
+                        }
+                        byte routing = data.AudioClips[clipIdx].Routing;
+                        if (routing != 0)
+                        {
+                            string r = routing == 1 ? "XA" : (routing == 2 ? "CDDA" : $"unknown({routing})");
+                            GD.PushError($"[PS1Godot] Instrument '{inst.InstrumentName}' region #{ri} clip '{region.AudioClipName}' is Route={r} — instrument regions only back SPU-routed clips. Skipped.");
+                            continue;
+                        }
+                        byte flags = 0;
+                        if (region.LoopEnabled)  flags |= 0x01;
+                        if (region.OverrideADSR) flags |= 0x02;
+                        data.Regions.Add(new RegionBankRecord
+                        {
+                            AudioClipIndex = (ushort)clipIdx,
+                            RootKey      = (byte)System.Math.Clamp(region.RootKey, 0, 127),
+                            Flags        = flags,
+                            KeyMin       = (byte)System.Math.Clamp(region.KeyMin, 0, 127),
+                            KeyMax       = (byte)System.Math.Clamp(region.KeyMax, 0, 127),
+                            VelocityMin  = (byte)System.Math.Clamp(region.VelocityMin, 0, 127),
+                            VelocityMax  = (byte)System.Math.Clamp(region.VelocityMax, 0, 127),
+                            TuneCents    = (short)System.Math.Clamp(region.TuneCents, -100, 100),
+                            Volume       = (byte)System.Math.Clamp(region.Volume, 0, 127),
+                            Pan          = (byte)System.Math.Clamp(region.Pan, 0, 127),
+                            AttackRate   = (byte)System.Math.Clamp(region.AttackRate, 0, 15),
+                            DecayRate    = (byte)System.Math.Clamp(region.DecayRate, 0, 15),
+                            SustainLevel = (byte)System.Math.Clamp(region.SustainLevel, 0, 127),
+                            ReleaseRate  = (byte)System.Math.Clamp(region.ReleaseRate, 0, 15),
+                        });
+                        regionsAdded++;
+                    }
+                }
+                if (regionsAdded == 0)
+                {
+                    GD.PushError($"[PS1Godot] Instrument '{inst.InstrumentName}' has no valid regions — bank entry skipped.");
+                    continue;
+                }
+                int instIdx = data.Instruments.Count;
+                data.Instruments.Add(new InstrumentBankRecord
+                {
+                    FirstRegionIndex = (ushort)firstRegion,
+                    RegionCount      = (ushort)regionsAdded,
+                    ProgramId        = (byte)System.Math.Clamp(inst.ProgramId, 0, 127),
+                    Volume           = (byte)System.Math.Clamp(inst.Volume, 0, 127),
+                    Pan              = (byte)System.Math.Clamp(inst.Pan, 0, 127),
+                    Priority         = (byte)System.Math.Clamp(inst.Priority, 0, 255),
+                    PolyphonyLimit   = (byte)System.Math.Clamp(inst.PolyphonyLimit, 0, 24),
+                    PitchBendRange   = (byte)System.Math.Clamp(inst.PitchBendRange, 0, 24),
+                    AttackRate       = (byte)System.Math.Clamp(inst.AttackRate, 0, 15),
+                    DecayRate        = (byte)System.Math.Clamp(inst.DecayRate, 0, 15),
+                    SustainLevel     = (byte)System.Math.Clamp(inst.SustainLevel, 0, 127),
+                    ReleaseRate      = (byte)System.Math.Clamp(inst.ReleaseRate, 0, 15),
+                });
+                data.InstrumentResourceToBankIndex[inst] = instIdx;
+            }
+        }
+
+        if (scene.DrumKits != null)
+        {
+            for (int i = 0; i < scene.DrumKits.Count; i++)
+            {
+                var kit = scene.DrumKits[i];
+                if (kit == null) continue;
+                if (data.DrumKitResourceToBankIndex.ContainsKey(kit))
+                {
+                    GD.PushWarning($"[PS1Godot] PS1Scene.DrumKits[{i}] '{kit.KitName}' is duplicated — using first occurrence.");
+                    continue;
+                }
+                int firstMapping = data.DrumMappings.Count;
+                int mappingsAdded = 0;
+                int kitN = kit.MidiNotes?.Count ?? 0;
+                for (int mi = 0; mi < kitN; mi++)
+                {
+                    int note = kit.MidiNotes![mi];
+                    if (note < 0 || note > 127)
+                    {
+                        GD.PushError($"[PS1Godot] DrumKit '{kit.KitName}' mapping #{mi} note={note} out of range.");
+                        continue;
+                    }
+                    string clipName = (kit.AudioClipNames != null && mi < kit.AudioClipNames.Count)
+                        ? kit.AudioClipNames[mi] : "";
+                    if (string.IsNullOrEmpty(clipName))
+                    {
+                        GD.PushWarning($"[PS1Godot] DrumKit '{kit.KitName}' note {note} has no AudioClipName — skipped.");
+                        continue;
+                    }
+                    if (!clipIndexByName.TryGetValue(clipName, out int clipIdx))
+                    {
+                        GD.PushError($"[PS1Godot] DrumKit '{kit.KitName}' note {note} references unknown audio clip '{clipName}'.");
+                        continue;
+                    }
+                    byte routing = data.AudioClips[clipIdx].Routing;
+                    if (routing != 0)
+                    {
+                        string r = routing == 1 ? "XA" : (routing == 2 ? "CDDA" : $"unknown({routing})");
+                        GD.PushError($"[PS1Godot] DrumKit '{kit.KitName}' note {note} clip '{clipName}' is Route={r} — drum mappings only back SPU-routed clips. Skipped.");
+                        continue;
+                    }
+                    byte vol   = (byte)System.Math.Clamp((kit.Volumes != null && mi < kit.Volumes.Count) ? kit.Volumes[mi] : 100, 0, 127);
+                    byte pan   = (byte)System.Math.Clamp((kit.Pans != null && mi < kit.Pans.Count) ? kit.Pans[mi] : 64, 0, 127);
+                    byte choke = (byte)System.Math.Clamp((kit.ChokeGroups != null && mi < kit.ChokeGroups.Count) ? kit.ChokeGroups[mi] : 0, 0, 255);
+                    byte prio  = (byte)System.Math.Clamp((kit.Priorities != null && mi < kit.Priorities.Count) ? kit.Priorities[mi] : 64, 0, 255);
+                    data.DrumMappings.Add(new DrumMappingBankRecord
+                    {
+                        MidiNote       = (byte)note,
+                        AudioClipIndex = (ushort)clipIdx,
+                        Volume         = vol,
+                        Pan            = pan,
+                        ChokeGroup     = choke,
+                        Priority       = prio,
+                    });
+                    mappingsAdded++;
+                }
+                if (mappingsAdded == 0)
+                {
+                    GD.PushWarning($"[PS1Godot] DrumKit '{kit.KitName}' has no valid mappings — bank entry skipped.");
+                    continue;
+                }
+                // MidiChannel on the kit record is the default; the
+                // PS1MusicSequence that references this kit can override
+                // via DrumMidiChannel — but Stage B keeps it at the kit's
+                // default of 9 (GM convention). Stage C's per-sequence
+                // wiring will revisit if the override matters.
+                int kitIdx = data.DrumKits.Count;
+                data.DrumKits.Add(new DrumKitBankRecord
+                {
+                    FirstMappingIndex = (ushort)firstMapping,
+                    MappingCount      = (ushort)mappingsAdded,
+                    MidiChannel       = 9,
+                });
+                data.DrumKitResourceToBankIndex[kit] = kitIdx;
+            }
+        }
+
+        if (data.Instruments.Count > 0 || data.DrumKits.Count > 0)
+        {
+            GD.Print($"[PS1Godot] Music bank: {data.Instruments.Count} instrument(s) / {data.Regions.Count} region(s) / {data.DrumKits.Count} drum kit(s) / {data.DrumMappings.Count} drum mapping(s).");
         }
     }
 

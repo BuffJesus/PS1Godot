@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Godot;
+using PS1Godot;
 
 namespace PS1Godot.Exporter;
 
@@ -92,6 +93,66 @@ public sealed class MusicSequenceRecord
 {
     public required byte[] Ps1mData { get; init; }   // PS1M binary blob
     public required string Name { get; init; }       // null-truncated to 15 chars in writer
+}
+
+// v28+: scene-wide instrument bank record (16 bytes on disk). Maps to
+// SPLASHPACKInstrumentRecord in psxsplash-main/src/splashpack.hh.
+public sealed class InstrumentBankRecord
+{
+    public required ushort FirstRegionIndex { get; init; }
+    public required ushort RegionCount { get; init; }
+    public required byte ProgramId { get; init; }
+    public required byte Volume { get; init; }
+    public required byte Pan { get; init; }
+    public required byte Priority { get; init; }
+    public required byte PolyphonyLimit { get; init; }
+    public required byte PitchBendRange { get; init; }
+    public required byte AttackRate { get; init; }
+    public required byte DecayRate { get; init; }
+    public required byte SustainLevel { get; init; }
+    public required byte ReleaseRate { get; init; }
+}
+
+// v28+: instrument region record (16 bytes on disk). Maps to
+// SPLASHPACKRegionRecord. AudioClipIndex is into SceneData.AudioClips.
+public sealed class RegionBankRecord
+{
+    public required ushort AudioClipIndex { get; init; }
+    public required byte RootKey { get; init; }
+    public required byte Flags { get; init; }   // bit 0 = LoopEnabled, bit 1 = OverrideADSR
+    public required byte KeyMin { get; init; }
+    public required byte KeyMax { get; init; }
+    public required byte VelocityMin { get; init; }
+    public required byte VelocityMax { get; init; }
+    public required short TuneCents { get; init; }
+    public required byte Volume { get; init; }
+    public required byte Pan { get; init; }
+    public required byte AttackRate { get; init; }
+    public required byte DecayRate { get; init; }
+    public required byte SustainLevel { get; init; }
+    public required byte ReleaseRate { get; init; }
+}
+
+// v28+: drum-kit record (8 bytes). FirstMappingIndex points into the
+// flat scene-wide drum-mapping table; MappingCount drums belong to
+// this kit.
+public sealed class DrumKitBankRecord
+{
+    public required ushort FirstMappingIndex { get; init; }
+    public required ushort MappingCount { get; init; }
+    public required byte MidiChannel { get; init; }
+}
+
+// v28+: per-drum mapping (8 bytes). Owned by a DrumKitBankRecord via
+// the kit's FirstMappingIndex / MappingCount slice.
+public sealed class DrumMappingBankRecord
+{
+    public required byte MidiNote { get; init; }
+    public required ushort AudioClipIndex { get; init; }
+    public required byte Volume { get; init; }
+    public required byte Pan { get; init; }
+    public required byte ChokeGroup { get; init; }
+    public required byte Priority { get; init; }
 }
 
 // World-space AABB that fires a Lua script when the player's AABB enters
@@ -472,6 +533,23 @@ public sealed class SceneData
     // Sequenced music tracks (.mid → PS1M). Parallel name lookup via
     // Music.Play("..."). Capped at 8 entries by the runtime.
     public List<MusicSequenceRecord> MusicSequences { get; } = new();
+
+    // v28+: scene-wide instrument bank. Each Instruments entry owns a
+    // contiguous slice of Regions (firstRegionIndex / regionCount).
+    // Each DrumKits entry owns a contiguous slice of DrumMappings.
+    // Sequences using the bank reference instruments by ProgramId
+    // (0-127). Empty lists = no bank (header counts/offsets emit as
+    // 0; runtime stays on legacy direct-binding path).
+    public List<InstrumentBankRecord> Instruments { get; } = new();
+    public List<RegionBankRecord> Regions { get; } = new();
+    public List<DrumKitBankRecord> DrumKits { get; } = new();
+    public List<DrumMappingBankRecord> DrumMappings { get; } = new();
+
+    // Author-side resource → bank index lookup, populated during
+    // CollectMusicBank. Lets PS1MSerializer translate channel.Instrument
+    // references into program IDs. Cleared on each scene export.
+    public Dictionary<PS1Instrument, int> InstrumentResourceToBankIndex { get; } = new();
+    public Dictionary<PS1DrumKit, int>    DrumKitResourceToBankIndex { get; } = new();
 
     // UI canvases gathered from PS1UICanvas nodes + their PS1UIElement
     // children. Lua resolves by name via UI.FindCanvas.
