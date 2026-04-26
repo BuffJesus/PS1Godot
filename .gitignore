@@ -111,6 +111,20 @@ scripts/rebuild_monitor_kenney.py
 scripts/gen_goblin_*.py
 scripts/gen_menu_assets.py
 scripts/double_obj_faces.py
+# Day 6: horror decal pipeline (gen + place + filter + Kenney install).
+scripts/ai_horror_kenney_textures.py
+scripts/horror_filter_kenney.py
+scripts/force_horror_4bpp.py
+scripts/gen_horror_assets.py
+scripts/gen_alpha_assets.py
+scripts/gen_blood_decal*.py
+scripts/gen_remaining_alpha.py
+scripts/gen_static_cobweb.py
+scripts/place_horror_decals*.py
+scripts/inspect_kenney_fbx.gd
+scripts/install_kenney_skinned.gd
+scripts/revert_kenney_skinned.gd
+scripts/regen_backroom_tone.py
 # UVgami CLI binaries + per-model unwrap intermediates (large + jam-specific).
 tools/uvgami/
 # Recent handoff notes — pre-jam handoffs (≤2026-04-21) are tracked.
@@ -118,5 +132,6 @@ docs/handoff-2026-04-22.md
 docs/handoff-2026-04-23.md
 docs/handoff-2026-04-24.md
 docs/handoff-2026-04-25.md
+docs/handoff-2026-04-26.md
 # Original jam-game source files staging area (Unity export, audio, etc.).
 SaunaGameSourceFiles/
