@@ -102,6 +102,8 @@ public sealed class PSXMesh
             var uvs = arrays[(int)Mesh.ArrayType.TexUV].AsVector2Array();
             var indices = arrays[(int)Mesh.ArrayType.Index].AsInt32Array();
 
+            MeshLinter.RecordSurface(node.Name, uvs);
+
             int triCount = indices.Length > 0 ? indices.Length / 3 : verts.Length / 3;
 
             for (int t = 0; t < triCount; t++)
@@ -160,6 +162,8 @@ public sealed class PSXMesh
         var normals = arrays[(int)Mesh.ArrayType.Normal].AsVector3Array();
         var uvs = arrays[(int)Mesh.ArrayType.TexUV].AsVector2Array();
         var indices = arrays[(int)Mesh.ArrayType.Index].AsInt32Array();
+
+        MeshLinter.RecordSurface(sub.Name, uvs);
 
         // Orthonormalize for normals so non-uniform child scales don't
         // warp the lighting vector. Positions still use the full transform

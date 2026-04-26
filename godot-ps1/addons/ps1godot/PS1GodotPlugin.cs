@@ -345,6 +345,7 @@ public partial class PS1GodotPlugin : EditorPlugin
         string buildDir = ProjectSettings.GlobalizePath("res://build/");
         string absPath = System.IO.Path.Combine(buildDir, $"scene_{sceneIndex}.splashpack");
 
+        Exporter.MeshLinter.ResetForScene();
         var sceneData = Exporter.SceneCollector.FromRoot(sceneRoot, sceneRoot.SceneFilePath ?? "");
         GD.Print($"[PS1Godot] Scene[{sceneIndex}]: {(string.IsNullOrEmpty(sceneData.ScenePath) ? "(unsaved)" : sceneData.ScenePath)}");
         GD.Print($"[PS1Godot]   PS1MeshInstance objects found: {sceneData.Objects.Count}");
@@ -367,6 +368,11 @@ public partial class PS1GodotPlugin : EditorPlugin
         // sources, 16bpp gameplay textures, and small cutouts that should
         // be 4bpp. Print-only; no behavioral change.
         Exporter.TextureValidationReport.EmitForScene(sceneData, sceneIndex);
+
+        // UV linter: warn on any vertex UV outside [0, 1]. PSX rasteriser
+        // doesn't wrap or clamp — out-of-range UVs sample neighbouring
+        // VRAM data as garbage. Editor's wrapping sampler hides this.
+        Exporter.MeshLinter.EmitForScene(sceneIndex);
 
         try
         {
