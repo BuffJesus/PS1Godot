@@ -111,6 +111,10 @@ struct SplashpackSceneSetup {
         bool loop;
         const char* name;   // Points into splashpack data (null-terminated)
         AudioRouting routing = AudioRouting::SPU;
+        // v26: red-book CD audio track for CDDA-routed clips. 0 = unset;
+        // Audio.PlayMusic logs "no track mapping" and returns -1 when a
+        // CDDA clip has track 0.
+        uint8_t cddaTrack = 0;
     };
     eastl::vector<AudioClipSetup> audioClips;
 

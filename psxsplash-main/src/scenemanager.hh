@@ -92,6 +92,15 @@ class SceneManager {
         return 0;
     }
 
+    // v26: red-book CD audio track for a CDDA-routed clip. 0 means
+    // unset — Audio.PlayMusic logs a "no track mapping" warning and
+    // returns -1. Authors should set the track in the editor's
+    // PS1AudioClip resource when they tag the clip CDDA.
+    uint8_t getAudioClipCddaTrack(int index) const {
+        if (index >= 0 && index < (int)m_audioClipCddaTrack.size()) return m_audioClipCddaTrack[index];
+        return 0;
+    }
+
     // Music sequence lookup by name (returns -1 if not found). Names
     // come from the splashpack music table and are stored at load time.
     int findMusicSequenceByName(const char* name) const;
@@ -220,6 +229,10 @@ class SceneManager {
     // PlayMusic/PlaySfx use this to dispatch to the right backend so the
     // game script doesn't have to know how each clip was authored.
     eastl::vector<uint8_t> m_audioClipRouting;
+
+    // v26: parallel to m_audioClipNames. CD audio track number for
+    // CDDA-routed clips. 0 = unset.
+    eastl::vector<uint8_t> m_audioClipCddaTrack;
 
     // Music sequence name table (v22+). Parallel to the sequencer's
     // registered sequences. Populated from the splashpack music table

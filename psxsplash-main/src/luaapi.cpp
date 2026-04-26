@@ -2018,10 +2018,17 @@ int LuaAPI::Audio_PlayMusic(lua_State* L) {
             ramsyscall_printf("[Audio] PlayMusic('%s'): XA streaming not implemented yet (Phase 3). Silence.\n", name);
             lua.pushNumber(-1);
             return 1;
-        case 2:  // CDDA — must use track-based API
-            ramsyscall_printf("[Audio] PlayMusic('%s'): CDDA-routed clip - call Audio.PlayCDDA(track) directly.\n", name);
-            lua.pushNumber(-1);
+        case 2: { // CDDA — auto-dispatch to PlayCDDA via the clip's track
+            uint8_t track = s_sceneManager->getAudioClipCddaTrack(idx);
+            if (track == 0) {
+                ramsyscall_printf("[Audio] PlayMusic('%s'): CDDA-routed clip has no track number set. Set CddaTrackNumber on the PS1AudioClip resource.\n", name);
+                lua.pushNumber(-1);
+                return 1;
+            }
+            s_sceneManager->getMusic().playCDDATrack(static_cast<int>(track));
+            lua.pushNumber(0);
             return 1;
+        }
         default:
             lua.pushNumber(-1);
             return 1;

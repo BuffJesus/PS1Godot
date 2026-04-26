@@ -71,6 +71,12 @@ public sealed class AudioClipRecord
     // concrete value before write. Default 0 = SPU preserves existing
     // export behavior for clips that don't opt in to routing.
     public byte Routing { get; init; } = 0;
+
+    // v26: CDDA track number for clips with Routing=CDDA. 0 = unset
+    // (runtime logs "no track mapping" instead of playing). Tracked
+    // here so PS1AudioClip authoring metadata can flow to the runtime
+    // Audio.PlayMusic dispatcher.
+    public byte CddaTrackNumber { get; init; } = 0;
 }
 
 // One pre-serialized PS1M sequenced-music blob. Lua picks it by name

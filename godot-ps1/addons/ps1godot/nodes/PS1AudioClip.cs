@@ -92,4 +92,15 @@ public partial class PS1AudioClip : Resource
     // playback is still scaffolded; runtime currently logs a warning and
     // falls back to SPU residency.
     [Export] public PS1AudioRoute Route { get; set; } = PS1AudioRoute.Auto;
+
+    // v26: red-book CD audio track number (1-based, matches mkpsxiso
+    // track ordering). Used by Audio.PlayMusic when Route == CDDA so
+    // the Lua side doesn't have to know which physical track the song
+    // landed on. 0 = unset; with Route == CDDA + track 0 the runtime
+    // logs "no track mapping" instead of playing.
+    //
+    // Track 1 is the data track on a PSX disc, so authored audio
+    // tracks start at 2. Range cap matches the format byte width.
+    [Export(PropertyHint.Range, "0,255,1")]
+    public int CddaTrackNumber { get; set; } = 0;
 }

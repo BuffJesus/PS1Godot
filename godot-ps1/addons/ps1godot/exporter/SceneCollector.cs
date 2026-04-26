@@ -1687,6 +1687,7 @@ public static class SceneCollector
                 Loop = clip.Loop,
                 Name = name,
                 Routing = resolvedRoute,
+                CddaTrackNumber = (byte)Mathf.Clamp(clip.CddaTrackNumber, 0, 255),
             });
             GD.Print($"[PS1Godot] Audio clip '{name}': {pcm.Length} samples @ {rate}Hz → {adpcm.Length} bytes ADPCM (loop={clip.Loop}, route={routeLabel}, index {data.AudioClips.Count - 1})");
         }

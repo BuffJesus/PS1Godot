@@ -43,7 +43,7 @@ Auto **never** picks CDDA — disc layout impact is too project-shaped to guess.
 | Splashpack v25 binary field        | shipped    | `routing` byte in audio table entry |
 | Runtime route table (SceneManager) | shipped    | `getAudioClipRouting(idx)` |
 | `Audio.PlaySfx(name, vol?, pan?)`  | shipped    | warns if clip is non-SPU |
-| `Audio.PlayMusic(name)`            | scaffolded | SPU works; XA/CDDA log "not implemented" or "use PlayCDDA(track)" |
+| `Audio.PlayMusic(name)`            | partial    | SPU + CDDA work end-to-end (CDDA auto-dispatches via `PS1AudioClip.CddaTrackNumber`); XA logs "not implemented" |
 | `Audio.StopMusic()`                | shipped    | stops sequencer + CDDA; no-op for XA |
 | `Audio.PlayCDDA(track)` etc.       | shipped    | unchanged — direct CDDA control |
 | psxavenc detection                 | shipped    | `PsxAvEnc.Detect()` — env `PSXAVENC` or PATH |
@@ -103,21 +103,24 @@ disc based on what the exporter wrote.
 
 ## CDDA strategy
 
-- Authoring path: place WAV music tracks in the disc layout config. Tag the
-  matching `PS1AudioClip` with `Route = CDDA` and a track-number link (TODO —
-  not yet exposed in the resource).
-- Until the link field exists, just call `Audio.PlayCDDA(<track>)` directly
-  from Lua and leave `Route = SPU` on the in-engine clip. CDDA is for
-  one-off "play track 2 on the title screen" not generic music routing.
+- Authoring path: place WAV music tracks in the disc layout config (mkpsxiso
+  Track 02, 03, …). Tag the matching `PS1AudioClip` with `Route = CDDA` and
+  set `CddaTrackNumber` to the disc track. `Audio.PlayMusic("name")` then
+  dispatches to `playCDDATrack(track)` automatically — Lua doesn't need to
+  know the track number.
+- Track 1 is the data track on a PSX disc; authored audio tracks start at 2.
+- `Audio.PlayCDDA(<track>)` direct call still works for one-off cases where
+  you don't want a `PS1AudioClip` resource at all.
 - Cost: CDDA monopolizes the CD drive — no concurrent file/level streaming.
   Use only where that is acceptable (title, end credits, attract loops).
 
 ## Migration notes
 
-- Splashpack version went **v24 → v25**. Loader hard-asserts `>= 25`. Re-export
-  any pack older than that.
-- AudioClipEntry stride went **16 B → 20 B** (added routing byte + 3-byte align
-  pad). Old packs won't load; fresh exports are fine.
+- Splashpack version went **v24 → v25 → v26**. Loader hard-asserts `>= 26`.
+  Re-export any pack older than that.
+- AudioClipEntry stride is **20 B** (v25 added routing + 3-byte pad; v26
+  claims one of the pad bytes for `cddaTrack`, so the layout is now
+  `... routing(u8) cddaTrack(u8) _pad(2)`).
 - Existing exports without `Route` set on every clip default to **Auto**, which
   resolves to **SPU** for everything below the size threshold — i.e. the same
   behavior as before for typical jam-scale audio.

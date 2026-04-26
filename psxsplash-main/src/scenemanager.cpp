@@ -133,14 +133,17 @@ void psxsplash::SceneManager::InitializeScene(uint8_t* splashpackData, LoadingSc
     // separately via uploadSpuData() before InitializeScene() is called.
     m_audioClipNames = std::move(sceneSetup.audioClipNames);
 
-    // v25 routing: walk the parallel audioClips array and snapshot the
-    // routing byte per index. Done before audioClips is consumed/dropped
-    // so the runtime keeps the route info even though AudioClipSetup
-    // itself isn't retained.
+    // v25/v26 routing: walk the parallel audioClips array and snapshot
+    // the routing byte + cdda track per index. Done before audioClips is
+    // consumed/dropped so the runtime keeps the route info even though
+    // AudioClipSetup itself isn't retained.
     m_audioClipRouting.clear();
     m_audioClipRouting.reserve(sceneSetup.audioClips.size());
+    m_audioClipCddaTrack.clear();
+    m_audioClipCddaTrack.reserve(sceneSetup.audioClips.size());
     for (const auto &clip : sceneSetup.audioClips) {
         m_audioClipRouting.push_back(static_cast<uint8_t>(clip.routing));
+        m_audioClipCddaTrack.push_back(clip.cddaTrack);
     }
 
     if (loading && loading->isActive()) loading->updateProgress(gpu, 55);
