@@ -457,9 +457,7 @@ public static class SceneCollector
             group.Name = displayName;
         }
 
-        byte rByte = PSXTrig.ColorChannelToPSX(group.FlatColor.R);
-        byte gByte = PSXTrig.ColorChannelToPSX(group.FlatColor.G);
-        byte bByte = PSXTrig.ColorChannelToPSX(group.FlatColor.B);
+        Color groupTint = group.FlatColor;
 
         var merged = new PSXMesh();
         var surfaceTextureIndices = new List<int>();
@@ -495,6 +493,17 @@ public static class SceneCollector
                 PSXTexture? tex = (texIdx >= 0 && texIdx < data.Textures.Count)
                     ? data.Textures[texIdx]
                     : null;
+
+                // Per-surface tint = groupTint * material.AlbedoColor. Critical
+                // for Kenney-style kits where every surface has a distinct
+                // albedo_color but no texture — without this, untextured
+                // surfaces would all flat-shade to groupTint (usually white)
+                // and the model would render as a single uniform blob.
+                Color surfaceColor = groupTint * ExtractAlbedoColor(GetSurfaceMaterial(sub, s));
+                byte rByte = PSXTrig.ColorChannelToPSX(surfaceColor.R);
+                byte gByte = PSXTrig.ColorChannelToPSX(surfaceColor.G);
+                byte bByte = PSXTrig.ColorChannelToPSX(surfaceColor.B);
+
                 merged.AppendFromGodotSurface(sub, s, subToGroup, texIdx, tex,
                     data.GteScaling, rByte, gByte, bByte);
             }
@@ -1287,6 +1296,32 @@ public static class SceneCollector
             }
         }
         return null;
+    }
+
+    // Same precedence as ResolveSurfaceTextureCore: override → per-surface
+    // override → mesh's surface material. Pulled out so PS1MeshGroup can
+    // grab per-surface tints without re-implementing the lookup.
+    private static Material? GetSurfaceMaterial(MeshInstance3D mi, int surfaceIdx)
+    {
+        Material? mat = mi.MaterialOverride;
+        if (mat == null) mat = mi.GetSurfaceOverrideMaterial(surfaceIdx);
+        if (mat == null && mi.Mesh != null) mat = mi.Mesh.SurfaceGetMaterial(surfaceIdx);
+        return mat;
+    }
+
+    // Per-surface albedo color. Returns white when the material is null or
+    // an unknown type, so callers can safely multiply against it without a
+    // null check. Recognizes our shader's `tint_color` parameter and
+    // StandardMaterial3D.AlbedoColor (the path Kenney GLBs use).
+    private static Color ExtractAlbedoColor(Material? mat)
+    {
+        if (mat is ShaderMaterial sm)
+        {
+            var tint = sm.GetShaderParameter("tint_color");
+            if (tint.VariantType == Variant.Type.Color) return tint.AsColor();
+        }
+        if (mat is StandardMaterial3D std) return std.AlbedoColor;
+        return Colors.White;
     }
 
     // Resolve a mesh's effective flat color for untextured export.
