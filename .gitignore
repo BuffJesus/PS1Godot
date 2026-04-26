@@ -19,6 +19,7 @@ godot-ps1/bin/
 godot-ps1/obj/
 godot-ps1/*.csproj.user
 godot-ps1/*.sln.DotSettings.user
+godot-ps1/project.godot*.tmp
 
 # ── Splashpack build output (authored scene → PSX binary) ──
 godot-ps1/build/
@@ -106,6 +107,12 @@ godot-ps1/assets/monitor/
 docs/the-monitor-*.md
 scripts/regen-monitor-assets.py
 scripts/regen-monitor-audio.py
+scripts/rebuild_monitor_kenney.py
+scripts/gen_goblin_*.py
+scripts/gen_menu_assets.py
+scripts/double_obj_faces.py
+# UVgami CLI binaries + per-model unwrap intermediates (large + jam-specific).
+tools/uvgami/
 # Recent handoff notes — pre-jam handoffs (≤2026-04-21) are tracked.
 docs/handoff-2026-04-22.md
 docs/handoff-2026-04-23.md
