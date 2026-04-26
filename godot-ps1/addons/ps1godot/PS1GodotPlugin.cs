@@ -363,6 +363,11 @@ public partial class PS1GodotPlugin : EditorPlugin
         }
         GD.Print($"[PS1Godot]   Total triangles: {totalTris}");
 
+        // v25 texture validation: print per-asset row + warn on oversized
+        // sources, 16bpp gameplay textures, and small cutouts that should
+        // be 4bpp. Print-only; no behavioral change.
+        Exporter.TextureValidationReport.EmitForScene(sceneData, sceneIndex);
+
         try
         {
             Exporter.SplashpackWriter.Write(absPath, sceneData);

@@ -25,6 +25,13 @@ public sealed class PSXTexture
     // Palette — null for 16bpp direct textures.
     public List<VRAMPixel>? ColorPalette;
 
+    // True when FromGodotImage detected any source pixel with alpha < 0.5
+    // and reserved palette index 0 as the transparent sentinel (CLUT[0] =
+    // 0x0000). Distinct from "palette[0] happens to be black" — used by
+    // the texture validation report to avoid false-positive cutout warns
+    // on solid-black art.
+    public bool HasAlphaKey;
+
     // Position within the owning atlas (byte addresses in VRAM-word units).
     public byte PackingX;
     public byte PackingY;
@@ -54,6 +61,10 @@ public sealed class PSXTexture
             BitDepth = bpp,
             SourcePath = sourcePath,
         };
+        // hasAlphaKey gets resolved below; record on the texture for the
+        // validation report. 16bpp path also writes Transparent() pixels
+        // when input alpha is 0, so the flag tracks "any transparent
+        // pixel exists" regardless of bit depth.
 
         t.QuantizedWidth = bpp switch
         {
@@ -88,6 +99,7 @@ public sealed class PSXTexture
                 for (int x = 0; x < t.Width; x++)
                     transparentMask[x, y] = img.GetPixel(x, y).A < AlphaKeyThreshold;
         }
+        t.HasAlphaKey = hasAlphaKey;
 
         if (bpp == PSXBPP.TEX_16BIT)
         {
