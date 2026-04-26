@@ -1064,6 +1064,40 @@ PCSX-Redux with combat, inventory, leveling, dialog, and save/load working.
 SplashEdit has useful UX that makes PS1 constraints tractable. Port what
 matters, and do better where it's cheap.
 
+### Audio routing pulled forward (in-progress as of 2026-04-26)
+
+Splashpack v25 added a per-clip `Routing` byte (SPU / XA / CDDA / Auto).
+Auto resolves at build time from size + loop heuristics. Status:
+
+- [x] `PS1AudioClip.Route` editor field + `ResolveAudioRoute` heuristic.
+- [x] Splashpack v25 binary field + runtime route table in `SceneManager`.
+- [x] Lua `Audio.PlaySfx` / `Audio.PlayMusic` / `Audio.StopMusic` —
+      SPU works, XA logs "not implemented", CDDA points at PlayCDDA(track).
+- [x] `psxavenc` detection (`PsxAvEnc.Detect`) — env `PSXAVENC` or PATH.
+      No conversion wired yet.
+- [ ] `psxavenc` invocation: convert XA-routed WAVs to `.xa`; emit a
+      v26 XA table with per-clip offset/size into a `scene.<n>.xa`
+      sidecar.
+- [ ] `XaAudioBackend` runtime: wrap `psyqo::CDRomDevice` sector reads,
+      plug into `Audio.PlayMusic` for XA clips.
+- [ ] mkpsxiso: include `.xa` sidecars in the data track.
+- [ ] CDDA track-link field on `PS1AudioClip` so `Audio.PlayMusic` can
+      route CDDA-tagged clips automatically (today: call `Audio.PlayCDDA`
+      with the track number explicitly).
+
+See [`docs/ps1-audio-routing.md`](docs/ps1-audio-routing.md) for the bus
+table, Auto rules, and per-clip migration shortlist.
+
+### Memory + texture strategy docs
+
+- [`docs/ps1-memory-strategy.md`](docs/ps1-memory-strategy.md) — three-bus
+  budget overview (SPU / VRAM / main RAM) with cross-references.
+- [`docs/ps1-texture-strategy.md`](docs/ps1-texture-strategy.md) — 4bpp/8bpp
+  default policy, atlas grouping, CLUT reuse, decal pipeline, alpha modes.
+- Validation scaffold (per-asset VRAM table, 16bpp warn, atlas dedup) is
+  noted in the texture doc but not yet implemented; lands alongside the
+  Phase 3 VRAM viewer.
+
 - [ ] **F5 to play.** Hook Godot's Play button: build splashpack → launch
       PCSX-Redux with PCdrv → attach C# debugger → tail `printf` output in
       the Godot Output dock.
