@@ -29,15 +29,17 @@ project with our plugin at `godot-ps1/addons/ps1godot/`.
 ```
 
 The **splashpack binary format** is the integration contract. Current version is
-**v21** (bumped 2026-04-20 from v20; see
+**v29** (bumped through v22–v29 between 2026-04-20 and 2026-04-26 for sequenced
+music, UI 3D-model HUD widgets, audio routing, XA sidecar table, scene-wide
+instrument bank, sound macros + sound families; see
 `godot-ps1/addons/ps1godot/exporter/SplashpackWriter.cs` and
 `psxsplash-main/src/splashpack.{hh,cpp}`). The loader hard-asserts
-`version >= 21`; older exports won't load. We are the sole consumer — the
+`version >= 29`; older exports won't load. We are the sole consumer — the
 upstream SplashEdit Unity project still emits v20, but we've diverged. If
 bumping again, maintain the "add at the end, bump the version" discipline
 rather than reshuffling existing fields.
 
-**v21 splits the export into three files**, all written alongside each other:
+**v21 onward splits the export into three files**, all written alongside each other:
 
 | File | Contents |
 |------|----------|
@@ -49,12 +51,12 @@ Splitting by destination lets the runtime DMA each blob into the right memory
 region without parsing. The `.splashpack` file references offsets into the other
 two.
 
-Magic bytes are `"SP"`, header is **136 bytes** (see `SPLASHPACKFileHeader` in
+Magic bytes are `"SP"`, header is **224 bytes** (see `SPLASHPACKFileHeader` in
 `splashpack.cpp`). Struct layouts are load-bearing — `static_assert` sizes in
 `splashpack.hh` are the source of truth, and the Godot writer must match them
-bit-for-bit. v21 added `cameraRigOffset` + `playerAvatarOffset` +
-`playerAvatarObjectIndex` at the end (+16 bytes) for editor-driven
-third-person rig + auto-tracked avatar.
+bit-for-bit. Each version bump appends to the end of the header (e.g. v21 added
+the third-person camera-rig fields, v27 added the XA sidecar table, v29 added
+sound-macro/family table offsets) — never reshuffle existing fields.
 
 A human-readable extract of the format lives in `docs/splashpack-format.md`.
 
@@ -124,11 +126,17 @@ A human-readable extract of the format lives in `docs/splashpack-format.md`.
 
 ## Current status
 
-Phase 1 complete. Phase 2 near-complete: bullets 1–6, 8, 9, 10 (MVP), and
-11 all running on PSX — full demo pipeline exports + boots + plays. Phase
-2 remaining: bullet 7 (non-flat nav regions) and bullet 12 (rooms /
-portals), both substantial. Format at v21. Phase 3 has landed a dockable
-plugin panel with live scene-budget bars + dependency detection; most
-other Phase 3 items (WYSIWYG UI editor, F5 to play, VRAM viewer dock)
-still pending. See `ROADMAP.md` for the full plan, `docs/ui-ux-plan.md`
-for the editor-experience vision, and `SETUP.md` for env setup.
+Phase 1 complete. Phase 2 effectively done: bullets 1–6 ✅, 7 🟡
+(authored regions + portals + ramps shipped; DotRecast auto-gen from
+floor geometry deferred), 8–12 ✅ (rooms/portals shipped 2026-04-22).
+Phase 2.5 + 2.6 audio shipped end-to-end: SPU + CDDA + XA all play via
+`Audio.PlayMusic`, sequenced music via PS2M with scene-wide instrument
+banks, sound macros + sound families wired through runtime dispatch,
+voice allocator with priority stealing. Format at **v29**. Phase 3 has
+landed a dockable plugin panel with live scene-budget bars + dependency
+detection + texture/UV/budget validators at every export; most other
+Phase 3 items (WYSIWYG UI editor, F5 to play, VRAM viewer dock) still
+pending. ISO build pipeline (`tools/build_iso/build_iso.py`) produces
+BIOS-bootable discs as of 2026-04-27. See `ROADMAP.md` for the full
+plan, `docs/ui-ux-plan.md` for the editor-experience vision, and
+`SETUP.md` for env setup.

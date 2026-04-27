@@ -2004,11 +2004,13 @@ int LuaAPI::Audio_PlaySfx(lua_State* L) {
     return 1;
 }
 
-// v25 Audio.PlayMusic — dispatch by routing.
+// Audio.PlayMusic — dispatch by routing.
 //   SPU  -> play via the SFX path (warn: this is musically large for SPU)
-//   XA   -> NOT IMPLEMENTED. Logged + returns -1. Phase 3 work item.
-//   CDDA -> use Audio.PlayCDDA(track) directly; this entry point only
-//           warns, since the splashpack doesn't carry a name->track map.
+//   XA   -> XaAudioBackend::play(sidecarOffset, sidecarSize). Resolves the
+//           clip's XA payload via SceneManager::getXaClipInfo. Returns -1
+//           if no XA payload was packed (psxavenc absent at export).
+//   CDDA -> auto-dispatches to MusicManager::playCDDATrack via the clip's
+//           CddaTrackNumber. Returns -1 if the clip has no track set.
 int LuaAPI::Audio_PlayMusic(lua_State* L) {
     psyqo::Lua lua(L);
     if (!s_sceneManager || !lua.isString(1)) {
@@ -2058,9 +2060,8 @@ int LuaAPI::Audio_PlayMusic(lua_State* L) {
     }
 }
 
-// v25 Audio.StopMusic — best-effort blanket stop. Stops the music
-// sequencer (PS1M) and any CDDA track. XA streaming is a no-op until
-// the Phase 3 backend lands.
+// Audio.StopMusic — best-effort blanket stop across all three buses:
+// stops the PS2M sequencer, any CDDA track, and the XA stream.
 int LuaAPI::Audio_StopMusic(lua_State* L) {
     (void)L;
     if (!s_sceneManager) return 0;
