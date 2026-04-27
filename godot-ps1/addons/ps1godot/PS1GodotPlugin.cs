@@ -29,6 +29,7 @@ public partial class PS1GodotPlugin : EditorPlugin
     private const string RunStubGenTestsMenuLabel = "PS1Godot: Run Lua API Stub Generator Tests";
     private const string FrameModelMenuLabel = "PS1Godot: Frame Selected Model in Viewport";
     private const string ApplyBlenderMetadataMenuLabel = "PS1Godot: Apply Blender Metadata Sidecars";
+    private const string WriteBlenderMetadataMenuLabel = "PS1Godot: Write Blender Metadata Sidecars";
 
     // Default sidecar dir matches the Blender add-on default
     // (tools/blender-addon/.../properties.py: "ps1godot_assets/blender_sources").
@@ -59,6 +60,7 @@ public partial class PS1GodotPlugin : EditorPlugin
         AddToolMenuItem(RunStubGenTestsMenuLabel, Callable.From(OnRunStubGenTests));
         AddToolMenuItem(FrameModelMenuLabel, Callable.From(OnFrameSelectedModel));
         AddToolMenuItem(ApplyBlenderMetadataMenuLabel, Callable.From(OnApplyBlenderMetadata));
+        AddToolMenuItem(WriteBlenderMetadataMenuLabel, Callable.From(OnWriteBlenderMetadata));
 
         _triggerBoxGizmo = new PS1TriggerBoxGizmo();
         AddNode3DGizmoPlugin(_triggerBoxGizmo);
@@ -156,6 +158,7 @@ public partial class PS1GodotPlugin : EditorPlugin
         RemoveToolMenuItem(RunMidiTestsMenuLabel);
         RemoveToolMenuItem(FrameModelMenuLabel);
         RemoveToolMenuItem(ApplyBlenderMetadataMenuLabel);
+        RemoveToolMenuItem(WriteBlenderMetadataMenuLabel);
 
         SceneChanged -= OnSceneChanged;
         EditorInterface.Singleton.GetSelection().SelectionChanged -= OnEditorSelectionChanged;
@@ -951,6 +954,45 @@ public partial class PS1GodotPlugin : EditorPlugin
         if (result.Applied > 0)
         {
             GD.Print("[PS1Godot] Save the .tscn to persist the new metadata.");
+        }
+    }
+
+    // ── Phase 8: write sidecars OUT to the Blender side ─────────────
+    //
+    // Symmetric counterpart to OnApplyBlenderMetadata. Walks every
+    // PS1MeshInstance / PS1MeshGroup in the active scene and emits
+    // one <mesh_id>.ps1meshmeta.json per node, matching the Blender
+    // add-on's wire format byte-for-byte. Auto-generates asset_id +
+    // mesh_id on first export and writes them back to the node — save
+    // the .tscn afterwards to persist the new IDs.
+    //
+    // After this runs, the Blender side's import operator can pull the
+    // values into Object PropertyGroups so the .blend reflects what
+    // the Godot author did.
+    private void OnWriteBlenderMetadata()
+    {
+        var sceneRoot = EditorInterface.Singleton.GetEditedSceneRoot();
+        if (sceneRoot == null)
+        {
+            GD.PushError("[PS1Godot] No scene open — open a .tscn before writing Blender sidecars.");
+            return;
+        }
+
+        string sidecarDir = ProjectSettings.GlobalizePath(DefaultBlenderSidecarDir);
+        GD.Print($"[PS1Godot] Writing Blender sidecars to {sidecarDir}…");
+
+        var result = Exporter.BlenderMetadataWriter.WriteScene(sceneRoot, sidecarDir);
+
+        GD.Print(
+            $"[PS1Godot] Sidecars written: {result.Written} (skipped {result.Skipped}, " +
+            $"new IDs auto-generated for {result.IdsGenerated} node(s), io-errors {result.IoErrors}).");
+        foreach (var p in result.Paths)
+        {
+            GD.Print($"[PS1Godot]   {p}");
+        }
+        if (result.IdsGenerated > 0)
+        {
+            GD.Print("[PS1Godot] Save the .tscn to persist the new asset_id / mesh_id values.");
         }
     }
 }

@@ -43,7 +43,7 @@ bl_info = {
 
 from . import properties
 from .panels import project_panel, metadata_panel
-from .operators import validate_scene, export_metadata
+from .operators import validate_scene, export_metadata, import_metadata
 
 # Each module exposes a matching register() / unregister() pair built
 # via bpy.utils.register_classes_factory. Order matters here:
@@ -55,6 +55,7 @@ _modules = (
     properties,
     validate_scene,
     export_metadata,
+    import_metadata,
     project_panel,
     metadata_panel,
 )

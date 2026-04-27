@@ -47,5 +47,9 @@ class PS1GODOT_PT_project(bpy.types.Panel):
         row.scale_y = 1.2
         row.operator("ps1godot.export_metadata", icon="EXPORT")
 
+        row = layout.row(align=True)
+        row.scale_y = 1.2
+        row.operator("ps1godot.import_metadata", icon="IMPORT")
+
 
 register, unregister = bpy.utils.register_classes_factory((PS1GODOT_PT_project,))

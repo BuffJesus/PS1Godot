@@ -181,6 +181,82 @@ def main() -> int:
             traceback.print_exc()
             failures += 1
 
+    # ── Phase 8: import direction (Godot → Blender) ─────────────
+    # Drop a hand-crafted sidecar that mirrors what the Godot writer
+    # emits, run the import operator, and verify the values landed
+    # on the Blender object's PropertyGroup. This proves the wire
+    # contract works in both directions without needing Godot installed.
+    with tempfile.TemporaryDirectory(prefix="ps1godot_import_smoketest_") as tmp:
+        sidecar_dir = os.path.join(tmp, "out")
+        os.makedirs(sidecar_dir, exist_ok=True)
+        sidecar_path = os.path.join(sidecar_dir, "smoketest_cube.ps1meshmeta.json")
+        # Use values that DIFFER from the previous export-pass state
+        # so we can tell the import overwrote them.
+        synthetic = {
+            "ps1godot_metadata_version": 1,
+            "asset_id": "deadbeefcafef00daaaaaaaaaaaaaaaa",
+            "mesh_id": "smoketest_cube",
+            "source_object_name": "Cube",
+            "blend_file": "",
+            "chunk_id": "imported_chunk",
+            "region_id": "imported_region",
+            "disc_id": 1,
+            "area_archive_id": "AREA_TEST",
+            "mesh_role": "DynamicRigid",        # was StaticWorld
+            "export_mode": "KeepSeparate",      # was MergeStatic
+            "draw_phase": "OpaqueDynamic",      # was OpaqueStatic
+            "shading_mode": "VertexColor",      # was FlatColor
+            "alpha_mode": "Cutout",             # was Opaque
+            "collision_layer": "world_static",
+            "materials": [],
+        }
+        with open(sidecar_path, "w", encoding="utf-8") as f:
+            json.dump(synthetic, f, indent=2)
+            f.write("\n")
+
+        scene = bpy.context.scene
+        scene.ps1godot.project_root = tmp
+        scene.ps1godot.output_subdir = "out"
+
+        try:
+            result = bpy.ops.ps1godot.import_metadata()
+            if "CANCELLED" in result:
+                _err(f"import_metadata cancelled: {result}")
+                failures += 1
+            else:
+                _info(f"import_metadata returned {result}")
+
+                # Verify the cube's PropertyGroup now matches the sidecar.
+                cube = bpy.data.objects.get("Cube")
+                if cube is None:
+                    _err("Cube vanished before import verify")
+                    failures += 1
+                else:
+                    p = cube.ps1godot
+                    checks = (
+                        ("asset_id",        p.asset_id,        synthetic["asset_id"]),
+                        ("mesh_id",         p.mesh_id,         synthetic["mesh_id"]),
+                        ("chunk_id",        p.chunk_id,        synthetic["chunk_id"]),
+                        ("region_id",       p.region_id,       synthetic["region_id"]),
+                        ("area_archive_id", p.area_archive_id, synthetic["area_archive_id"]),
+                        ("mesh_role",       p.mesh_role,       synthetic["mesh_role"]),
+                        ("export_mode",     p.export_mode,     synthetic["export_mode"]),
+                        ("draw_phase",      p.draw_phase,      synthetic["draw_phase"]),
+                        ("shading_mode",    p.shading_mode,    synthetic["shading_mode"]),
+                        ("alpha_mode",      p.alpha_mode,      synthetic["alpha_mode"]),
+                        ("collision_layer", p.collision_layer, synthetic["collision_layer"]),
+                    )
+                    for field, got, want in checks:
+                        if got != want:
+                            _err(f"import: {field} = {got!r}, expected {want!r}")
+                            failures += 1
+                        else:
+                            _info(f"import: {field} = {got!r}")
+        except Exception:
+            _err("import_metadata raised:")
+            traceback.print_exc()
+            failures += 1
+
     # ── Unregister cleanly (catches detach-order bugs) ──────────
     try:
         ps1godot_blender.unregister()
