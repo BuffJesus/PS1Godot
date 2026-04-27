@@ -77,7 +77,10 @@ public static class MeshLinter
     // sample outside [0,1]". The 1.5 threshold splits "tiled author
     // intent" from "definitely wrong" — meshes flagged Far reach into
     // adjacent atlas tiles regardless of the runtime's wrap mode.
-    public static void EmitForScene(int sceneIndex)
+    //
+    // Returns the number of meshes with out-of-range UVs. Plugin sums
+    // this into the dock's "Last export" line.
+    public static int EmitForScene(int sceneIndex)
     {
         int dirtyCount = 0;
         foreach (var kv in _stats)
@@ -87,7 +90,7 @@ public static class MeshLinter
         if (dirtyCount == 0)
         {
             GD.Print($"[PS1Godot]   UV linter scene[{sceneIndex}]: all meshes clean.");
-            return;
+            return 0;
         }
 
         GD.PushWarning($"[PS1Godot] UV linter scene[{sceneIndex}]: {dirtyCount} mesh(es) with out-of-range UVs. Out-of-range UVs sample neighbouring VRAM data on PSX (no wrap/clamp). Fix at the source mesh or tag tiling explicitly.");
@@ -103,6 +106,8 @@ public static class MeshLinter
             string v = $"[{s.VMin:F2}, {s.VMax:F2}]";
             GD.Print($"[PS1Godot]   {name,-36} {s.Vertices,5} {s.OutOfRange,5} {s.FarOutOfRange,5}   {u,-15}  {v,-15}");
         }
+
+        return dirtyCount;
     }
 }
 #endif

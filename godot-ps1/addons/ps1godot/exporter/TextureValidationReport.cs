@@ -37,12 +37,14 @@ public static class TextureValidationReport
         int UseCount,
         string? Warning);
 
-    public static void EmitForScene(SceneData data, int sceneIndex)
+    // Returns the number of WARN-level rows emitted (0 if every texture
+    // is fine). Plugin sums this into the dock's "Last export" line.
+    public static int EmitForScene(SceneData data, int sceneIndex)
     {
         if (data.Textures.Count == 0)
         {
             GD.Print($"[PS1Godot]   Texture report: scene[{sceneIndex}] has no textures.");
-            return;
+            return 0;
         }
 
         // Count how many distinct GameObjects reference each texture index.
@@ -113,6 +115,8 @@ public static class TextureValidationReport
             string warn = r.Warning ?? "";
             GD.Print($"[PS1Godot]   {Truncate(r.Name, 45),-45} {dim,-7} {bpp,-5} {alpha,-7}  {r.UseCount,4}  {vramKb,9}  {warn}");
         }
+
+        return warnCount;
     }
 
     // Mirrors SceneStats.EstimateTextureVramBytes — keep in sync. Counts

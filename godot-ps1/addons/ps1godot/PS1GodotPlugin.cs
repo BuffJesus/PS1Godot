@@ -401,6 +401,12 @@ public partial class PS1GodotPlugin : EditorPlugin
         return code;
     }
 
+    // Last export's aggregate validation summary (mesh dedup + texture +
+    // audio + UV linter warnings). Reset at the start of each
+    // OnExportEmptySplashpack pass; fed to the dock once the multi-scene
+    // export is done.
+    private LastExportSummary? _lastExportSummary;
+
     private void OnExportEmptySplashpack()
     {
         // psxsplash's FileLoader expects "scene_<index>.splashpack" (and .vram, .spu)
@@ -415,6 +421,8 @@ public partial class PS1GodotPlugin : EditorPlugin
             GD.PushError("[PS1Godot] No scene open — open a .tscn whose root is a PS1Scene before exporting.");
             return;
         }
+
+        _lastExportSummary = new LastExportSummary();
 
         // Export the open scene as scene_0, then iterate PS1Scene.SubScenes
         // (if any) to emit scene_1, scene_2, … in declared order. Each
@@ -459,6 +467,12 @@ public partial class PS1GodotPlugin : EditorPlugin
                 }
             }
         }
+
+        // Push the aggregated validation summary to the dock so the
+        // author sees the headline issue count without scanning the
+        // Output panel. Tooltip on the dock label expands to per-category
+        // subtotals + the worst mesh-cleanup names.
+        _dock?.ApplyLastExportSummary(_lastExportSummary);
     }
 
     private void ExportOneScene(Node sceneRoot, int sceneIndex)
@@ -488,12 +502,22 @@ public partial class PS1GodotPlugin : EditorPlugin
         // v25 texture validation: print per-asset row + warn on oversized
         // sources, 16bpp gameplay textures, and small cutouts that should
         // be 4bpp. Print-only; no behavioral change.
-        Exporter.TextureValidationReport.EmitForScene(sceneData, sceneIndex);
+        int textureWarnings = Exporter.TextureValidationReport.EmitForScene(sceneData, sceneIndex);
+
+        // Audio validation: per-clip row + warn on big SPU clips that
+        // should route XA, big resident loops, dangling XA payloads.
+        int audioWarnings = Exporter.AudioValidationReport.EmitForScene(sceneData, sceneIndex);
 
         // UV linter: warn on any vertex UV outside [0, 1]. PSX rasteriser
         // doesn't wrap or clamp — out-of-range UVs sample neighbouring
         // VRAM data as garbage. Editor's wrapping sampler hides this.
-        Exporter.MeshLinter.EmitForScene(sceneIndex);
+        int uvDirty = Exporter.MeshLinter.EmitForScene(sceneIndex);
+
+        // Aggregate this scene's results into the run-wide summary the
+        // dock reads after OnExportEmptySplashpack returns. Mesh-dedup
+        // counts come from sceneData.MeshDedup which the SceneCollector
+        // populated during FromRoot.
+        _lastExportSummary?.Add(sceneData, textureWarnings, audioWarnings, uvDirty);
 
         try
         {
