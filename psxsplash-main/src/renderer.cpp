@@ -368,8 +368,15 @@ void psxsplash::Renderer::Render(eastl::vector<GameObject*>& objects) {
         if (obj->isSkinned()) continue;
         if (obj->isUIModelTarget()) continue;
         setupObjectTransform(obj, cameraPosition);
-        for (int i = 0; i < obj->polyCount; i++)
-            processTriangle(obj->polygons[i], fogFarSZ, ot, balloc);
+        // v31+ static mesh: obj->polygons points at a MeshBlob; faces[i]
+        // dereferences pooled vertices via expandTri. Hoisted out of the
+        // tri loop so the indirection cost is per-object, not per-tri.
+        const Vertex* verts = meshVertices(obj->polygons);
+        const Face*   faces = meshFaces(obj->polygons);
+        for (int i = 0; i < obj->polyCount; i++) {
+            Tri tri = expandTri(verts, faces[i]);
+            processTriangle(tri, fogFarSZ, ot, balloc);
+        }
     }
     renderSkinnedObjects(objects, cameraPosition, fogFarSZ, ot, balloc);
     renderUIModels(objects, ot, balloc);
@@ -406,6 +413,8 @@ void psxsplash::Renderer::RenderWithBVH(eastl::vector<GameObject*>& objects, con
     int32_t fogFarSZ = m_fog.fogFarSZ;
     int16_t lastObjectIndex = -1;
     bool lastObjCulled = false;
+    const Vertex* lastVerts = nullptr;
+    const Face*   lastFaces = nullptr;
     for (int i = 0; i < visibleCount; i++) {
         const TriangleRef& ref = m_visibleRefs[i];
         if (ref.objectIndex >= objects.size()) continue;
@@ -427,9 +436,14 @@ void psxsplash::Renderer::RenderWithBVH(eastl::vector<GameObject*>& objects, con
             }
             lastObjCulled = false;
             setupObjectTransform(obj, cameraPosition);
+            // Hoist per-object pool pointers; same lifetime as the
+            // setupObjectTransform call above — refresh on object change.
+            lastVerts = meshVertices(obj->polygons);
+            lastFaces = meshFaces(obj->polygons);
         }
         if (lastObjCulled) continue;
-        processTriangle(obj->polygons[ref.triangleIndex], fogFarSZ, ot, balloc);
+        Tri tri = expandTri(lastVerts, lastFaces[ref.triangleIndex]);
+        processTriangle(tri, fogFarSZ, ot, balloc);
     }
 
     // Second pass: render dynamically-moved objects (their BVH references are stale).
@@ -444,8 +458,11 @@ void psxsplash::Renderer::RenderWithBVH(eastl::vector<GameObject*>& objects, con
         objBox.maxX = obj->aabbMaxX; objBox.maxY = obj->aabbMaxY; objBox.maxZ = obj->aabbMaxZ;
         if (!frustum.testAABB(objBox)) continue;
         setupObjectTransform(obj, cameraPosition);
+        const Vertex* verts = meshVertices(obj->polygons);
+        const Face*   faces = meshFaces(obj->polygons);
         for (int t = 0; t < obj->polyCount; t++) {
-            processTriangle(obj->polygons[t], fogFarSZ, ot, balloc);
+            Tri tri = expandTri(verts, faces[t]);
+            processTriangle(tri, fogFarSZ, ot, balloc);
         }
     }
 
@@ -737,6 +754,8 @@ void psxsplash::Renderer::RenderWithRooms(eastl::vector<GameObject*>& objects,
     // object transforms when consecutive refs share an object.
     auto renderTriRefs = [&](const TriangleRef* refs, int count,
                              int16_t& lastObj, bool& lastObjCulled) {
+        const Vertex* lastVerts = nullptr;
+        const Face*   lastFaces = nullptr;
         for (int ti = 0; ti < count; ti++) {
             const TriangleRef& ref = refs[ti];
             if (ref.objectIndex >= objects.size()) continue;
@@ -757,9 +776,12 @@ void psxsplash::Renderer::RenderWithRooms(eastl::vector<GameObject*>& objects,
                 }
                 lastObjCulled = false;
                 setupObjectTransform(obj, cameraPosition);
+                lastVerts = meshVertices(obj->polygons);
+                lastFaces = meshFaces(obj->polygons);
             }
             if (lastObjCulled) continue;
-            processTriangle(obj->polygons[ref.triangleIndex], fogFarSZ, ot, balloc);
+            Tri tri = expandTri(lastVerts, lastFaces[ref.triangleIndex]);
+            processTriangle(tri, fogFarSZ, ot, balloc);
         }
     };
 
@@ -963,7 +985,8 @@ void psxsplash::Renderer::RenderWithRooms(eastl::vector<GameObject*>& objects,
                 GameObject* obj = objects[ref.objectIndex];
                 if (ref.triangleIndex >= obj->polyCount) continue;
 
-                Tri& tri = obj->polygons[ref.triangleIndex];
+                Tri tri = expandTri(meshVertices(obj->polygons),
+                                    meshFaces(obj->polygons)[ref.triangleIndex]);
                 setupObjectTransform(obj, cameraPosition);
 
                 // GTE transform
@@ -1135,8 +1158,11 @@ void psxsplash::Renderer::RenderWithRooms(eastl::vector<GameObject*>& objects,
         objBox.maxX = obj->aabbMaxX; objBox.maxY = obj->aabbMaxY; objBox.maxZ = obj->aabbMaxZ;
         if (!frustum.testAABB(objBox)) continue;
         setupObjectTransform(obj, cameraPosition);
+        const Vertex* verts = meshVertices(obj->polygons);
+        const Face*   faces = meshFaces(obj->polygons);
         for (int t = 0; t < obj->polyCount; t++) {
-            processTriangle(obj->polygons[t], fogFarSZ, ot, balloc);
+            Tri tri = expandTri(verts, faces[t]);
+            processTriangle(tri, fogFarSZ, ot, balloc);
         }
     }
 
@@ -1529,8 +1555,11 @@ void psxsplash::Renderer::renderUIModels(
 
         // UI models bypass fog (depth fade at HUD scale looks wrong) and
         // go in at OT slot 1 so they always draw over world geometry.
+        const Vertex* verts = meshVertices(obj->polygons);
+        const Face*   faces = meshFaces(obj->polygons);
         for (uint16_t t = 0; t < obj->polyCount; t++) {
-            processTriangle(obj->polygons[t], 0, ot, balloc, 0, true);
+            Tri tri = expandTri(verts, faces[t]);
+            processTriangle(tri, 0, ot, balloc, 0, true);
         }
     }
 

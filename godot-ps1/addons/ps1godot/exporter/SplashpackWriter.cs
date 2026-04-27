@@ -29,7 +29,7 @@ namespace PS1Godot.Exporter;
 //                  Name table — referenced by header.nameTableOffset.
 public static class SplashpackWriter
 {
-    public const ushort SplashpackVersion = 30;
+    public const ushort SplashpackVersion = 31;
     // Header layout grew by 16 bytes in v24 (sky struct: tpage + clut + UVs
     // + bitDepth + tint + enabled flag, mirroring the UI Image typeData
     // union slot). See WriteHeader and the runtime's SPLASHPACKFileHeader.
@@ -215,16 +215,36 @@ public static class SplashpackWriter
             }
         }
 
-        // ── Mesh data: per object, align to 4, write Tri[] ──
+        // ── Mesh data: per object, align to 4 ──
+        // Static meshes use the v31+ pooled layout (MeshBlob header
+        // + Vertex[] + Face[]); skinned meshes keep the legacy
+        // expanded Tri[] (their per-tri-vertex bone indices need
+        // vertices to stay non-deduplicated, since two triangles
+        // sharing position+color+UV may have different bone
+        // assignments). The runtime dispatches on isSkinned() — see
+        // mesh.hh expandTri / animSet.polygons paths in renderer.cpp.
+        var skinnedObjectIndices = new HashSet<int>();
+        foreach (var sm in scene.SkinnedMeshes)
+        {
+            skinnedObjectIndices.Add(sm.GameObjectIndex);
+        }
+
         for (int i = 0; i < objCount; i++)
         {
             AlignTo4(w);
             long meshStart = w.BaseStream.Position;
             BackfillUInt32(w, meshOffsetPositions[i], (uint)meshStart);
 
-            foreach (var tri in scene.Objects[i].Mesh.Triangles)
+            if (skinnedObjectIndices.Contains(i))
             {
-                WriteTri(w, tri, scene);
+                foreach (var tri in scene.Objects[i].Mesh.Triangles)
+                {
+                    WriteTri(w, tri, scene);
+                }
+            }
+            else
+            {
+                WriteStaticMeshPooled(w, scene.Objects[i].Mesh, scene);
             }
         }
 
@@ -2005,6 +2025,166 @@ public static class SplashpackWriter
         int vb = v + tex.PackingY;
         w.Write((byte)(ub & 0xFF));
         w.Write((byte)(vb & 0xFF));
+    }
+
+    // Compute the atlas-relative UV byte pair for a vertex, applying the
+    // per-texture packing offset and the bit-depth expander. Mirrors
+    // WriteUvByte's math but returns the bytes instead of writing them —
+    // needed by the pool dedup so we hash on the post-expansion UV (which
+    // is what actually distinguishes vertices in VRAM).
+    private static (byte u, byte v) ResolveUvByte(byte u, byte v, PSXTexture? tex, int expander)
+    {
+        if (tex == null) return (0, 0);
+        int ub = u + tex.PackingX * expander;
+        int vb = v + tex.PackingY;
+        return ((byte)(ub & 0xFF), (byte)(vb & 0xFF));
+    }
+
+    // Vertex pool key for v31+ static-mesh dedup. Two vertices fold
+    // together when their on-disk bytes match: position (vx, vy, vz),
+    // post-expander UV (u, v), color (r, g, b). Vertex normal is *not*
+    // part of the key — the on-disk Face stores one face normal per
+    // triangle, so vertices that differ only in authored vertex normal
+    // collapse cleanly. Using the post-expander UV (instead of the raw
+    // authored UV) means two triangles with different TextureIndex but
+    // identical world positions still produce distinct pool entries —
+    // they really are different vertices for VRAM-sampling purposes.
+    private readonly struct StaticVertexKey : IEquatable<StaticVertexKey>
+    {
+        public readonly short Vx, Vy, Vz;
+        public readonly byte U, V;
+        public readonly byte R, G, B;
+        public StaticVertexKey(short vx, short vy, short vz, byte u, byte v, byte r, byte g, byte b)
+        { Vx = vx; Vy = vy; Vz = vz; U = u; V = v; R = r; G = g; B = b; }
+        public bool Equals(StaticVertexKey o)
+            => Vx == o.Vx && Vy == o.Vy && Vz == o.Vz
+            && U == o.U && V == o.V
+            && R == o.R && G == o.G && B == o.B;
+        public override bool Equals(object? obj) => obj is StaticVertexKey k && Equals(k);
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                uint h = 2166136261u;
+                h = (h ^ (uint)(ushort)Vx) * 16777619u;
+                h = (h ^ (uint)(ushort)Vy) * 16777619u;
+                h = (h ^ (uint)(ushort)Vz) * 16777619u;
+                h = (h ^ U) * 16777619u;
+                h = (h ^ V) * 16777619u;
+                h = (h ^ R) * 16777619u;
+                h = (h ^ G) * 16777619u;
+                h = (h ^ B) * 16777619u;
+                return (int)h;
+            }
+        }
+    }
+
+    // v31+ static mesh: deduplicate vertices and write
+    //   MeshBlob {u16 vertexCount; u16 triCount;}     (4 B)
+    //   Vertex[vertexCount]                           (12 B each:
+    //                                                  6 B pos + 2 B uv +
+    //                                                  4 B color)
+    //   Face[triCount]                                (20 B each:
+    //                                                  6 B u16 indices +
+    //                                                  6 B face normal +
+    //                                                  2 B tpage + 4 B
+    //                                                  CLUT XY + 2 B pad)
+    // Vertex emit order is *first-seen* across the triangle walk —
+    // re-exports of unchanged meshes produce byte-identical output as
+    // long as the upstream Tri list is stable.
+    private const int StaticVertexBytes = 12;
+    private const int StaticFaceBytes   = 20;
+
+    private static void WriteStaticMeshPooled(BinaryWriter w, PSXMesh mesh, SceneData scene)
+    {
+        var keyToIndex = new Dictionary<StaticVertexKey, int>();
+        var poolVerts  = new List<PSXVertex>();
+        var poolUvBytes = new List<(byte u, byte v)>();
+
+        // Face data buffered, written after the vertex pool.
+        var faceData = new List<(ushort i0, ushort i1, ushort i2,
+                                  short nx, short ny, short nz,
+                                  ushort tpage, ushort clutX, ushort clutY)>();
+
+        foreach (var tri in mesh.Triangles)
+        {
+            PSXTexture? tex = (tri.TextureIndex >= 0 && tri.TextureIndex < scene.Textures.Count)
+                ? scene.Textures[tri.TextureIndex]
+                : null;
+            int expander = tex?.BitDepth switch
+            {
+                PSXBPP.TEX_4BIT => 4,
+                PSXBPP.TEX_8BIT => 2,
+                _               => 1,
+            };
+
+            ushort i0 = AddPooledVertex(tri.v0, tex, expander, keyToIndex, poolVerts, poolUvBytes);
+            ushort i1 = AddPooledVertex(tri.v1, tex, expander, keyToIndex, poolVerts, poolUvBytes);
+            ushort i2 = AddPooledVertex(tri.v2, tex, expander, keyToIndex, poolVerts, poolUvBytes);
+
+            ushort tpage; ushort clutX, clutY;
+            if (tex == null)
+            {
+                tpage = UntexturedTpage; clutX = 0; clutY = 0;
+            }
+            else
+            {
+                tpage = VRAMPacker.BuildTpageAttr(tex.TexpageX, tex.TexpageY, tex.BitDepth);
+                clutX = tex.ClutPackingX;
+                clutY = tex.ClutPackingY;
+            }
+
+            faceData.Add((i0, i1, i2,
+                          tri.v0.nx, tri.v0.ny, tri.v0.nz,
+                          tpage, clutX, clutY));
+        }
+
+        if (poolVerts.Count > ushort.MaxValue)
+            throw new InvalidOperationException(
+                $"Mesh '{string.Empty}' has {poolVerts.Count} unique vertices — exceeds the u16 cap. Split the mesh or merge by distance in the source.");
+
+        // ── MeshBlob header ──
+        w.Write((ushort)poolVerts.Count);
+        w.Write((ushort)faceData.Count);
+
+        // ── Vertex[] ──
+        for (int i = 0; i < poolVerts.Count; i++)
+        {
+            var v = poolVerts[i];
+            var (u, vv) = poolUvBytes[i];
+            // pos (6 B)
+            w.Write(v.vx); w.Write(v.vy); w.Write(v.vz);
+            // uv (2 B)
+            w.Write(u); w.Write(vv);
+            // color (4 B: r, g, b, code)
+            w.Write(v.r); w.Write(v.g); w.Write(v.b); w.Write((byte)0);
+        }
+
+        // ── Face[] ──
+        foreach (var f in faceData)
+        {
+            w.Write(f.i0); w.Write(f.i1); w.Write(f.i2);
+            w.Write(f.nx); w.Write(f.ny); w.Write(f.nz);
+            w.Write(f.tpage);
+            w.Write(f.clutX);
+            w.Write(f.clutY);
+            w.Write((ushort)0); // pad
+        }
+    }
+
+    private static ushort AddPooledVertex(PSXVertex v, PSXTexture? tex, int expander,
+        Dictionary<StaticVertexKey, int> keyToIndex,
+        List<PSXVertex> poolVerts,
+        List<(byte u, byte v)> poolUvBytes)
+    {
+        var (u, vv) = ResolveUvByte(v.u, v.v, tex, expander);
+        var key = new StaticVertexKey(v.vx, v.vy, v.vz, u, vv, v.r, v.g, v.b);
+        if (keyToIndex.TryGetValue(key, out int existing)) return (ushort)existing;
+        int idx = poolVerts.Count;
+        poolVerts.Add(v);
+        poolUvBytes.Add((u, vv));
+        keyToIndex[key] = idx;
+        return (ushort)idx;
     }
 
     private static void WriteShort3(BinaryWriter w, short a, short b, short c)
