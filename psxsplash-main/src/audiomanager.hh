@@ -21,6 +21,31 @@ struct AudioClip {
   bool loaded;
 };
 
+// Phase 4: voice-allocation metadata. Tracks who a voice belongs to,
+// how important the sound is (priority), when it started (allocTick,
+// for oldest-first stealing), and whether key-off has been issued
+// (released — naturally finishing voices get reused before active
+// ones). Each VoiceMeta entry parallels SPU_VOICES[i].
+//
+// "Owner" segregates allocation behaviour. Music gets explicit voice
+// indices via playOnVoice() from MusicSequencer (priority is fixed at
+// MAX_PRIORITY so allocateVoice() never steals music slots). SFX,
+// Macro, Ambience all draw from the [m_reservedForMusic, MAX_VOICES)
+// pool through allocateVoice() with caller-provided priority.
+enum class VoiceOwner : uint8_t {
+  Free     = 0,  // not allocated
+  SFX      = 1,  // play() default — Lua Audio.PlaySfx, ad-hoc one-shots
+  Music    = 2,  // MusicSequencer-owned (claimed via playOnVoice)
+  Macro    = 3,  // Phase 5: Sound.PlayMacro composite SFX
+  Ambience = 4,  // Phase 5: ambient bed loops
+};
+
+// Default priority for plain Audio.Play() calls. Mid-range to leave
+// room for both quieter footsteps (~32) and louder dialog/UI (~128+).
+static constexpr uint8_t DEFAULT_SFX_PRIORITY = 64;
+// Music voices are immune to SFX-side stealing — pinned at the top.
+static constexpr uint8_t MUSIC_PRIORITY       = 255;
+
 /// Manages SPU voices and audio clip playback.
 ///
 ///   init()
@@ -44,9 +69,12 @@ public:
 
   /// Play a clip by index. Returns channel (0-23), or -1 if full.
   /// Volume: 0-128 (128=max). Pan: 0 (left) to 127 (right), 64 = center.
-  /// Skips voices [0, m_reservedForMusic) — those belong to the
-  /// MusicSequencer.
-  int play(int clipIndex, int volume = 128, int pan = 64);
+  /// Priority: 0-255, higher wins voice-stealing. Defaults to
+  /// DEFAULT_SFX_PRIORITY (64). Allocator scans the [reservedForMusic,
+  /// MAX_VOICES) pool for: free voice → released voice (key-off
+  /// already issued) → lower-priority voice to steal → drop (-1).
+  int play(int clipIndex, int volume = 128, int pan = 64,
+           uint8_t priority = DEFAULT_SFX_PRIORITY);
 
   /// Place a clip onto a specific voice. Used by the MusicSequencer
   /// to retrigger notes on its reserved pool without going through the
@@ -99,11 +127,34 @@ private:
   // resolves a free voice) and playOnVoice() (caller-supplied voice).
   void writeVoice(int voice, const AudioClip &clip, int volume, int pan);
 
+  // Phase 4: voice-stealing allocator for the SFX pool. Walks
+  // [m_reservedForMusic, MAX_VOICES) in priority order and returns the
+  // best slot for a new sound, or -1 to drop. Steal policy:
+  //   1. First Free voice in the pool — instant idle reuse.
+  //   2. First Released voice — key-off already issued, envelope
+  //      decaying. Reusing these is inaudible.
+  //   3. Lowest-priority active voice with priority < incoming
+  //      priority. On ties, oldest (lowest allocTick).
+  //   4. Otherwise -1: every active voice is at >= incoming priority,
+  //      let the new sound drop rather than interrupt important audio.
+  int allocateVoice(VoiceOwner owner, uint8_t priority);
+
   AudioClip m_clips[MAX_AUDIO_CLIPS];
   uint32_t m_nextAddr = SPU_RAM_START;
   // Voices [0, m_reservedForMusic) are not allocated by play().
   // MusicSequencer owns them while it's active.
   int m_reservedForMusic = 0;
+
+  // Phase 4: per-voice allocation metadata. Indexed by SPU voice
+  // number 0..MAX_VOICES-1. Free voices have owner=VoiceOwner::Free.
+  struct VoiceMeta {
+    VoiceOwner owner = VoiceOwner::Free;
+    uint8_t    priority = 0;
+    uint32_t   allocTick = 0;     // monotonic; lower = older
+    bool       released = false;  // key-off issued, sample finishing
+  };
+  VoiceMeta m_voices[MAX_VOICES] = {};
+  uint32_t  m_voiceAllocCounter = 0;  // increments on every allocate
 };
 
 } // namespace psxsplash

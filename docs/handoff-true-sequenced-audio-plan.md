@@ -145,7 +145,7 @@ envelope finish.
 
 **No format bump if grouped with Phase 2.** Otherwise v29.
 
-## Phase 4 — Voice allocator (§21 step 7) — collision risk
+## Phase 4 — Voice allocator (§21 step 7) — shipped
 
 `AudioManager::m_reservedForMusic` (`audiomanager.hh:106`,
 `audiomanager.cpp:115-145`) already implements a coarse-grained "first N
@@ -228,19 +228,27 @@ top of PS1M2; defer.
 - **Phase 2.5 Stage B** (commit `34aebf7`): exporter walks
   `PS1Scene.Instruments` / `PS1Scene.DrumKits`, validates SPU-routing,
   packs the bank into the splashpack.
-- **Phase 2.5 Stage C** (this commit): PS2M wire format magic + runtime
-  resolution chain. PS2M sequences route NoteOn through
+- **Phase 2.5 Stage C** (commit `cfbaab2`): PS2M wire format magic +
+  runtime resolution chain. PS2M sequences route NoteOn through
   channel→program→instrument→region→clip; ProgramChange events (kind
   4) swap the channel's current program mid-sequence. PS1M sequences
   unchanged.
+- **Phase 2.5 ergonomics** (commit `249a097`): exporter pre-scans bank
+  references and force-resolves Auto → SPU for instrument-backed clips.
+  Author drops a Steinway WAV into a region without flipping the Route
+  field manually.
+- **Phase 4** (this commit): voice allocator extension on
+  AudioManager. New `VoiceMeta`+`allocateVoice` with three-pass steal
+  policy (Free → Released → lower-priority steal → drop). Music slots
+  pinned at MUSIC_PRIORITY (255) so SFX never evict them. Existing
+  `m_reservedForMusic` semantics preserved.
 
 ## What to ship next
 
-Phases 4 (voice allocator extension) and 5
-(Sound.PlayMacro / Sound.PlayFamily) are independent of the format
-bump and can land any time. Phase 4 is a runtime-only change to
-AudioManager; Phase 5 is a new Lua global plus two scaffold resource
-types.
+Phase 5 (Sound.PlayMacro / Sound.PlayFamily) is independent of the
+format bump and can land any time. New Lua global plus two scaffold
+resource types. Now that Phase 4 ships, Phase 5 macros can claim
+priority through allocateVoice without fighting MusicSequencer.
 
 Phase 2.6 follow-ups (deferred): PitchBend / Controller / Marker /
 LoopStart / LoopEnd event kinds in PS2M; runtime drum-kit dispatch
