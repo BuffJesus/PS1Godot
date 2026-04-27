@@ -333,6 +333,18 @@ bool MusicSequencer::dispatchEvent(const MusicEvent &e) {
             // SPU voice's sample rate is re-pitched live.
             dispatchPitchBend(e.channel, e.data1, e.data2);
             break;
+        case 7:
+            // Controller. data1 = CC#, data2 = value. Whitelist:
+            // CC#7 → channel volume, CC#10 → pan. Both apply at the
+            // next noteOn (same as kind=2/3 ChannelVolume/Pan events
+            // from the static channel config). Unknown CC# values are
+            // silently no-ops so adding new handlers later is forward-
+            // compatible without a format bump.
+            if (e.channel < MAX_CHANNELS) {
+                if (e.data1 == 7)       m_channels[e.channel].volume = e.data2;
+                else if (e.data1 == 10) m_channels[e.channel].pan    = e.data2;
+            }
+            break;
         case 9:
             // LoopStart marker. Records this point for the next LoopEnd
             // to jump back to. Re-executing the same LoopStart after a

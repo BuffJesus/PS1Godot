@@ -90,6 +90,21 @@ public static class MidiParser
         public int  Track { get; init; }
     }
 
+    // 0xB0 controller event. controller# 0..127 identifies which CC
+    // (CC#7=channel volume, CC#10=pan, CC#11=expression, CC#1=mod,
+    // etc.); value is 0..127. PS2M serializes these as kind=7 events
+    // with data1=controller, data2=value. The runtime dispatches a
+    // small whitelist (volume, pan today) and silently no-ops the
+    // rest — unknown CC# values stay forward-compatible.
+    public readonly struct MidiControllerEvent
+    {
+        public uint AbsoluteTick { get; init; }
+        public byte Channel { get; init; }
+        public byte Controller { get; init; }   // 0..127
+        public byte Value { get; init; }        // 0..127
+        public int  Track { get; init; }
+    }
+
     // Loop bracket markers parsed from meta-events 0x06 (Marker) and
     // 0x07 (Cue Point) when their text payload matches "loopStart" or
     // "loopEnd" (case-insensitive, leading/trailing whitespace ignored).
@@ -119,6 +134,7 @@ public static class MidiParser
         public List<MidiTempoEvent> Tempos { get; init; } = new();
         public List<MidiProgramChangeEvent> ProgramChanges { get; init; } = new();
         public List<MidiPitchBendEvent> PitchBends { get; init; } = new();
+        public List<MidiControllerEvent> Controllers { get; init; } = new();
         public List<MidiMarkerEvent> Markers { get; init; } = new();
         public SkippedEventCounts SkippedCounts { get; init; } = new();
     }
@@ -153,6 +169,7 @@ public static class MidiParser
         var tempos = new List<MidiTempoEvent>();
         var programChanges = new List<MidiProgramChangeEvent>();
         var pitchBends = new List<MidiPitchBendEvent>();
+        var controllers = new List<MidiControllerEvent>();
         var markers = new List<MidiMarkerEvent>();
         var skipped = new SkippedEventCounts();
 
@@ -168,7 +185,7 @@ public static class MidiParser
             }
             uint trackLen = ReadU32BE(r);
             long trackEnd = r.BaseStream.Position + trackLen;
-            ParseTrack(r, trackEnd, notes, tempos, programChanges, pitchBends, markers, skipped, t);
+            ParseTrack(r, trackEnd, notes, tempos, programChanges, pitchBends, controllers, markers, skipped, t);
         }
 
         // Sort events by absolute tick (format 1 tracks started at 0 each).
@@ -198,6 +215,7 @@ public static class MidiParser
         // them with notes in tick order without an extra merge step.
         programChanges = programChanges.OrderBy(p => p.AbsoluteTick).ToList();
         pitchBends = pitchBends.OrderBy(p => p.AbsoluteTick).ToList();
+        controllers = controllers.OrderBy(c => c.AbsoluteTick).ToList();
         markers = markers.OrderBy(m => m.AbsoluteTick).ThenBy(m => (int)m.Kind).ToList();
 
         return new ParsedMidi
@@ -208,6 +226,7 @@ public static class MidiParser
             Tempos = tempos,
             ProgramChanges = programChanges,
             PitchBends = pitchBends,
+            Controllers = controllers,
             Markers = markers,
             SkippedCounts = skipped,
         };
@@ -218,6 +237,7 @@ public static class MidiParser
                                     List<MidiTempoEvent> tempos,
                                     List<MidiProgramChangeEvent> programChanges,
                                     List<MidiPitchBendEvent> pitchBends,
+                                    List<MidiControllerEvent> controllers,
                                     List<MidiMarkerEvent> markers,
                                     SkippedEventCounts skipped,
                                     int trackIndex)
@@ -350,10 +370,25 @@ public static class MidiParser
                         r.ReadByte(); r.ReadByte();
                         skipped.Aftertouch++;
                         break;
-                    case 0xB0: // CC — skip, 2 data bytes
-                        r.ReadByte(); r.ReadByte();
+                    case 0xB0: // CC. data1 = controller# (0..127),
+                               // data2 = value (0..127). Preserved into
+                               // the parsed model; serialized as kind=7
+                               // in PS2M. Runtime acts on a CC whitelist
+                               // (volume, pan) and ignores the rest.
+                    {
+                        byte cc = r.ReadByte();
+                        byte value = r.ReadByte();
+                        controllers.Add(new MidiControllerEvent
+                        {
+                            AbsoluteTick = absTick,
+                            Channel = channel,
+                            Controller = cc,
+                            Value = value,
+                            Track = trackIndex,
+                        });
                         skipped.Controller++;
                         break;
+                    }
                     case 0xE0: // Pitch bend. data1 = LSB (0-127), data2 = MSB
                                // (0-127). Combined 14-bit value: (MSB << 7) | LSB.
                                // 0x2000 = center (no bend). Preserved into the

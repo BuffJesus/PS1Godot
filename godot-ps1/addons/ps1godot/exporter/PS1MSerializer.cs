@@ -323,13 +323,36 @@ public static class PS1MSerializer
             }
         }
 
-        // Re-sort if we injected anything, so kind=4/5/9/10 events
+        // Inject controller events as kind=7. Same fan-out pattern as
+        // PitchBend. data1 = controller# (0..127), data2 = value
+        // (0..127). The runtime acts on a small whitelist (CC#7
+        // channel volume, CC#10 pan); other CC#s are preserved into
+        // the wire stream and silently ignored at runtime — adding a
+        // new CC handler later doesn't need a format bump.
+        bool injectedControllers = false;
+        if (midi.Controllers != null && midi.Controllers.Count > 0)
+        {
+            foreach (var cc in midi.Controllers)
+            {
+                for (int i = 0; i < bindings.Count; i++)
+                {
+                    if (bindings[i].MidiChannel != cc.Channel) continue;
+                    if (bindings[i].MidiTrackIndex >= 0
+                        && bindings[i].MidiTrackIndex != cc.Track) continue;
+                    events.Add(EncodeEvent(Rescale(cc.AbsoluteTick), (byte)i, (byte)7, cc.Controller, cc.Value));
+                    injectedControllers = true;
+                }
+            }
+        }
+
+        // Re-sort if we injected anything, so kind=4/5/7/9/10 events
         // interleave correctly with notes. Decode each event's first
         // 4 bytes as little-endian tick. Stable sort preserves
         // declaration order at ties so NoteOff-before-NoteOn (same
         // tick) is preserved.
         bool injectedAnything = injectedLoopEvents
             || injectedPitchBends
+            || injectedControllers
             || (emitPS2M && programChanges != null && programChanges.Count > 0);
         if (injectedAnything)
         {
