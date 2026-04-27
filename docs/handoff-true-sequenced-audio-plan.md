@@ -246,7 +246,7 @@ top of PS1M2; defer.
   `PS1SoundMacro` + `PS1SoundMacroEvent` + `PS1SoundFamily` resource
   types. Splashpack v29 with empty macro/family tables. `Sound`
   global registered with `PlayMacro`/`PlayFamily`/`StopAll` stubs.
-- **Phase 5 Stage B** (this commit): runtime + exporter wiring.
+- **Phase 5 Stage B** (commit `08b9fb9`): runtime + exporter wiring.
   - `psxsplash-main/src/soundmacro.{hh,cpp}` — `SoundMacroSequencer`
     with up to 8 active macro instances, per-macro MaxVoices cap,
     CooldownFrames anti-spam, fp12-accumulator frame ticking.
@@ -271,18 +271,25 @@ top of PS1M2; defer.
     pitch-shift one-shots without duplicating the 84-entry table.
   - `psxsplash-main/Makefile` includes `soundmacro.cpp` +
     `soundfamily.cpp` in `SRCS`.
+- **Phase 2.6 — inline loop events** (commits `b7467ff` Godot side,
+  `3d2deca` runtime side): MIDI marker / cue-point meta-events with
+  text "loopStart" / "loopEnd" (case-insensitive — FFXIV PSF +
+  RPG-Maker convention) parsed by `MidiParser` and emitted as PS2M
+  event kinds 9 / 10. `MusicSequencer::dispatchEvent` records the
+  LoopStart tick + event index, and on LoopEnd silences held notes
+  and rewinds `m_currentTick` + `m_nextEventIdx` to the prior
+  LoopStart. Lets sequences carry an intro that plays once before
+  looping a body, instead of the header `loopStartTick` mechanism's
+  "replay-from-start every cycle." No splashpack format bump —
+  unknown event kinds were already default-skipped, so older
+  runtimes load and play marker-tagged sequences unchanged (just
+  without the loop-back).
 
 ## What to ship next
 
-Phase 2.6: PitchBend / Controller / Marker / LoopStart / LoopEnd
-event kinds in PS2M. Runtime drum-kit dispatch (today kits expand to
-bindings at export, but choke groups + per-drum priority on
-`PS1DrumKit` are runtime-driven by design and need a voice-scanner
-that watches active music voices for matching choke groups).
-
-Phase 2.6 follow-ups (deferred): PitchBend / Controller / Marker /
-LoopStart / LoopEnd event kinds in PS2M; runtime drum-kit dispatch
-(currently kits expand to bindings at export time, but choke groups
-+ per-drum priority on `PS1DrumKit` are runtime-driven by design and
-need a voice-scanner that watches active music voices for matching
-choke groups).
+Phase 2.6 follow-ups: PitchBend (kind=5), Controller (kind=7), and
+Marker-as-other-text (kind=8) event kinds. Runtime drum-kit dispatch
+(today kits expand to bindings at export, but choke groups + per-drum
+priority on `PS1DrumKit` are runtime-driven by design and need a
+voice-scanner that watches active music voices for matching choke
+groups).
