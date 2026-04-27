@@ -38,6 +38,7 @@ void MusicSequencer::init(AudioManager *audio) {
     m_inlineLoopStartTick = 0xFFFFFFFFu;
     m_inlineLoopStartIdx = 0;
     m_lastMarkerHash = 0;
+    m_lfoPhase = 0;
     m_masterVolume = 100;
     m_bankInstruments = nullptr;
     m_bankRegions = nullptr;
@@ -167,6 +168,7 @@ bool MusicSequencer::playByIndex(int index, uint8_t masterVolume) {
     m_inlineLoopStartTick = 0xFFFFFFFFu;
     m_inlineLoopStartIdx = 0;
     m_lastMarkerHash = 0;
+    m_lfoPhase = 0;
     m_masterVolume = masterVolume;
 
     // Pre-compute ticks-per-(dt12=4096-unit) in fp12. The runtime's
@@ -204,6 +206,7 @@ bool MusicSequencer::playByIndex(int index, uint8_t masterVolume) {
         m_channels[i].expression = 127;           // CC#11 default = no attenuation
         m_channels[i].sustainHeld = 0;            // CC#64 default = pedal up
         m_channels[i].noteOffPending = 0;
+        m_channels[i].modDepth = 0;               // CC#1 default = no vibrato
         // Pre-silence the voice so the next noteOn starts cleanly.
         psyqo::SPU::silenceChannels(1u << i);
     }
@@ -224,6 +227,7 @@ void MusicSequencer::stop() {
     m_inlineLoopStartTick = 0xFFFFFFFFu;
     m_inlineLoopStartIdx = 0;
     m_lastMarkerHash = 0;
+    m_lfoPhase = 0;
     // Release the voice pool so dialog/SFX can fill the whole bank again.
     if (m_audio) m_audio->reserveVoices(0);
 }
@@ -235,6 +239,32 @@ int MusicSequencer::getBeat() const {
 
 void MusicSequencer::tick(int32_t dt12) {
     if (!m_active) return;
+
+    // Advance the shared CC#1 modulation LFO and re-pitch any held
+    // melodic voices with non-zero modDepth. Step 24 ≈ 11 ticks /
+    // cycle at the scenemanager's ~30Hz cadence ≈ ~3 Hz vibrato — a
+    // pleasant musical rate. Wraps naturally as uint8.
+    m_lfoPhase = (uint8_t)(m_lfoPhase + 24);
+    int chanCount = m_active->header->channelCount;
+    if (chanCount > MAX_CHANNELS) chanCount = MAX_CHANNELS;
+    int16_t lfoSample = LFO_TABLE[m_lfoPhase >> 4];
+    for (int i = 0; i < chanCount; i++) {
+        uint8_t depth = m_channels[i].modDepth;
+        if (depth == 0) continue;
+        if (m_channels[i].activeVoice < 0) continue;
+        if ((m_active->channels[i].flags & 0x02) != 0) continue;  // skip percussion
+        // mod-ratio = 0x1000 + (lfoSample × depth / 127). Scaled
+        // peak deviation ≈ ±0x80 × depth/127 fp12.
+        int32_t modOffset = ((int32_t)lfoSample * (int32_t)depth) / 127;
+        int32_t modRatio = 0x1000 + modOffset;
+        // Compose with the existing static rate (note→base × bend).
+        uint32_t bent = ((uint32_t)m_channels[i].noteBaseRate
+                        * (uint32_t)m_channels[i].pitchBendRatio12) >> 12;
+        uint32_t mod = (bent * (uint32_t)modRatio) >> 12;
+        if (mod < 1) mod = 1;
+        if (mod > 0x3FFF) mod = 0x3FFF;
+        SPU_VOICES[m_channels[i].activeVoice].sampleRate = (uint16_t)mod;
+    }
 
     // Advance the playhead by (ticksPerFrame12 * dt12) >> 12.
     // dt12 is fp12 where 4096 == 1/30 s wall-clock (see scenemanager),
@@ -277,6 +307,15 @@ void MusicSequencer::tick(int32_t dt12) {
         }
     }
 }
+
+// One cycle of a sine in fp12 ratio offsets. Peak ±0x80 → ~3.1% pitch
+// variation → ~55 cents (≈ a half-semitone) at full modDepth. Phase>>4
+// indexes the 16 slots; modDepth scales the offset before adding to
+// 0x1000 = unity.
+const int16_t MusicSequencer::LFO_TABLE[16] = {
+       0,   49,   91,  118,  128,  118,   91,   49,
+       0,  -49,  -91, -118, -128, -118,  -91,  -49,
+};
 
 uint16_t MusicSequencer::bendRatio12From14(uint16_t value14) {
     // 14-bit unsigned bend value [0..0x3FFF] with 0x2000 = center.
@@ -350,6 +389,22 @@ bool MusicSequencer::dispatchEvent(const MusicEvent &e) {
                 if (e.data1 == 7)       m_channels[e.channel].volume     = e.data2;
                 else if (e.data1 == 10) m_channels[e.channel].pan        = e.data2;
                 else if (e.data1 == 11) m_channels[e.channel].expression = e.data2;
+                else if (e.data1 == 1) {
+                    // Modulation wheel. depth=0 → restore the static
+                    // (note×bend) rate immediately so the voice
+                    // doesn't freeze at whatever LFO sample it last
+                    // saw. depth>0 → next tick picks up modulation.
+                    bool wasActive = (m_channels[e.channel].modDepth != 0);
+                    m_channels[e.channel].modDepth = e.data2;
+                    if (wasActive && e.data2 == 0
+                        && m_channels[e.channel].activeVoice >= 0) {
+                        uint32_t bent = ((uint32_t)m_channels[e.channel].noteBaseRate
+                            * (uint32_t)m_channels[e.channel].pitchBendRatio12) >> 12;
+                        if (bent < 1) bent = 1;
+                        if (bent > 0x3FFF) bent = 0x3FFF;
+                        SPU_VOICES[m_channels[e.channel].activeVoice].sampleRate = (uint16_t)bent;
+                    }
+                }
                 else if (e.data1 == 64) {
                     // Sustain pedal: ≥64 = down, <64 = up. On pedal
                     // release, fire any deferred noteOff that was

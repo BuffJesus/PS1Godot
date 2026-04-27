@@ -349,7 +349,7 @@ top of PS1M2; defer.
   `combined = volume × velocity × expression × region × master`,
   each /127. Like CC#7 / CC#10, applies at next noteOn only — no
   live retune of held notes.
-- **Phase 2.6 — CC#64 sustain pedal** (this commit, runtime
+- **Phase 2.6 — CC#64 sustain pedal** (commit `3e961fb`, runtime
   only): adds `sustainHeld` + `noteOffPending` bytes to
   `ChannelState` (both default 0, reset on `playByIndex`).
   Dispatch case 7 routes data1=64 → ≥64 sets sustainHeld; <64
@@ -359,17 +359,24 @@ top of PS1M2; defer.
   `noteOffPending` because mono-per-channel dispatch means a new
   note replaces the held one — the deferred off no longer
   applies.
+- **Phase 2.6 — CC#1 modulation wheel** (this commit, runtime
+  only): adds `modDepth` byte to `ChannelState` (default 0,
+  reset on `playByIndex`) and `m_lfoPhase` byte + 16-entry
+  `LFO_TABLE` (signed fp12 ratio offsets, peak ±0x80 ≈ ±55
+  cents) on the sequencer. `tick()` advances the shared phase
+  by 24 per call (~3 Hz vibrato at the 30Hz scenemanager
+  cadence) and re-pitches each held melodic voice with non-zero
+  modDepth — `finalRate = noteBaseRate × pitchBend × (1 +
+  lfoSample × depth/127)`. Percussion is excluded. CC#1
+  data2=0 immediately restores the static rate so the voice
+  doesn't freeze at whatever LFO sample it last saw.
 
 ## What to ship next
 
 Phase 2.6 is effectively complete: every reserved event kind
 (4 ProgramChange, 5 PitchBend, 7 Controller, 8 Marker, 9/10
 LoopStart/End) is now end-to-end, drum-kit choke groups ship,
-and the kind=7 whitelist covers CC#7/CC#10/CC#11/CC#64. Optional
-polish that doesn't gate further phases:
-- Extend the kind=7 whitelist to CC#1 (modulation — needs an
-  LFO + per-tick voice retune; substantially more infrastructure
-  than the volume / pan / sustain handlers).
+and the kind=7 whitelist covers CC#1/CC#7/CC#10/CC#11/CC#64.
 - Wire per-drum priority once a global voice allocator with
   stealing exists (Phase 4 territory — today every music channel
   has a dedicated reserved voice, so priority has nothing to do).

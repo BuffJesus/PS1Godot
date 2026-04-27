@@ -201,6 +201,19 @@ private:
     // playByIndex.
     uint16_t m_lastMarkerHash = 0;
 
+    // Shared CC#1 modulation LFO phase. uint8 wraps naturally so the
+    // sine table indexes phase>>4. Advances by a fixed step per
+    // tick(), giving an LFO rate independent of song tempo. Reset on
+    // playByIndex.
+    uint8_t m_lfoPhase = 0;
+
+    // 16-entry signed LFO sine table. Each entry is an fp12 pitch-
+    // ratio offset (added to 0x1000 = 1.0 to produce the final ratio
+    // multiplier). Peak ±0x80 ≈ ±3.1% rate variation ≈ ±55 cents at
+    // full depth — typical synth vibrato range. Scaled by depth/127
+    // per channel.
+    static const int16_t LFO_TABLE[16];
+
     // Per-channel state. activeVoice == -1 means the channel has no
     // note playing right now.
     //
@@ -228,6 +241,12 @@ private:
         // release fires the deferred silence if pending.
         uint8_t sustainHeld;
         uint8_t noteOffPending;
+        // CC#1 Modulation wheel. 0 = no vibrato, 127 = full depth.
+        // The sequencer owns a single shared LFO phase; per-tick the
+        // dispatcher walks held melodic voices with non-zero modDepth
+        // and re-pitches the SPU sample rate with the LFO contribution
+        // multiplied by depth/127. Percussion ignores modulation.
+        uint8_t modDepth;
         // Pre-bend SPU rate of the currently-held note, captured at noteOn
         // after the note→base pitch shift. kind=5 (PitchBend) re-multiplies
         // this by pitchBendRatio12 / 4096 instead of re-running the shift,
