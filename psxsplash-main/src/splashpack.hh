@@ -139,6 +139,54 @@ struct SPLASHPACKDrumMappingRecord {
 };
 static_assert(sizeof(SPLASHPACKDrumMappingRecord) == 8, "SPLASHPACKDrumMappingRecord must be 8 bytes");
 
+// v29+: composite sound effects ("sound macros"). Each macro is a
+// frame-keyed event list — at frame N play sample S with pitch P at
+// volume V/pan PN. Replaces baked composite WAVs with short clean
+// clips + a tiny event sequence.
+//
+// Layout: a flat events[] table indexed by [firstEventIndex,
+// firstEventIndex + eventCount). Macro names are inline 16-byte
+// null-padded strings to match the MusicTableEntry pattern.
+struct SPLASHPACKSoundMacroRecord {
+    uint16_t firstEventIndex;
+    uint16_t eventCount;
+    uint8_t  maxVoices;          // 0 = no cap (limited by SFX pool)
+    uint8_t  priority;            // 0-255, voice-stealing priority
+    uint16_t cooldownFrames;
+    char     name[16];
+};
+static_assert(sizeof(SPLASHPACKSoundMacroRecord) == 24, "SPLASHPACKSoundMacroRecord must be 24 bytes");
+
+struct SPLASHPACKSoundMacroEventRecord {
+    uint16_t frame;
+    uint16_t audioClipIndex;
+    uint8_t  volume;             // 0-128
+    uint8_t  pan;                // 0-127
+    int8_t   pitchOffset;        // -24..+24 semitones
+    uint8_t  pad;
+};
+static_assert(sizeof(SPLASHPACKSoundMacroEventRecord) == 8, "SPLASHPACKSoundMacroEventRecord must be 8 bytes");
+
+// v29+: variation pool. Each family draws from a contiguous slice of
+// the scene's familyClipIndices[] table — those values are indices
+// into the audio clip table. Per-dispatch the runtime picks one
+// (with anti-repeat if flags bit 0 set), applies pitch/volume/pan
+// jitter from the configured ranges.
+struct SPLASHPACKSoundFamilyRecord {
+    uint16_t firstClipIndex;     // into familyClipIndices[]
+    uint16_t clipCount;
+    int8_t   pitchSemitonesMin;
+    int8_t   pitchSemitonesMax;
+    uint8_t  volumeMin;
+    uint8_t  volumeMax;
+    uint8_t  panJitter;
+    uint8_t  flags;              // bit 0 = avoidRepeat
+    uint8_t  priority;
+    uint8_t  cooldownFrames;
+    char     name[16];
+};
+static_assert(sizeof(SPLASHPACKSoundFamilyRecord) == 28, "SPLASHPACKSoundFamilyRecord must be 28 bytes");
+
 struct SPLASHPACKTriggerBox {
     int32_t minX, minY, minZ;
     int32_t maxX, maxY, maxZ;
@@ -299,6 +347,19 @@ struct SplashpackSceneSetup {
     uint16_t regionCount = 0;
     uint16_t drumKitCount = 0;
     uint16_t drumMappingCount = 0;
+
+    // v29+: sound-macro and sound-family banks. Same in-place
+    // pointer pattern. familyClipIndices is a flat u16 array; each
+    // family's [firstClipIndex, firstClipIndex+clipCount) slice
+    // lists its variant clip indices.
+    const SPLASHPACKSoundMacroRecord*       soundMacros = nullptr;
+    const SPLASHPACKSoundMacroEventRecord*  soundMacroEvents = nullptr;
+    const SPLASHPACKSoundFamilyRecord*      soundFamilies = nullptr;
+    const uint16_t*                         familyClipIndices = nullptr;
+    uint16_t soundMacroCount = 0;
+    uint16_t soundMacroEventCount = 0;
+    uint16_t soundFamilyCount = 0;
+    uint16_t familyClipIndexCount = 0;
 };
 
 class SplashPackLoader {

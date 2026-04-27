@@ -132,8 +132,20 @@ struct SPLASHPACKFileHeader {
     uint32_t regionTableOffset;
     uint32_t drumKitTableOffset;
     uint32_t drumMappingTableOffset;
+    // v29+: sound macros + sound families (composite SFX + variation
+    // pools, see strategy doc §15-§16). soundMacroCount = 0 means the
+    // scene has no macros; same for families. familyClipIndices is a
+    // flat u16 array sliced per-family.
+    uint16_t soundMacroCount;
+    uint16_t soundMacroEventCount;
+    uint16_t soundFamilyCount;
+    uint16_t familyClipIndexCount;
+    uint32_t soundMacroTableOffset;
+    uint32_t soundMacroEventTableOffset;
+    uint32_t soundFamilyTableOffset;
+    uint32_t familyClipIndexTableOffset;
 };
-static_assert(sizeof(SPLASHPACKFileHeader) == 200, "SPLASHPACKFileHeader must be 200 bytes");
+static_assert(sizeof(SPLASHPACKFileHeader) == 224, "SPLASHPACKFileHeader must be 224 bytes");
 
 struct MusicTableEntry {
     uint32_t dataOffset;
@@ -163,7 +175,7 @@ void SplashPackLoader::LoadSplashpack(uint8_t *data, SplashpackSceneSetup &setup
     psyqo::Kernel::assert(data != nullptr, "Splashpack loading data pointer is null");
     psxsplash::SPLASHPACKFileHeader *header = reinterpret_cast<psxsplash::SPLASHPACKFileHeader *>(data);
     psyqo::Kernel::assert(__builtin_memcmp(header->magic, "SP", 2) == 0, "Splashpack has incorrect magic");
-    psyqo::Kernel::assert(header->version >= 28, "Splashpack version too old (need v28+): re-export from PS1Godot");
+    psyqo::Kernel::assert(header->version >= 29, "Splashpack version too old (need v29+): re-export from PS1Godot");
 
     setup.playerStartPosition = header->playerStartPos;
     setup.playerStartRotation = header->playerStartRot;
@@ -406,6 +418,41 @@ void SplashPackLoader::LoadSplashpack(uint8_t *data, SplashpackSceneSetup &setup
             setup.drumMappings = reinterpret_cast<const SPLASHPACKDrumMappingRecord*>(
                 data + header->drumMappingTableOffset);
             setup.drumMappingCount = header->drumMappingCount;
+        }
+    }
+
+    // v29+: sound macro + sound family banks. Same in-place pointer
+    // pattern as the v28 instrument bank — the runtime indexes the
+    // on-disk arrays directly. Stage A leaves these load-but-unused;
+    // Stage B will wire SoundMacroSequencer / SoundFamily dispatch.
+    setup.soundMacroCount        = 0;
+    setup.soundMacroEventCount   = 0;
+    setup.soundFamilyCount       = 0;
+    setup.familyClipIndexCount   = 0;
+    setup.soundMacros            = nullptr;
+    setup.soundMacroEvents       = nullptr;
+    setup.soundFamilies          = nullptr;
+    setup.familyClipIndices      = nullptr;
+    if (header->version >= 29) {
+        if (header->soundMacroCount > 0 && header->soundMacroTableOffset != 0) {
+            setup.soundMacros = reinterpret_cast<const SPLASHPACKSoundMacroRecord*>(
+                data + header->soundMacroTableOffset);
+            setup.soundMacroCount = header->soundMacroCount;
+        }
+        if (header->soundMacroEventCount > 0 && header->soundMacroEventTableOffset != 0) {
+            setup.soundMacroEvents = reinterpret_cast<const SPLASHPACKSoundMacroEventRecord*>(
+                data + header->soundMacroEventTableOffset);
+            setup.soundMacroEventCount = header->soundMacroEventCount;
+        }
+        if (header->soundFamilyCount > 0 && header->soundFamilyTableOffset != 0) {
+            setup.soundFamilies = reinterpret_cast<const SPLASHPACKSoundFamilyRecord*>(
+                data + header->soundFamilyTableOffset);
+            setup.soundFamilyCount = header->soundFamilyCount;
+        }
+        if (header->familyClipIndexCount > 0 && header->familyClipIndexTableOffset != 0) {
+            setup.familyClipIndices = reinterpret_cast<const uint16_t*>(
+                data + header->familyClipIndexTableOffset);
+            setup.familyClipIndexCount = header->familyClipIndexCount;
         }
     }
 

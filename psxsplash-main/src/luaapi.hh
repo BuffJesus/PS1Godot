@@ -342,6 +342,27 @@ private:
     static int Music_Find(lua_State* L);
 
     // ========================================================================
+    // SOUND API (Phase 5) — composite SFX (macros) + variation pools (families)
+    //
+    // Macros and families both pull from the SFX voice pool via
+    // AudioManager::play. They never reserve voices and never compete
+    // with the music sequencer — Phase 4's allocateVoice with the
+    // author-set priority handles eviction. Stage A registers stubs
+    // that log "not implemented" and return nil/false; Stage B wires
+    // the dispatch path against new SoundMacroSequencer + SoundFamily
+    // runtime systems.
+    // ========================================================================
+
+    // Sound.PlayMacro(name) -> handle or nil
+    static int Sound_PlayMacro(lua_State* L);
+
+    // Sound.PlayFamily(name) -> channel or nil
+    static int Sound_PlayFamily(lua_State* L);
+
+    // Sound.StopAll() — silences every macro currently in flight.
+    static int Sound_StopAll(lua_State* L);
+
+    // ========================================================================
     // DEBUG API - Development helpers
     // ========================================================================
     

@@ -316,7 +316,23 @@ void LuaAPI::RegisterAll(psyqo::Lua& L, SceneManager* scene, CutscenePlayer* cut
     L.setField(-2, "Find");
 
     L.setGlobal("Music");
-    
+
+    // ========================================================================
+    // SOUND API (Phase 5 Stage A — stubs)
+    // ========================================================================
+    L.newTable();
+
+    L.push(Sound_PlayMacro);
+    L.setField(-2, "PlayMacro");
+
+    L.push(Sound_PlayFamily);
+    L.setField(-2, "PlayFamily");
+
+    L.push(Sound_StopAll);
+    L.setField(-2, "StopAll");
+
+    L.setGlobal("Sound");
+
     // ========================================================================
     // DEBUG API
     // ========================================================================
@@ -2175,6 +2191,41 @@ int LuaAPI::Music_Find(lua_State* L) {
         lua.pushNumber(static_cast<lua_Number>(idx));
     }
     return 1;
+}
+
+// ============================================================================
+// SOUND API IMPLEMENTATION (Phase 5 Stage A — stubs)
+//
+// Stage A registers the Sound table so authoring scripts can call
+// Sound.PlayMacro / PlayFamily / StopAll without a "global Sound is
+// nil" runtime error. The actual dispatch path lands in Stage B:
+// SoundMacroSequencer ticks active macro instances each frame and
+// dispatches frame-keyed sample events through AudioManager::play
+// with the macro's author-set priority; SoundFamily picks a variant
+// at random with author-set jitter. Stage A logs once per call so
+// it's obvious in PCSX-Redux's stdout when a stub fires.
+// ============================================================================
+
+int LuaAPI::Sound_PlayMacro(lua_State* L) {
+    psyqo::Lua lua(L);
+    const char* name = lua.isString(1) ? lua.toString(1) : "?";
+    printf("[Sound.PlayMacro] '%s' — runtime stub (Phase 5 Stage A); macro will dispatch in Stage B.\n", name);
+    lua.push();  // nil — Stage B returns a handle int
+    return 1;
+}
+
+int LuaAPI::Sound_PlayFamily(lua_State* L) {
+    psyqo::Lua lua(L);
+    const char* name = lua.isString(1) ? lua.toString(1) : "?";
+    printf("[Sound.PlayFamily] '%s' — runtime stub (Phase 5 Stage A); family will dispatch in Stage B.\n", name);
+    lua.push();  // nil — Stage B returns the SPU channel int
+    return 1;
+}
+
+int LuaAPI::Sound_StopAll(lua_State* L) {
+    (void)L;
+    printf("[Sound.StopAll] runtime stub (Phase 5 Stage A).\n");
+    return 0;
 }
 
 // ============================================================================

@@ -29,11 +29,11 @@ namespace PS1Godot.Exporter;
 //                  Name table — referenced by header.nameTableOffset.
 public static class SplashpackWriter
 {
-    public const ushort SplashpackVersion = 28;
+    public const ushort SplashpackVersion = 29;
     // Header layout grew by 16 bytes in v24 (sky struct: tpage + clut + UVs
     // + bitDepth + tint + enabled flag, mirroring the UI Image typeData
     // union slot). See WriteHeader and the runtime's SPLASHPACKFileHeader.
-    public const int HeaderSize = 200;
+    public const int HeaderSize = 224;
     public const int GameObjectSize = 92;
     public const int TriSize = 52;
     public const int LuaFileSize = 8; // luaCodeOffset (u32) + length (u32)
@@ -1231,6 +1231,18 @@ public static class SplashpackWriter
         public long RegionTableOffsetPos;
         public long DrumKitTableOffsetPos;
         public long DrumMappingTableOffsetPos;
+        // v29+: sound macro / family backfill positions. All four
+        // tables are independent. Empty list → counts and offsets
+        // emit as 0 and the runtime treats the scene as having no
+        // macros / families.
+        public long SoundMacroCountPos;
+        public long SoundMacroEventCountPos;
+        public long SoundFamilyCountPos;
+        public long FamilyClipIndexCountPos;
+        public long SoundMacroTableOffsetPos;
+        public long SoundMacroEventTableOffsetPos;
+        public long SoundFamilyTableOffsetPos;
+        public long FamilyClipIndexTableOffsetPos;
     }
 
     private static HeaderOffsets WriteHeader(BinaryWriter w, SceneData scene, int atlasCount, int clutCount, int colliderCount,
@@ -1434,6 +1446,28 @@ public static class SplashpackWriter
         w.Write((uint)0);      // drumKitTableOffset      (backfilled)
         offsets.DrumMappingTableOffsetPos = w.BaseStream.Position;
         w.Write((uint)0);      // drumMappingTableOffset  (backfilled)
+
+        // v29: sound macros + sound families — counts (8 bytes) +
+        // table offsets (16 bytes). All zero today (Stage B will
+        // populate). Runtime treats zero counts as "no macros/families
+        // for this scene"; Sound.PlayMacro logs a no-such-name warning
+        // and Sound.PlayFamily silently no-ops.
+        offsets.SoundMacroCountPos = w.BaseStream.Position;
+        w.Write((ushort)0);    // soundMacroCount        (backfilled)
+        offsets.SoundMacroEventCountPos = w.BaseStream.Position;
+        w.Write((ushort)0);    // soundMacroEventCount   (backfilled)
+        offsets.SoundFamilyCountPos = w.BaseStream.Position;
+        w.Write((ushort)0);    // soundFamilyCount       (backfilled)
+        offsets.FamilyClipIndexCountPos = w.BaseStream.Position;
+        w.Write((ushort)0);    // familyClipIndexCount   (backfilled)
+        offsets.SoundMacroTableOffsetPos = w.BaseStream.Position;
+        w.Write((uint)0);      // soundMacroTableOffset       (backfilled)
+        offsets.SoundMacroEventTableOffsetPos = w.BaseStream.Position;
+        w.Write((uint)0);      // soundMacroEventTableOffset  (backfilled)
+        offsets.SoundFamilyTableOffsetPos = w.BaseStream.Position;
+        w.Write((uint)0);      // soundFamilyTableOffset      (backfilled)
+        offsets.FamilyClipIndexTableOffsetPos = w.BaseStream.Position;
+        w.Write((uint)0);      // familyClipIndexTableOffset  (backfilled)
 
         long written = w.BaseStream.Position - headerStart;
         if (written != HeaderSize)

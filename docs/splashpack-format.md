@@ -1,4 +1,4 @@
-# Splashpack format v28
+# Splashpack format v29
 
 Extracted from `psxsplash-main/src/splashpack.{hh,cpp}` and
 `godot-ps1/addons/ps1godot/exporter/SplashpackWriter.cs`. Keep this in sync when
@@ -44,7 +44,7 @@ for the sequenced-music table (`musicSequenceCount` + `pad_music` +
 | Offset | Type | Field | Notes |
 |-------:|------|-------|-------|
 | 0 | `char[2]` | `magic` | `"SP"` |
-| 2 | `u16` | `version` | `28`; loader asserts `>= 28` |
+| 2 | `u16` | `version` | `29`; loader asserts `>= 29` |
 | 4 | `u16` | `luaFileCount` | |
 | 6 | `u16` | `gameObjectCount` | |
 | 8 | `u16` | `textureAtlasCount` | |
@@ -240,6 +240,26 @@ export-time, not runtime.
   `XaAudioBackend` (`xaaudio.cpp`) drives Form-2 disc streaming via
   `psyqo::CDRomDevice::Action` for SETMODE 0x24 → SETLOC → READS. See
   `splashpack.hh:120`.
+- v29: sound macros + sound families (Phase 5 Stage A). Header gains
+  four u16 counts (`soundMacroCount`, `soundMacroEventCount`,
+  `soundFamilyCount`, `familyClipIndexCount`) + four u32 table
+  offsets — total +24 bytes, header now 224 B. Records:
+    - `SPLASHPACKSoundMacroRecord` (24 B): inline 16-byte name,
+      `firstEventIndex` + `eventCount` slice into the macro-event
+      table, `maxVoices`, `priority`, `cooldownFrames`.
+    - `SPLASHPACKSoundMacroEventRecord` (8 B): `frame` (local to
+      macro), `audioClipIndex`, `volume`, `pan`, `pitchOffset`
+      (i8 semitones).
+    - `SPLASHPACKSoundFamilyRecord` (28 B): inline 16-byte name,
+      `firstClipIndex` + `clipCount` slice into the
+      familyClipIndices table, pitch/volume/pan jitter ranges,
+      `flags` (bit 0 = avoidRepeat), `priority`, `cooldownFrames`.
+    - familyClipIndices: flat u16 array; each family's slice lists
+      the AudioClips indices it draws variants from.
+  Stage A scaffold: counts/offsets emit as zero, runtime parses but
+  doesn't dispatch. Stage B wires `SoundMacroSequencer` /
+  `SoundFamily` runtime systems and the Lua dispatch path. See
+  `splashpack.hh` for ground-truth field layouts.
 - v28: scene-wide instrument bank for sequenced music. Header gains
   `instrumentCount` / `regionCount` / `drumKitCount` /
   `drumMappingCount` (u16 each) plus four u32 table offsets — total

@@ -164,7 +164,7 @@ This is purely a runtime change; **no splashpack bump.** The PolyphonyLimit
 and Priority fields baked into instruments in Phase 2 finally get consulted
 here.
 
-## Phase 5 — Sound macros + sound families (§21 step 8) — Music.Play vs Sound.PlayMacro split
+## Phase 5 — Sound macros + sound families (§21 step 8) — Stage A shipped, Stage B pending
 
 `luaapi.cpp:300-318` registers the `Music` table; `Music_Play` at `:2102-2127`
 calls `getMusicSequencer().playByIndex` which itself calls
@@ -237,18 +237,23 @@ top of PS1M2; defer.
   references and force-resolves Auto → SPU for instrument-backed clips.
   Author drops a Steinway WAV into a region without flipping the Route
   field manually.
-- **Phase 4** (this commit): voice allocator extension on
+- **Phase 4** (commit `ece6912`): voice allocator extension on
   AudioManager. New `VoiceMeta`+`allocateVoice` with three-pass steal
   policy (Free → Released → lower-priority steal → drop). Music slots
   pinned at MUSIC_PRIORITY (255) so SFX never evict them. Existing
   `m_reservedForMusic` semantics preserved.
+- **Phase 5 Stage A** (this commit): authoring scaffold.
+  `PS1SoundMacro` + `PS1SoundMacroEvent` + `PS1SoundFamily` resource
+  types. Splashpack v29 with empty macro/family tables. `Sound`
+  global registered with `PlayMacro`/`PlayFamily`/`StopAll` stubs
+  (log + no-op). Authors can drop resources and Lua calls now;
+  Stage B wires the runtime dispatch.
 
 ## What to ship next
 
-Phase 5 (Sound.PlayMacro / Sound.PlayFamily) is independent of the
-format bump and can land any time. New Lua global plus two scaffold
-resource types. Now that Phase 4 ships, Phase 5 macros can claim
-priority through allocateVoice without fighting MusicSequencer.
+Phase 5 Stage B: SoundMacroSequencer + SoundFamily runtime, exporter
+collects + packs records, Lua stubs become real. Estimated
+~400-500 LOC across runtime + exporter.
 
 Phase 2.6 follow-ups (deferred): PitchBend / Controller / Marker /
 LoopStart / LoopEnd event kinds in PS2M; runtime drum-kit dispatch

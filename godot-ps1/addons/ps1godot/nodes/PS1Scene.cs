@@ -108,6 +108,22 @@ public partial class PS1Scene : Node3D
     [Export]
     public Godot.Collections.Array<PS1DrumKit> DrumKits { get; set; } = new();
 
+    [ExportGroup("Sound (Phase 5)")]
+    // Composite sound effects (frame-keyed event lists). Each macro
+    // is one Lua-callable entry: Sound.PlayMacro("MacroName"). Macros
+    // pull from the SFX voice pool — they don't touch reserved music
+    // voices. See PS1SoundMacro for per-event semantics and the
+    // strategy doc §15 for the design rationale.
+    [Export]
+    public Godot.Collections.Array<PS1SoundMacro> SoundMacros { get; set; } = new();
+
+    // Variation pools: Sound.PlayFamily("FamilyName") picks one of
+    // the family's clips with author-set pitch/volume/pan jitter.
+    // Replaces hand-baked variations (footstep_01..08) with two
+    // clean clips + jitter parameters. See PS1SoundFamily.
+    [Export]
+    public Godot.Collections.Array<PS1SoundFamily> SoundFamilies { get; set; } = new();
+
     [ExportGroup("Scene loading")]
     // Additional scenes that ship in the same splashpack drop. The currently-
     // open scene exports as scene_0; entries here export as scene_1, scene_2,
