@@ -90,9 +90,13 @@ tools/*.mid
 tools/*.splashpack
 
 # ── Release staging ──
-# Built by scripts/build-release.py; attached to GitHub Releases.
+# Built by scripts/py/build-release.py; attached to GitHub Releases.
 # Not tracked in the repo itself.
 dist/
+
+# ── Python bytecode cache (from scripts/py/, tools/) ──
+__pycache__/
+*.pyc
 
 # ── Local-only config ──
 .env
