@@ -113,7 +113,8 @@ public static class BlenderMetadataWriter
             {
                 var mat = pmi.GetSurfaceOverrideMaterial(s) ?? pmi.Mesh.SurfaceGetMaterial(s);
                 if (mat == null) continue;
-                materials.Add(BuildMaterialPayload(mat, pmi.AlphaMode, pmi.AtlasGroup));
+                var meta = LookupMeta(pmi.Materials, mat);
+                materials.Add(BuildMaterialPayload(mat, meta, pmi.AlphaMode, pmi.AtlasGroup));
             }
         }
         return BuildCommonPayload(
@@ -139,7 +140,7 @@ public static class BlenderMetadataWriter
         // every distinct material the group exports.
         var materials = new List<Dictionary<string, object?>>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
-        CollectGroupMaterials(pmg, materials, seen, pmg.AlphaMode, pmg.AtlasGroup);
+        CollectGroupMaterials(pmg, materials, seen, pmg.Materials, pmg.AlphaMode, pmg.AtlasGroup);
 
         string sourceName = string.IsNullOrEmpty(pmg.ObjectName) ? pmg.Name : pmg.ObjectName;
         return BuildCommonPayload(
@@ -162,6 +163,7 @@ public static class BlenderMetadataWriter
         Node n,
         List<Dictionary<string, object?>> materials,
         HashSet<string> seen,
+        Godot.Collections.Array<PS1MaterialMetadata> metas,
         AlphaMode fallbackAlpha,
         AtlasGroup fallbackAtlas)
     {
@@ -174,13 +176,32 @@ public static class BlenderMetadataWriter
                 string key = mat.ResourceName ?? "";
                 if (string.IsNullOrEmpty(key)) key = $"_anon_{materials.Count}";
                 if (!seen.Add(key)) continue;
-                materials.Add(BuildMaterialPayload(mat, fallbackAlpha, fallbackAtlas));
+                var meta = LookupMeta(metas, mat);
+                materials.Add(BuildMaterialPayload(mat, meta, fallbackAlpha, fallbackAtlas));
             }
         }
         foreach (var child in n.GetChildren())
         {
-            CollectGroupMaterials(child, materials, seen, fallbackAlpha, fallbackAtlas);
+            CollectGroupMaterials(child, materials, seen, metas, fallbackAlpha, fallbackAtlas);
         }
+    }
+
+    // Find the PS1MaterialMetadata entry whose MaterialName matches
+    // the supplied Material's ResourceName. Returns null when the
+    // node has no metadata for this slot — caller falls back to the
+    // mesh-level alpha/atlas hints.
+    private static PS1MaterialMetadata? LookupMeta(
+        Godot.Collections.Array<PS1MaterialMetadata> metas, Material mat)
+    {
+        if (metas == null || metas.Count == 0) return null;
+        string slotName = mat.ResourceName ?? "";
+        foreach (var m in metas)
+        {
+            if (m == null) continue;
+            string n = !string.IsNullOrEmpty(m.MaterialName) ? m.MaterialName : m.MaterialId;
+            if (string.Equals(n, slotName, StringComparison.Ordinal)) return m;
+        }
+        return null;
     }
 
     private static Dictionary<string, object?> BuildCommonPayload(
@@ -214,25 +235,43 @@ public static class BlenderMetadataWriter
     }
 
     private static Dictionary<string, object?> BuildMaterialPayload(
-        Material mat, AlphaMode meshAlpha, AtlasGroup meshAtlas)
+        Material mat, PS1MaterialMetadata? meta, AlphaMode meshAlpha, AtlasGroup meshAtlas)
     {
-        // Per-material PS1 properties are Phase 5 (per-material types
-        // on the Godot side). Until then, populate from the Material's
-        // ResourceName + the parent mesh's mesh-level alpha/atlas
-        // hints so the JSON is well-formed and round-trips.
+        // Phase 5: when the mesh node has a PS1MaterialMetadata entry
+        // for this slot, the per-material fields come from there.
+        // Otherwise we fall back to the mesh-level alpha/atlas hints
+        // (the pre-Phase-5 default) and emit empty strings for the
+        // texture-page / CLUT IDs that have no Godot-side authoring
+        // home yet.
         string name = string.IsNullOrEmpty(mat.ResourceName) ? "Material" : mat.ResourceName;
+        if (meta != null && !string.IsNullOrEmpty(meta.MaterialName))
+        {
+            name = meta.MaterialName;
+        }
+
+        string materialId   = meta?.MaterialId    ?? "";
+        if (string.IsNullOrEmpty(materialId)) materialId = name;
+        string texturePage  = meta?.TexturePageId ?? "";
+        string clutId       = meta?.ClutId        ?? "";
+        string paletteGroup = meta?.PaletteGroup  ?? "";
+        AtlasGroup atlas    = meta?.AtlasGroup    ?? meshAtlas;
+        TextureFormat fmt   = meta?.TextureFormat ?? TextureFormat.Auto;
+        AlphaMode alpha     = meta?.AlphaMode     ?? meshAlpha;
+        bool forceNoFilter  = meta?.ForceNoFilter ?? false;
+        bool approved16bpp  = meta?.Approved16bpp ?? false;
+
         return new Dictionary<string, object?>
         {
             ["blender_name"]    = name,
-            ["material_id"]     = name,
-            ["texture_page_id"] = "",
-            ["clut_id"]         = "",
-            ["palette_group"]   = "",
-            ["atlas_group"]     = meshAtlas.ToString(),
-            ["texture_format"]  = "Auto",
-            ["alpha_mode"]      = meshAlpha.ToString(),
-            ["force_no_filter"] = false,
-            ["approved_16bpp"]  = false,
+            ["material_id"]     = materialId,
+            ["texture_page_id"] = texturePage,
+            ["clut_id"]         = clutId,
+            ["palette_group"]   = paletteGroup,
+            ["atlas_group"]     = atlas.ToString(),
+            ["texture_format"]  = TextureFormatNames.ToWire(fmt),
+            ["alpha_mode"]      = alpha.ToString(),
+            ["force_no_filter"] = forceNoFilter,
+            ["approved_16bpp"]  = approved16bpp,
         };
     }
 

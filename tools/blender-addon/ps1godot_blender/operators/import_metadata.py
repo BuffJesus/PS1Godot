@@ -43,6 +43,7 @@ _VALID_SHADING_MODE = frozenset({
 _VALID_ALPHA_MODE = frozenset({
     "Opaque", "Cutout", "SemiTransparent", "Additive", "UI",
 })
+_VALID_TEXTURE_FORMAT = frozenset({"Auto", "4bpp", "8bpp", "16bpp"})
 
 
 class PS1GODOT_OT_import_metadata(bpy.types.Operator):
@@ -208,6 +209,10 @@ class PS1GODOT_OT_import_metadata(bpy.types.Operator):
                 setattr(m, key, m_payload[key])
         if "alpha_mode" in m_payload and isinstance(m_payload["alpha_mode"], str) and m_payload["alpha_mode"] in _VALID_ALPHA_MODE:
             m.alpha_mode = m_payload["alpha_mode"]
+        if ("texture_format" in m_payload
+                and isinstance(m_payload["texture_format"], str)
+                and m_payload["texture_format"] in _VALID_TEXTURE_FORMAT):
+            m.texture_format = m_payload["texture_format"]
         if "force_no_filter" in m_payload:
             m.force_no_filter = bool(m_payload["force_no_filter"])
         if "approved_16bpp" in m_payload:

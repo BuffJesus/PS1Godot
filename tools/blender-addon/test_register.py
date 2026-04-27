@@ -208,7 +208,20 @@ def main() -> int:
             "shading_mode": "VertexColor",      # was FlatColor
             "alpha_mode": "Cutout",             # was Opaque
             "collision_layer": "world_static",
-            "materials": [],
+            "materials": [
+                {
+                    "blender_name":    "Material",
+                    "material_id":     "town_wood_dark",
+                    "texture_page_id": "tpage_town_world_01",
+                    "clut_id":         "town_day",
+                    "palette_group":   "town_day",
+                    "atlas_group":     "World",
+                    "texture_format":  "8bpp",
+                    "alpha_mode":      "Cutout",
+                    "force_no_filter": True,
+                    "approved_16bpp":  False,
+                },
+            ],
         }
         with open(sidecar_path, "w", encoding="utf-8") as f:
             json.dump(synthetic, f, indent=2)
@@ -252,6 +265,31 @@ def main() -> int:
                             failures += 1
                         else:
                             _info(f"import: {field} = {got!r}")
+
+                    # Per-material round-trip — Phase 5.
+                    mat = bpy.data.materials.get("Material")
+                    if mat is None:
+                        _err("Material 'Material' missing for per-material check")
+                        failures += 1
+                    else:
+                        mp = mat.ps1godot
+                        m_checks = (
+                            ("material_id",     mp.material_id,     "town_wood_dark"),
+                            ("texture_page_id", mp.texture_page_id, "tpage_town_world_01"),
+                            ("clut_id",         mp.clut_id,         "town_day"),
+                            ("palette_group",   mp.palette_group,   "town_day"),
+                            ("atlas_group",     mp.atlas_group,     "World"),
+                            ("texture_format",  mp.texture_format,  "8bpp"),
+                            ("alpha_mode",      mp.alpha_mode,      "Cutout"),
+                            ("force_no_filter", mp.force_no_filter, True),
+                            ("approved_16bpp",  mp.approved_16bpp,  False),
+                        )
+                        for field, got, want in m_checks:
+                            if got != want:
+                                _err(f"mat import: {field} = {got!r}, expected {want!r}")
+                                failures += 1
+                            else:
+                                _info(f"mat import: {field} = {got!r}")
         except Exception:
             _err("import_metadata raised:")
             traceback.print_exc()

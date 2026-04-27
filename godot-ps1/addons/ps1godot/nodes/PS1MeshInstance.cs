@@ -110,6 +110,14 @@ public partial class PS1MeshInstance : MeshInstance3D
     [Export] public string RegionId { get; set; } = "";
     [Export] public string AreaArchiveId { get; set; } = "";
 
+    // Per-material PS1 metadata, one entry per surface that wants
+    // texture-page / CLUT / atlas-group overrides. Round-trips with
+    // the Blender side's per-material PropertyGroup. Match strategy
+    // at export: PS1MaterialMetadata.MaterialName ⇄ surface
+    // Material.ResourceName. Empty array = mesh-level defaults apply
+    // to every surface (the pre-Phase-5 behavior).
+    [Export] public Godot.Collections.Array<PS1MaterialMetadata> Materials { get; set; } = new();
+
     [ExportGroup("PS1 / Interactable")]
     // When true, the runtime treats this mesh as an interactable. Pressing
     // InteractButton within InteractionRadiusMeters fires onInteract on

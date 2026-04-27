@@ -154,6 +154,7 @@ public static class BlenderMetadataReader
                 setChunkId:     v => pmi.ChunkId = v,
                 setRegionId:    v => pmi.RegionId = v,
                 setArchiveId:   v => pmi.AreaArchiveId = v);
+            ApplyMaterials(pmi.Materials, root);
         }
         else if (node is PS1MeshGroup pmg)
         {
@@ -170,6 +171,66 @@ public static class BlenderMetadataReader
                 setChunkId:     v => pmg.ChunkId = v,
                 setRegionId:    v => pmg.RegionId = v,
                 setArchiveId:   v => pmg.AreaArchiveId = v);
+            ApplyMaterials(pmg.Materials, root);
+        }
+    }
+
+    // Phase 5 round-trip — read the JSON `materials[]` array and
+    // populate / refresh PS1MaterialMetadata entries on the node.
+    // Match by `blender_name` / `material_id`. Existing entries with
+    // matching MaterialName are mutated in place (preserves user
+    // overrides made post-import); unknown names are appended.
+    private static void ApplyMaterials(Godot.Collections.Array<PS1MaterialMetadata> dest, JsonElement root)
+    {
+        if (!root.TryGetProperty("materials", out var arr)) return;
+        if (arr.ValueKind != JsonValueKind.Array) return;
+
+        // Index existing entries by MaterialName for in-place update.
+        var existing = new Dictionary<string, PS1MaterialMetadata>(StringComparer.Ordinal);
+        foreach (var mm in dest)
+        {
+            if (mm == null) continue;
+            string key = !string.IsNullOrEmpty(mm.MaterialName) ? mm.MaterialName : mm.MaterialId;
+            if (string.IsNullOrEmpty(key)) continue;
+            existing[key] = mm;
+        }
+
+        foreach (var mEl in arr.EnumerateArray())
+        {
+            if (mEl.ValueKind != JsonValueKind.Object) continue;
+
+            string blenderName = mEl.TryGetProperty("blender_name", out var bn) ? (bn.GetString() ?? "") : "";
+            string materialId  = mEl.TryGetProperty("material_id",  out var mi) ? (mi.GetString() ?? "") : "";
+            string lookupKey   = !string.IsNullOrEmpty(blenderName) ? blenderName : materialId;
+            if (string.IsNullOrEmpty(lookupKey)) continue;
+
+            if (!existing.TryGetValue(lookupKey, out var meta))
+            {
+                meta = new PS1MaterialMetadata { MaterialName = blenderName };
+                dest.Add(meta);
+                existing[lookupKey] = meta;
+            }
+
+            if (!string.IsNullOrEmpty(blenderName)) meta.MaterialName = blenderName;
+            meta.MaterialId    = materialId;
+            if (mEl.TryGetProperty("texture_page_id", out var tp) && tp.ValueKind == JsonValueKind.String) meta.TexturePageId = tp.GetString() ?? "";
+            if (mEl.TryGetProperty("clut_id",         out var cl) && cl.ValueKind == JsonValueKind.String) meta.ClutId        = cl.GetString() ?? "";
+            if (mEl.TryGetProperty("palette_group",   out var pg) && pg.ValueKind == JsonValueKind.String) meta.PaletteGroup  = pg.GetString() ?? "";
+
+            // Per-material enum + bool fields. Each guard mirrors the
+            // top-level TryAssignEnum / TryAssignString contract.
+            if (mEl.TryGetProperty("atlas_group", out var ag) && ag.ValueKind == JsonValueKind.String &&
+                Enum.TryParse<AtlasGroup>(ag.GetString(), out var parsedAG))
+                meta.AtlasGroup = parsedAG;
+            if (mEl.TryGetProperty("alpha_mode", out var am) && am.ValueKind == JsonValueKind.String &&
+                Enum.TryParse<AlphaMode>(am.GetString(), out var parsedAM))
+                meta.AlphaMode = parsedAM;
+            if (mEl.TryGetProperty("texture_format", out var tf) && tf.ValueKind == JsonValueKind.String)
+                meta.TextureFormat = TextureFormatNames.FromWire(tf.GetString() ?? "Auto");
+            if (mEl.TryGetProperty("force_no_filter", out var fnf) && fnf.ValueKind != JsonValueKind.Null)
+                meta.ForceNoFilter = fnf.ValueKind == JsonValueKind.True;
+            if (mEl.TryGetProperty("approved_16bpp", out var a16) && a16.ValueKind != JsonValueKind.Null)
+                meta.Approved16bpp = a16.ValueKind == JsonValueKind.True;
         }
     }
 

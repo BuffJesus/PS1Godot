@@ -101,6 +101,10 @@ public partial class PS1MeshGroup : Node3D
     [Export] public string RegionId { get; set; } = "";
     [Export] public string AreaArchiveId { get; set; } = "";
 
+    // Per-material metadata aggregated across the group's descendant
+    // meshes. Match strategy mirrors PS1MeshInstance — see that node.
+    [Export] public Godot.Collections.Array<PS1MaterialMetadata> Materials { get; set; } = new();
+
     [ExportGroup("PS1 / Naming")]
     // Exported GameObject name. Empty → falls back to the node's own Name,
     // which is what most scenes want. Set explicitly only when you need
