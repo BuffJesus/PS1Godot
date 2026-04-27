@@ -36,10 +36,16 @@ class PS1GODOT_PT_project(bpy.types.Panel):
         # but authors don't typically change it manually.
         col.prop(props, "metadata_version")
 
-        # Action row.
+        # Action row. Validate is always safe (read-only); Export
+        # writes files under project_root, so keep them visually
+        # distinct via separate rows rather than side-by-side.
         row = layout.row(align=True)
         row.scale_y = 1.2
         row.operator("ps1godot.validate_scene", icon="CHECKMARK")
+
+        row = layout.row(align=True)
+        row.scale_y = 1.2
+        row.operator("ps1godot.export_metadata", icon="EXPORT")
 
 
 register, unregister = bpy.utils.register_classes_factory((PS1GODOT_PT_project,))

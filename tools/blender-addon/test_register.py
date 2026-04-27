@@ -121,6 +121,60 @@ def main() -> int:
         traceback.print_exc()
         failures += 1
 
+    # ── Exercise the export operator end-to-end ─────────────────
+    # Point project_root at a tempdir, run the operator, and verify
+    # the expected sidecar file appeared with the right shape.
+    import tempfile
+    import json
+    with tempfile.TemporaryDirectory(prefix="ps1godot_smoketest_") as tmp:
+        scene = bpy.context.scene
+        scene.ps1godot.project_root = tmp
+        scene.ps1godot.output_subdir = "out"
+
+        try:
+            result = bpy.ops.ps1godot.export_metadata()
+            if "CANCELLED" in result:
+                _err(f"export_metadata cancelled: {result}")
+                failures += 1
+            else:
+                _info(f"export_metadata returned {result}")
+
+                out_dir = os.path.join(tmp, "out")
+                # The default cube was tagged earlier with mesh_id
+                # 'smoketest_cube' so we know the sidecar filename.
+                expected = os.path.join(out_dir, "smoketest_cube.ps1meshmeta.json")
+                if not os.path.exists(expected):
+                    _err(f"expected sidecar not found at {expected}")
+                    # List what DID land for diagnosis.
+                    for f in (os.listdir(out_dir) if os.path.isdir(out_dir) else []):
+                        _info(f"  found: {f}")
+                    failures += 1
+                else:
+                    payload = json.loads(open(expected, encoding="utf-8").read())
+                    expected_keys = (
+                        "ps1godot_metadata_version", "asset_id", "mesh_id",
+                        "source_object_name", "mesh_role", "shading_mode",
+                        "alpha_mode", "materials",
+                    )
+                    missing = [k for k in expected_keys if k not in payload]
+                    if missing:
+                        _err(f"sidecar missing keys: {missing}")
+                        failures += 1
+                    elif payload["mesh_role"] != "StaticWorld":
+                        _err(f"mesh_role round-trip wrong: {payload['mesh_role']}")
+                        failures += 1
+                    elif not payload["asset_id"]:
+                        _err("asset_id was not auto-generated")
+                        failures += 1
+                    else:
+                        _info(f"sidecar at {expected} has expected shape "
+                              f"(asset_id={payload['asset_id'][:8]}…, "
+                              f"materials={len(payload['materials'])})")
+        except Exception:
+            _err("export_metadata raised:")
+            traceback.print_exc()
+            failures += 1
+
     # ── Unregister cleanly (catches detach-order bugs) ──────────
     try:
         ps1godot_blender.unregister()
