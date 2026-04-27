@@ -315,6 +315,12 @@ void LuaAPI::RegisterAll(psyqo::Lua& L, SceneManager* scene, CutscenePlayer* cut
     L.push(Music_Find);
     L.setField(-2, "Find");
 
+    L.push(Music_GetLastMarkerHash);
+    L.setField(-2, "GetLastMarkerHash");
+
+    L.push(Music_MarkerHash);
+    L.setField(-2, "MarkerHash");
+
     L.setGlobal("Music");
 
     // ========================================================================
@@ -2191,6 +2197,52 @@ int LuaAPI::Music_Find(lua_State* L) {
     } else {
         lua.pushNumber(static_cast<lua_Number>(idx));
     }
+    return 1;
+}
+
+int LuaAPI::Music_GetLastMarkerHash(lua_State* L) {
+    psyqo::Lua lua(L);
+    if (!s_sceneManager) {
+        lua.pushNumber(0);
+        return 1;
+    }
+    lua.pushNumber(static_cast<lua_Number>(
+        s_sceneManager->getMusicSequencer().getLastMarkerHash()));
+    return 1;
+}
+
+int LuaAPI::Music_MarkerHash(lua_State* L) {
+    psyqo::Lua lua(L);
+    if (!lua.isString(1)) {
+        lua.pushNumber(0);
+        return 1;
+    }
+    // FNV-1a 32-bit folded to 16-bit. Must match
+    // godot-ps1/addons/ps1godot/exporter/PS1MSerializer.cs
+    // MarkerHash16 bit-for-bit. Trim+lowercase to match the case-
+    // insensitive convention loop markers already use.
+    const char *src = lua.toString(1);
+    if (!src) { lua.pushNumber(0); return 1; }
+    // Skip leading ASCII whitespace.
+    while (*src == ' ' || *src == '\t' || *src == '\n' || *src == '\r') ++src;
+    // Find end of trimmed range.
+    const char *end = src;
+    const char *lastNonSpace = src;
+    while (*end) {
+        if (*end != ' ' && *end != '\t' && *end != '\n' && *end != '\r')
+            lastNonSpace = end;
+        ++end;
+    }
+    end = (*src == 0) ? src : lastNonSpace + 1;
+    uint32_t hash = 2166136261u;  // FNV offset basis
+    for (const char *p = src; p < end; ++p) {
+        unsigned char c = (unsigned char)*p;
+        if (c >= 'A' && c <= 'Z') c = (unsigned char)(c + 32);
+        hash ^= c;
+        hash *= 16777619u;  // FNV prime
+    }
+    uint16_t folded = (uint16_t)((hash & 0xFFFFu) ^ (hash >> 16));
+    lua.pushNumber(static_cast<lua_Number>(folded));
     return 1;
 }
 

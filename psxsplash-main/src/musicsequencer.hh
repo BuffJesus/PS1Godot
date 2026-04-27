@@ -95,6 +95,14 @@ public:
     // Current beat (sequence tick / ticksPerBeat). 0 when idle.
     int getBeat() const;
 
+    // 16-bit FNV-1a hash of the most recent kind=8 marker text fired
+    // by the active sequence. 0 if none has fired yet (also reset on
+    // playByIndex). Lua polls via Music.GetLastMarkerHash() and
+    // compares against Music.MarkerHash("name"). Hash function must
+    // match godot-ps1/addons/ps1godot/exporter/PS1MSerializer.cs
+    // MarkerHash16 bit-for-bit.
+    uint16_t getLastMarkerHash() const { return m_lastMarkerHash; }
+
     // Called once per scene tick. dt12 is fp12 frame delta (1.0 = 1 frame).
     void tick(int32_t dt12);
 
@@ -179,6 +187,11 @@ private:
     // an end-of-stream fallback). Reset on sequence start/stop.
     uint32_t m_inlineLoopStartTick = 0xFFFFFFFFu;
     int      m_inlineLoopStartIdx  = 0;
+
+    // 16-bit hash of the most recent kind=8 marker that fired. 0 = no
+    // marker has fired yet on the active sequence. Reset by
+    // playByIndex.
+    uint16_t m_lastMarkerHash = 0;
 
     // Per-channel state. activeVoice == -1 means the channel has no
     // note playing right now.

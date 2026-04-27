@@ -282,6 +282,7 @@ public static class PS1MSerializer
         // event kinds (default branch in MusicSequencer::dispatchEvent).
         // Channel field is unused for these; data1/data2 reserved.
         bool injectedLoopEvents = false;
+        bool injectedMarkers = false;
         if (midi.Markers != null && midi.Markers.Count > 0)
         {
             foreach (var m in midi.Markers)
@@ -295,6 +296,22 @@ public static class PS1MSerializer
                 {
                     events.Add(EncodeEvent(Rescale(m.AbsoluteTick), 0, (byte)10, 0, 0));
                     injectedLoopEvents = true;
+                }
+                else
+                {
+                    // Generic text marker → kind=8 with 16-bit FNV-1a
+                    // hash of the marker text in data1/data2. Lua side
+                    // polls the last-fired hash via
+                    // Music.GetLastMarkerHash() and compares against
+                    // Music.MarkerHash("name"). 16 bits is enough for
+                    // ~100 markers per song before birthday-paradox
+                    // collisions become likely; rename collisions
+                    // when they occur (no runtime collision check).
+                    ushort hash = MarkerHash16(m.Text);
+                    byte lo = (byte)(hash & 0xFF);
+                    byte hi = (byte)((hash >> 8) & 0xFF);
+                    events.Add(EncodeEvent(Rescale(m.AbsoluteTick), 0, (byte)8, lo, hi));
+                    injectedMarkers = true;
                 }
             }
         }
@@ -353,6 +370,7 @@ public static class PS1MSerializer
         bool injectedAnything = injectedLoopEvents
             || injectedPitchBends
             || injectedControllers
+            || injectedMarkers
             || (emitPS2M && programChanges != null && programChanges.Count > 0);
         if (injectedAnything)
         {
@@ -455,5 +473,23 @@ public static class PS1MSerializer
         ev[6] = data1;
         ev[7] = data2;
         return ev;
+    }
+
+    // FNV-1a 32-bit folded to 16-bit. Used by kind=8 marker events to
+    // identify the marker text without carrying it into the wire
+    // format. Must match the Lua-side Music.MarkerHash helper bit-for-
+    // bit (psxsplash-main/src/luaapi.cpp). Trim+lowercase to match the
+    // case-insensitive convention loop markers already use.
+    public static ushort MarkerHash16(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return 0;
+        string normalized = text.Trim().ToLowerInvariant();
+        uint hash = 2166136261u; // FNV offset basis
+        foreach (char c in normalized)
+        {
+            hash ^= (byte)c;
+            hash *= 16777619u; // FNV prime
+        }
+        return (ushort)((hash & 0xFFFF) ^ (hash >> 16));
     }
 }

@@ -299,7 +299,7 @@ top of PS1M2; defer.
   would drift the sample's natural pitch). No format bump —
   kind=5 is recognised by older runtimes via the default-skip on
   unknown kinds.
-- **Phase 2.6 — controller (CC)** (this commit, both sides):
+- **Phase 2.6 — controller (CC)** (commit `faa7ffc`, both sides):
   MIDI 0xB0 events parsed by `MidiParser` into a new `Controllers`
   list (cc#, value, channel, track, tick). `PS1MSerializer`
   injects them as PS2M event kind=7 with `data1 = controller#`,
@@ -312,14 +312,27 @@ top of PS1M2; defer.
   expression, CC#1 modulation, CC#64 sustain) later does not
   need a format bump. Older runtimes default-skip kind=7. No
   format bump.
+- **Phase 2.6 — text marker** (this commit, both sides): MIDI
+  marker / cue-point meta-events whose text is *not*
+  loopStart/loopEnd are emitted as PS2M event kind=8.
+  `data1 = hash & 0xFF`, `data2 = (hash >> 8) & 0xFF` where hash
+  is FNV-1a 32-bit folded to 16-bit (text trimmed +
+  lowercase-normalized). Runtime stores the latest hash in
+  `m_lastMarkerHash`, reset on `playByIndex`. Lua surface:
+  `Music.GetLastMarkerHash()` polls the latest, and
+  `Music.MarkerHash(text)` lets a script compute the same hash
+  client-side for comparison
+  (`if Music.GetLastMarkerHash() == Music.MarkerHash("chorus") …`).
+  16 bits is enough for ~100 markers per song before
+  birthday-paradox collisions become likely — rename one if a
+  collision turns up; no runtime collision check. No format bump.
 
 ## What to ship next
 
-Phase 2.6 follow-ups: Marker-as-other-text (kind=8) event kind.
-Runtime drum-kit dispatch (today kits expand to bindings at
-export, but choke groups + per-drum priority on `PS1DrumKit` are
-runtime-driven by design and need a voice-scanner that watches
-active music voices for matching choke groups). Optional: extend
-the kind=7 whitelist to CC#11 (expression — needs a new
-ChannelState field), CC#1 (modulation — needs an LFO), CC#64
-(sustain pedal — needs deferred noteOff release).
+Phase 2.6 wrap-up: runtime drum-kit dispatch (today kits expand
+to bindings at export, but choke groups + per-drum priority on
+`PS1DrumKit` are runtime-driven by design and need a voice-scanner
+that watches active music voices for matching choke groups).
+Optional: extend the kind=7 whitelist to CC#11 (expression —
+needs a new ChannelState field), CC#1 (modulation — needs an
+LFO), CC#64 (sustain pedal — needs deferred noteOff release).

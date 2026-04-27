@@ -37,6 +37,7 @@ void MusicSequencer::init(AudioManager *audio) {
     m_nextEventIdx = 0;
     m_inlineLoopStartTick = 0xFFFFFFFFu;
     m_inlineLoopStartIdx = 0;
+    m_lastMarkerHash = 0;
     m_masterVolume = 100;
     m_bankInstruments = nullptr;
     m_bankRegions = nullptr;
@@ -165,6 +166,7 @@ bool MusicSequencer::playByIndex(int index, uint8_t masterVolume) {
     m_nextEventIdx = 0;
     m_inlineLoopStartTick = 0xFFFFFFFFu;
     m_inlineLoopStartIdx = 0;
+    m_lastMarkerHash = 0;
     m_masterVolume = masterVolume;
 
     // Pre-compute ticks-per-(dt12=4096-unit) in fp12. The runtime's
@@ -218,6 +220,7 @@ void MusicSequencer::stop() {
     m_nextEventIdx = 0;
     m_inlineLoopStartTick = 0xFFFFFFFFu;
     m_inlineLoopStartIdx = 0;
+    m_lastMarkerHash = 0;
     // Release the voice pool so dialog/SFX can fill the whole bank again.
     if (m_audio) m_audio->reserveVoices(0);
 }
@@ -344,6 +347,14 @@ bool MusicSequencer::dispatchEvent(const MusicEvent &e) {
                 if (e.data1 == 7)       m_channels[e.channel].volume = e.data2;
                 else if (e.data1 == 10) m_channels[e.channel].pan    = e.data2;
             }
+            break;
+        case 8:
+            // Generic text marker. data1/data2 = 16-bit FNV-1a hash
+            // of the marker text (lo/hi). Lua polls the latest hash
+            // via Music.GetLastMarkerHash() and compares against
+            // Music.MarkerHash("name"). LoopStart/LoopEnd never
+            // arrive here — those are kind=9/10.
+            m_lastMarkerHash = (uint16_t)e.data1 | ((uint16_t)e.data2 << 8);
             break;
         case 9:
             // LoopStart marker. Records this point for the next LoopEnd

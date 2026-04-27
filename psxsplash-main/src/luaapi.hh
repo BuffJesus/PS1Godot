@@ -341,6 +341,18 @@ private:
     // Music.Find(name) -> index or nil
     static int Music_Find(lua_State* L);
 
+    // Hash of the most recent kind=8 marker the active sequence
+    // fired, or 0 if none. Reset on each Music.Play. Compare against
+    // Music.MarkerHash for identification.
+    // Music.GetLastMarkerHash() -> integer (16-bit hash, 0 if none)
+    static int Music_GetLastMarkerHash(lua_State* L);
+
+    // FNV-1a folded hash of a marker name. Bit-exact match for the
+    // exporter's PS1MSerializer.MarkerHash16, so script-side compares
+    // work.
+    // Music.MarkerHash(text) -> integer (16-bit hash)
+    static int Music_MarkerHash(lua_State* L);
+
     // ========================================================================
     // SOUND API (Phase 5) — composite SFX (macros) + variation pools (families)
     //
