@@ -279,7 +279,7 @@ public sealed class CutsceneRecord
 // skin-side data the runtime needs: which GameObject to skin, the bone
 // count, and one bone index per triangle vertex (3 bytes per triangle).
 // Stage 1 ships with Clips empty; stage 2 populates it with baked
-// BakedBoneMatrix[] per clip.
+// BakedBonePose[] per clip (v30+: quat int16×4 + translation int16×3 = 14 B).
 public sealed class SkinnedMeshRecord
 {
     public required string Name { get; init; }
@@ -294,10 +294,11 @@ public sealed class SkinnedMeshRecord
     public System.Collections.Generic.List<SkinClipRecord> Clips { get; init; } = new();
 }
 
-// One baked animation clip. Frames is frameCount × boneCount × 24 bytes
-// laid out as [frame0_bone0, frame0_bone1, … frame1_bone0, …]. Each
-// BakedBoneMatrix = 9 int16 rotation (row-major) + 3 int16 translation
-// (fp12, PSX Y-down). Loader reads this blob raw, no further parsing.
+// One baked animation clip. Frames is frameCount × boneCount × 14 bytes
+// (v30+) laid out as [frame0_bone0, frame0_bone1, … frame1_bone0, …].
+// Each BakedBonePose = 4 int16 quaternion (fp12) + 3 int16 translation
+// (fp12, PSX Y-down). Loader reads this blob raw, no further parsing;
+// the renderer decodes one pose to a 24 B matrix per bone at frame swap.
 public sealed class SkinClipRecord
 {
     public required string Name { get; init; }

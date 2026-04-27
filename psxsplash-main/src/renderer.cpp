@@ -1192,10 +1192,14 @@ void psxsplash::Renderer::renderSkinnedObjects(
             if (!frustum->testAABB(objBox)) continue;
         }
 
-        const BakedBoneMatrix* boneMatrices = nullptr;
+        // Working buffer: poses get decoded into matrices here, then the
+        // matrix-extraction loop below reads from boneMatrices = lerpedBones
+        // unconditionally. Unifies bind-pose, no-interp, and interp paths
+        // around one in-RAM matrix layout.
+        const BakedBoneMatrix* boneMatrices = lerpedBones;
 
         if (animState.bindPose) {
-            // Render bind pose: identity rotation, zero translation per bone.
+            // Bind pose: identity rotation, zero translation per bone.
             // Baked clip frames are bone-local delta from bind, so identity
             // here puts every vertex back on its bind-pose position — same as
             // the character authored in T-pose. Used as the default idle so
@@ -1207,7 +1211,6 @@ void psxsplash::Renderer::renderSkinnedObjects(
             for (int bi = 0; bi < animSet.boneCount && bi < SKINMESH_MAX_BONES; bi++) {
                 lerpedBones[bi] = kIdentityBone;
             }
-            boneMatrices = lerpedBones;
         } else {
             // Get current clip and frame
             uint8_t clipIdx = animState.currentClip;
@@ -1218,33 +1221,27 @@ void psxsplash::Renderer::renderSkinnedObjects(
             uint16_t frame = animState.currentFrame;
             if (frame >= clip.frameCount) frame = clip.frameCount - 1;
 
-            const BakedBoneMatrix* boneMatricesA = &clip.frames[(uint32_t)frame * animSet.boneCount];
-            boneMatrices = boneMatricesA; // default: no interpolation
+            const BakedBonePose* posesA = &clip.frames[(uint32_t)frame * animSet.boneCount];
+            const BakedBonePose* posesB = nullptr;
 
-            // Interpolate between frames when subFrame > 0
             uint16_t sf = animState.subFrame;
             if (sf > 0 && frame + 1 < clip.frameCount) {
-                const BakedBoneMatrix* boneMatricesB = &clip.frames[(uint32_t)(frame + 1) * animSet.boneCount];
-                for (int bi = 0; bi < animSet.boneCount && bi < SKINMESH_MAX_BONES; bi++) {
-                    const BakedBoneMatrix& bA = boneMatricesA[bi];
-                    const BakedBoneMatrix& bB = boneMatricesB[bi];
-                    BakedBoneMatrix& out = lerpedBones[bi];
-                    for (int k = 0; k < 9; k++) {
-                        int32_t a = bA.r[k], b = bB.r[k];
-                        out.r[k] = (int16_t)(a + (((b - a) * sf) >> 12));
-                    }
-                    for (int k = 0; k < 3; k++) {
-                        int32_t a = bA.t[k], b = bB.t[k];
-                        out.t[k] = (int16_t)(a + (((b - a) * sf) >> 12));
-                    }
-                }
-                boneMatrices = lerpedBones;
+                posesB = &clip.frames[(uint32_t)(frame + 1) * animSet.boneCount];
             } else if (sf > 0 && (animState.loop || (clip.flags & 0x01)) && clip.frameCount > 1) {
-                // Looping: interpolate last frame → first frame
-                const BakedBoneMatrix* boneMatricesB = &clip.frames[0];
+                // Looping: blend last frame → first frame.
+                posesB = &clip.frames[0];
+            }
+
+            if (posesB) {
+                // Decode both poses to matrices, then linear-interpolate
+                // matrix elements. Interpolating decoded matrices isn't
+                // strictly slerp-correct, but matches the prior behavior
+                // (which also lerp'd matrix elements) and keeps the per-
+                // frame cost bounded.
                 for (int bi = 0; bi < animSet.boneCount && bi < SKINMESH_MAX_BONES; bi++) {
-                    const BakedBoneMatrix& bA = boneMatricesA[bi];
-                    const BakedBoneMatrix& bB = boneMatricesB[bi];
+                    BakedBoneMatrix bA, bB;
+                    poseToMatrix(posesA[bi], bA);
+                    poseToMatrix(posesB[bi], bB);
                     BakedBoneMatrix& out = lerpedBones[bi];
                     for (int k = 0; k < 9; k++) {
                         int32_t a = bA.r[k], b = bB.r[k];
@@ -1255,7 +1252,12 @@ void psxsplash::Renderer::renderSkinnedObjects(
                         out.t[k] = (int16_t)(a + (((b - a) * sf) >> 12));
                     }
                 }
-                boneMatrices = lerpedBones;
+            } else {
+                // No interpolation needed — decode the single frame directly
+                // into the working buffer.
+                for (int bi = 0; bi < animSet.boneCount && bi < SKINMESH_MAX_BONES; bi++) {
+                    poseToMatrix(posesA[bi], lerpedBones[bi]);
+                }
             }
         }
 

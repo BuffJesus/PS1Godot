@@ -175,7 +175,7 @@ void SplashPackLoader::LoadSplashpack(uint8_t *data, SplashpackSceneSetup &setup
     psyqo::Kernel::assert(data != nullptr, "Splashpack loading data pointer is null");
     psxsplash::SPLASHPACKFileHeader *header = reinterpret_cast<psxsplash::SPLASHPACKFileHeader *>(data);
     psyqo::Kernel::assert(__builtin_memcmp(header->magic, "SP", 2) == 0, "Splashpack has incorrect magic");
-    psyqo::Kernel::assert(header->version >= 29, "Splashpack version too old (need v29+): re-export from PS1Godot");
+    psyqo::Kernel::assert(header->version >= 30, "Splashpack version too old (need v30+): re-export from PS1Godot");
 
     setup.playerStartPosition = header->playerStartPos;
     setup.playerStartRotation = header->playerStartRot;
@@ -764,9 +764,9 @@ void SplashPackLoader::LoadSplashpack(uint8_t *data, SplashpackSceneSetup &setup
                 clip.frameCount = *reinterpret_cast<uint16_t*>(skinPtr); skinPtr += 2;
                 clip.boneCount  = animSet.boneCount;
 
-                // Frame data: frameCount × boneCount × 24 bytes
-                clip.frames = reinterpret_cast<const BakedBoneMatrix*>(skinPtr);
-                skinPtr += (uint32_t)clip.frameCount * (uint32_t)animSet.boneCount * sizeof(BakedBoneMatrix);
+                // Frame data: frameCount × boneCount × sizeof(BakedBonePose) bytes (v30+)
+                clip.frames = reinterpret_cast<const BakedBonePose*>(skinPtr);
+                skinPtr += (uint32_t)clip.frameCount * (uint32_t)animSet.boneCount * sizeof(BakedBonePose);
             }
 
             // Zero unused clip slots

@@ -29,7 +29,7 @@ namespace PS1Godot.Exporter;
 //                  Name table — referenced by header.nameTableOffset.
 public static class SplashpackWriter
 {
-    public const ushort SplashpackVersion = 29;
+    public const ushort SplashpackVersion = 30;
     // Header layout grew by 16 bytes in v24 (sky struct: tpage + clut + UVs
     // + bitDepth + tint + enabled flag, mirroring the UI Image typeData
     // union slot). See WriteHeader and the runtime's SPLASHPACKFileHeader.
@@ -1040,8 +1040,8 @@ public static class SplashpackWriter
 
             // Clips: loader expects length-prefixed name (in-place
             // null-terminated), flags, fps, u16 frameCount (2-byte
-            // aligned), then frameCount × boneCount × 24 bytes of
-            // BakedBoneMatrix. See splashpack.cpp:503 for the parser.
+            // aligned), then frameCount × boneCount × 14 bytes of
+            // BakedBonePose (v30+). See splashpack.cpp for the parser.
             for (int c = 0; c < clipCount; c++)
             {
                 var clip = sm.Clips[c];

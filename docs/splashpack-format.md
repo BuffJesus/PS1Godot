@@ -1,4 +1,4 @@
-# Splashpack format v29
+# Splashpack format v30
 
 Extracted from `psxsplash-main/src/splashpack.{hh,cpp}` and
 `godot-ps1/addons/ps1godot/exporter/SplashpackWriter.cs`. Keep this in sync when
@@ -240,6 +240,20 @@ export-time, not runtime.
   `XaAudioBackend` (`xaaudio.cpp`) drives Form-2 disc streaming via
   `psyqo::CDRomDevice::Action` for SETMODE 0x24 → SETLOC → READS. See
   `splashpack.hh:120`.
+- v30: skin-animation pose compression. Per-bone-frame storage
+  shrinks from 24 B `BakedBoneMatrix` (9 int16 row-major rotation +
+  3 int16 translation, fp12) to 14 B `BakedBonePose` (4 int16
+  quaternion + 3 int16 translation, fp12) — a ~42% reduction on
+  every clip. The renderer's working buffer (`lerpedBones[]`) stays
+  in matrix form; an inline `poseToMatrix()` decoder runs once per
+  bone at frame swap. Linear interpolation between adjacent frames
+  still happens in matrix space (consistent with prior behavior;
+  matrix lerp isn't slerp-correct but the per-frame error is
+  imperceptible at 30 fps clip rates and the cost saving is worth
+  it). Format change is *inside* the skin section — header layout
+  and every other section stay byte-compatible with v29. Hard
+  cutover: v29 splashpacks no longer load (loader hard-asserts
+  `version >= 30`).
 - v29: sound macros + sound families (Phase 5 Stage A). Header gains
   four u16 counts (`soundMacroCount`, `soundMacroEventCount`,
   `soundFamilyCount`, `familyClipIndexCount`) + four u32 table

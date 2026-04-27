@@ -1271,8 +1271,11 @@ public static class SceneCollector
             if (anim == null) continue;
 
             int frameCount = Mathf.Max(1, Mathf.CeilToInt((float)anim.Length * fps));
-            // Runtime loads frames as count × bones × 24 bytes contiguously.
-            byte[] frameData = new byte[frameCount * boneCount * 24];
+            // v30+ runtime loads frames as count × bones × 14 bytes
+            // contiguously (BakedBonePose: quat int16×4 + translation
+            // int16×3, fp12 throughout). Decoded to a 24 B BakedBoneMatrix
+            // at frame swap by the renderer's poseToMatrix() inline.
+            byte[] frameData = new byte[frameCount * boneCount * 14];
 
             // Stash the current play state so we restore it when done.
             // Guard the position read — GetCurrentAnimationPosition() errors
@@ -1310,7 +1313,7 @@ public static class SceneCollector
                     // origin stays valid because it was composed BEFORE we
                     // touched the basis.
                     combined.Basis = combined.Basis.Orthonormalized();
-                    WriteBakedBoneMatrix(frameData, (f * boneCount + bi) * 24, combined, gteScaling);
+                    WriteBakedBonePose(frameData, (f * boneCount + bi) * 14, combined, gteScaling);
                 }
             }
 
@@ -1339,45 +1342,63 @@ public static class SceneCollector
         return result;
     }
 
-    // Write one BakedBoneMatrix into `buf` at `offset` (24 bytes total).
-    // Layout: int16[9] row-major rotation (fp12) + int16[3] translation
-    // (fp12 at gteScaling, PSX Y-down+Z-forward). Matches the mesh
-    // vertex writer's Y+Z reflection (S·R·S with S=diag(1,-1,-1)) so
-    // bone transforms compose correctly with Y+Z-flipped local verts.
-    // psyqo's Matrix33.vs[i] is row i (verified via GTE R11=vs[0].x…
-    // R33=vs[2].z), so the row-major write lands directly in the
-    // GTE rotation register without transposition.
-    private static void WriteBakedBoneMatrix(byte[] buf, int offset, Transform3D t, float gteScaling)
+    // Write one BakedBonePose into `buf` at `offset` (14 bytes total,
+    // v30+). Layout: int16[4] quaternion (fp12, components in
+    // [-4096, 4096]) + int16[3] translation (fp12 at gteScaling, PSX
+    // Y-down+Z-forward). Matches the mesh vertex writer's Y+Z
+    // reflection (S·R·S with S=diag(1,-1,-1)) so bone transforms
+    // compose correctly with Y+Z-flipped local verts. The runtime
+    // decoder (skinmesh.hh poseToMatrix) reconstructs the row-major
+    // 3×3 the GTE rotation register expects — keeping that decoder
+    // bit-exact with this encoder is what locks the round-trip.
+    private static void WriteBakedBonePose(byte[] buf, int offset, Transform3D t, float gteScaling)
     {
         Basis b = t.Basis;
-        float[,] m =
-        {
-            {  b.Column0.X, -b.Column1.X, -b.Column2.X },
-            { -b.Column0.Y,  b.Column1.Y,  b.Column2.Y },
-            { -b.Column0.Z,  b.Column1.Z,  b.Column2.Z },
-        };
-        for (int i = 0; i < 3; i++)
-        {
-            for (int j = 0; j < 3; j++)
-            {
-                short fp = PSXTrig.ConvertToFixed12(m[i, j]);
-                int off = offset + (i * 3 + j) * 2;
-                buf[off + 0] = (byte)(fp & 0xFF);
-                buf[off + 1] = (byte)((fp >> 8) & 0xFF);
-            }
-        }
+        // Build the PSX-coord-frame basis explicitly (S·R·S applied),
+        // then extract a quaternion. Each Basis column maps to a
+        // sign-flipped column of the source.
+        Basis psxBasis = new Basis(
+            new Vector3( b.Column0.X, -b.Column0.Y, -b.Column0.Z),
+            new Vector3(-b.Column1.X,  b.Column1.Y,  b.Column1.Z),
+            new Vector3(-b.Column2.X,  b.Column2.Y,  b.Column2.Z));
+        Quaternion q = psxBasis.GetRotationQuaternion();
+
+        short qx = ClampToFp12(q.X);
+        short qy = ClampToFp12(q.Y);
+        short qz = ClampToFp12(q.Z);
+        short qw = ClampToFp12(q.W);
+
+        buf[offset +  0] = (byte)(qx & 0xFF);
+        buf[offset +  1] = (byte)((qx >> 8) & 0xFF);
+        buf[offset +  2] = (byte)(qy & 0xFF);
+        buf[offset +  3] = (byte)((qy >> 8) & 0xFF);
+        buf[offset +  4] = (byte)(qz & 0xFF);
+        buf[offset +  5] = (byte)((qz >> 8) & 0xFF);
+        buf[offset +  6] = (byte)(qw & 0xFF);
+        buf[offset +  7] = (byte)((qw >> 8) & 0xFF);
 
         // Translation: Y+Z negated to match the mesh vertex convention.
         short tx = PSXTrig.ConvertCoordinateToPSX( t.Origin.X, gteScaling);
         short ty = PSXTrig.ConvertCoordinateToPSX(-t.Origin.Y, gteScaling);
         short tz = PSXTrig.ConvertCoordinateToPSX(-t.Origin.Z, gteScaling);
-        int tOff = offset + 18;
-        buf[tOff + 0] = (byte)(tx & 0xFF);
-        buf[tOff + 1] = (byte)((tx >> 8) & 0xFF);
-        buf[tOff + 2] = (byte)(ty & 0xFF);
-        buf[tOff + 3] = (byte)((ty >> 8) & 0xFF);
-        buf[tOff + 4] = (byte)(tz & 0xFF);
-        buf[tOff + 5] = (byte)((tz >> 8) & 0xFF);
+        buf[offset +  8] = (byte)(tx & 0xFF);
+        buf[offset +  9] = (byte)((tx >> 8) & 0xFF);
+        buf[offset + 10] = (byte)(ty & 0xFF);
+        buf[offset + 11] = (byte)((ty >> 8) & 0xFF);
+        buf[offset + 12] = (byte)(tz & 0xFF);
+        buf[offset + 13] = (byte)((tz >> 8) & 0xFF);
+    }
+
+    // Encode a quaternion component (range [-1, 1]) as fp12 int16.
+    // Clamp to int16 range (4096 = 1.0) to defend against round-off
+    // exceeding 1.0 on near-unit-quaternions; values outside [-1, 1]
+    // would indicate a non-normalized quaternion and shouldn't occur.
+    private static short ClampToFp12(float v)
+    {
+        int q = Mathf.RoundToInt(v * 4096f);
+        if (q >  short.MaxValue) q = short.MaxValue;
+        if (q <  short.MinValue) q = short.MinValue;
+        return (short)q;
     }
 
     private static Texture2D? ExtractAlbedoTexture(Material? mat)
