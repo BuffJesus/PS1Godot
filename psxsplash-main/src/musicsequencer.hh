@@ -129,9 +129,16 @@ private:
         bool isPS2M;  // magic was "PS2M" (vs "PS1M")
     };
 
-    void dispatchEvent(const MusicEvent &e);
+    // Returns true if the event triggered an inline loop-back (kind=10
+    // jumping to the prior LoopStart). The caller must NOT advance
+    // m_nextEventIdx in that case — the dispatch already rewound it.
+    bool dispatchEvent(const MusicEvent &e);
     void noteOn(uint8_t channel, uint8_t note, uint8_t velocity);
     void noteOff(uint8_t channel, uint8_t note);
+    // Silences any held music-channel notes at a loop seam. Used both
+    // by the end-of-stream loop (header loopStartTick) and the inline
+    // LoopEnd event-driven loop (kinds 9/10).
+    void silenceLoopSeam();
 
     // PS2M bank dispatch: walk the scene-wide instrument bank to find
     // the region matching (channel.currentProgram, note, velocity).
@@ -160,6 +167,13 @@ private:
     uint32_t m_subTick12 = 0;       // fp12 fractional tick accumulator
     uint32_t m_ticksPerFrame12 = 0; // (bpm * ticksPerBeat / 60 / 60fps) << 12
     int m_nextEventIdx = 0;
+
+    // Inline loop bracket state, populated by event kind=9 (LoopStart)
+    // and consumed by kind=10 (LoopEnd). 0xFFFFFFFFu = no LoopStart seen
+    // yet → kind=10 is a no-op (header loopStartTick still applies as
+    // an end-of-stream fallback). Reset on sequence start/stop.
+    uint32_t m_inlineLoopStartTick = 0xFFFFFFFFu;
+    int      m_inlineLoopStartIdx  = 0;
 
     // Per-channel state. activeVoice == -1 means the channel has no
     // note playing right now.

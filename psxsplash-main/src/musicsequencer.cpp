@@ -35,6 +35,8 @@ void MusicSequencer::init(AudioManager *audio) {
     m_currentTick = 0;
     m_subTick12 = 0;
     m_nextEventIdx = 0;
+    m_inlineLoopStartTick = 0xFFFFFFFFu;
+    m_inlineLoopStartIdx = 0;
     m_masterVolume = 100;
     m_bankInstruments = nullptr;
     m_bankRegions = nullptr;
@@ -161,6 +163,8 @@ bool MusicSequencer::playByIndex(int index, uint8_t masterVolume) {
     m_currentTick = 0;
     m_subTick12 = 0;
     m_nextEventIdx = 0;
+    m_inlineLoopStartTick = 0xFFFFFFFFu;
+    m_inlineLoopStartIdx = 0;
     m_masterVolume = masterVolume;
 
     // Pre-compute ticks-per-(dt12=4096-unit) in fp12. The runtime's
@@ -210,6 +214,8 @@ void MusicSequencer::stop() {
     m_currentTick = 0;
     m_subTick12 = 0;
     m_nextEventIdx = 0;
+    m_inlineLoopStartTick = 0xFFFFFFFFu;
+    m_inlineLoopStartIdx = 0;
     // Release the voice pool so dialog/SFX can fill the whole bank again.
     if (m_audio) m_audio->reserveVoices(0);
 }
@@ -232,34 +238,23 @@ void MusicSequencer::tick(int32_t dt12) {
     m_subTick12 &= 0xFFF;
     m_currentTick += whole;
 
-    // Dispatch all events whose tick is now <= m_currentTick.
+    // Dispatch all events whose tick is now <= m_currentTick. dispatchEvent
+    // returns true when it performed an inline loop-back (kind=10): the
+    // dispatch already updated m_currentTick + m_nextEventIdx, so we
+    // skip the post-loop ++ and re-evaluate from the new index.
     int total = m_active->header->eventCount;
     while (m_nextEventIdx < total) {
         const MusicEvent &e = m_active->events[m_nextEventIdx];
         if (e.tick > m_currentTick) break;
-        dispatchEvent(e);
+        if (dispatchEvent(e)) continue;
         m_nextEventIdx++;
     }
 
-    // Loop / end handling.
+    // End-of-stream loop / stop.
     if (m_nextEventIdx >= total) {
         uint32_t loopStart = m_active->header->loopStartTick;
         if (loopStart != 0xFFFFFFFFu) {
-            // Silence any notes still held at the loop seam. Without this,
-            // a pad/drone on the final chord keeps droning across the loop
-            // because its note-off event was at tick N but m_currentTick
-            // is now < N. Authors noticed stuck notes at the loop point.
-            int chanCount = m_active->header->channelCount;
-            if (chanCount > MAX_CHANNELS) chanCount = MAX_CHANNELS;
-            for (int i = 0; i < chanCount; i++) {
-                if (m_channels[i].activeVoice >= 0) {
-                    psyqo::SPU::silenceChannels(1u << m_channels[i].activeVoice);
-                    m_channels[i].activeNote = 0;
-                    // Keep activeVoice pinned to the reserved index — the
-                    // next noteOn on this channel retriggers it cleanly.
-                }
-            }
-
+            silenceLoopSeam();
             m_currentTick = loopStart;
             m_subTick12 = 0;
             // Find the first event at or after loopStart.
@@ -275,7 +270,26 @@ void MusicSequencer::tick(int32_t dt12) {
     }
 }
 
-void MusicSequencer::dispatchEvent(const MusicEvent &e) {
+void MusicSequencer::silenceLoopSeam() {
+    // Silence any notes still held at a loop boundary. Without this, a
+    // pad/drone on the final chord keeps droning across the loop because
+    // its note-off event was at tick N but m_currentTick is about to
+    // jump back to a smaller value. Authors noticed stuck notes at the
+    // loop point.
+    if (!m_active) return;
+    int chanCount = m_active->header->channelCount;
+    if (chanCount > MAX_CHANNELS) chanCount = MAX_CHANNELS;
+    for (int i = 0; i < chanCount; i++) {
+        if (m_channels[i].activeVoice >= 0) {
+            psyqo::SPU::silenceChannels(1u << m_channels[i].activeVoice);
+            m_channels[i].activeNote = 0;
+            // Keep activeVoice pinned to the reserved index — the next
+            // noteOn on this channel retriggers it cleanly.
+        }
+    }
+}
+
+bool MusicSequencer::dispatchEvent(const MusicEvent &e) {
     switch (e.kind) {
         case 0: noteOn(e.channel, e.data1, e.data2); break;
         case 1: noteOff(e.channel, e.data1); break;
@@ -290,10 +304,32 @@ void MusicSequencer::dispatchEvent(const MusicEvent &e) {
             // sequences silently ignore it — no bank, no resolution.
             if (e.channel < MAX_CHANNELS) m_channels[e.channel].currentProgram = e.data1;
             break;
+        case 9:
+            // LoopStart marker. Records this point for the next LoopEnd
+            // to jump back to. Re-executing the same LoopStart after a
+            // jump-back is intentional and idempotent (the body of the
+            // loop sits AFTER this index, so re-recording the same
+            // position causes no infinite loop on its own).
+            m_inlineLoopStartTick = e.tick;
+            m_inlineLoopStartIdx  = m_nextEventIdx;
+            break;
+        case 10:
+            // LoopEnd marker. Jump back to the prior LoopStart if one
+            // was seen; otherwise no-op (the header loopStartTick still
+            // applies as an end-of-stream fallback).
+            if (m_inlineLoopStartTick != 0xFFFFFFFFu && m_active) {
+                silenceLoopSeam();
+                m_currentTick = m_inlineLoopStartTick;
+                m_subTick12 = 0;
+                m_nextEventIdx = m_inlineLoopStartIdx;
+                return true;
+            }
+            break;
         default:
             // Unknown event kind — skip silently for forward compat.
             break;
     }
+    return false;
 }
 
 void MusicSequencer::noteOn(uint8_t channel, uint8_t note, uint8_t velocity) {
