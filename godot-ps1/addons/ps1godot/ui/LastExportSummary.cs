@@ -20,6 +20,7 @@ public sealed class LastExportSummary
     public int ScenesExported;
     public int TextureWarnings;
     public int AudioWarnings;
+    public int AnimationWarnings;
     public int UVDirtyMeshes;
     public int MeshCleanupCandidates;          // reuse-factor < threshold
     public long MeshBytesSavedByPooling;       // sum across scenes (v31 vs legacy)
@@ -28,12 +29,14 @@ public sealed class LastExportSummary
 
     // PS1GodotPlugin calls this once per ExportOneScene invocation,
     // accumulating per-scene results into the running totals.
-    public void Add(SceneData data, int textureWarnings, int audioWarnings, int uvDirtyMeshes)
+    public void Add(SceneData data, int textureWarnings, int audioWarnings,
+                    int animationWarnings, int uvDirtyMeshes)
     {
         ScenesExported++;
-        TextureWarnings += textureWarnings;
-        AudioWarnings   += audioWarnings;
-        UVDirtyMeshes   += uvDirtyMeshes;
+        TextureWarnings    += textureWarnings;
+        AudioWarnings      += audioWarnings;
+        AnimationWarnings  += animationWarnings;
+        UVDirtyMeshes      += uvDirtyMeshes;
 
         if (data.MeshDedup is { } dedup)
         {
@@ -53,7 +56,7 @@ public sealed class LastExportSummary
     }
 
     public int TotalIssues =>
-        TextureWarnings + AudioWarnings + UVDirtyMeshes + MeshCleanupCandidates;
+        TextureWarnings + AudioWarnings + AnimationWarnings + UVDirtyMeshes + MeshCleanupCandidates;
 
     // Two-line one-shot label: top line = headline issue count, bottom
     // = mesh-bytes-saved (positive feedback). Empty when nothing was
@@ -83,9 +86,10 @@ public sealed class LastExportSummary
         {
             if (ScenesExported == 0) return "";
             var sb = new StringBuilder();
-            sb.AppendLine($"Texture warnings: {TextureWarnings}");
-            sb.AppendLine($"Audio warnings:   {AudioWarnings}");
-            sb.AppendLine($"UV-dirty meshes:  {UVDirtyMeshes}");
+            sb.AppendLine($"Texture warnings:   {TextureWarnings}");
+            sb.AppendLine($"Audio warnings:     {AudioWarnings}");
+            sb.AppendLine($"Animation warnings: {AnimationWarnings}");
+            sb.AppendLine($"UV-dirty meshes:    {UVDirtyMeshes}");
             sb.AppendLine($"Mesh cleanup candidates: {MeshCleanupCandidates}");
             if (_worstMeshes.Count > 0)
             {

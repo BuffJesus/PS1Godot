@@ -508,6 +508,10 @@ public partial class PS1GodotPlugin : EditorPlugin
         // should route XA, big resident loops, dangling XA payloads.
         int audioWarnings = Exporter.AudioValidationReport.EmitForScene(sceneData, sceneIndex);
 
+        // Animation validation: per-track + per-skin-clip rows + warn
+        // on dead tracks, oversized clips, high fps/bone counts.
+        int animWarnings = Exporter.AnimationLinter.EmitForScene(sceneData, sceneIndex);
+
         // UV linter: warn on any vertex UV outside [0, 1]. PSX rasteriser
         // doesn't wrap or clamp — out-of-range UVs sample neighbouring
         // VRAM data as garbage. Editor's wrapping sampler hides this.
@@ -517,7 +521,7 @@ public partial class PS1GodotPlugin : EditorPlugin
         // dock reads after OnExportEmptySplashpack returns. Mesh-dedup
         // counts come from sceneData.MeshDedup which the SceneCollector
         // populated during FromRoot.
-        _lastExportSummary?.Add(sceneData, textureWarnings, audioWarnings, uvDirty);
+        _lastExportSummary?.Add(sceneData, textureWarnings, audioWarnings, animWarnings, uvDirty);
 
         try
         {
