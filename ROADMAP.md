@@ -280,6 +280,32 @@ scope.
 them in Godot, and byte-diff the resulting splashpacks against the Unity output.
 Non-zero diffs must be explainable (e.g., floating-point ordering), not bugs.
 
+### Stable asset IDs *(amendment, prerequisite for save/dialog/multi-disc/Blender)*
+
+Save data, dialogue references, multi-disc validation, and the Blender
+round-trip all assume a stable identifier exists per asset across
+re-exports. Lock the convention now so later phases don't pay a
+migration cost.
+
+- [ ] **Auto-assign + persist `AssetId` on first export**
+      (`MeshId / TextureId / CLUTId / TexturePageId / MaterialId /
+      AnimationId / ChunkId / DialogueId / QuestId / ItemId`). Stored
+      as a `[Tool]`-set property on each `PS1*` resource so it
+      survives rename and re-import. Never regenerated.
+- [ ] **Generated cross-language manifest** —
+      `addons/ps1godot/.generated/ids.lua` + `ids.cs` + `ids.json`,
+      written by the exporter. Lua scripts reference
+      `Items.HEALTH_POTION` instead of magic strings; C# tooling and
+      the Blender add-on read the same JSON.
+- [ ] **Validation** — exporter errors on duplicate IDs across
+      resources of the same kind; warns on unreferenced IDs (likely
+      orphaned definition).
+- [ ] Source docs:
+      [`docs/ps1godot_missing_pieces_production_tooling_roadmap.md`](docs/ps1godot_missing_pieces_production_tooling_roadmap.md)
+      § Asset Registry,
+      [`docs/ps1_asset_pipeline_plan.md`](docs/ps1_asset_pipeline_plan.md)
+      § C7 Stable IDs.
+
 **Done when:** a non-trivial game scene authored only in Godot runs in PCSX-Redux
 with rendering, collision, audio, UI, nav, and Lua all working.
 
@@ -342,7 +368,26 @@ bullets, pickups, particles, enemy waves, and voxel-style worlds.
       single streamable chunk: geometry set + resident texture pages + NPC
       set + script set + audio profile + effect budget. One struct, not six.
       Exporter emits a `chunk_N.splashpack` per chunk. Pairs with
-      `Scene.LoadChunk` above.
+      `Scene.LoadChunk` above. Detailed metadata field list (SceneType,
+      NeighborChunks, PreloadChunks, TransitionType, NPCSet,
+      LightingProfile, FogProfile, SkyProfile, AudioProfile,
+      CameraProfile, plus per-chunk budgets for triangles / objects /
+      VRAM / SPU / texture pages / CLUTs / alpha quads / particles /
+      skinned actors / colliders) lives in
+      [`docs/ps1_chunked_rpg_architecture_plan_multidisc.md`](docs/ps1_chunked_rpg_architecture_plan_multidisc.md)
+      and
+      [`docs/ps1godot_current_implementation_review_next_steps.md`](docs/ps1godot_current_implementation_review_next_steps.md).
+      Chunk states (Active / Nearby / LoadedInactive / Unloaded /
+      SymbolicOnly) drive simulation tier and SPU/VRAM residency.
+- [ ] **Multi-disc metadata scaffold** — `DiscId`, `DiscCount`,
+      `AreaArchiveId`, `RequiresDisc`, `DiscSwapSafeTransition`
+      fields on `PS1Chunk` plus a `DiscManifest.tres` listing
+      contained chunks / common-bank refs per disc. Authoring
+      shape only; runtime support (manifest reader, save-file
+      disc requirement, swap UI, disc-accurate test mode) deferred
+      to Phase 3 / 4. Adding the metadata now prevents a later
+      migration. See
+      [`docs/ps1_chunked_rpg_architecture_plan_multidisc.md`](docs/ps1_chunked_rpg_architecture_plan_multidisc.md).
 
 ### Performance / culling / scheduling
 
@@ -435,6 +480,51 @@ ship the primitive.
 - [ ] `AI.LineOfSightTo(self, target)` — raycast wrapper.
 - [ ] `AI.Steering.Seek/Flee/Wander(self, target, params)` — classical
       steering primitives; cheap to implement, huge ergonomic win.
+
+### Lua state modules *(architecture from `docs/ps1_lua_scripting_cross_entity_state_architecture.md`)*
+
+Authored Lua today scatters cross-entity state across `_G` and ad-hoc
+helpers. The architecture doc prescribes a small set of named modules
+that own each state layer (entity-local, chunk/scene, global, save).
+These ship as Lua-side helpers backed by tiny `luaapi.cpp` shims; no
+splashpack format change required.
+
+- [ ] **`Bus.Emit / Bus.On / Bus.Flush`** — capped event queue
+      (~32 events / frame), drains once per frame. Replaces direct
+      cross-script function calls. Loosely coupled events: `quest_flag_changed`,
+      `item_added`, `dialogue_ended`, `chunk_entered`.
+- [ ] **`GameState`** — frame counter, mode (`explore`/`battle`/
+      `dialogue`/`menu`/`cutscene`/`paused`), current chunk / region /
+      disc id. One source of truth.
+- [ ] **`Quest.SetFlag / GetFlag / Has`** + `Bus` event emission.
+- [ ] **`Inventory.Add / Remove / Has / Count`** + events. Static
+      `Items` definition table (data-driven, not hard-coded).
+- [ ] **`Party`** — gold, HP/maxHP, member tracking. Subset of
+      Phase 2.6 RPG attribute system; this is the pre-RPG shape.
+- [ ] **`Dialogue.Start / IsActive / Close`** — wrapper over the raw
+      `UI.SetText` + canvas-show plumbing. Pairs with the Phase 3
+      Dialog graph (`PS1DialogueGraph`).
+- [ ] **`Blackboard`** — per-entity-id KV store for AI temp state
+      (mood, last-seen-target, cooldown counters) without polluting
+      globals or every script's own table.
+- [ ] **`AudioRouter.PlaySfx / PlayMusic / PlayAmbient`** — logical
+      wrapper over `Audio.PlaySfx` / `Audio.PlayMusic` etc. that
+      consults a routing table (clip id → SPU / XA / CDDA), so script
+      callers don't hard-code routes.
+- [ ] **`CameraController.SetMode / SetZone / LoadPreset /
+      ResetBehindPlayer`** — wraps the Phase 2.5 camera primitives
+      with intent-named helpers.
+- [ ] **Module export/import for save** — each module implements
+      `Mod.Export() → table` / `Mod.Import(data)` so `Save.WriteSlot`
+      walks a fixed list and stays save-version-friendly.
+- [ ] **Loading-order convention** — `bus → gamestate → quest → party
+      → inventory → dialogue → audio → camera → chunk → scene
+      controllers → per-object scripts`. Documented in `docs/lua-architecture.md`
+      (TBD); validated by the host-mode test runner.
+- [ ] **`Task.RunOverFrames(fn, budgetUsPerFrame)`** + update
+      frequency tiers (every-frame / every-4 / every-16) — already
+      sketched in *Performance / culling / scheduling*; this lands the
+      authored shape used by the modules above.
 
 ### Audio from Lua
 
@@ -599,6 +689,22 @@ runtime so first-person / orbit actually take effect.
       this frame. Pairs with `Scene.SetPaused(true)` for photo modes.
       Discord feature request "Other controller types or lua based
       camera control" (psxsplash channel, 2026-04). **[runtime]**
+- [ ] **`PS1CameraZone` constraint metadata** — per-room bounds for
+      yaw / pitch / distance, plus `PreferredYaw` / `PreferredPitch`
+      / `AllowRightStick` / `CameraCollisionEnabled` /
+      `DrawDistanceOverride` / `FogOverride`. Prevents the orbit
+      camera from revealing unloaded chunks or void at the edges of
+      authored geometry. Editor warns on missing zones in
+      open-area chunks, `MaxDistance` exceeding the chunk bound, and
+      authored `MaxPitch` that would clip the camera into the floor.
+      See
+      [`docs/ps1_rpg_performance_lighting_sky_camera_strategy.md`](docs/ps1_rpg_performance_lighting_sky_camera_strategy.md)
+      § Camera. **[runtime]**
+- [ ] **Camera-collision via simplified layer** — author tags meshes
+      `CameraBlocker` (typically simplified low-poly walls + ceilings,
+      not the render geometry). Runtime sweep-raycasts the camera
+      target against this layer only, never against render triangles.
+      Cheap and predictable. **[runtime]**
 
 ### Texture animation (UV scroll + frame-flip)
 
@@ -622,6 +728,50 @@ mechanisms cover most cases — UV-shifting and atlas-region cycling.
       mesh as "use UV scroll" without writing a per-mesh Lua script.
 - [ ] Demo addition: animated water plane (UV scroll) + a face mesh on
       an NPC with mouth-flap atlas frames (frame swap).
+
+### Lighting, fog, sky *(architecture from `docs/ps1_rpg_performance_lighting_sky_camera_strategy.md`)*
+
+Authentic PS1 visual feel relies on baked vertex-color lighting +
+distance fog + cheap painted sky cards, not real-time lighting. The
+strategy doc separates the three concepts (currently conflated in
+`PS1Scene.FogColor`) and prescribes per-chunk lighting profiles
+authored alongside chunk metadata.
+
+- [ ] **Lighting tier enum** on `PS1MeshInstance` — `Unlit`,
+      `FlatColor`, `MeshVertexColors` (bake into the existing GLB
+      vertex-color attribute), `BakedLighting` (sampled from a
+      lightmap quad), `CharacterAmbient`, `CharacterDirectional`,
+      `FakeLight` (vertex patches + sprite glow). Default is
+      `MeshVertexColors`; warn on `Unlit` outside cutscenes.
+- [ ] **Vertex-color bake helper** — editor button on a selection
+      that bakes one of: directional light, ambient + height
+      gradient, radial fake light, ambient tint. Writes back into
+      Godot mesh vertex colors so the round-trip survives.
+- [ ] **`PS1ChunkLightingProfile.tres`** — `BackgroundColor`,
+      `FogColor`, `FogNear`, `FogFar`, `AmbientColor`, `KeyLight`
+      (direction + color), `CharacterLightMode`, `PaletteMood`.
+      Replaces today's single `PS1Scene.FogColor` / single density
+      with the separate-concepts model. Per-chunk override; falls
+      back to scene default.
+- [ ] **`PS1ChunkSkyProfile.tres`** — sky mode enum (`None` /
+      `ClearColor` / `SkyCard` / `SkyDome` / `Skybox` /
+      `PaintedBackdrop`). `SkyCard` = textured full-screen quad
+      drawn before scene geometry (cheapest, authentic Crash/Spyro
+      technique). Pairs with the existing Phase 2.5 *Rendering
+      options* "2D parallax skybox" bullet — same renderer hook,
+      richer authoring metadata.
+- [ ] **CLUT mood swaps** — palette variants per lighting profile
+      for time-of-day shifts, dungeon mood, damage flashes, magic
+      effects. Free at runtime (palette swap = single SPU/GPU
+      register write); cost is authoring discipline.
+- [ ] **Editor warnings** — fog hiding sky (FogFar < distance to
+      sky horizon), close fog blocking authored detail, `Unlit`
+      mesh in lit chunk, ambient + key-light combination producing
+      overbright vertices, missing `LightingProfile` on a chunk
+      whose meshes use `BakedLighting`.
+- [ ] **Editor preview** — render the active scene in the Godot
+      viewport with the chunk's authored `LightingProfile` applied,
+      so authors see the PSX-target lighting before exporting.
 
 ### Rendering options
 
@@ -1273,6 +1423,131 @@ Tiered by effort vs. user reach:
 working sequence resource that plays a recognizable rendition of the
 source on PSX with no manual binding work.
 
+### PS1 Doctor — unified validator *(from `docs/ps1godot_missing_pieces_production_tooling_roadmap.md`)*
+
+The dockable plugin panel + per-export validators are growing
+piecemeal (texture / UV / budget). The production-tooling doc
+prescribes a single "Doctor" view that aggregates every check across
+project structure, assets, VRAM, SPU, meshes, Lua scripts, chunks,
+saves, and deployment. Status levels: Info / Warning / Error /
+Blocking. Author runs once, sees everything wrong with the project.
+
+- [ ] **`PS1 Doctor` dock** — single tabbed panel. Tabs: Project
+      (manifest / disc layout / version mismatch), Assets (atlas
+      coverage / orphans / 16bpp / one-offs), Memory (per-bus
+      residency / budget overruns), Lua (parse / API / load order),
+      Chunks (budgets / neighbor links / disc ownership), Save
+      (slot version / migration). One re-run button + auto-run on
+      export.
+- [ ] **Status aggregation** across existing per-pass linters so
+      authors don't hunt through three docks for findings.
+- [ ] **Fix-suggestion text** plain-language ("Texture `Wood_05` is
+      16bpp and used in a Gameplay-residency atlas — convert to 4bpp
+      indexed or move the use to a Cutscene canvas").
+
+### Lua API IDL + host-mode tooling *(from `docs/ps1_lua_scripting_cross_entity_state_architecture.md`)*
+
+Today the Lua surface is hand-authored in `luaapi.cpp` and the
+exporter regenerates `ApiData.gen.cpp` for in-editor autocomplete.
+The architecture doc prescribes a single source of truth (`lua_api.yaml`)
+that drives the C++ binding skeletons, the EmmyLua stubs for
+external editors, the in-editor completion data, validation rules,
+and the host-mode test runner.
+
+- [ ] **`tools/lua_api.yaml`** — typed schema (namespace, name,
+      args with types, return type, summary, version) for every
+      Lua-exposed function.
+- [ ] **Generators** — `gen_luaapi_skeleton.py` (C++ binding stubs,
+      same shape `luaapi.cpp` already has), `gen_emmylua_stubs.py`
+      (already present, switch source from header to YAML),
+      `gen_apidata_cpp.py` (replace the existing header parser),
+      `gen_docs_md.py` (Markdown doc page for `docs/`). One run-all
+      script.
+- [ ] **Lua profiler / observability overlay** — per-hook timing
+      ring buffer (`onCreate / onUpdate / onEnable / onDisable`,
+      per-script aggregate), `Entity.Find` call counter, event-queue
+      depth, frame-budget utilization. Surfaces in the existing PSX
+      dev overlay; toggleable from Lua via `Debug.ProfileEnable(true)`.
+- [ ] **Host-mode test runner** — runs in-process inside the C#
+      plugin (no emulator). Validates: every `.lua` parses;
+      `Bus.On` callbacks resolve; `Items.*` / `Quests.*` / `Chunks.*`
+      ID references match the generated manifest; save round-trip
+      preserves a known fixture. Wired to a `tools/run_host_tests`
+      script + the PS1 Doctor "Lua" tab.
+
+### Blender add-on integration *(from `docs/ps1godot_blender_addon_integration_plan.md`)*
+
+The Blender ↔ Godot round-trip is treated as a first-class authoring
+path (memory: stable string IDs as join keys, every PS1 metadata
+field must survive both directions). Today nothing on the Blender
+side is built. The plan stages the work in 9 phases; we land them in
+roughly dependency order.
+
+- [ ] **B1. Add-on skeleton + project settings panel** — locate
+      PS1Godot root, manifest path, output folders, default
+      `ChunkId` / `DiscId`. Read `addons/ps1godot/.generated/ids.json`
+      for cross-tool ID lookups.
+- [ ] **B2. Asset metadata panel** — per-object custom properties
+      under `ps1godot.*` namespace (`AssetId`, `MeshId`, `ChunkId`,
+      `MeshRole`, `ExportMode`, `DrawPhase`, `ShadingMode`,
+      `AlphaMode`, `CollisionLayer`). Stable across rename + re-import.
+- [ ] **B3. Mesh validation panel** — vertex / triangle / material
+      counts, UV bounds, vertex-color presence, estimated binary
+      size, index format warnings. Mirrors the Godot-side `MeshLinter`.
+- [ ] **B4. Vertex-color bake helpers** — directional light, ambient
+      tint, height gradient, radial fake light, darken-by-normal.
+      Pairs with the Phase 2.5 lighting tier system.
+- [ ] **B5. Material / texture-page panel** — `TextureFormat`,
+      `TexturePageId`, `CLUTId`, `PaletteGroup`, `AtlasGroup`, alpha
+      mode, 16bpp approval. Reads atlas assignments from the manifest.
+- [ ] **B6. Collision helpers panel** — typed empties /
+      bounding-volume objects (PlayerCollision, CameraCollision,
+      InteractionVolume, TriggerVolume, NavRegion, SavePoint,
+      TransitionPoint). Round-trip through metadata JSON.
+- [ ] **B7. Animation export panel** — bank id, skeleton id,
+      character mode, residency, chunk id, disc id, event markers
+      (frame + eventId).
+- [ ] **B8. Export / import operators + JSON metadata sidecar** —
+      writes `<asset>.glb` + `<asset>.ps1godot.json` (metadata).
+      Import operator reads the same pair back into Blender.
+- [ ] **B9. Validation rules + report** — composite report:
+      object / vertex / texture / CLUT counts, atlas coverage,
+      undeclared collisions, unmatched animation bones. Mirrors
+      the Godot-side report so a project's findings are consistent
+      across both sides.
+
+Done when an artist authoring in Blender can set one PS1Godot
+project root, paint vertex colors with the bake helpers, drop typed
+collision empties, hit Export, and see the meshes appear in
+PS1Godot's filesystem panel with stable IDs and full metadata
+already filled in.
+
+### Project templates *(expand from one stub to a starter library)*
+
+Today we ship one template (`PS1 Game`). The production-tooling doc
+lists ~12 useful starting points — each is a tiny scene + a
+read-me, which together teach a different slice of the engine.
+
+- [ ] **Hello Cube** — current template, kept as the smoke test.
+- [ ] **Basic Interactive Scene** — player + a trigger box + a
+      `UI.SetText` reaction.
+- [ ] **Fixed Camera Room** — shows the `PS1FixedCamera` node + zone
+      constraints.
+- [ ] **Third-Person Field** — orbit cam + nav region + walking floor.
+- [ ] **Interior With Door Transition** — two rooms + portal + door
+      script.
+- [ ] **Dialogue NPC** — `Dialogue.Start` + a small dialogue graph
+      once `PS1DialogueGraph` lands.
+- [ ] **Chest / Item Pickup** — `Inventory.Add` + a ground sprite.
+- [ ] **Battle Arena** — Phase 2.6 attribute / ability example with
+      one melee enemy.
+- [ ] **Title Screen** — splashpack 0 with a menu and `Music.Play`.
+- [ ] **Multi-Disc Skeleton** — two-chunk project with `DiscId` /
+      `DiscManifest.tres` populated; Doctor passes its disc tab.
+- [ ] **Chunked RPG Mini-Slice** — 1 town + 1 field + 1 interior +
+      one quest; the vertical-slice deliverable from Phase 4 lives
+      here once shipped.
+
 **Done when:** someone who's never seen the project can open Godot, select the
 "PS1 Game" template, press F5, and see a playable scene in the emulator within
 60 seconds.
@@ -1296,6 +1571,13 @@ Only after Phases 0–3 land.
   - This is what Phase 0.5 gracefully evolves into once it stabilizes.
 - **Visual Lua debugger** wired into PCSX-Redux's Lua debug interface
   (breakpoints, variables, step) surfaced in a Godot dock.
+- **Vertical-slice RPG reference game.** One small but complete
+  PS1 RPG: 1 town, 5 quest NPCs, one field area, one interior /
+  dungeon, 3 enemy types, 6 abilities, 20 items, dialog, chests,
+  save/load, and a multi-disc skeleton. Doubles as the
+  *Chunked RPG Mini-Slice* template (Phase 3) and as the
+  end-to-end smoke test for every subsystem. Source:
+  [`docs/ps1godot_missing_pieces_production_tooling_roadmap.md`](docs/ps1godot_missing_pieces_production_tooling_roadmap.md).
 - **GDExtension hot path** for heavy inner loops (texture quantization, BVH
   build, VRAM pack) if iteration time hurts.
 - Serial-link upload to real hardware.
