@@ -30,6 +30,8 @@ public partial class PS1GodotPlugin : EditorPlugin
     private const string FrameModelMenuLabel = "PS1Godot: Frame Selected Model in Viewport";
     private const string ApplyBlenderMetadataMenuLabel = "PS1Godot: Apply Blender Metadata Sidecars";
     private const string WriteBlenderMetadataMenuLabel = "PS1Godot: Write Blender Metadata Sidecars";
+    private const string PopulateMaterialsMenuLabel    = "PS1Godot: Populate PS1MaterialMetadata for Selected";
+    private const string InferDefaultsMenuLabel        = "PS1Godot: Infer PS1 Defaults for Selected";
 
     // Default sidecar dir matches the Blender add-on default
     // (tools/blender-addon/.../properties.py: "ps1godot_assets/blender_sources").
@@ -61,6 +63,8 @@ public partial class PS1GodotPlugin : EditorPlugin
         AddToolMenuItem(FrameModelMenuLabel, Callable.From(OnFrameSelectedModel));
         AddToolMenuItem(ApplyBlenderMetadataMenuLabel, Callable.From(OnApplyBlenderMetadata));
         AddToolMenuItem(WriteBlenderMetadataMenuLabel, Callable.From(OnWriteBlenderMetadata));
+        AddToolMenuItem(PopulateMaterialsMenuLabel,    Callable.From(OnPopulateMaterials));
+        AddToolMenuItem(InferDefaultsMenuLabel,        Callable.From(OnInferDefaults));
 
         _triggerBoxGizmo = new PS1TriggerBoxGizmo();
         AddNode3DGizmoPlugin(_triggerBoxGizmo);
@@ -159,6 +163,8 @@ public partial class PS1GodotPlugin : EditorPlugin
         RemoveToolMenuItem(FrameModelMenuLabel);
         RemoveToolMenuItem(ApplyBlenderMetadataMenuLabel);
         RemoveToolMenuItem(WriteBlenderMetadataMenuLabel);
+        RemoveToolMenuItem(PopulateMaterialsMenuLabel);
+        RemoveToolMenuItem(InferDefaultsMenuLabel);
 
         SceneChanged -= OnSceneChanged;
         EditorInterface.Singleton.GetSelection().SelectionChanged -= OnEditorSelectionChanged;
@@ -532,8 +538,12 @@ public partial class PS1GodotPlugin : EditorPlugin
         // Aggregate this scene's results into the run-wide summary the
         // dock reads after OnExportEmptySplashpack returns. Mesh-dedup
         // counts come from sceneData.MeshDedup which the SceneCollector
-        // populated during FromRoot.
-        _lastExportSummary?.Add(sceneData, textureWarnings, audioWarnings, animWarnings, uvDirty);
+        // populated during FromRoot. uvDirtyNames is captured from
+        // MeshLinter on its way out so the headline can name a real
+        // failing mesh instead of just counting.
+        _lastExportSummary?.Add(
+            sceneData, textureWarnings, audioWarnings, animWarnings, uvDirty,
+            new System.Collections.Generic.List<string>(Exporter.MeshLinter.LastDirtyMeshNames));
 
         try
         {
@@ -994,6 +1004,278 @@ public partial class PS1GodotPlugin : EditorPlugin
         {
             GD.Print("[PS1Godot] Save the .tscn to persist the new asset_id / mesh_id values.");
         }
+    }
+
+    // ── UX2: one-click PS1MaterialMetadata population ────────────────
+    //
+    // Walk the selected node's Material slots (or the children's, if a
+    // PS1MeshGroup is selected) and append a PS1MaterialMetadata for
+    // each unique slot whose name doesn't already have one. Authors
+    // run this once per mesh after import, then fill in
+    // texture_page_id / clut_id etc. instead of right-clicking → New
+    // Resource per surface.
+    private void OnPopulateMaterials()
+    {
+        var selected = EditorInterface.Singleton.GetSelection().GetSelectedNodes();
+        if (selected.Count == 0)
+        {
+            GD.PushError("[PS1Godot] Populate Materials: select a PS1MeshInstance / PS1MeshGroup first.");
+            return;
+        }
+
+        int touchedNodes = 0;
+        int addedTotal   = 0;
+
+        foreach (var n in selected)
+        {
+            int added = 0;
+            if (n is PS1MeshInstance pmi)
+            {
+                added = PopulateForInstance(pmi);
+            }
+            else if (n is PS1MeshGroup pmg)
+            {
+                added = PopulateForGroup(pmg);
+            }
+            else
+            {
+                continue;
+            }
+            if (added > 0)
+            {
+                touchedNodes++;
+                addedTotal += added;
+                GD.Print($"[PS1Godot]   {n.Name}: +{added} PS1MaterialMetadata entry(s).");
+            }
+            else
+            {
+                GD.Print($"[PS1Godot]   {n.Name}: already populated, no change.");
+            }
+        }
+
+        if (addedTotal == 0)
+        {
+            GD.Print("[PS1Godot] Populate Materials: nothing to add — every slot already has a PS1MaterialMetadata entry.");
+        }
+        else
+        {
+            GD.Print($"[PS1Godot] Populate Materials: added {addedTotal} entry(s) across {touchedNodes} node(s). Save the .tscn to persist.");
+        }
+    }
+
+    private static int PopulateForInstance(PS1MeshInstance pmi)
+    {
+        if (pmi.Mesh == null) return 0;
+        var existing = ExistingMaterialNames(pmi.Materials);
+        int added = 0;
+        for (int s = 0; s < pmi.Mesh.GetSurfaceCount(); s++)
+        {
+            var mat = pmi.GetSurfaceOverrideMaterial(s) ?? pmi.Mesh.SurfaceGetMaterial(s);
+            if (mat == null) continue;
+            string name = string.IsNullOrEmpty(mat.ResourceName) ? $"Surface {s}" : mat.ResourceName;
+            if (!existing.Add(name)) continue;
+            pmi.Materials.Add(new PS1MaterialMetadata { MaterialName = name, MaterialId = name });
+            added++;
+        }
+        return added;
+    }
+
+    private static int PopulateForGroup(PS1MeshGroup pmg)
+    {
+        var existing = ExistingMaterialNames(pmg.Materials);
+        int added = 0;
+        AddFromDescendants(pmg, existing, pmg.Materials, ref added);
+        return added;
+    }
+
+    private static void AddFromDescendants(Node n, System.Collections.Generic.HashSet<string> existing,
+                                           Godot.Collections.Array<PS1MaterialMetadata> dest, ref int added)
+    {
+        if (n is MeshInstance3D mi && mi.Mesh != null)
+        {
+            for (int s = 0; s < mi.Mesh.GetSurfaceCount(); s++)
+            {
+                var mat = mi.GetSurfaceOverrideMaterial(s) ?? mi.Mesh.SurfaceGetMaterial(s);
+                if (mat == null) continue;
+                string name = string.IsNullOrEmpty(mat.ResourceName) ? $"{mi.Name}_Surface{s}" : mat.ResourceName;
+                if (!existing.Add(name)) continue;
+                dest.Add(new PS1MaterialMetadata { MaterialName = name, MaterialId = name });
+                added++;
+            }
+        }
+        foreach (var child in n.GetChildren())
+        {
+            AddFromDescendants(child, existing, dest, ref added);
+        }
+    }
+
+    private static System.Collections.Generic.HashSet<string> ExistingMaterialNames(
+        Godot.Collections.Array<PS1MaterialMetadata> metas)
+    {
+        var set = new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal);
+        foreach (var m in metas)
+        {
+            if (m == null) continue;
+            string key = !string.IsNullOrEmpty(m.MaterialName) ? m.MaterialName : m.MaterialId;
+            if (!string.IsNullOrEmpty(key)) set.Add(key);
+        }
+        return set;
+    }
+
+    // ── UX3: smart default inference ─────────────────────────────────
+    //
+    // For each selected PS1MeshInstance / PS1MeshGroup, look at the
+    // scene context (animation player ancestor? alpha-cutout texture?
+    // sibling skinned mesh?) and overwrite the construction defaults
+    // with values that match the scene shape. Authored values that
+    // already differ from the default are PRESERVED — we only fill
+    // gaps. Authors run this consciously; nothing here is automatic.
+    private void OnInferDefaults()
+    {
+        var selected = EditorInterface.Singleton.GetSelection().GetSelectedNodes();
+        if (selected.Count == 0)
+        {
+            GD.PushError("[PS1Godot] Infer Defaults: select a PS1MeshInstance / PS1MeshGroup first.");
+            return;
+        }
+
+        int touched = 0;
+        foreach (var n in selected)
+        {
+            var changes = new System.Collections.Generic.List<string>();
+            if (n is PS1MeshInstance pmi) InferOnInstance(pmi, changes);
+            else if (n is PS1MeshGroup pmg) InferOnGroup(pmg, changes);
+            else continue;
+
+            if (changes.Count > 0)
+            {
+                touched++;
+                GD.Print($"[PS1Godot]   {n.Name}: {string.Join(", ", changes)}");
+            }
+            else
+            {
+                GD.Print($"[PS1Godot]   {n.Name}: no inferrable defaults to set.");
+            }
+        }
+
+        if (touched > 0)
+        {
+            GD.Print($"[PS1Godot] Infer Defaults: updated {touched} node(s). Save the .tscn to persist.");
+        }
+    }
+
+    private static void InferOnInstance(PS1MeshInstance pmi, System.Collections.Generic.List<string> changes)
+    {
+        // Animation context — has an AnimationPlayer in the scene that
+        // targets this node by name? Treat as DynamicRigid.
+        if (pmi.MeshRole == Exporter.MeshRole.StaticWorld && HasAnimationTargeting(pmi))
+        {
+            pmi.MeshRole  = Exporter.MeshRole.DynamicRigid;
+            pmi.DrawPhase = Exporter.DrawPhase.OpaqueDynamic;
+            pmi.ExportMode = Exporter.ExportMode.KeepSeparate;
+            changes.Add("MeshRole→DynamicRigid + KeepSeparate (animation targets this node)");
+        }
+
+        // Material alpha — any cutout / transparent material on this
+        // mesh implies CutoutDecals draw phase + AlphaMode=Cutout.
+        if (pmi.AlphaMode == Exporter.AlphaMode.Opaque && HasAlphaMaterial(pmi))
+        {
+            pmi.AlphaMode = Exporter.AlphaMode.Cutout;
+            if (pmi.DrawPhase == Exporter.DrawPhase.OpaqueStatic)
+            {
+                pmi.DrawPhase = Exporter.DrawPhase.CutoutDecals;
+            }
+            // Translucent already drives the runtime; mirror so writers
+            // that consume AlphaMode see the same intent. Don't clobber
+            // a user-set Translucent=true — the legacy field stays.
+            if (!pmi.Translucent) pmi.Translucent = true;
+            changes.Add("AlphaMode→Cutout + DrawPhase→CutoutDecals (alpha-keyed material)");
+        }
+
+        // Vertex color hint — if the mesh has a COLOR channel, ShadingMode
+        // should be VertexColor instead of FlatColor.
+        if (pmi.ShadingMode == Exporter.ShadingMode.FlatColor && HasVertexColors(pmi.Mesh))
+        {
+            pmi.ShadingMode = Exporter.ShadingMode.VertexColor;
+            changes.Add("ShadingMode→VertexColor (mesh has COLOR channel)");
+        }
+    }
+
+    private static void InferOnGroup(PS1MeshGroup pmg, System.Collections.Generic.List<string> changes)
+    {
+        if (pmg.MeshRole == Exporter.MeshRole.StaticWorld && HasAnimationTargeting(pmg))
+        {
+            pmg.MeshRole  = Exporter.MeshRole.DynamicRigid;
+            pmg.DrawPhase = Exporter.DrawPhase.OpaqueDynamic;
+            pmg.ExportMode = Exporter.ExportMode.KeepSeparate;
+            changes.Add("MeshRole→DynamicRigid + KeepSeparate (animation targets this group)");
+        }
+    }
+
+    // True when an ancestor's children include an AnimationPlayer with
+    // a track that mentions `node`'s name. Rough match — Godot animation
+    // tracks use NodePaths but for our authoring conventions a contains
+    // check is good enough to flag intent.
+    private static bool HasAnimationTargeting(Node node)
+    {
+        for (var p = node.GetParent(); p != null; p = p.GetParent())
+        {
+            foreach (var c in p.GetChildren())
+            {
+                if (c is not AnimationPlayer ap) continue;
+                foreach (var libName in ap.GetAnimationLibraryList())
+                {
+                    var lib = ap.GetAnimationLibrary(libName);
+                    if (lib == null) continue;
+                    foreach (var animName in lib.GetAnimationList())
+                    {
+                        var anim = lib.GetAnimation(animName);
+                        if (anim == null) continue;
+                        for (int t = 0; t < anim.GetTrackCount(); t++)
+                        {
+                            string path = anim.TrackGetPath(t).ToString();
+                            if (path.Contains((string)node.Name)) return true;
+                        }
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    private static bool HasAlphaMaterial(PS1MeshInstance pmi)
+    {
+        if (pmi.Mesh == null) return false;
+        for (int s = 0; s < pmi.Mesh.GetSurfaceCount(); s++)
+        {
+            var mat = pmi.GetSurfaceOverrideMaterial(s) ?? pmi.Mesh.SurfaceGetMaterial(s);
+            if (mat is StandardMaterial3D std)
+            {
+                if (std.Transparency != BaseMaterial3D.TransparencyEnum.Disabled) return true;
+                if (std.AlbedoTexture != null && std.AlbedoTexture.HasAlpha()) return true;
+            }
+        }
+        return false;
+    }
+
+    private static bool HasVertexColors(Mesh? mesh)
+    {
+        if (mesh == null) return false;
+        // Mesh base class doesn't expose SurfaceGetFormat in C# — peek
+        // the surface arrays directly. ArrayType.Color slot is empty
+        // on meshes without a vertex-color channel.
+        for (int s = 0; s < mesh.GetSurfaceCount(); s++)
+        {
+            var arrays = mesh.SurfaceGetArrays(s);
+            if (arrays == null || arrays.Count <= (int)Mesh.ArrayType.Color) continue;
+            var colorSlot = arrays[(int)Mesh.ArrayType.Color];
+            if (colorSlot.VariantType != Variant.Type.Nil)
+            {
+                var colors = colorSlot.AsColorArray();
+                if (colors != null && colors.Length > 0) return true;
+            }
+        }
+        return false;
     }
 }
 #endif

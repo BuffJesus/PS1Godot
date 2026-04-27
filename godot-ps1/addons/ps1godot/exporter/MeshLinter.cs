@@ -80,12 +80,25 @@ public static class MeshLinter
     //
     // Returns the number of meshes with out-of-range UVs. Plugin sums
     // this into the dock's "Last export" line.
+    /// <summary>
+    /// Names of meshes flagged by the most recent EmitForScene pass —
+    /// used by the dock's last-export summary to surface the worst
+    /// offender by name + drive click-to-focus navigation. Cleared at
+    /// each ResetForScene + EmitForScene start.
+    /// </summary>
+    public static List<string> LastDirtyMeshNames { get; } = new();
+
     public static int EmitForScene(int sceneIndex)
     {
+        LastDirtyMeshNames.Clear();
         int dirtyCount = 0;
         foreach (var kv in _stats)
         {
-            if (kv.Value.OutOfRange > 0) dirtyCount++;
+            if (kv.Value.OutOfRange > 0)
+            {
+                dirtyCount++;
+                LastDirtyMeshNames.Add(kv.Key);
+            }
         }
         if (dirtyCount == 0)
         {

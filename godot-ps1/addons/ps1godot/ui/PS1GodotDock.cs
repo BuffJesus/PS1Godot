@@ -29,6 +29,7 @@ public partial class PS1GodotDock : VBoxContainer
     private BudgetRow? _vramRow;
     private BudgetRow? _spuRow;
     private Label? _lastExportLabel;
+    private VBoxContainer? _lastExportRows;   // click-to-focus list
     private VBoxContainer? _setupBox;
     private Label? _setupSummary;
 
@@ -126,17 +127,22 @@ public partial class PS1GodotDock : VBoxContainer
         inner.AddChild(_spuRow.Label);
         inner.AddChild(_spuRow.Bar);
 
-        // Last-export summary line. Hidden until OnExportEmptySplashpack
-        // pushes a non-empty summary; tooltip carries the per-category
-        // breakdown + worst mesh-cleanup candidates.
+        // Last-export summary headline + click-to-focus row list.
+        // Headline carries severity-coded one-line state; rows below
+        // expand to per-mesh entries the author can click to jump to
+        // the offending node in the scene tree.
         _lastExportLabel = new Label
         {
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
             Visible = false,
-            MouseFilter = MouseFilterEnum.Pass,  // tooltip needs hover events
+            MouseFilter = MouseFilterEnum.Pass,
         };
         _lastExportLabel.AddThemeColorOverride("font_color", new Color(1, 1, 1, 0.70f));
         inner.AddChild(_lastExportLabel);
+
+        _lastExportRows = new VBoxContainer { Visible = false };
+        _lastExportRows.AddThemeConstantOverride("separation", 2);
+        inner.AddChild(_lastExportRows);
 
         // ── Setup section ───────────────────────────────────────────────
         AddSectionHeader(inner, "Setup");
@@ -267,20 +273,97 @@ public partial class PS1GodotDock : VBoxContainer
     // breakdown.
     public void ApplyLastExportSummary(LastExportSummary? summary)
     {
-        if (_lastExportLabel == null) return;
+        if (_lastExportLabel == null || _lastExportRows == null) return;
         if (summary == null || summary.ScenesExported == 0)
         {
             _lastExportLabel.Visible = false;
+            _lastExportRows.Visible = false;
             return;
         }
 
         _lastExportLabel.Text = summary.LabelText;
         _lastExportLabel.TooltipText = summary.TooltipText;
-        Color c = summary.TotalIssues == 0
-            ? new Color(0.55f, 0.85f, 0.55f)
-            : new Color(0.95f, 0.75f, 0.35f);
-        _lastExportLabel.AddThemeColorOverride("font_color", c);
+        Color headColor = summary.Severity switch
+        {
+            SummarySeverity.Error   => new Color(0.90f, 0.25f, 0.25f),
+            SummarySeverity.Warning => new Color(0.95f, 0.75f, 0.25f),
+            _                       => new Color(0.55f, 0.85f, 0.55f),
+        };
+        _lastExportLabel.AddThemeColorOverride("font_color", headColor);
         _lastExportLabel.Visible = true;
+
+        // Rebuild the click-to-focus rows. Cap at 8 so the dock stays
+        // compact; longer reports send the rest to the Output panel.
+        foreach (var child in _lastExportRows.GetChildren()) child.QueueFree();
+        int rowsShown = 0;
+        foreach (var off in summary.Offenders)
+        {
+            if (rowsShown >= 8) break;
+            _lastExportRows.AddChild(BuildOffenderRow(off));
+            rowsShown++;
+        }
+        _lastExportRows.Visible = rowsShown > 0;
+    }
+
+    // One row in the click-to-focus list. LinkButton renders as
+    // underlined text and feels obviously interactive without needing
+    // a button-frame style. Hover tooltip carries the full reason.
+    private Control BuildOffenderRow(LastExportSummary.Offender off)
+    {
+        var row = new HBoxContainer();
+        row.AddThemeConstantOverride("separation", 4);
+
+        string glyph = off.Tier == SummarySeverity.Error ? "✗" : "▲";
+        Color tierColor = off.Tier == SummarySeverity.Error
+            ? new Color(0.90f, 0.40f, 0.40f)
+            : new Color(0.95f, 0.80f, 0.35f);
+        var glyphLabel = new Label { Text = glyph, CustomMinimumSize = new Vector2(14, 0) };
+        glyphLabel.AddThemeColorOverride("font_color", tierColor);
+        row.AddChild(glyphLabel);
+
+        var link = new LinkButton
+        {
+            Text = off.Name,
+            TooltipText = off.Reason,
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+        };
+        link.Underline = LinkButton.UnderlineMode.OnHover;
+        link.AddThemeColorOverride("font_color", tierColor);
+        link.Pressed += () => FocusNodeByName(off.Name);
+        row.AddChild(link);
+
+        return row;
+    }
+
+    // Walks the active scene root looking for a node whose Name
+    // matches `name`. First hit wins. Selection update + EditNode
+    // brings the scene tree to focus on the offender; the user can
+    // press F to frame it in the 3D viewport.
+    private static void FocusNodeByName(string name)
+    {
+        var root = EditorInterface.Singleton.GetEditedSceneRoot();
+        if (root == null) return;
+        var match = FindByName(root, name);
+        if (match == null)
+        {
+            GD.PushWarning($"[PS1Godot] Click-to-focus: no node named '{name}' in the active scene.");
+            return;
+        }
+        var sel = EditorInterface.Singleton.GetSelection();
+        sel.Clear();
+        sel.AddNode(match);
+        EditorInterface.Singleton.EditNode(match);
+    }
+
+    private static Node? FindByName(Node n, string name)
+    {
+        if ((string)n.Name == name) return n;
+        foreach (var child in n.GetChildren())
+        {
+            var hit = FindByName(child, name);
+            if (hit != null) return hit;
+        }
+        return null;
     }
 
     private static string FormatKb(long bytes) => $"{bytes / 1024} KB";
