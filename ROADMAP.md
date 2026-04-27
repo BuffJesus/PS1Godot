@@ -1508,17 +1508,36 @@ field must survive both directions). Today nothing on the Blender
 side is built. The plan stages the work in 9 phases; we land them in
 roughly dependency order.
 
-- [ ] **B1. Add-on skeleton + project settings panel** — locate
-      PS1Godot root, manifest path, output folders, default
-      `ChunkId` / `DiscId`. Read `addons/ps1godot/.generated/ids.json`
-      for cross-tool ID lookups.
-- [ ] **B2. Asset metadata panel** — per-object custom properties
-      under `ps1godot.*` namespace (`AssetId`, `MeshId`, `ChunkId`,
-      `MeshRole`, `ExportMode`, `DrawPhase`, `ShadingMode`,
-      `AlphaMode`, `CollisionLayer`). Stable across rename + re-import.
-- [ ] **B3. Mesh validation panel** — vertex / triangle / material
-      counts, UV bounds, vertex-color presence, estimated binary
-      size, index format warnings. Mirrors the Godot-side `MeshLinter`.
+- [x] **B1. Add-on skeleton + project settings panel** *(2026-04-27)* —
+      `tools/blender-addon/ps1godot_blender/` ships with bl_info,
+      register/unregister via `register_classes_factory`, Project
+      panel exposing project root + output subdir + default
+      `ChunkId` / `DiscId` + metadata version. Verified green against
+      Blender 5.0.0 via `tools/blender-addon/test_register.py`.
+- [x] **B2. Asset metadata panel** *(2026-04-27)* — per-object
+      `PS1GodotObjectProps` PointerProperty under `Object.ps1godot`
+      with the full Slot C enum set (`MeshRole`, `ExportMode`,
+      `DrawPhase`, `ShadingMode`, `AlphaMode`, `CollisionLayer`) plus
+      stable IDs (`asset_id`, `mesh_id`, `chunk_id`, `region_id`,
+      `area_archive_id`). Per-material panel with `texture_page_id`,
+      `clut_id`, `palette_group`, `atlas_group`, `texture_format`,
+      `force_no_filter`, `approved_16bpp`.
+- [x] **B2.5. JSON sidecar export** *(2026-04-27)* — Phase 2 of the
+      integration plan. `PS1GODOT_OT_export_metadata` writes one
+      `<mesh_id>.ps1meshmeta.json` per tagged Object under
+      `<project_root>/<output_subdir>/`. Auto-generates +
+      persists-back `asset_id` (UUID hex) + `mesh_id` (slugified)
+      per the round-trip rule. Schema versioned via
+      `ps1godot_metadata_version`. **Godot-side reader still pending**
+      — gated on Slot C metadata enums landing on `PS1MeshInstance`
+      (currently nowhere to store the imported `MeshRole` etc.).
+- [x] **B3. Mesh validation (Phase 1 ruleset)** *(2026-04-27)* —
+      `PS1GODOT_OT_validate_scene` mirrors the Godot-side validators:
+      duplicate IDs, no-UV-with-materials, far-OOB UVs, missing
+      vertex colors, >4 materials, DynamicRigid+MergeStatic,
+      >1000 tris, missing texture_page_id, unapproved 16bpp,
+      >256 px sources. Phase 3 (full vertex-format / index-format /
+      atlas-usage deep-dive) still pending.
 - [ ] **B4. Vertex-color bake helpers** — directional light, ambient
       tint, height gradient, radial fake light, darken-by-normal.
       Pairs with the Phase 2.5 lighting tier system.
