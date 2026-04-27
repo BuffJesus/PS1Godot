@@ -80,6 +80,36 @@ public partial class PS1MeshInstance : MeshInstance3D
     // not done here. Use the flag knowingly.
     [Export] public bool TilingUV { get; set; } = false;
 
+    // ── Slot C metadata (round-trip with Blender add-on) ────────────
+    //
+    // These fields mirror tools/blender-addon/.../properties.py per-
+    // object enums verbatim and are the contract for the Phase 2 JSON
+    // sidecar reader. Defaults are picked so existing scenes don't
+    // break: StaticWorld + MergeStatic + OpaqueStatic match what the
+    // exporter has been doing implicitly all along. Today these fields
+    // are recorded but don't change runtime behavior; Slot D
+    // render-group batching + the sidecar reader consume them.
+    //
+    // Don't rename the enum members — they ARE the wire identifiers
+    // (see exporter/PS1Metadata.cs).
+    [ExportGroup("PS1 / Metadata")]
+    [Export] public MeshRole MeshRole { get; set; } = MeshRole.StaticWorld;
+    [Export] public ExportMode ExportMode { get; set; } = ExportMode.MergeStatic;
+    [Export] public DrawPhase DrawPhase { get; set; } = DrawPhase.OpaqueStatic;
+    [Export] public ShadingMode ShadingMode { get; set; } = ShadingMode.FlatColor;
+    [Export] public AlphaMode AlphaMode { get; set; } = AlphaMode.Opaque;
+    [Export] public AtlasGroup AtlasGroup { get; set; } = AtlasGroup.World;
+    [Export] public Residency Residency { get; set; } = Residency.Scene;
+
+    // Stable IDs — auto-populated by Phase 2 sidecar reader. Empty
+    // strings until the Blender import runs; downstream code falls
+    // back to node Name.
+    [Export] public string AssetId { get; set; } = "";
+    [Export] public string MeshId { get; set; } = "";
+    [Export] public string ChunkId { get; set; } = "";
+    [Export] public string RegionId { get; set; } = "";
+    [Export] public string AreaArchiveId { get; set; } = "";
+
     [ExportGroup("PS1 / Interactable")]
     // When true, the runtime treats this mesh as an interactable. Pressing
     // InteractButton within InteractionRadiusMeters fires onInteract on

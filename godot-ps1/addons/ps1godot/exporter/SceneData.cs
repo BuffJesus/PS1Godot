@@ -43,6 +43,30 @@ public sealed class SceneObject
     // it via GameObject.isTranslucent() and switches setOpaque →
     // setSemiTrans on the textured tri emit.
     public bool Translucent { get; set; } = false;
+
+    // ── Slot C metadata (round-trip with Blender) ────────────────────
+    //
+    // Captured by SceneCollector from PS1MeshInstance / PS1MeshGroup
+    // [Export] properties (which can in turn be populated by the Phase
+    // 2 sidecar reader). Today these flow through to the export-time
+    // logs / validators; Slot D render-group batching reads them to
+    // bucket meshes by (DrawPhase, AtlasGroup, ShadingMode).
+    //
+    // Stable IDs (AssetId/MeshId/ChunkId/...) round-trip Blender →
+    // Godot → splashpack so save data and dialogue can reference
+    // assets by string handle without depending on tree-position.
+    public MeshRole MeshRole { get; set; } = MeshRole.StaticWorld;
+    public ExportMode ExportMode { get; set; } = ExportMode.MergeStatic;
+    public DrawPhase DrawPhase { get; set; } = DrawPhase.OpaqueStatic;
+    public ShadingMode ShadingMode { get; set; } = ShadingMode.FlatColor;
+    public AlphaMode AlphaMode { get; set; } = AlphaMode.Opaque;
+    public AtlasGroup AtlasGroup { get; set; } = AtlasGroup.World;
+    public Residency Residency { get; set; } = Residency.Scene;
+    public string AssetId { get; set; } = "";
+    public string MeshId { get; set; } = "";
+    public string ChunkId { get; set; } = "";
+    public string RegionId { get; set; } = "";
+    public string AreaArchiveId { get; set; } = "";
 }
 
 // One entry in the splashpack's lua-file table. Runtime v20 (full-parser

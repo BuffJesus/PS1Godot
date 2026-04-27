@@ -170,6 +170,12 @@ def main() -> int:
                         _info(f"sidecar at {expected} has expected shape "
                               f"(asset_id={payload['asset_id'][:8]}…, "
                               f"materials={len(payload['materials'])})")
+                        # Dump the wire format so Godot-side reader
+                        # tweaks can spot-check against a known sample.
+                        _info("--- sidecar wire format ---")
+                        for line in json.dumps(payload, indent=2).splitlines():
+                            _info(line)
+                        _info("--- end sidecar ---")
         except Exception:
             _err("export_metadata raised:")
             traceback.print_exc()

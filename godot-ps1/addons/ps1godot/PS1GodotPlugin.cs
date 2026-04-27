@@ -28,6 +28,13 @@ public partial class PS1GodotPlugin : EditorPlugin
     private const string RegenLuaStubsMenuLabel = "PS1Godot: Regenerate Lua API stubs";
     private const string RunStubGenTestsMenuLabel = "PS1Godot: Run Lua API Stub Generator Tests";
     private const string FrameModelMenuLabel = "PS1Godot: Frame Selected Model in Viewport";
+    private const string ApplyBlenderMetadataMenuLabel = "PS1Godot: Apply Blender Metadata Sidecars";
+
+    // Default sidecar dir matches the Blender add-on default
+    // (tools/blender-addon/.../properties.py: "ps1godot_assets/blender_sources").
+    // Authors who relocate it on the Blender side should pass their
+    // override via OnApplyBlenderMetadata's argument once we add UI.
+    private const string DefaultBlenderSidecarDir = "res://ps1godot_assets/blender_sources/";
 
     private PS1TriggerBoxGizmo? _triggerBoxGizmo;
     private PS1GodotDock? _dock;
@@ -51,6 +58,7 @@ public partial class PS1GodotPlugin : EditorPlugin
         AddToolMenuItem(RegenLuaStubsMenuLabel, Callable.From(OnRegenLuaStubs));
         AddToolMenuItem(RunStubGenTestsMenuLabel, Callable.From(OnRunStubGenTests));
         AddToolMenuItem(FrameModelMenuLabel, Callable.From(OnFrameSelectedModel));
+        AddToolMenuItem(ApplyBlenderMetadataMenuLabel, Callable.From(OnApplyBlenderMetadata));
 
         _triggerBoxGizmo = new PS1TriggerBoxGizmo();
         AddNode3DGizmoPlugin(_triggerBoxGizmo);
@@ -147,6 +155,7 @@ public partial class PS1GodotPlugin : EditorPlugin
         RemoveToolMenuItem(GenerateFontBitmapMenuLabel);
         RemoveToolMenuItem(RunMidiTestsMenuLabel);
         RemoveToolMenuItem(FrameModelMenuLabel);
+        RemoveToolMenuItem(ApplyBlenderMetadataMenuLabel);
 
         SceneChanged -= OnSceneChanged;
         EditorInterface.Singleton.GetSelection().SelectionChanged -= OnEditorSelectionChanged;
@@ -905,6 +914,44 @@ public partial class PS1GodotPlugin : EditorPlugin
         float pct = 100.0f * totalVram / VramBudgetBytes;
         GD.Print($"[PS1Godot] Summary: {ok} OK, {warn} WARN, {fail} FAIL. " +
                  $"Estimated VRAM {totalVram}B / {VramBudgetBytes}B ({pct:F1}% of budget).");
+    }
+
+    // ── Slot C / Phase 2: apply Blender JSON sidecars to the open scene ─
+    //
+    // Reads `<mesh_id>.ps1meshmeta.json` files from the conventional
+    // sidecar directory and applies their metadata (MeshRole / DrawPhase /
+    // ShadingMode / AlphaMode / AtlasGroup / Residency / stable IDs) to
+    // matching PS1MeshInstance / PS1MeshGroup nodes in the active scene.
+    //
+    // Author trigger only — never silently mutates scene state. Author
+    // saves the .tscn afterwards to persist; round-trip back to Blender
+    // happens via the Phase 8 export-back operator (not yet shipped).
+    private void OnApplyBlenderMetadata()
+    {
+        var sceneRoot = EditorInterface.Singleton.GetEditedSceneRoot();
+        if (sceneRoot == null)
+        {
+            GD.PushError("[PS1Godot] No scene open — open a .tscn before applying Blender metadata.");
+            return;
+        }
+
+        string sidecarDir = ProjectSettings.GlobalizePath(DefaultBlenderSidecarDir);
+        GD.Print($"[PS1Godot] Applying Blender sidecars from {sidecarDir}…");
+
+        var result = Exporter.BlenderMetadataReader.Apply(sidecarDir, sceneRoot);
+
+        GD.Print(
+            $"[PS1Godot] Sidecars: found={result.SidecarsFound}, " +
+            $"applied={result.Applied}, unmatched={result.Unmatched}, " +
+            $"version-skipped={result.VersionSkip}, parse-error={result.ParseError}.");
+        foreach (var name in result.UnmatchedNames)
+        {
+            GD.PushWarning($"[PS1Godot]   unmatched sidecar: {name}");
+        }
+        if (result.Applied > 0)
+        {
+            GD.Print("[PS1Godot] Save the .tscn to persist the new metadata.");
+        }
     }
 }
 #endif

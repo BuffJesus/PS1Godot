@@ -457,6 +457,20 @@ public static class SceneCollector
                 Tag = (ushort)Mathf.Clamp(pmi.Tag, 0, 65535),
                 StartsInactive = pmi.StartsInactive,
                 Translucent = pmi.Translucent,
+                // Slot C metadata — round-trips with Blender side via
+                // tools/blender-addon/.../properties.py + Phase 2 sidecars.
+                MeshRole       = pmi.MeshRole,
+                ExportMode     = pmi.ExportMode,
+                DrawPhase      = pmi.DrawPhase,
+                ShadingMode    = pmi.ShadingMode,
+                AlphaMode      = pmi.AlphaMode,
+                AtlasGroup     = pmi.AtlasGroup,
+                Residency      = pmi.Residency,
+                AssetId        = pmi.AssetId,
+                MeshId         = pmi.MeshId,
+                ChunkId        = pmi.ChunkId,
+                RegionId       = pmi.RegionId,
+                AreaArchiveId  = pmi.AreaArchiveId,
             });
 
             EmitCollisionFor(pmi, objectIndex, data);
@@ -714,6 +728,19 @@ public static class SceneCollector
             Tag = (ushort)Mathf.Clamp(group.Tag, 0, 65535),
             StartsInactive = group.StartsInactive,
             Translucent = group.Translucent,
+            // Slot C metadata — see PS1MeshInstance equivalent above.
+            MeshRole       = group.MeshRole,
+            ExportMode     = group.ExportMode,
+            DrawPhase      = group.DrawPhase,
+            ShadingMode    = group.ShadingMode,
+            AlphaMode      = group.AlphaMode,
+            AtlasGroup     = group.AtlasGroup,
+            Residency      = group.Residency,
+            AssetId        = group.AssetId,
+            MeshId         = group.MeshId,
+            ChunkId        = group.ChunkId,
+            RegionId       = group.RegionId,
+            AreaArchiveId  = group.AreaArchiveId,
         });
 
         GD.Print(

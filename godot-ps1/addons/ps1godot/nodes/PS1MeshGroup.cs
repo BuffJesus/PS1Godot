@@ -83,6 +83,24 @@ public partial class PS1MeshGroup : Node3D
     // mistexture isn't visible at PSX resolution).
     [Export] public bool TilingUV { get; set; } = false;
 
+    // ── Slot C metadata (round-trip with Blender add-on) ────────────
+    // Same vocabulary as PS1MeshInstance — see that node + exporter/
+    // PS1Metadata.cs for the wire-identifier-stability contract.
+    [ExportGroup("PS1 / Metadata")]
+    [Export] public MeshRole MeshRole { get; set; } = MeshRole.StaticWorld;
+    [Export] public ExportMode ExportMode { get; set; } = ExportMode.MergeStatic;
+    [Export] public DrawPhase DrawPhase { get; set; } = DrawPhase.OpaqueStatic;
+    [Export] public ShadingMode ShadingMode { get; set; } = ShadingMode.FlatColor;
+    [Export] public AlphaMode AlphaMode { get; set; } = AlphaMode.Opaque;
+    [Export] public AtlasGroup AtlasGroup { get; set; } = AtlasGroup.World;
+    [Export] public Residency Residency { get; set; } = Residency.Scene;
+
+    [Export] public string AssetId { get; set; } = "";
+    [Export] public string MeshId { get; set; } = "";
+    [Export] public string ChunkId { get; set; } = "";
+    [Export] public string RegionId { get; set; } = "";
+    [Export] public string AreaArchiveId { get; set; } = "";
+
     [ExportGroup("PS1 / Naming")]
     // Exported GameObject name. Empty → falls back to the node's own Name,
     // which is what most scenes want. Set explicitly only when you need
