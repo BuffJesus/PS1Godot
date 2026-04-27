@@ -216,14 +216,4 @@ class PS1GODOT_OT_validate_scene(bpy.types.Operator):
                     )
 
 
-_classes = (PS1GODOT_OT_validate_scene,)
-
-
-def register():
-    for c in _classes:
-        bpy.utils.register_class(c)
-
-
-def unregister():
-    for c in reversed(_classes):
-        bpy.utils.unregister_class(c)
+register, unregister = bpy.utils.register_classes_factory((PS1GODOT_OT_validate_scene,))

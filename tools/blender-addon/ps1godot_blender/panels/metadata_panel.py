@@ -106,17 +106,7 @@ class PS1GODOT_PT_material_metadata(bpy.types.Panel):
         row.prop(props, "approved_16bpp", toggle=True)
 
 
-_classes = (
+register, unregister = bpy.utils.register_classes_factory((
     PS1GODOT_PT_object_metadata,
     PS1GODOT_PT_material_metadata,
-)
-
-
-def register():
-    for c in _classes:
-        bpy.utils.register_class(c)
-
-
-def unregister():
-    for c in reversed(_classes):
-        bpy.utils.unregister_class(c)
+))

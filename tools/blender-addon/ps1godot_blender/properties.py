@@ -255,6 +255,14 @@ class PS1GodotMaterialProps(bpy.types.PropertyGroup):
 
 
 # ── Registration ────────────────────────────────────────────────────
+#
+# We use bpy.utils.register_classes_factory (the canonical Blender
+# pattern, see scripts/addons_core/hydra_storm/properties.py) to
+# generate matched register() / unregister() functions. The
+# PointerProperty attachments to bpy.types.Scene / Object / Material
+# happen inside register() / unregister() right after the factory call
+# so the typed PointerProperty can resolve the just-registered
+# PropertyGroup classes.
 
 _classes = (
     PS1GodotSceneProps,
@@ -262,40 +270,32 @@ _classes = (
     PS1GodotMaterialProps,
 )
 
+_register_classes, _unregister_classes = bpy.utils.register_classes_factory(_classes)
+
+
+# (host, attribute) pairs the addon installs on Blender data types.
+_pointer_targets = (
+    (bpy.types.Scene,    "ps1godot", PS1GodotSceneProps),
+    (bpy.types.Object,   "ps1godot", PS1GodotObjectProps),
+    (bpy.types.Material, "ps1godot", PS1GodotMaterialProps),
+)
+
 
 def register():
-    for c in _classes:
-        bpy.utils.register_class(c)
+    _register_classes()
+    for host, attr, prop_type in _pointer_targets:
+        setattr(host, attr, PointerProperty(type=prop_type))
 
 
 def unregister():
-    for c in reversed(_classes):
-        bpy.utils.unregister_class(c)
-
-
-def attach_pointers():
-    """Attach the PropertyGroups to their host types after registration.
-
-    Run from the package __init__'s register() once classes are live.
-    Done as a separate pass so the typed PointerProperty can resolve the
-    PropertyGroup classes that were just registered.
-    """
-    bpy.types.Scene.ps1godot = PointerProperty(type=PS1GodotSceneProps)
-    bpy.types.Object.ps1godot = PointerProperty(type=PS1GodotObjectProps)
-    bpy.types.Material.ps1godot = PointerProperty(type=PS1GodotMaterialProps)
-
-
-def detach_pointers():
-    # Guard each delete: hot-reload during development can leave the
-    # pointers in inconsistent shapes; we'd rather silently move on
-    # than block re-registration.
-    for host, attr in (
-        (bpy.types.Scene, "ps1godot"),
-        (bpy.types.Object, "ps1godot"),
-        (bpy.types.Material, "ps1godot"),
-    ):
+    # Detach pointers in reverse so the host types are clean before the
+    # PropertyGroup classes themselves go away. Guard each delete: hot-
+    # reload during development can leave the pointers in inconsistent
+    # shapes; we'd rather silently move on than block re-registration.
+    for host, attr, _prop_type in reversed(_pointer_targets):
         if hasattr(host, attr):
             try:
                 delattr(host, attr)
             except (AttributeError, RuntimeError):
                 pass
+    _unregister_classes()

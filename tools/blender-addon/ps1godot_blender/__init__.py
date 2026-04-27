@@ -41,13 +41,16 @@ bl_info = {
     "tracker_url": "",
 }
 
-import bpy
-
 from . import properties
 from .panels import project_panel, metadata_panel
 from .operators import validate_scene
 
-# Order matters: properties must register before panels that draw them.
+# Each module exposes a matching register() / unregister() pair built
+# via bpy.utils.register_classes_factory. Order matters here:
+#   1. properties — PropertyGroups + PointerProperty installation;
+#   2. operators  — referenced by panels via bl_idname strings;
+#   3. panels     — draw functions read the PropertyGroups installed
+#                   in step 1, so they must register last.
 _modules = (
     properties,
     validate_scene,
@@ -59,12 +62,11 @@ _modules = (
 def register():
     for m in _modules:
         m.register()
-    properties.attach_pointers()
 
 
 def unregister():
-    properties.detach_pointers()
-    # Reverse registration order so PropertyGroup teardown happens last.
+    # Reverse registration order so panels detach before the
+    # PropertyGroups they read, and PropertyGroups detach last.
     for m in reversed(_modules):
         m.unregister()
 
