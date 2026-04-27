@@ -77,6 +77,19 @@ public static class MidiParser
         public int  Track { get; init; }
     }
 
+    // 0xE0 pitch bend. 14-bit unsigned value (LSB | MSB << 7), 0x2000
+    // = center (no bend), 0 = -2 semitones, 0x3FFF = +2 semitones at
+    // MIDI's default bend range. PS2M serializes these as kind=5 events
+    // with data1 = LSB, data2 = MSB; the runtime applies them on top of
+    // the note-derived sample rate.
+    public readonly struct MidiPitchBendEvent
+    {
+        public uint AbsoluteTick { get; init; }
+        public byte Channel { get; init; }
+        public ushort Value14 { get; init; }   // 0..0x3FFF
+        public int  Track { get; init; }
+    }
+
     // Loop bracket markers parsed from meta-events 0x06 (Marker) and
     // 0x07 (Cue Point) when their text payload matches "loopStart" or
     // "loopEnd" (case-insensitive, leading/trailing whitespace ignored).
@@ -105,6 +118,7 @@ public static class MidiParser
         public List<MidiNoteEvent> Notes { get; init; } = new();
         public List<MidiTempoEvent> Tempos { get; init; } = new();
         public List<MidiProgramChangeEvent> ProgramChanges { get; init; } = new();
+        public List<MidiPitchBendEvent> PitchBends { get; init; } = new();
         public List<MidiMarkerEvent> Markers { get; init; } = new();
         public SkippedEventCounts SkippedCounts { get; init; } = new();
     }
@@ -138,6 +152,7 @@ public static class MidiParser
         var notes = new List<MidiNoteEvent>();
         var tempos = new List<MidiTempoEvent>();
         var programChanges = new List<MidiProgramChangeEvent>();
+        var pitchBends = new List<MidiPitchBendEvent>();
         var markers = new List<MidiMarkerEvent>();
         var skipped = new SkippedEventCounts();
 
@@ -153,7 +168,7 @@ public static class MidiParser
             }
             uint trackLen = ReadU32BE(r);
             long trackEnd = r.BaseStream.Position + trackLen;
-            ParseTrack(r, trackEnd, notes, tempos, programChanges, markers, skipped, t);
+            ParseTrack(r, trackEnd, notes, tempos, programChanges, pitchBends, markers, skipped, t);
         }
 
         // Sort events by absolute tick (format 1 tracks started at 0 each).
@@ -182,6 +197,7 @@ public static class MidiParser
         // Sort program changes by tick so the serializer can interleave
         // them with notes in tick order without an extra merge step.
         programChanges = programChanges.OrderBy(p => p.AbsoluteTick).ToList();
+        pitchBends = pitchBends.OrderBy(p => p.AbsoluteTick).ToList();
         markers = markers.OrderBy(m => m.AbsoluteTick).ThenBy(m => (int)m.Kind).ToList();
 
         return new ParsedMidi
@@ -191,6 +207,7 @@ public static class MidiParser
             Notes = notes,
             Tempos = tempos,
             ProgramChanges = programChanges,
+            PitchBends = pitchBends,
             Markers = markers,
             SkippedCounts = skipped,
         };
@@ -200,6 +217,7 @@ public static class MidiParser
                                     List<MidiNoteEvent> notes,
                                     List<MidiTempoEvent> tempos,
                                     List<MidiProgramChangeEvent> programChanges,
+                                    List<MidiPitchBendEvent> pitchBends,
                                     List<MidiMarkerEvent> markers,
                                     SkippedEventCounts skipped,
                                     int trackIndex)
@@ -336,10 +354,24 @@ public static class MidiParser
                         r.ReadByte(); r.ReadByte();
                         skipped.Controller++;
                         break;
-                    case 0xE0: // Pitch bend — skip, 2 data bytes
-                        r.ReadByte(); r.ReadByte();
+                    case 0xE0: // Pitch bend. data1 = LSB (0-127), data2 = MSB
+                               // (0-127). Combined 14-bit value: (MSB << 7) | LSB.
+                               // 0x2000 = center (no bend). Preserved into the
+                               // parsed model; serialised as kind=5 in PS2M.
+                    {
+                        byte lsb = r.ReadByte();
+                        byte msb = r.ReadByte();
+                        ushort value14 = (ushort)(((msb & 0x7F) << 7) | (lsb & 0x7F));
+                        pitchBends.Add(new MidiPitchBendEvent
+                        {
+                            AbsoluteTick = absTick,
+                            Channel = channel,
+                            Value14 = value14,
+                            Track = trackIndex,
+                        });
                         skipped.PitchBend++;
                         break;
+                    }
                     case 0xC0: // Program change — preserve into the
                                // parsed model; serialised as event
                                // kind=4 (PS2M only) so the runtime

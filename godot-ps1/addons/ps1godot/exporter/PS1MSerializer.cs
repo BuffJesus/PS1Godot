@@ -299,12 +299,37 @@ public static class PS1MSerializer
             }
         }
 
-        // Re-sort if we injected anything, so kind=4/9/10 events
+        // Inject pitch-bend events as kind=5. Like ProgramChange, one
+        // source MIDI event on channel C fans out to one event per
+        // binding listening on C — runtime channels are 0..N-1 and
+        // each binding's pitchBend state is tracked separately.
+        // data1 = bend14 LSB, data2 = bend14 MSB. Works for both PS1M
+        // and PS2M; older runtimes default-skip kind=5.
+        bool injectedPitchBends = false;
+        if (midi.PitchBends != null && midi.PitchBends.Count > 0)
+        {
+            foreach (var pb in midi.PitchBends)
+            {
+                for (int i = 0; i < bindings.Count; i++)
+                {
+                    if (bindings[i].MidiChannel != pb.Channel) continue;
+                    if (bindings[i].MidiTrackIndex >= 0
+                        && bindings[i].MidiTrackIndex != pb.Track) continue;
+                    byte lsb = (byte)(pb.Value14 & 0x7F);
+                    byte msb = (byte)((pb.Value14 >> 7) & 0x7F);
+                    events.Add(EncodeEvent(Rescale(pb.AbsoluteTick), (byte)i, (byte)5, lsb, msb));
+                    injectedPitchBends = true;
+                }
+            }
+        }
+
+        // Re-sort if we injected anything, so kind=4/5/9/10 events
         // interleave correctly with notes. Decode each event's first
         // 4 bytes as little-endian tick. Stable sort preserves
         // declaration order at ties so NoteOff-before-NoteOn (same
         // tick) is preserved.
         bool injectedAnything = injectedLoopEvents
+            || injectedPitchBends
             || (emitPS2M && programChanges != null && programChanges.Count > 0);
         if (injectedAnything)
         {
