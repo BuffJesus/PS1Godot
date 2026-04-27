@@ -77,6 +77,27 @@ public static class MidiParser
         public int  Track { get; init; }
     }
 
+    // Loop bracket markers parsed from meta-events 0x06 (Marker) and
+    // 0x07 (Cue Point) when their text payload matches "loopStart" or
+    // "loopEnd" (case-insensitive, leading/trailing whitespace ignored).
+    // This is the convention used by FFXIV PSF, RPG Maker MZ exports,
+    // and most game-music workflows. Other marker text is preserved on
+    // the same list with Kind=Other so the exporter can surface it as
+    // a diagnostic.
+    public enum MidiMarkerKind
+    {
+        Other,
+        LoopStart,
+        LoopEnd,
+    }
+
+    public readonly struct MidiMarkerEvent
+    {
+        public uint AbsoluteTick { get; init; }
+        public MidiMarkerKind Kind { get; init; }
+        public string Text { get; init; }
+    }
+
     public sealed class ParsedMidi
     {
         public int TicksPerQuarter { get; init; }
@@ -84,6 +105,7 @@ public static class MidiParser
         public List<MidiNoteEvent> Notes { get; init; } = new();
         public List<MidiTempoEvent> Tempos { get; init; } = new();
         public List<MidiProgramChangeEvent> ProgramChanges { get; init; } = new();
+        public List<MidiMarkerEvent> Markers { get; init; } = new();
         public SkippedEventCounts SkippedCounts { get; init; } = new();
     }
 
@@ -116,6 +138,7 @@ public static class MidiParser
         var notes = new List<MidiNoteEvent>();
         var tempos = new List<MidiTempoEvent>();
         var programChanges = new List<MidiProgramChangeEvent>();
+        var markers = new List<MidiMarkerEvent>();
         var skipped = new SkippedEventCounts();
 
         for (int t = 0; t < trackCount; t++)
@@ -130,7 +153,7 @@ public static class MidiParser
             }
             uint trackLen = ReadU32BE(r);
             long trackEnd = r.BaseStream.Position + trackLen;
-            ParseTrack(r, trackEnd, notes, tempos, programChanges, skipped, t);
+            ParseTrack(r, trackEnd, notes, tempos, programChanges, markers, skipped, t);
         }
 
         // Sort events by absolute tick (format 1 tracks started at 0 each).
@@ -159,6 +182,7 @@ public static class MidiParser
         // Sort program changes by tick so the serializer can interleave
         // them with notes in tick order without an extra merge step.
         programChanges = programChanges.OrderBy(p => p.AbsoluteTick).ToList();
+        markers = markers.OrderBy(m => m.AbsoluteTick).ThenBy(m => (int)m.Kind).ToList();
 
         return new ParsedMidi
         {
@@ -167,6 +191,7 @@ public static class MidiParser
             Notes = notes,
             Tempos = tempos,
             ProgramChanges = programChanges,
+            Markers = markers,
             SkippedCounts = skipped,
         };
     }
@@ -175,6 +200,7 @@ public static class MidiParser
                                     List<MidiNoteEvent> notes,
                                     List<MidiTempoEvent> tempos,
                                     List<MidiProgramChangeEvent> programChanges,
+                                    List<MidiMarkerEvent> markers,
                                     SkippedEventCounts skipped,
                                     int trackIndex)
     {
@@ -215,6 +241,23 @@ public static class MidiParser
                     byte b2 = r.ReadByte();
                     uint mpq = ((uint)b0 << 16) | ((uint)b1 << 8) | b2;
                     tempos.Add(new MidiTempoEvent { AbsoluteTick = absTick, MicrosPerQuarter = mpq });
+                }
+                else if ((metaType == 0x06 || metaType == 0x07) && metaLen > 0 && metaLen < 256)
+                {
+                    // Marker (0x06) and Cue Point (0x07) carry ASCII text.
+                    // Game-music tooling (FFXIV PSF, RPG Maker exports,
+                    // most DAW marker tracks) uses "loopStart"/"loopEnd"
+                    // here to bracket the looping body. We classify the
+                    // text and let the serializer turn matched markers
+                    // into PS2M kind=9/10 events.
+                    byte[] textBytes = r.ReadBytes((int)metaLen);
+                    string text = Encoding.ASCII.GetString(textBytes).Trim();
+                    MidiMarkerKind kind = MidiMarkerKind.Other;
+                    if (string.Equals(text, "loopStart", StringComparison.OrdinalIgnoreCase))
+                        kind = MidiMarkerKind.LoopStart;
+                    else if (string.Equals(text, "loopEnd", StringComparison.OrdinalIgnoreCase))
+                        kind = MidiMarkerKind.LoopEnd;
+                    markers.Add(new MidiMarkerEvent { AbsoluteTick = absTick, Kind = kind, Text = text });
                 }
                 r.BaseStream.Seek(metaStart + metaLen, SeekOrigin.Begin);
             }

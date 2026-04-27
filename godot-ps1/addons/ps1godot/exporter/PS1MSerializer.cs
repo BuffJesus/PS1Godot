@@ -274,11 +274,40 @@ public static class PS1MSerializer
                     events.Add(EncodeEvent(Rescale(pc.AbsoluteTick), (byte)i, (byte)4, pc.Program, 0));
                 }
             }
-            // Re-sort so kind=4 events interleave correctly with note
-            // events. Decode each event's first 4 bytes as little-
-            // endian tick, sort by that. Stable sort preserves
-            // declaration order at ties so NoteOff-before-NoteOn (same
-            // tick) is preserved.
+        }
+
+        // Inject loop-bracket events from MIDI markers/cue points
+        // tagged "loopStart"/"loopEnd" (kind=9 / kind=10). Works for
+        // both PS1M and PS2M — older runtimes silently skip unknown
+        // event kinds (default branch in MusicSequencer::dispatchEvent).
+        // Channel field is unused for these; data1/data2 reserved.
+        bool injectedLoopEvents = false;
+        if (midi.Markers != null && midi.Markers.Count > 0)
+        {
+            foreach (var m in midi.Markers)
+            {
+                if (m.Kind == MidiParser.MidiMarkerKind.LoopStart)
+                {
+                    events.Add(EncodeEvent(Rescale(m.AbsoluteTick), 0, (byte)9, 0, 0));
+                    injectedLoopEvents = true;
+                }
+                else if (m.Kind == MidiParser.MidiMarkerKind.LoopEnd)
+                {
+                    events.Add(EncodeEvent(Rescale(m.AbsoluteTick), 0, (byte)10, 0, 0));
+                    injectedLoopEvents = true;
+                }
+            }
+        }
+
+        // Re-sort if we injected anything, so kind=4/9/10 events
+        // interleave correctly with notes. Decode each event's first
+        // 4 bytes as little-endian tick. Stable sort preserves
+        // declaration order at ties so NoteOff-before-NoteOn (same
+        // tick) is preserved.
+        bool injectedAnything = injectedLoopEvents
+            || (emitPS2M && programChanges != null && programChanges.Count > 0);
+        if (injectedAnything)
+        {
             events = events
                 .Select((bytes, idx) => new { bytes, tick = (uint)(bytes[0] | (bytes[1] << 8) | (bytes[2] << 16) | (bytes[3] << 24)), idx })
                 .OrderBy(x => x.tick).ThenBy(x => x.idx)
