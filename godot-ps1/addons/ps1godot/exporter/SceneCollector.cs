@@ -163,8 +163,65 @@ public static class SceneCollector
         }
 
         ReportMeshDedupForecast(data);
+        VerifyMeshFormatRoundTrip(data);
 
         return data;
+    }
+
+    // Run the v31 vertex-pool format roundtrip check on every static
+    // mesh. Compares the legacy WriteTri output (expected) against the
+    // pooled-format output decoded back into the same per-Tri byte
+    // layout (actual). Any disagreement points to a writer or reader
+    // bug; we surface the first divergent byte + which Tri field it
+    // belongs to so we can debug deterministically without a PSX run.
+    private static void VerifyMeshFormatRoundTrip(SceneData data)
+    {
+        if (data.Objects == null || data.Objects.Count == 0) return;
+
+        // Identify skinned objects — they keep the legacy Tri[] layout
+        // and don't go through WriteStaticMeshPooled. Skip them.
+        var skinnedIndices = new System.Collections.Generic.HashSet<int>();
+        foreach (var sm in data.SkinnedMeshes) skinnedIndices.Add(sm.GameObjectIndex);
+
+        int checkedCount = 0;
+        int failureCount = 0;
+        for (int i = 0; i < data.Objects.Count; i++)
+        {
+            if (skinnedIndices.Contains(i)) continue;
+            var obj = data.Objects[i];
+            if (obj?.Mesh?.Triangles == null) continue;
+            if (obj.Mesh.Triangles.Count == 0) continue;
+            checkedCount++;
+
+            var diff = MeshFormatRoundTripVerifier.Verify(obj.Mesh, data);
+            if (diff == null) continue;
+
+            failureCount++;
+            string objName = (obj.Node != null && !string.IsNullOrEmpty(obj.Node.Name))
+                ? (string)obj.Node.Name
+                : "<unnamed>";
+            if (diff.TriIndex < 0)
+            {
+                GD.PushError(
+                    $"[PS1Godot] Mesh format roundtrip FAIL: '{objName}' length mismatch — " +
+                    $"expected {diff.ExpectedLen} B, pooled→reconstructed {diff.ActualLen} B.");
+            }
+            else
+            {
+                GD.PushError(
+                    $"[PS1Godot] Mesh format roundtrip FAIL: '{objName}' tri #{diff.TriIndex} byte {diff.ByteWithinTri} " +
+                    $"(field={diff.FieldHint}): expected 0x{diff.ExpectedByte:X2}, got 0x{diff.ActualByte:X2}.");
+            }
+        }
+
+        if (failureCount == 0)
+        {
+            GD.Print($"[PS1Godot] Mesh format roundtrip: {checkedCount}/{checkedCount} static meshes verified.");
+        }
+        else
+        {
+            GD.PushError($"[PS1Godot] Mesh format roundtrip: {failureCount}/{checkedCount} static meshes FAILED — see errors above.");
+        }
     }
 
     // Per-export forecast of how much each mesh would shrink if the

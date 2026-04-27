@@ -1957,7 +1957,7 @@ public static class SplashpackWriter
 
     // ─── Tri (52 bytes) ─────────────────────────────────────────────────
 
-    private static void WriteTri(BinaryWriter w, Tri tri, SceneData scene)
+    internal static void WriteTri(BinaryWriter w, Tri tri, SceneData scene)
     {
         long triStart = w.BaseStream.Position;
 
@@ -2114,7 +2114,7 @@ public static class SplashpackWriter
     private const int StaticVertexBytes = 12;
     private const int StaticFaceBytes   = 20;
 
-    private static void WriteStaticMeshPooled(BinaryWriter w, PSXMesh mesh, SceneData scene)
+    internal static void WriteStaticMeshPooled(BinaryWriter w, PSXMesh mesh, SceneData scene)
     {
         var keyToIndex = new Dictionary<StaticVertexKey, int>();
         var poolVerts  = new List<PSXVertex>();
