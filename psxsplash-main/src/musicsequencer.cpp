@@ -202,6 +202,8 @@ bool MusicSequencer::playByIndex(int index, uint8_t masterVolume) {
         m_channels[i].noteBaseRate = 0;
         m_channels[i].pitchBendRatio12 = 0x1000;  // no bend at sequence start
         m_channels[i].expression = 127;           // CC#11 default = no attenuation
+        m_channels[i].sustainHeld = 0;            // CC#64 default = pedal up
+        m_channels[i].noteOffPending = 0;
         // Pre-silence the voice so the next noteOn starts cleanly.
         psyqo::SPU::silenceChannels(1u << i);
     }
@@ -348,6 +350,24 @@ bool MusicSequencer::dispatchEvent(const MusicEvent &e) {
                 if (e.data1 == 7)       m_channels[e.channel].volume     = e.data2;
                 else if (e.data1 == 10) m_channels[e.channel].pan        = e.data2;
                 else if (e.data1 == 11) m_channels[e.channel].expression = e.data2;
+                else if (e.data1 == 64) {
+                    // Sustain pedal: ≥64 = down, <64 = up. On pedal
+                    // release, fire any deferred noteOff that was
+                    // queued while the pedal was held.
+                    bool down = (e.data2 >= 64);
+                    if (down) {
+                        m_channels[e.channel].sustainHeld = 1;
+                    } else {
+                        m_channels[e.channel].sustainHeld = 0;
+                        if (m_channels[e.channel].noteOffPending
+                            && m_channels[e.channel].activeVoice >= 0) {
+                            psyqo::SPU::silenceChannels(
+                                1u << m_channels[e.channel].activeVoice);
+                            m_channels[e.channel].activeVoice = -1;
+                        }
+                        m_channels[e.channel].noteOffPending = 0;
+                    }
+                }
             }
             break;
         case 8:
@@ -495,6 +515,11 @@ void MusicSequencer::noteOn(uint8_t channel, uint8_t note, uint8_t velocity) {
     m_channels[channel].activeNote    = note;
     m_channels[channel].lastClipIndex = (uint8_t)clipIdx;
     m_channels[channel].noteBaseRate  = noteBaseRate;
+    // Mono-per-channel: this note replaces whatever was previously
+    // held, so any CC#64-deferred noteOff on the prior note is no
+    // longer meaningful. Clear it so a later pedal release doesn't
+    // silence the freshly-triggered note.
+    m_channels[channel].noteOffPending = 0;
 }
 
 void MusicSequencer::dispatchPitchBend(uint8_t channel, uint8_t lsb, uint8_t msb) {
@@ -527,6 +552,13 @@ void MusicSequencer::noteOff(uint8_t channel, uint8_t note) {
     // Only key-off if the held note matches — note-off events for
     // notes already replaced by a subsequent note-on are no-ops.
     if (m_channels[channel].activeNote != note) return;
+    // CC#64 sustain pedal: defer the silence while the pedal is
+    // held. The deferred off fires on pedal release (or is cleared
+    // by the next noteOn replacing the held note).
+    if (m_channels[channel].sustainHeld) {
+        m_channels[channel].noteOffPending = 1;
+        return;
+    }
     psyqo::SPU::silenceChannels(1u << m_channels[channel].activeVoice);
     m_channels[channel].activeVoice = -1;
 }

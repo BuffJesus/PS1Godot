@@ -220,6 +220,14 @@ private:
         // alongside CC#7 ChannelVolume. Like CC#7, applies at the
         // next noteOn (no live retune of held notes).
         uint8_t expression;
+        // CC#64 Sustain pedal. While sustainHeld, noteOff events on
+        // this channel set noteOffPending instead of silencing — the
+        // held note rings until the pedal releases. A subsequent
+        // noteOn clears noteOffPending (the new note implicitly
+        // replaces the held one in mono-per-channel dispatch). Pedal
+        // release fires the deferred silence if pending.
+        uint8_t sustainHeld;
+        uint8_t noteOffPending;
         // Pre-bend SPU rate of the currently-held note, captured at noteOn
         // after the note→base pitch shift. kind=5 (PitchBend) re-multiplies
         // this by pitchBendRatio12 / 4096 instead of re-running the shift,

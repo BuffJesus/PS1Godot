@@ -340,25 +340,36 @@ top of PS1M2; defer.
   birthday-paradox collisions become likely — rename one if a
   collision turns up; no runtime collision check. No format bump.
 
-- **Phase 2.6 — CC#11 expression** (this commit, runtime only):
-  adds `expression` byte to `ChannelState` (default 127 = no
-  attenuation, reset on `playByIndex`). Wire-format unchanged —
+- **Phase 2.6 — CC#11 expression** (commit `c6412d3`, runtime
+  only): adds `expression` byte to `ChannelState` (default 127 =
+  no attenuation, reset on `playByIndex`). Wire-format unchanged —
   CC#11 already serialized as kind=7 since the controller
   rollout. Dispatch case 7 routes data1=11 → state. The noteOn
   volume formula folds expression in alongside CC#7 volume:
   `combined = volume × velocity × expression × region × master`,
   each /127. Like CC#7 / CC#10, applies at next noteOn only — no
   live retune of held notes.
+- **Phase 2.6 — CC#64 sustain pedal** (this commit, runtime
+  only): adds `sustainHeld` + `noteOffPending` bytes to
+  `ChannelState` (both default 0, reset on `playByIndex`).
+  Dispatch case 7 routes data1=64 → ≥64 sets sustainHeld; <64
+  releases and fires any deferred noteOff. `noteOff` defers the
+  SPU silence by setting `noteOffPending` while sustainHeld;
+  pedal release fires the silence. `noteOn` clears
+  `noteOffPending` because mono-per-channel dispatch means a new
+  note replaces the held one — the deferred off no longer
+  applies.
 
 ## What to ship next
 
 Phase 2.6 is effectively complete: every reserved event kind
 (4 ProgramChange, 5 PitchBend, 7 Controller, 8 Marker, 9/10
-LoopStart/End) is now end-to-end, and drum-kit choke groups
-ship. Optional polish that doesn't gate further phases:
+LoopStart/End) is now end-to-end, drum-kit choke groups ship,
+and the kind=7 whitelist covers CC#7/CC#10/CC#11/CC#64. Optional
+polish that doesn't gate further phases:
 - Extend the kind=7 whitelist to CC#1 (modulation — needs an
-  LFO + per-tick voice retune) and CC#64 (sustain pedal — needs
-  deferred noteOff release).
+  LFO + per-tick voice retune; substantially more infrastructure
+  than the volume / pan / sustain handlers).
 - Wire per-drum priority once a global voice allocator with
   stealing exists (Phase 4 territory — today every music channel
   has a dedicated reserved voice, so priority has nothing to do).
