@@ -284,12 +284,25 @@ top of PS1M2; defer.
   unknown event kinds were already default-skipped, so older
   runtimes load and play marker-tagged sequences unchanged (just
   without the loop-back).
+- **Phase 2.6 — pitch bend** (commit `aabeeb7` Godot side, runtime
+  in this commit): MIDI pitch-bend events parsed by `MidiParser`
+  and emitted as PS2M event kind=5 with `data1 = LSB`,
+  `data2 = MSB` of the 14-bit value (0x2000 = center). Runtime
+  side adds per-channel `pitchBendRatio12` (fp12 ratio, persists
+  across notes) + `noteBaseRate` (pre-bend SPU rate captured at
+  noteOn). `bendRatio12From14` linearly interpolates the existing
+  `pitchForOffset` table between adjacent semitone slots; default
+  ±2-semitone range. `dispatchPitchBend` updates the channel
+  state and live-retunes the SPU voice if a note is currently
+  held. Percussion channels skip bend application (meaningless
+  for hi-hats/snares, and would drift the sample's natural
+  pitch). No format bump — kind=5 is recognised by older runtimes
+  via the default-skip on unknown kinds.
 
 ## What to ship next
 
-Phase 2.6 follow-ups: PitchBend (kind=5), Controller (kind=7), and
-Marker-as-other-text (kind=8) event kinds. Runtime drum-kit dispatch
-(today kits expand to bindings at export, but choke groups + per-drum
-priority on `PS1DrumKit` are runtime-driven by design and need a
-voice-scanner that watches active music voices for matching choke
-groups).
+Phase 2.6 follow-ups: Controller (kind=7) and Marker-as-other-text
+(kind=8) event kinds. Runtime drum-kit dispatch (today kits expand
+to bindings at export, but choke groups + per-drum priority on
+`PS1DrumKit` are runtime-driven by design and need a voice-scanner
+that watches active music voices for matching choke groups).

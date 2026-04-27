@@ -197,6 +197,8 @@ bool MusicSequencer::playByIndex(int index, uint8_t masterVolume) {
             ? m_active->channelPrograms[i]
             : (uint8_t)0;
         m_channels[i].lastClipIndex = 0;
+        m_channels[i].noteBaseRate = 0;
+        m_channels[i].pitchBendRatio12 = 0x1000;  // no bend at sequence start
         // Pre-silence the voice so the next noteOn starts cleanly.
         psyqo::SPU::silenceChannels(1u << i);
     }
@@ -270,6 +272,27 @@ void MusicSequencer::tick(int32_t dt12) {
     }
 }
 
+uint16_t MusicSequencer::bendRatio12From14(uint16_t value14) {
+    // 14-bit unsigned bend value [0..0x3FFF] with 0x2000 = center.
+    // Centred range: -8192..+8191. With the default ±2-semitone bend
+    // range, fp12 semitones = centred value (4096 fp12 ticks per
+    // semitone × 2 semitones = 8192 fp12 ticks across half the range,
+    // and centred itself spans ±8192).
+    int32_t semi_fp12 = (int32_t)value14 - 0x2000;
+    // Floor to integer semitone via arithmetic shift; fractional part
+    // is the bottom 12 bits and is always non-negative regardless of
+    // sign (bitwise &).
+    int semiInt = semi_fp12 >> 12;
+    int semiFrac12 = semi_fp12 & 0xFFF;
+    uint16_t lo = pitchForOffset(semiInt);
+    uint16_t hi = pitchForOffset(semiInt + 1);
+    int32_t diff = (int32_t)hi - (int32_t)lo;
+    int32_t interp = (int32_t)lo + ((diff * (int32_t)semiFrac12) >> 12);
+    if (interp < 1) interp = 1;
+    if (interp > 0xFFFF) interp = 0xFFFF;
+    return (uint16_t)interp;
+}
+
 void MusicSequencer::silenceLoopSeam() {
     // Silence any notes still held at a loop boundary. Without this, a
     // pad/drone on the final chord keeps droning across the loop because
@@ -303,6 +326,12 @@ bool MusicSequencer::dispatchEvent(const MusicEvent &e) {
             // ProgramChange (PS2M only). data1 = new ProgramId. PS1M
             // sequences silently ignore it — no bank, no resolution.
             if (e.channel < MAX_CHANNELS) m_channels[e.channel].currentProgram = e.data1;
+            break;
+        case 5:
+            // PitchBend. data1 = LSB, data2 = MSB of 14-bit value.
+            // Updates per-channel bend state; if a note is held, the
+            // SPU voice's sample rate is re-pitched live.
+            dispatchPitchBend(e.channel, e.data1, e.data2);
             break;
         case 9:
             // LoopStart marker. Records this point for the next LoopEnd
@@ -385,19 +414,63 @@ void MusicSequencer::noteOn(uint8_t channel, uint8_t note, uint8_t velocity) {
     int voice = (int)channel;
     if (m_audio->playOnVoice(voice, clipIdx, combinedVol, finalPan) < 0) return;
 
-    // Apply pitch shift unless this is a percussion channel.
+    // Compute the pre-bend rate (note→base shift on melodic channels;
+    // native rate on percussion). Stash it in noteBaseRate so kind=5
+    // (PitchBend) events that arrive mid-note can recompute the final
+    // SPU rate without re-running the shift.
+    uint16_t noteBaseRate = SPU_VOICES[voice].sampleRate;
     if (!percussion) {
         int semitoneOffset = (int)note - baseNoteMidi;
-        uint16_t basePitch = SPU_VOICES[voice].sampleRate;
-        uint32_t shifted = ((uint32_t)basePitch * pitchForOffset(semitoneOffset)) >> 12;
+        uint32_t shifted = ((uint32_t)noteBaseRate * pitchForOffset(semitoneOffset)) >> 12;
         if (shifted < 1) shifted = 1;
         if (shifted > 0x3FFF) shifted = 0x3FFF;
-        SPU_VOICES[voice].sampleRate = (uint16_t)shifted;
+        noteBaseRate = (uint16_t)shifted;
     }
+
+    // Apply current pitch bend on top (skip for percussion — clip pitch
+    // shouldn't drift on a hi-hat/snare). Bends from prior notes carry
+    // forward by design; a sequence that wants to reset clears it via
+    // a 0x2000 bend event.
+    uint16_t finalRate = noteBaseRate;
+    if (!percussion) {
+        uint16_t bend12 = m_channels[channel].pitchBendRatio12;
+        if (bend12 != 0x1000) {
+            uint32_t bent = ((uint32_t)finalRate * bend12) >> 12;
+            if (bent < 1) bent = 1;
+            if (bent > 0x3FFF) bent = 0x3FFF;
+            finalRate = (uint16_t)bent;
+        }
+    }
+    SPU_VOICES[voice].sampleRate = finalRate;
 
     m_channels[channel].activeVoice   = (int8_t)voice;
     m_channels[channel].activeNote    = note;
     m_channels[channel].lastClipIndex = (uint8_t)clipIdx;
+    m_channels[channel].noteBaseRate  = noteBaseRate;
+}
+
+void MusicSequencer::dispatchPitchBend(uint8_t channel, uint8_t lsb, uint8_t msb) {
+    if (!m_active) return;
+    if (channel >= MAX_CHANNELS) return;
+    uint16_t value14 = (uint16_t)(((msb & 0x7F) << 7) | (lsb & 0x7F));
+    uint16_t bend12 = bendRatio12From14(value14);
+    m_channels[channel].pitchBendRatio12 = bend12;
+
+    // Only retune live if a note is currently held on this channel.
+    int8_t voice = m_channels[channel].activeVoice;
+    if (voice < 0) return;
+
+    // Skip live retune on percussion — bend is meaningless there and
+    // touching the SPU rate would drift the sample's natural pitch.
+    if (channel < m_active->header->channelCount) {
+        const MusicChannelEntry &cfg = m_active->channels[channel];
+        if ((cfg.flags & 0x02) != 0) return;
+    }
+
+    uint32_t bent = ((uint32_t)m_channels[channel].noteBaseRate * bend12) >> 12;
+    if (bent < 1) bent = 1;
+    if (bent > 0x3FFF) bent = 0x3FFF;
+    SPU_VOICES[voice].sampleRate = (uint16_t)bent;
 }
 
 void MusicSequencer::noteOff(uint8_t channel, uint8_t note) {

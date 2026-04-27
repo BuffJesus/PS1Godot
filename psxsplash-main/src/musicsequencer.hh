@@ -135,10 +135,15 @@ private:
     bool dispatchEvent(const MusicEvent &e);
     void noteOn(uint8_t channel, uint8_t note, uint8_t velocity);
     void noteOff(uint8_t channel, uint8_t note);
+    void dispatchPitchBend(uint8_t channel, uint8_t lsb, uint8_t msb);
     // Silences any held music-channel notes at a loop seam. Used both
     // by the end-of-stream loop (header loopStartTick) and the inline
     // LoopEnd event-driven loop (kinds 9/10).
     void silenceLoopSeam();
+    // 14-bit MIDI pitch-bend value (0..0x3FFF, 0x2000 = center) → fp12
+    // ratio. Default ±2-semitone range. Linearly interpolates the
+    // existing pitchForOffset table between adjacent integer slots.
+    static uint16_t bendRatio12From14(uint16_t value14);
 
     // PS2M bank dispatch: walk the scene-wide instrument bank to find
     // the region matching (channel.currentProgram, note, velocity).
@@ -189,6 +194,15 @@ private:
         uint8_t pan;
         uint8_t currentProgram;  // PS2M: the program the channel is currently set to
         uint8_t lastClipIndex;   // PS2M: clip resolved at the last NoteOn (for pitch reuse)
+        // Pre-bend SPU rate of the currently-held note, captured at noteOn
+        // after the note→base pitch shift. kind=5 (PitchBend) re-multiplies
+        // this by pitchBendRatio12 / 4096 instead of re-running the shift,
+        // so live bends don't drift the pitch on re-trigger.
+        uint16_t noteBaseRate;
+        // fp12 ratio (0x1000 = no bend). Updated by kind=5 events.
+        // Persists across notes — a bend from a previous note stays in
+        // effect until explicitly reset by another bend event.
+        uint16_t pitchBendRatio12;
     };
     ChannelState m_channels[MAX_CHANNELS] = {};
 
