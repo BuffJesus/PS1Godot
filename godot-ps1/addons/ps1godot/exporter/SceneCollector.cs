@@ -162,7 +162,78 @@ public static class SceneCollector
             }
         }
 
+        ReportMeshDedupForecast(data);
+
         return data;
+    }
+
+    // Per-export forecast of how much each mesh would shrink if the
+    // splashpack switched from the current per-tri-expanded format
+    // (52 B/tri) to a Vertex[]+Face[] vertex-pool layout. Read-only —
+    // sizes the Phase A.1 format change before committing to it.
+    // Walk every collected ObjectRecord, run MeshDedupAnalyzer, report
+    // aggregates plus the worst- and best-reuse standouts.
+    private static void ReportMeshDedupForecast(SceneData data)
+    {
+        if (data.Objects == null || data.Objects.Count == 0) return;
+
+        long aggregateOld = 0;
+        long aggregateNew = 0;
+        int  meshesAnalyzed = 0;
+        var perMesh = new List<(string Name, MeshDedupAnalyzer.Stats Stats)>();
+
+        foreach (var obj in data.Objects)
+        {
+            if (obj?.Mesh?.Triangles == null) continue;
+            if (obj.Mesh.Triangles.Count == 0) continue;
+            var stats = MeshDedupAnalyzer.Analyze(obj.Mesh.Triangles);
+            aggregateOld += stats.BytesV29;
+            aggregateNew += stats.BytesV30;
+            meshesAnalyzed++;
+            string objName = (obj.Node != null && !string.IsNullOrEmpty(obj.Node.Name))
+                ? (string)obj.Node.Name
+                : "<unnamed>";
+            perMesh.Add((objName, stats));
+        }
+
+        if (meshesAnalyzed == 0) return;
+
+        long aggregateSaved = aggregateOld - aggregateNew;
+        float aggregatePct = (aggregateOld > 0) ? (100f * aggregateSaved / aggregateOld) : 0f;
+
+        GD.Print($"[PS1Godot] Mesh dedup forecast (Phase A.1, splashpack v30 candidate):");
+        GD.Print($"[PS1Godot]   meshes analyzed: {meshesAnalyzed}");
+        GD.Print($"[PS1Godot]   total bytes today (v29): {aggregateOld:n0} B");
+        GD.Print($"[PS1Godot]   total bytes after pool (v30): {aggregateNew:n0} B");
+        GD.Print($"[PS1Godot]   saved: {aggregateSaved:n0} B ({aggregatePct:f1}%)");
+
+        // Worst reuse first — these are the meshes that would benefit
+        // *least* from pooling (and which authors might want to fix at
+        // source, e.g. via Blender mesh cleanup → "Merge By Distance").
+        perMesh.Sort((a, b) => a.Stats.ReuseFactor.CompareTo(b.Stats.ReuseFactor));
+        int worstCount = System.Math.Min(5, perMesh.Count);
+        if (worstCount > 0)
+        {
+            GD.Print($"[PS1Godot]   worst-reuse meshes (vertex reuse < 1.5× = potential mesh-cleanup candidates):");
+            for (int i = 0; i < worstCount; i++)
+            {
+                var (name, s) = perMesh[i];
+                GD.Print($"[PS1Godot]     {name}: {s.TriCount} tris, {s.UniqueVertices} unique verts ({s.ReuseFactor:f2}× reuse), saves {s.SavingsPercent:f1}%");
+            }
+        }
+
+        // Best reuse last — these are tightly-meshed (manifold-clean)
+        // surfaces that pool well; useful as authoring-style examples.
+        if (perMesh.Count > worstCount)
+        {
+            GD.Print($"[PS1Godot]   best-reuse meshes (highest savings):");
+            int bestCount = System.Math.Min(5, perMesh.Count);
+            for (int i = perMesh.Count - 1; i >= perMesh.Count - bestCount; i--)
+            {
+                var (name, s) = perMesh[i];
+                GD.Print($"[PS1Godot]     {name}: {s.TriCount} tris, {s.UniqueVertices} unique verts ({s.ReuseFactor:f2}× reuse), saves {s.SavingsPercent:f1}%");
+            }
+        }
     }
 
     private static T? FindFirstOfType<T>(Node n) where T : Node
