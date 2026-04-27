@@ -194,7 +194,44 @@ private:
     // Timer.GetFrameCount() -> number
     // Returns total frames since scene start
     static int Timer_GetFrameCount(lua_State* L);
-    
+
+    // ========================================================================
+    // GAMESTATE API - Cross-script game-mode + chunk awareness
+    //
+    // Lightweight shared state for "what is the game doing right now?" so
+    // scripts don't reinvent it via _G hacks or per-script polling. Mode
+    // is a free-form short string (typical values: "explore", "battle",
+    // "dialogue", "menu", "cutscene", "paused"); chunk is the active
+    // scene/area id authors set when transitions land. Both reset to
+    // empty on scene load via ResetFrameCount + the scenemanager init
+    // path. See docs/ps1_lua_scripting_cross_entity_state_architecture.md.
+    // ========================================================================
+public:
+    // Reset GameState (called on scene load alongside frame-counter reset).
+    static void ResetGameState();
+
+private:
+    // GameState.Frame() -> number (alias for Timer.GetFrameCount)
+    static int GameState_Frame(lua_State* L);
+
+    // GameState.GetMode() -> string
+    static int GameState_GetMode(lua_State* L);
+
+    // GameState.SetMode(name)
+    static int GameState_SetMode(lua_State* L);
+
+    // GameState.IsMode(name) -> boolean
+    static int GameState_IsMode(lua_State* L);
+
+    // GameState.GetChunk() -> string
+    static int GameState_GetChunk(lua_State* L);
+
+    // GameState.SetChunk(id)
+    static int GameState_SetChunk(lua_State* L);
+
+    // GameState.IsChunk(id) -> boolean
+    static int GameState_IsChunk(lua_State* L);
+
     // ========================================================================
     // CAMERA API - Camera control
     // ========================================================================

@@ -178,11 +178,39 @@ void LuaAPI::RegisterAll(psyqo::Lua& L, SceneManager* scene, CutscenePlayer* cut
     // TIMER API
     // ========================================================================
     L.newTable();  // Timer table
-    
+
     L.push(Timer_GetFrameCount);
     L.setField(-2, "GetFrameCount");
-    
+
     L.setGlobal("Timer");
+
+    // ========================================================================
+    // GAMESTATE API
+    // ========================================================================
+    L.newTable();
+
+    L.push(GameState_Frame);
+    L.setField(-2, "Frame");
+
+    L.push(GameState_GetMode);
+    L.setField(-2, "GetMode");
+
+    L.push(GameState_SetMode);
+    L.setField(-2, "SetMode");
+
+    L.push(GameState_IsMode);
+    L.setField(-2, "IsMode");
+
+    L.push(GameState_GetChunk);
+    L.setField(-2, "GetChunk");
+
+    L.push(GameState_SetChunk);
+    L.setField(-2, "SetChunk");
+
+    L.push(GameState_IsChunk);
+    L.setField(-2, "IsChunk");
+
+    L.setGlobal("GameState");
     
     // ========================================================================
     // CAMERA API
@@ -1553,6 +1581,94 @@ void LuaAPI::ResetFrameCount() {
 int LuaAPI::Timer_GetFrameCount(lua_State* L) {
     psyqo::Lua lua(L);
     lua.pushNumber(s_frameCount);
+    return 1;
+}
+
+// ============================================================================
+// GAMESTATE API IMPLEMENTATION
+// ============================================================================
+
+// Free-form short strings; 32 bytes covers typical mode names ("explore",
+// "battle", "dialogue", "menu", "cutscene", "paused") and chunk ids
+// ("north_gate", "tavern_basement"). Truncates silently on overflow —
+// authors keep names short anyway.
+static char s_gsMode[32]   = {0};
+static char s_gsChunk[32]  = {0};
+
+static void copyBoundedString(char* dst, size_t dstSize, const char* src) {
+    if (!dst || dstSize == 0) return;
+    if (!src) { dst[0] = 0; return; }
+    size_t i = 0;
+    for (; i + 1 < dstSize && src[i]; i++) dst[i] = src[i];
+    dst[i] = 0;
+}
+
+void LuaAPI::ResetGameState() {
+    s_gsMode[0] = 0;
+    s_gsChunk[0] = 0;
+}
+
+// Local strlen — bounded scan, no <cstring> dependency.
+static size_t boundedStrlen(const char* s, size_t maxLen) {
+    if (!s) return 0;
+    size_t i = 0;
+    for (; i < maxLen && s[i]; i++) {}
+    return i;
+}
+
+static bool stringsEqualNullTerm(const char* a, const char* b, size_t maxLen) {
+    if (!a || !b) return false;
+    size_t i = 0;
+    for (; i < maxLen; i++) {
+        if (a[i] != b[i]) return false;
+        if (a[i] == 0) return true;     // both are 0 (a[i]==b[i] above)
+    }
+    return false;                       // both ran past maxLen without terminator
+}
+
+int LuaAPI::GameState_Frame(lua_State* L) {
+    psyqo::Lua lua(L);
+    lua.pushNumber(s_frameCount);
+    return 1;
+}
+
+int LuaAPI::GameState_GetMode(lua_State* L) {
+    psyqo::Lua lua(L);
+    lua.push(s_gsMode, boundedStrlen(s_gsMode, sizeof(s_gsMode)));
+    return 1;
+}
+
+int LuaAPI::GameState_SetMode(lua_State* L) {
+    psyqo::Lua lua(L);
+    if (!lua.isString(1)) return 0;
+    copyBoundedString(s_gsMode, sizeof(s_gsMode), lua.toString(1));
+    return 0;
+}
+
+int LuaAPI::GameState_IsMode(lua_State* L) {
+    psyqo::Lua lua(L);
+    if (!lua.isString(1)) { lua.push(false); return 1; }
+    lua.push(stringsEqualNullTerm(lua.toString(1), s_gsMode, sizeof(s_gsMode)));
+    return 1;
+}
+
+int LuaAPI::GameState_GetChunk(lua_State* L) {
+    psyqo::Lua lua(L);
+    lua.push(s_gsChunk, boundedStrlen(s_gsChunk, sizeof(s_gsChunk)));
+    return 1;
+}
+
+int LuaAPI::GameState_SetChunk(lua_State* L) {
+    psyqo::Lua lua(L);
+    if (!lua.isString(1)) return 0;
+    copyBoundedString(s_gsChunk, sizeof(s_gsChunk), lua.toString(1));
+    return 0;
+}
+
+int LuaAPI::GameState_IsChunk(lua_State* L) {
+    psyqo::Lua lua(L);
+    if (!lua.isString(1)) { lua.push(false); return 1; }
+    lua.push(stringsEqualNullTerm(lua.toString(1), s_gsChunk, sizeof(s_gsChunk)));
     return 1;
 }
 
