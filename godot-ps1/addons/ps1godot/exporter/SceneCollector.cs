@@ -1639,6 +1639,40 @@ public static class SceneCollector
         var seen = new HashSet<string>();
         int xaCount = 0;
         int iter = -1;
+
+        // v28+: pre-scan the scene-wide bank to find clip names referenced
+        // by any PS1SampleRegion or PS1DrumKit mapping. The runtime
+        // sequencer dispatches via the SPU voice path, not the disc XA
+        // stream, so bank-referenced clips MUST land on SPU. We use this
+        // set to force-resolve Auto → SPU below; without this the Auto
+        // heuristic happily routes a 30 KB piano sample to XA, which then
+        // makes the bank validator reject the entire instrument with an
+        // unhelpful "produced 0 valid bindings" cascade.
+        var bankReferencedClipNames = new HashSet<string>();
+        if (scene.Instruments != null)
+        {
+            foreach (var inst in scene.Instruments)
+            {
+                if (inst?.Regions == null) continue;
+                foreach (var region in inst.Regions)
+                {
+                    if (region != null && !string.IsNullOrEmpty(region.AudioClipName))
+                        bankReferencedClipNames.Add(region.AudioClipName);
+                }
+            }
+        }
+        if (scene.DrumKits != null)
+        {
+            foreach (var kit in scene.DrumKits)
+            {
+                if (kit?.AudioClipNames == null) continue;
+                foreach (var clipName in kit.AudioClipNames)
+                {
+                    if (!string.IsNullOrEmpty(clipName))
+                        bankReferencedClipNames.Add(clipName);
+                }
+            }
+        }
         foreach (var clip in scene.AudioClips)
         {
             iter++;
@@ -1682,7 +1716,20 @@ public static class SceneCollector
             byte[] adpcm = ADPCMEncoder.Encode(pcm, clip.Loop);
             GD.Print($"[CollectAudioClips]   '{name}': ADPCM ok ({adpcm.Length} B). resolving route…");
             ushort rate = (ushort)Mathf.Clamp(wav.MixRate, 1000, 44100);
-            byte resolvedRoute = ResolveAudioRoute(clip.Route, adpcm.Length, clip.Loop);
+            // Bank-referenced clips must stay on SPU (sequencer voice path
+            // can't drive disc-streamed XA). Override Auto → SPU silently
+            // for those; explicit Route=XA on a bank-referenced clip is
+            // still respected and will fail validation in CollectMusicBank
+            // with a clear error — better an explicit reject than auto-
+            // override that surprises the author.
+            bool isBankReferenced = bankReferencedClipNames.Contains(name);
+            PS1AudioRoute effectiveRoute = clip.Route;
+            if (isBankReferenced && effectiveRoute == PS1AudioRoute.Auto)
+            {
+                effectiveRoute = PS1AudioRoute.SPU;
+                GD.Print($"[CollectAudioClips]   '{name}': Auto → SPU (referenced by instrument bank).");
+            }
+            byte resolvedRoute = ResolveAudioRoute(effectiveRoute, adpcm.Length, clip.Loop);
             if (resolvedRoute == 1) xaCount++;
             GD.Print($"[CollectAudioClips]   '{name}': route={resolvedRoute}");
 
