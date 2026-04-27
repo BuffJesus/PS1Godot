@@ -2041,25 +2041,41 @@ public static class SplashpackWriter
     }
 
     // Vertex pool key for v31+ static-mesh dedup. Two vertices fold
-    // together when their on-disk bytes match: position (vx, vy, vz),
-    // post-expander UV (u, v), color (r, g, b). Vertex normal is *not*
-    // part of the key — the on-disk Face stores one face normal per
-    // triangle, so vertices that differ only in authored vertex normal
-    // collapse cleanly. Using the post-expander UV (instead of the raw
-    // authored UV) means two triangles with different TextureIndex but
-    // identical world positions still produce distinct pool entries —
-    // they really are different vertices for VRAM-sampling purposes.
+    // together when *all* of these match: position (vx, vy, vz),
+    // post-expander UV (u, v), color (r, g, b), AND face draw state
+    // (tpage, clutX, clutY).
+    //
+    // Face draw state is in the key because the runtime expands a
+    // pooled vertex into a Tri using the *enclosing face's* tpage /
+    // CLUT — so two triangles with the same vertex but different draw
+    // state must NOT share a pool entry, otherwise one of the two
+    // surviving Faces ends up wired to a vertex that nclips wrong on
+    // its own draw state. (Pre-fix symptom: large quads losing one of
+    // their two triangles to back-face cull when a nearby quad shared
+    // a corner.) Vertex normal is *not* part of the key — the on-disk
+    // Face stores one face normal per triangle, so vertices that
+    // differ only in authored vertex normal collapse cleanly.
     private readonly struct StaticVertexKey : IEquatable<StaticVertexKey>
     {
         public readonly short Vx, Vy, Vz;
         public readonly byte U, V;
         public readonly byte R, G, B;
-        public StaticVertexKey(short vx, short vy, short vz, byte u, byte v, byte r, byte g, byte b)
-        { Vx = vx; Vy = vy; Vz = vz; U = u; V = v; R = r; G = g; B = b; }
+        public readonly ushort Tpage, ClutX, ClutY;
+        public StaticVertexKey(short vx, short vy, short vz,
+                               byte u, byte v,
+                               byte r, byte g, byte b,
+                               ushort tpage, ushort clutX, ushort clutY)
+        {
+            Vx = vx; Vy = vy; Vz = vz;
+            U = u; V = v;
+            R = r; G = g; B = b;
+            Tpage = tpage; ClutX = clutX; ClutY = clutY;
+        }
         public bool Equals(StaticVertexKey o)
             => Vx == o.Vx && Vy == o.Vy && Vz == o.Vz
             && U == o.U && V == o.V
-            && R == o.R && G == o.G && B == o.B;
+            && R == o.R && G == o.G && B == o.B
+            && Tpage == o.Tpage && ClutX == o.ClutX && ClutY == o.ClutY;
         public override bool Equals(object? obj) => obj is StaticVertexKey k && Equals(k);
         public override int GetHashCode()
         {
@@ -2074,6 +2090,9 @@ public static class SplashpackWriter
                 h = (h ^ R) * 16777619u;
                 h = (h ^ G) * 16777619u;
                 h = (h ^ B) * 16777619u;
+                h = (h ^ Tpage) * 16777619u;
+                h = (h ^ ClutX) * 16777619u;
+                h = (h ^ ClutY) * 16777619u;
                 return (int)h;
             }
         }
@@ -2118,10 +2137,6 @@ public static class SplashpackWriter
                 _               => 1,
             };
 
-            ushort i0 = AddPooledVertex(tri.v0, tex, expander, keyToIndex, poolVerts, poolUvBytes);
-            ushort i1 = AddPooledVertex(tri.v1, tex, expander, keyToIndex, poolVerts, poolUvBytes);
-            ushort i2 = AddPooledVertex(tri.v2, tex, expander, keyToIndex, poolVerts, poolUvBytes);
-
             ushort tpage; ushort clutX, clutY;
             if (tex == null)
             {
@@ -2133,6 +2148,13 @@ public static class SplashpackWriter
                 clutX = tex.ClutPackingX;
                 clutY = tex.ClutPackingY;
             }
+
+            ushort i0 = AddPooledVertex(tri.v0, tex, expander, tpage, clutX, clutY,
+                                        keyToIndex, poolVerts, poolUvBytes);
+            ushort i1 = AddPooledVertex(tri.v1, tex, expander, tpage, clutX, clutY,
+                                        keyToIndex, poolVerts, poolUvBytes);
+            ushort i2 = AddPooledVertex(tri.v2, tex, expander, tpage, clutX, clutY,
+                                        keyToIndex, poolVerts, poolUvBytes);
 
             faceData.Add((i0, i1, i2,
                           tri.v0.nx, tri.v0.ny, tri.v0.nz,
@@ -2173,12 +2195,14 @@ public static class SplashpackWriter
     }
 
     private static ushort AddPooledVertex(PSXVertex v, PSXTexture? tex, int expander,
+        ushort tpage, ushort clutX, ushort clutY,
         Dictionary<StaticVertexKey, int> keyToIndex,
         List<PSXVertex> poolVerts,
         List<(byte u, byte v)> poolUvBytes)
     {
         var (u, vv) = ResolveUvByte(v.u, v.v, tex, expander);
-        var key = new StaticVertexKey(v.vx, v.vy, v.vz, u, vv, v.r, v.g, v.b);
+        var key = new StaticVertexKey(v.vx, v.vy, v.vz, u, vv, v.r, v.g, v.b,
+                                       tpage, clutX, clutY);
         if (keyToIndex.TryGetValue(key, out int existing)) return (ushort)existing;
         int idx = poolVerts.Count;
         poolVerts.Add(v);
