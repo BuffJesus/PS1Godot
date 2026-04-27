@@ -27,6 +27,8 @@ src/loadingscreen.cpp \
 src/memoverlay.cpp \
 src/musicmanager.cpp \
 src/musicsequencer.cpp \
+src/soundmacro.cpp \
+src/soundfamily.cpp \
 src/skinmesh.cpp \
 src/xaaudio.cpp \
 src/loadbuffer_patch.cpp

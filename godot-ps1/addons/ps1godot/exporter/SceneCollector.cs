@@ -67,6 +67,10 @@ public static class SceneCollector
             // Music sequences depend on AudioClips (channels reference clip
             // names) — collect after audio so the lookup table is populated.
             CollectMusicSequences(sceneWithAudio, data);
+            // v29+ Phase 5 Stage B: composite SFX + variation pools. Both
+            // resolve clip references through AudioClips (same lookup
+            // pattern as the music bank), so collect after audio.
+            CollectSoundBank(sceneWithAudio, data);
         }
 
         // Dedup cache keyed by (resourcePath, bitDepth). A texture used at two
@@ -2009,6 +2013,184 @@ public static class SceneCollector
         {
             GD.Print($"[PS1Godot] Music bank: {data.Instruments.Count} instrument(s) / {data.Regions.Count} region(s) / {data.DrumKits.Count} drum kit(s) / {data.DrumMappings.Count} drum mapping(s).");
         }
+    }
+
+    // v29+ Phase 5 Stage B. Collects PS1Scene.SoundMacros and
+    // PS1Scene.SoundFamilies into flat tables ready for SplashpackWriter.
+    // Both resolve clip references against data.AudioClips. Bank-referenced
+    // clips must be SPU-routed (XA/CDDA can't be triggered through the
+    // SFX voice path).
+    private static void CollectSoundBank(PS1Scene scene, SceneData data)
+    {
+        bool hasMacros = scene.SoundMacros != null && scene.SoundMacros.Count > 0;
+        bool hasFamilies = scene.SoundFamilies != null && scene.SoundFamilies.Count > 0;
+        if (!hasMacros && !hasFamilies) return;
+
+        var clipIndexByName = new Dictionary<string, int>(data.AudioClips.Count);
+        for (int i = 0; i < data.AudioClips.Count; i++)
+            clipIndexByName[data.AudioClips[i].Name] = i;
+
+        if (hasMacros)
+        {
+            var seenNames = new HashSet<string>(System.StringComparer.Ordinal);
+            for (int i = 0; i < scene.SoundMacros!.Count; i++)
+            {
+                var macro = scene.SoundMacros[i];
+                if (macro == null) continue;
+                string name = macro.MacroName ?? "";
+                if (string.IsNullOrEmpty(name))
+                {
+                    GD.PushWarning($"[PS1Godot] PS1Scene.SoundMacros[{i}] has no MacroName — skipped.");
+                    continue;
+                }
+                if (!seenNames.Add(name))
+                {
+                    GD.PushWarning($"[PS1Godot] PS1Scene.SoundMacros[{i}] '{name}' is duplicated — using first occurrence.");
+                    continue;
+                }
+
+                int firstEvent = data.SoundMacroEvents.Count;
+                int eventsAdded = 0;
+                int eventN = macro.Events?.Count ?? 0;
+                // Frame-sort the events so the runtime's "advance until
+                // next event's frame > current frame" walk works without
+                // a per-instance scan.
+                var sortedEvents = new List<PS1SoundMacroEvent>(eventN);
+                for (int ei = 0; ei < eventN; ei++)
+                {
+                    var ev = macro.Events![ei];
+                    if (ev != null) sortedEvents.Add(ev);
+                }
+                sortedEvents.Sort((a, b) => a.Frame.CompareTo(b.Frame));
+                foreach (var ev in sortedEvents)
+                {
+                    if (string.IsNullOrEmpty(ev.AudioClipName))
+                    {
+                        GD.PushWarning($"[PS1Godot] SoundMacro '{name}' event @frame {ev.Frame} has no AudioClipName — skipped.");
+                        continue;
+                    }
+                    if (!clipIndexByName.TryGetValue(ev.AudioClipName, out int clipIdx))
+                    {
+                        GD.PushError($"[PS1Godot] SoundMacro '{name}' event @frame {ev.Frame} references unknown audio clip '{ev.AudioClipName}'.");
+                        continue;
+                    }
+                    byte routing = data.AudioClips[clipIdx].Routing;
+                    if (routing != 0)
+                    {
+                        string r = routing == 1 ? "XA" : (routing == 2 ? "CDDA" : $"unknown({routing})");
+                        GD.PushError($"[PS1Godot] SoundMacro '{name}' event clip '{ev.AudioClipName}' is Route={r} — macros only dispatch SPU-routed clips. Skipped.");
+                        continue;
+                    }
+                    data.SoundMacroEvents.Add(new SoundMacroEventBankRecord
+                    {
+                        Frame          = (ushort)System.Math.Clamp(ev.Frame, 0, 65535),
+                        AudioClipIndex = (ushort)clipIdx,
+                        Volume         = (byte)System.Math.Clamp(ev.Volume, 0, 128),
+                        Pan            = (byte)System.Math.Clamp(ev.Pan, 0, 127),
+                        PitchOffset    = (sbyte)System.Math.Clamp(ev.PitchOffset, -24, 24),
+                    });
+                    eventsAdded++;
+                }
+                if (eventsAdded == 0)
+                {
+                    GD.PushWarning($"[PS1Godot] SoundMacro '{name}' has no valid events — bank entry skipped.");
+                    continue;
+                }
+                data.SoundMacros.Add(new SoundMacroBankRecord
+                {
+                    FirstEventIndex = (ushort)firstEvent,
+                    EventCount      = (ushort)eventsAdded,
+                    MaxVoices       = (byte)System.Math.Clamp(macro.MaxVoices, 0, 8),
+                    Priority        = (byte)System.Math.Clamp(macro.Priority, 0, 255),
+                    CooldownFrames  = (ushort)System.Math.Clamp(macro.CooldownFrames, 0, 65535),
+                    Name            = TruncateName(name, 15),
+                });
+            }
+        }
+
+        if (hasFamilies)
+        {
+            var seenNames = new HashSet<string>(System.StringComparer.Ordinal);
+            for (int i = 0; i < scene.SoundFamilies!.Count; i++)
+            {
+                var fam = scene.SoundFamilies[i];
+                if (fam == null) continue;
+                string name = fam.FamilyName ?? "";
+                if (string.IsNullOrEmpty(name))
+                {
+                    GD.PushWarning($"[PS1Godot] PS1Scene.SoundFamilies[{i}] has no FamilyName — skipped.");
+                    continue;
+                }
+                if (!seenNames.Add(name))
+                {
+                    GD.PushWarning($"[PS1Godot] PS1Scene.SoundFamilies[{i}] '{name}' is duplicated — using first occurrence.");
+                    continue;
+                }
+                int firstClip = data.FamilyClipIndices.Count;
+                int clipsAdded = 0;
+                int clipN = fam.AudioClipNames?.Count ?? 0;
+                for (int ci = 0; ci < clipN; ci++)
+                {
+                    string clipName = fam.AudioClipNames![ci];
+                    if (string.IsNullOrEmpty(clipName))
+                    {
+                        GD.PushWarning($"[PS1Godot] SoundFamily '{name}' variant #{ci} has no AudioClipName — skipped.");
+                        continue;
+                    }
+                    if (!clipIndexByName.TryGetValue(clipName, out int clipIdx))
+                    {
+                        GD.PushError($"[PS1Godot] SoundFamily '{name}' variant '{clipName}' is unknown.");
+                        continue;
+                    }
+                    byte routing = data.AudioClips[clipIdx].Routing;
+                    if (routing != 0)
+                    {
+                        string r = routing == 1 ? "XA" : (routing == 2 ? "CDDA" : $"unknown({routing})");
+                        GD.PushError($"[PS1Godot] SoundFamily '{name}' variant '{clipName}' is Route={r} — families only dispatch SPU-routed clips. Skipped.");
+                        continue;
+                    }
+                    data.FamilyClipIndices.Add((ushort)clipIdx);
+                    clipsAdded++;
+                }
+                if (clipsAdded == 0)
+                {
+                    GD.PushWarning($"[PS1Godot] SoundFamily '{name}' has no valid variants — bank entry skipped.");
+                    continue;
+                }
+                byte flags = (byte)(fam.AvoidRepeat ? 0x01 : 0x00);
+                data.SoundFamilies.Add(new SoundFamilyBankRecord
+                {
+                    FirstClipIndex     = (ushort)firstClip,
+                    ClipCount          = (ushort)clipsAdded,
+                    PitchSemitonesMin  = (sbyte)System.Math.Clamp(fam.PitchSemitonesMin, -12, 12),
+                    PitchSemitonesMax  = (sbyte)System.Math.Clamp(fam.PitchSemitonesMax, -12, 12),
+                    VolumeMin          = (byte)System.Math.Clamp(fam.VolumeMin, 0, 128),
+                    VolumeMax          = (byte)System.Math.Clamp(fam.VolumeMax, 0, 128),
+                    PanJitter          = (byte)System.Math.Clamp(fam.PanJitter, 0, 32),
+                    Flags              = flags,
+                    Priority           = (byte)System.Math.Clamp(fam.Priority, 0, 255),
+                    CooldownFrames     = (byte)System.Math.Clamp(fam.CooldownFrames, 0, 60),
+                    Name               = TruncateName(name, 15),
+                });
+            }
+        }
+
+        if (data.SoundMacros.Count > 0 || data.SoundFamilies.Count > 0)
+        {
+            GD.Print($"[PS1Godot] Sound bank: {data.SoundMacros.Count} macro(s) / {data.SoundMacroEvents.Count} event(s) / {data.SoundFamilies.Count} family/families / {data.FamilyClipIndices.Count} variant(s).");
+        }
+    }
+
+    private static string TruncateName(string s, int max)
+    {
+        if (string.IsNullOrEmpty(s)) return string.Empty;
+        if (s.Length <= max) return s;
+        string truncated = s.Substring(0, max);
+        // Loud — the inline name field on disk is 16 bytes (15 chars +
+        // null), so anything longer silently chops here and Lua callers
+        // using the full string will fail to resolve at runtime.
+        GD.PushWarning($"[PS1Godot] Sound bank name '{s}' exceeds {max}-char limit — truncated to '{truncated}'. Lua callers must use the truncated form.");
+        return truncated;
     }
 
     private static void CollectMusicSequences(PS1Scene scene, SceneData data)

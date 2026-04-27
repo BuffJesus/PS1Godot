@@ -2194,37 +2194,62 @@ int LuaAPI::Music_Find(lua_State* L) {
 }
 
 // ============================================================================
-// SOUND API IMPLEMENTATION (Phase 5 Stage A — stubs)
+// SOUND API IMPLEMENTATION (Phase 5 Stage B — wired)
 //
-// Stage A registers the Sound table so authoring scripts can call
-// Sound.PlayMacro / PlayFamily / StopAll without a "global Sound is
-// nil" runtime error. The actual dispatch path lands in Stage B:
-// SoundMacroSequencer ticks active macro instances each frame and
-// dispatches frame-keyed sample events through AudioManager::play
-// with the macro's author-set priority; SoundFamily picks a variant
-// at random with author-set jitter. Stage A logs once per call so
-// it's obvious in PCSX-Redux's stdout when a stub fires.
+// Sound.PlayMacro / PlayFamily / StopAll dispatch through the
+// SceneManager's SoundMacroSequencer + SoundFamily runtimes. Both
+// pull from the SFX voice pool via AudioManager::play — they never
+// reserve voices and never compete with the music sequencer.
+// Per-macro Priority / MaxVoices / CooldownFrames and per-family
+// jitter ranges live on the on-disk records (authored via PS1Scene
+// in the Godot editor).
 // ============================================================================
 
 int LuaAPI::Sound_PlayMacro(lua_State* L) {
     psyqo::Lua lua(L);
-    const char* name = lua.isString(1) ? lua.toString(1) : "?";
-    printf("[Sound.PlayMacro] '%s' — runtime stub (Phase 5 Stage A); macro will dispatch in Stage B.\n", name);
-    lua.push();  // nil — Stage B returns a handle int
+    if (!s_sceneManager) {
+        lua.push();
+        return 1;
+    }
+    int handle = -1;
+    if (lua.isString(1)) {
+        handle = s_sceneManager->getSoundMacros().playByName(lua.toString(1));
+    } else if (lua.isNumber(1)) {
+        handle = s_sceneManager->getSoundMacros().playByIndex((int)lua.toNumber(1));
+    }
+    if (handle < 0) {
+        lua.push();  // nil = drop / unknown / cooldown / cap
+    } else {
+        lua.pushNumber(static_cast<lua_Number>(handle));
+    }
     return 1;
 }
 
 int LuaAPI::Sound_PlayFamily(lua_State* L) {
     psyqo::Lua lua(L);
-    const char* name = lua.isString(1) ? lua.toString(1) : "?";
-    printf("[Sound.PlayFamily] '%s' — runtime stub (Phase 5 Stage A); family will dispatch in Stage B.\n", name);
-    lua.push();  // nil — Stage B returns the SPU channel int
+    if (!s_sceneManager) {
+        lua.push();
+        return 1;
+    }
+    int ch = -1;
+    if (lua.isString(1)) {
+        ch = s_sceneManager->getSoundFamilies().playByName(lua.toString(1));
+    } else if (lua.isNumber(1)) {
+        ch = s_sceneManager->getSoundFamilies().playByIndex((int)lua.toNumber(1));
+    }
+    if (ch < 0) {
+        lua.push();
+    } else {
+        lua.pushNumber(static_cast<lua_Number>(ch));
+    }
     return 1;
 }
 
 int LuaAPI::Sound_StopAll(lua_State* L) {
     (void)L;
-    printf("[Sound.StopAll] runtime stub (Phase 5 Stage A).\n");
+    if (s_sceneManager) {
+        s_sceneManager->getSoundMacros().stopAll();
+    }
     return 0;
 }
 

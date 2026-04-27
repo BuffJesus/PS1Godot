@@ -18,6 +18,8 @@
 #include "audiomanager.hh"
 #include "musicmanager.hh"
 #include "musicsequencer.hh"
+#include "soundmacro.hh"
+#include "soundfamily.hh"
 #include "xaaudio.hh"
 #include "interactable.hh"
 #include "luaapi.hh"
@@ -134,6 +136,8 @@ class SceneManager {
     MusicSequencer& getMusicSequencer() { return m_musicSequencer; }
     MusicManager& getMusic() { return m_music; }
     XaAudioBackend& getXa() { return m_xa; }
+    SoundMacroSequencer& getSoundMacros() { return m_soundMacros; }
+    SoundFamily& getSoundFamilies() { return m_soundFamilies; }
     CollisionSystem& getCollision() { return m_collisionSystem; }
 
     // v23+: UI 3D-model accessors — the renderer walks these in its
@@ -263,6 +267,8 @@ class SceneManager {
     MusicSequencer m_musicSequencer;
     MusicManager m_music;
     XaAudioBackend m_xa;
+    SoundMacroSequencer m_soundMacros;
+    SoundFamily m_soundFamilies;
     
     // Cutscene playback
     Cutscene m_cutscenes[MAX_CUTSCENES];

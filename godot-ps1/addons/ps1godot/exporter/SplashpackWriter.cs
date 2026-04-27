@@ -393,6 +393,18 @@ public static class SplashpackWriter
         {
             WriteMusicBankSection(w, scene, headerOffsets);
         }
+
+        // ── Sound bank section (v29+ Phase 5 Stage B) ──────────
+        // Macro records + macro event records + family records + family
+        // clip indices, all as parallel tables sliced via Index/Count
+        // pairs. Skipped on scenes without any authored macros or
+        // families — header counts/offsets stay 0; runtime treats it
+        // as "no banks" and Sound.PlayMacro / PlayFamily resolve to
+        // -1 with a "not found" log.
+        if (scene.SoundMacros.Count > 0 || scene.SoundFamilies.Count > 0)
+        {
+            WriteSoundBankSection(w, scene, headerOffsets);
+        }
     }
 
     // ─── Music sequence section ─────────────────────────────────────────
@@ -535,6 +547,101 @@ public static class SplashpackWriter
                 w.Write(dm.ChokeGroup);           // u8
                 w.Write(dm.Priority);             // u8
                 // 8 bytes total — matches SPLASHPACKDrumMappingRecord.
+            }
+        }
+    }
+
+    // ─── Sound bank section (v29+ Phase 5 Stage B) ───────────────────────
+    //
+    // Four parallel tables:
+    //   SoundMacros        — 24 B × N (SPLASHPACKSoundMacroRecord)
+    //   SoundMacroEvents   —  8 B × N (SPLASHPACKSoundMacroEventRecord)
+    //   SoundFamilies      — 28 B × N (SPLASHPACKSoundFamilyRecord)
+    //   FamilyClipIndices  —  2 B × N (flat u16, sliced per-family)
+    //
+    // Counts and offsets backfill into the header's v29 reservations.
+    // Layouts must match the C++ structs in psxsplash-main/src/splashpack.hh.
+    private static void WriteSoundBankSection(BinaryWriter w, SceneData scene, HeaderOffsets headerOffsets)
+    {
+        // SoundMacros
+        if (scene.SoundMacros.Count > 0)
+        {
+            AlignTo4(w);
+            long start = w.BaseStream.Position;
+            BackfillUInt16(w, headerOffsets.SoundMacroCountPos, (ushort)scene.SoundMacros.Count);
+            BackfillUInt32(w, headerOffsets.SoundMacroTableOffsetPos, (uint)start);
+            foreach (var m in scene.SoundMacros)
+            {
+                w.Write(m.FirstEventIndex);   // u16
+                w.Write(m.EventCount);        // u16
+                w.Write(m.MaxVoices);         // u8
+                w.Write(m.Priority);          // u8
+                w.Write(m.CooldownFrames);    // u16
+                // 16-byte inline name field, null-padded.
+                byte[] nameBytes = Encoding.UTF8.GetBytes(m.Name ?? string.Empty);
+                int nameLen = Math.Min(nameBytes.Length, 15);
+                w.Write(nameBytes, 0, nameLen);
+                for (int p = nameLen; p < 16; p++) w.Write((byte)0);
+                // 24 bytes total — matches SPLASHPACKSoundMacroRecord.
+            }
+        }
+
+        // SoundMacroEvents
+        if (scene.SoundMacroEvents.Count > 0)
+        {
+            AlignTo4(w);
+            long start = w.BaseStream.Position;
+            BackfillUInt16(w, headerOffsets.SoundMacroEventCountPos, (ushort)scene.SoundMacroEvents.Count);
+            BackfillUInt32(w, headerOffsets.SoundMacroEventTableOffsetPos, (uint)start);
+            foreach (var ev in scene.SoundMacroEvents)
+            {
+                w.Write(ev.Frame);            // u16
+                w.Write(ev.AudioClipIndex);   // u16
+                w.Write(ev.Volume);           // u8
+                w.Write(ev.Pan);              // u8
+                w.Write(ev.PitchOffset);      // i8
+                w.Write((byte)0);             // pad
+                // 8 bytes total — matches SPLASHPACKSoundMacroEventRecord.
+            }
+        }
+
+        // SoundFamilies
+        if (scene.SoundFamilies.Count > 0)
+        {
+            AlignTo4(w);
+            long start = w.BaseStream.Position;
+            BackfillUInt16(w, headerOffsets.SoundFamilyCountPos, (ushort)scene.SoundFamilies.Count);
+            BackfillUInt32(w, headerOffsets.SoundFamilyTableOffsetPos, (uint)start);
+            foreach (var f in scene.SoundFamilies)
+            {
+                w.Write(f.FirstClipIndex);    // u16
+                w.Write(f.ClipCount);         // u16
+                w.Write(f.PitchSemitonesMin); // i8
+                w.Write(f.PitchSemitonesMax); // i8
+                w.Write(f.VolumeMin);         // u8
+                w.Write(f.VolumeMax);         // u8
+                w.Write(f.PanJitter);         // u8
+                w.Write(f.Flags);             // u8
+                w.Write(f.Priority);          // u8
+                w.Write(f.CooldownFrames);    // u8
+                byte[] nameBytes = Encoding.UTF8.GetBytes(f.Name ?? string.Empty);
+                int nameLen = Math.Min(nameBytes.Length, 15);
+                w.Write(nameBytes, 0, nameLen);
+                for (int p = nameLen; p < 16; p++) w.Write((byte)0);
+                // 28 bytes total — matches SPLASHPACKSoundFamilyRecord.
+            }
+        }
+
+        // FamilyClipIndices — flat u16 array referenced by SoundFamily slices.
+        if (scene.FamilyClipIndices.Count > 0)
+        {
+            AlignTo4(w);
+            long start = w.BaseStream.Position;
+            BackfillUInt16(w, headerOffsets.FamilyClipIndexCountPos, (ushort)scene.FamilyClipIndices.Count);
+            BackfillUInt32(w, headerOffsets.FamilyClipIndexTableOffsetPos, (uint)start);
+            foreach (var idx in scene.FamilyClipIndices)
+            {
+                w.Write(idx);  // u16
             }
         }
     }

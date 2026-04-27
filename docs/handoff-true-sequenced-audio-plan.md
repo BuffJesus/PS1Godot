@@ -164,7 +164,7 @@ This is purely a runtime change; **no splashpack bump.** The PolyphonyLimit
 and Priority fields baked into instruments in Phase 2 finally get consulted
 here.
 
-## Phase 5 — Sound macros + sound families (§21 step 8) — Stage A shipped, Stage B pending
+## Phase 5 — Sound macros + sound families (§21 step 8) — shipped
 
 `luaapi.cpp:300-318` registers the `Music` table; `Music_Play` at `:2102-2127`
 calls `getMusicSequencer().playByIndex` which itself calls
@@ -242,18 +242,43 @@ top of PS1M2; defer.
   policy (Free → Released → lower-priority steal → drop). Music slots
   pinned at MUSIC_PRIORITY (255) so SFX never evict them. Existing
   `m_reservedForMusic` semantics preserved.
-- **Phase 5 Stage A** (this commit): authoring scaffold.
+- **Phase 5 Stage A** (commit `af2ed31`): authoring scaffold.
   `PS1SoundMacro` + `PS1SoundMacroEvent` + `PS1SoundFamily` resource
   types. Splashpack v29 with empty macro/family tables. `Sound`
-  global registered with `PlayMacro`/`PlayFamily`/`StopAll` stubs
-  (log + no-op). Authors can drop resources and Lua calls now;
-  Stage B wires the runtime dispatch.
+  global registered with `PlayMacro`/`PlayFamily`/`StopAll` stubs.
+- **Phase 5 Stage B** (this commit): runtime + exporter wiring.
+  - `psxsplash-main/src/soundmacro.{hh,cpp}` — `SoundMacroSequencer`
+    with up to 8 active macro instances, per-macro MaxVoices cap,
+    CooldownFrames anti-spam, fp12-accumulator frame ticking.
+    Events dispatch via `AudioManager::play` at the macro's
+    Priority; pitchOffset post-modifies `SPU_VOICES[ch].sampleRate`
+    using the shared `MusicSequencer::pitchForOffset` table.
+  - `psxsplash-main/src/soundfamily.{hh,cpp}` — `SoundFamily`
+    stateless dispatcher with per-family lastVariantIdx +
+    lastTriggerFrame state. Picks variant via `SceneManager::m_random`,
+    applies pitch / volume / pan jitter, dispatches one-shot.
+  - `SceneManager` owns one of each, init+setBank wired in
+    `InitializeScene`, ticked alongside `m_musicSequencer`.
+  - `LuaAPI::Sound_PlayMacro/PlayFamily/StopAll` replace stubs
+    with real dispatch through SceneManager.
+  - Exporter `CollectSoundBank` walks `PS1Scene.SoundMacros` and
+    `PS1Scene.SoundFamilies`, validates SPU routing on every
+    referenced clip, packs into `SoundMacros` / `SoundMacroEvents`
+    / `SoundFamilies` / `FamilyClipIndices` flat tables.
+  - `SplashpackWriter.WriteSoundBankSection` emits the four tables
+    with the v29 header backfills already reserved in Stage A.
+  - `MusicSequencer::pitchForOffset` is now public so siblings can
+    pitch-shift one-shots without duplicating the 84-entry table.
+  - `psxsplash-main/Makefile` includes `soundmacro.cpp` +
+    `soundfamily.cpp` in `SRCS`.
 
 ## What to ship next
 
-Phase 5 Stage B: SoundMacroSequencer + SoundFamily runtime, exporter
-collects + packs records, Lua stubs become real. Estimated
-~400-500 LOC across runtime + exporter.
+Phase 2.6: PitchBend / Controller / Marker / LoopStart / LoopEnd
+event kinds in PS2M. Runtime drum-kit dispatch (today kits expand to
+bindings at export, but choke groups + per-drum priority on
+`PS1DrumKit` are runtime-driven by design and need a voice-scanner
+that watches active music voices for matching choke groups).
 
 Phase 2.6 follow-ups (deferred): PitchBend / Controller / Marker /
 LoopStart / LoopEnd event kinds in PS2M; runtime drum-kit dispatch

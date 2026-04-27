@@ -98,6 +98,12 @@ public:
     // Called once per scene tick. dt12 is fp12 frame delta (1.0 = 1 frame).
     void tick(int32_t dt12);
 
+    // Look up an SPU sample-rate ratio for a semitone offset relative to the
+    // sample's authored pitch. fp12 result (0x1000 = native rate). Public so
+    // siblings (SoundMacroSequencer, SoundFamily) can pitch-shift one-shots
+    // without duplicating the 84-entry table.
+    static uint16_t pitchForOffset(int semitoneOffset);
+
 private:
     static constexpr int MAX_SEQUENCES = 8;
     // Matches SPU voice cap (audiomanager.hh MAX_VOICES=24). Voice
@@ -126,7 +132,6 @@ private:
     void dispatchEvent(const MusicEvent &e);
     void noteOn(uint8_t channel, uint8_t note, uint8_t velocity);
     void noteOff(uint8_t channel, uint8_t note);
-    static uint16_t pitchForOffset(int semitoneOffset);
 
     // PS2M bank dispatch: walk the scene-wide instrument bank to find
     // the region matching (channel.currentProgram, note, velocity).

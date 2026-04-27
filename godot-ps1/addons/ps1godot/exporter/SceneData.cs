@@ -155,6 +155,49 @@ public sealed class DrumMappingBankRecord
     public required byte Priority { get; init; }
 }
 
+// v29+ Phase 5 Stage B: composite SFX. Maps to SPLASHPACKSoundMacroRecord
+// (24 bytes on disk). Each macro owns a contiguous slice of the scene-wide
+// MacroEvents list ([FirstEventIndex, FirstEventIndex+EventCount)).
+public sealed class SoundMacroBankRecord
+{
+    public required ushort FirstEventIndex { get; init; }
+    public required ushort EventCount { get; init; }
+    public required byte MaxVoices { get; init; }
+    public required byte Priority { get; init; }
+    public required ushort CooldownFrames { get; init; }
+    public required string Name { get; init; }   // null-truncated to 15 chars in writer
+}
+
+// v29+ Phase 5 Stage B: one frame-keyed event inside a macro.
+// Maps to SPLASHPACKSoundMacroEventRecord (8 bytes on disk).
+public sealed class SoundMacroEventBankRecord
+{
+    public required ushort Frame { get; init; }
+    public required ushort AudioClipIndex { get; init; }
+    public required byte Volume { get; init; }
+    public required byte Pan { get; init; }
+    public required sbyte PitchOffset { get; init; }   // -24..+24 semitones
+}
+
+// v29+ Phase 5 Stage B: variation pool. Maps to SPLASHPACKSoundFamilyRecord
+// (28 bytes on disk). Each family owns a contiguous slice of FamilyClipIndices
+// ([FirstClipIndex, FirstClipIndex+ClipCount)). Each entry in that slice is
+// an audio clip index.
+public sealed class SoundFamilyBankRecord
+{
+    public required ushort FirstClipIndex { get; init; }
+    public required ushort ClipCount { get; init; }
+    public required sbyte PitchSemitonesMin { get; init; }
+    public required sbyte PitchSemitonesMax { get; init; }
+    public required byte VolumeMin { get; init; }
+    public required byte VolumeMax { get; init; }
+    public required byte PanJitter { get; init; }
+    public required byte Flags { get; init; }      // bit 0 = AvoidRepeat
+    public required byte Priority { get; init; }
+    public required byte CooldownFrames { get; init; }
+    public required string Name { get; init; }
+}
+
 // World-space AABB that fires a Lua script when the player's AABB enters
 // or leaves it. Serialized as SPLASHPACKTriggerBox (32 bytes).
 public sealed class TriggerBoxRecord
@@ -550,6 +593,17 @@ public sealed class SceneData
     // references into program IDs. Cleared on each scene export.
     public Dictionary<PS1Instrument, int> InstrumentResourceToBankIndex { get; } = new();
     public Dictionary<PS1DrumKit, int>    DrumKitResourceToBankIndex { get; } = new();
+
+    // v29+ Phase 5 Stage B: composite SFX + variation pools. Each macro
+    // owns a contiguous slice of SoundMacroEvents (FirstEventIndex /
+    // EventCount); each family owns a contiguous slice of
+    // FamilyClipIndices (FirstClipIndex / ClipCount). Empty lists →
+    // header counts/offsets emit as 0; runtime treats the scene as
+    // having no macros / families.
+    public List<SoundMacroBankRecord> SoundMacros { get; } = new();
+    public List<SoundMacroEventBankRecord> SoundMacroEvents { get; } = new();
+    public List<SoundFamilyBankRecord> SoundFamilies { get; } = new();
+    public List<ushort> FamilyClipIndices { get; } = new();
 
     // UI canvases gathered from PS1UICanvas nodes + their PS1UIElement
     // children. Lua resolves by name via UI.FindCanvas.

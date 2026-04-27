@@ -190,6 +190,17 @@ void psxsplash::SceneManager::InitializeScene(uint8_t* splashpackData, LoadingSc
         m_musicSequenceNames.push_back(ms.name);
     }
 
+    // v29+ Phase 5 Stage B: hand the SoundMacro / SoundFamily banks to
+    // their runtimes. Pointers are nullptr/0 when the scene exported
+    // none, in which case Sound.PlayMacro / PlayFamily resolve to
+    // -1/log "not found" rather than crashing.
+    m_soundMacros.init(&m_audio);
+    m_soundMacros.setBank(sceneSetup.soundMacros, sceneSetup.soundMacroCount,
+                          sceneSetup.soundMacroEvents, sceneSetup.soundMacroEventCount);
+    m_soundFamilies.init(&m_audio);
+    m_soundFamilies.setBank(sceneSetup.soundFamilies, sceneSetup.soundFamilyCount,
+                            sceneSetup.familyClipIndices, sceneSetup.familyClipIndexCount);
+
     // Copy cutscene data into scene manager storage (sceneSetup is stack-local)
     m_cutsceneCount = sceneSetup.cutsceneCount;
     for (int i = 0; i < m_cutsceneCount; i++) {
@@ -529,6 +540,12 @@ void psxsplash::SceneManager::GameTick(psyqo::GPU &gpu) {
         }
     }
     m_musicSequencer.tick(m_dt12);
+    // Phase 5 Stage B: tick macro/family runtimes every frame so
+    // active macro instances dispatch their next-due events and the
+    // family cooldown counter advances. Both run regardless of pause —
+    // sound effects shouldn't freeze with the gameplay tick.
+    m_soundMacros.tick(m_dt12);
+    m_soundFamilies.tick(m_dt12);
 
     // Controls read/delta every frame (including paused) so button-state
     // tracking stays in sync — otherwise the first post-pause frame would
