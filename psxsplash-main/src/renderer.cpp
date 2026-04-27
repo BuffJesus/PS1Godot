@@ -752,10 +752,15 @@ void psxsplash::Renderer::RenderWithRooms(eastl::vector<GameObject*>& objects,
     // Helper: render a span of tri-refs with per-object frustum culling.
     // lastObj/lastObjCulled are managed across the span to avoid redundant
     // object transforms when consecutive refs share an object.
+    // lastObj / lastObjCulled / lastVerts / lastFaces all carry across cells
+    // within the same room. Hoisting the pool pointers alongside lastObj is
+    // mandatory: the "if (ref.objectIndex != lastObj)" branch is what refreshes
+    // them, so when a new cell starts with the SAME object as the previous
+    // cell ended on (common for big floors/walls split across many cells),
+    // we'd otherwise hand expandTri null pointers and dereference garbage.
     auto renderTriRefs = [&](const TriangleRef* refs, int count,
-                             int16_t& lastObj, bool& lastObjCulled) {
-        const Vertex* lastVerts = nullptr;
-        const Face*   lastFaces = nullptr;
+                             int16_t& lastObj, bool& lastObjCulled,
+                             const Vertex*& lastVerts, const Face*& lastFaces) {
         for (int ti = 0; ti < count; ti++) {
             const TriangleRef& ref = refs[ti];
             if (ref.objectIndex >= objects.size()) continue;
@@ -794,6 +799,8 @@ void psxsplash::Renderer::RenderWithRooms(eastl::vector<GameObject*>& objects,
         const RoomData& rm = rooms[ri];
         int16_t lastObj = -1;
         bool lastObjCulled = false;
+        const Vertex* lastVerts = nullptr;
+        const Face*   lastFaces = nullptr;
 
         if (rm.cellCount > 0 && cells != nullptr) {
             // Only pay for cell-vs-screen projection when the clip rect is narrower
@@ -818,12 +825,12 @@ void psxsplash::Renderer::RenderWithRooms(eastl::vector<GameObject*>& objects,
                 }
 
                 renderTriRefs(&roomTriRefs[cell.firstTriRef], cell.triRefCount,
-                              lastObj, lastObjCulled);
+                              lastObj, lastObjCulled, lastVerts, lastFaces);
             }
         } else {
             // Fallback: render all tris in room (no cell data available)
             renderTriRefs(&roomTriRefs[rm.firstTriRef], rm.triRefCount,
-                          lastObj, lastObjCulled);
+                          lastObj, lastObjCulled, lastVerts, lastFaces);
         }
     };
 
