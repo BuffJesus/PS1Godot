@@ -215,6 +215,11 @@ private:
         uint8_t pan;
         uint8_t currentProgram;  // PS2M: the program the channel is currently set to
         uint8_t lastClipIndex;   // PS2M: clip resolved at the last NoteOn (for pitch reuse)
+        // CC#11 Expression — secondary volume controller (0-127, 127 =
+        // no attenuation). Multiplied into the noteOn volume formula
+        // alongside CC#7 ChannelVolume. Like CC#7, applies at the
+        // next noteOn (no live retune of held notes).
+        uint8_t expression;
         // Pre-bend SPU rate of the currently-held note, captured at noteOn
         // after the note→base pitch shift. kind=5 (PitchBend) re-multiplies
         // this by pitchBendRatio12 / 4096 instead of re-running the shift,

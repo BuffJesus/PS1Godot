@@ -201,6 +201,7 @@ bool MusicSequencer::playByIndex(int index, uint8_t masterVolume) {
         m_channels[i].lastClipIndex = 0;
         m_channels[i].noteBaseRate = 0;
         m_channels[i].pitchBendRatio12 = 0x1000;  // no bend at sequence start
+        m_channels[i].expression = 127;           // CC#11 default = no attenuation
         // Pre-silence the voice so the next noteOn starts cleanly.
         psyqo::SPU::silenceChannels(1u << i);
     }
@@ -344,8 +345,9 @@ bool MusicSequencer::dispatchEvent(const MusicEvent &e) {
             // silently no-ops so adding new handlers later is forward-
             // compatible without a format bump.
             if (e.channel < MAX_CHANNELS) {
-                if (e.data1 == 7)       m_channels[e.channel].volume = e.data2;
-                else if (e.data1 == 10) m_channels[e.channel].pan    = e.data2;
+                if (e.data1 == 7)       m_channels[e.channel].volume     = e.data2;
+                else if (e.data1 == 10) m_channels[e.channel].pan        = e.data2;
+                else if (e.data1 == 11) m_channels[e.channel].expression = e.data2;
             }
             break;
         case 8:
@@ -435,10 +437,14 @@ void MusicSequencer::noteOn(uint8_t channel, uint8_t note, uint8_t velocity) {
         }
     }
 
-    // Compose final volume: channel × velocity × master × region.
-    // Each factor is 0-127 except master (0-128). Normalised to 0..128.
+    // Compose final volume: channel × velocity × expression × master
+    // × region. Each factor is 0-127 except master (0-128). Normalised
+    // to 0..128. Expression (CC#11) folds in alongside the channel
+    // volume — both apply at noteOn only, no live retune.
     int combinedVol = ((int)m_channels[channel].volume * (int)velocity)
                       / 127;                                    // 0..127
+    combinedVol = (combinedVol * (int)m_channels[channel].expression)
+                  / 127;                                        // 0..127
     combinedVol = (combinedVol * regionVolume) / 127;            // 0..127
     combinedVol = (combinedVol * (int)m_masterVolume) / 127;     // 0..127
     if (combinedVol > 128) combinedVol = 128;

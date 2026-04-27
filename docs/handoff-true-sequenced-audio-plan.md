@@ -340,15 +340,25 @@ top of PS1M2; defer.
   birthday-paradox collisions become likely — rename one if a
   collision turns up; no runtime collision check. No format bump.
 
+- **Phase 2.6 — CC#11 expression** (this commit, runtime only):
+  adds `expression` byte to `ChannelState` (default 127 = no
+  attenuation, reset on `playByIndex`). Wire-format unchanged —
+  CC#11 already serialized as kind=7 since the controller
+  rollout. Dispatch case 7 routes data1=11 → state. The noteOn
+  volume formula folds expression in alongside CC#7 volume:
+  `combined = volume × velocity × expression × region × master`,
+  each /127. Like CC#7 / CC#10, applies at next noteOn only — no
+  live retune of held notes.
+
 ## What to ship next
 
 Phase 2.6 is effectively complete: every reserved event kind
 (4 ProgramChange, 5 PitchBend, 7 Controller, 8 Marker, 9/10
 LoopStart/End) is now end-to-end, and drum-kit choke groups
 ship. Optional polish that doesn't gate further phases:
-- Extend the kind=7 whitelist to CC#11 (expression — needs a new
-  ChannelState field), CC#1 (modulation — needs an LFO), CC#64
-  (sustain pedal — needs deferred noteOff release).
+- Extend the kind=7 whitelist to CC#1 (modulation — needs an
+  LFO + per-tick voice retune) and CC#64 (sustain pedal — needs
+  deferred noteOff release).
 - Wire per-drum priority once a global voice allocator with
   stealing exists (Phase 4 territory — today every music channel
   has a dedicated reserved voice, so priority has nothing to do).
