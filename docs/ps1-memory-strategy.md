@@ -29,7 +29,8 @@ fix) reflect those caps.
 - Pack by what renders together, not by what's similar.
 - Share CLUTs across enemy/lighting/team variants.
 - Bake one-off decals into world atlases instead of separate quads.
-- Detailed format policy in [`ps1-texture-strategy.md`](ps1-texture-strategy.md).
+- Detailed format policy + warning catalogue in
+  [`ps1_asset_pipeline_plan.md`](ps1_asset_pipeline_plan.md).
 
 ## Meshes + level data + gameplay state fight main RAM
 
@@ -102,5 +103,5 @@ should aim for.
 - Dock budget bars + per-bus caps: `godot-ps1/addons/ps1godot/ui/SceneStats.cs`
 - Splashpack format + version: `psxsplash-main/src/splashpack.{hh,cpp}` (currently v25)
 - Audio routing: [`ps1-audio-routing.md`](ps1-audio-routing.md)
-- Texture / decal / alpha policy: [`ps1-texture-strategy.md`](ps1-texture-strategy.md)
+- Texture / decal / alpha policy + asset pipeline plan: [`ps1_asset_pipeline_plan.md`](ps1_asset_pipeline_plan.md)
 - General improvement TODOs: [`psxsplash-improvements.md`](psxsplash-improvements.md)

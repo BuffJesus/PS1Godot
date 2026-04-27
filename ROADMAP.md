@@ -1088,15 +1088,20 @@ Auto resolves at build time from size + loop heuristics. Status:
 See [`docs/ps1-audio-routing.md`](docs/ps1-audio-routing.md) for the bus
 table, Auto rules, and per-clip migration shortlist.
 
-### Memory + texture strategy docs
+### Memory + asset-pipeline strategy docs
 
 - [`docs/ps1-memory-strategy.md`](docs/ps1-memory-strategy.md) — three-bus
   budget overview (SPU / VRAM / main RAM) with cross-references.
-- [`docs/ps1-texture-strategy.md`](docs/ps1-texture-strategy.md) — 4bpp/8bpp
-  default policy, atlas grouping, CLUT reuse, decal pipeline, alpha modes.
+- [`docs/ps1_asset_pipeline_plan.md`](docs/ps1_asset_pipeline_plan.md) —
+  unified plan covering meshes, textures, sprites/decals/alpha, VRAM, and
+  animation. Includes 4bpp/8bpp policy, atlas grouping, CLUT reuse, decal
+  pipeline, alpha modes, animation method tiers, the consolidated warning
+  catalogue, and the Blender ↔ Godot round-trip schema.
+- [`docs/ps1godot_blender_addon_integration_plan.md`](docs/ps1godot_blender_addon_integration_plan.md) —
+  Blender-side implementation spec for the same schema (panels, custom
+  properties, import/export plumbing).
 - Validation scaffold (per-asset VRAM table, 16bpp warn, atlas dedup) is
-  noted in the texture doc but not yet implemented; lands alongside the
-  Phase 3 VRAM viewer.
+  Slot A in the asset-pipeline plan; lands alongside the Phase 3 VRAM viewer.
 
 - [ ] **F5 to play.** Hook Godot's Play button: build splashpack → launch
       PCSX-Redux with PCdrv → attach C# debugger → tail `printf` output in

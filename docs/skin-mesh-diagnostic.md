@@ -99,5 +99,9 @@ persists, suspect #2 is still in play.
 `PS1MeshGroup` whose descendants match the Kenney offender list (the 21
 meshes the UV linter flagged), and sets `TilingUV=true` on each group.
 Run from Godot's `File → Run...` menu. Idempotent. Mutes the linter
-without changing rendered output — see `docs/ps1-texture-strategy.md`
-on the TilingUV caveat (PSX still doesn't wrap; muting is intent-only).
+without changing rendered output — `TilingUV=true` is an authoring
+intent flag only; the PSX rasteriser still doesn't wrap or clamp UVs
+(see comment in `godot-ps1/addons/ps1godot/exporter/MeshLinter.cs`),
+so out-of-range UVs still sample whatever happens to sit at that
+VRAM offset. See `docs/ps1_asset_pipeline_plan.md` for the wider
+mesh / texture policy.

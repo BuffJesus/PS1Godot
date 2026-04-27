@@ -15,8 +15,9 @@ namespace PS1Godot.Exporter;
 // be additive — print only, no behavioral change.
 //
 // Cross-references:
-//   docs/ps1-texture-strategy.md — the policy this validates.
-//   SceneStats.cs                — same VRAM cost model (kept in sync).
+//   docs/ps1_asset_pipeline_plan.md — the policy this validates (texture
+//                                     section + warning catalogue).
+//   SceneStats.cs                  — same VRAM cost model (kept in sync).
 public static class TextureValidationReport
 {
     // Printed only when the texture is over the page-max in either dim.
