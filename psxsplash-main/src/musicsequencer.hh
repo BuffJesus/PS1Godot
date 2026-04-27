@@ -43,7 +43,15 @@ struct MusicChannelEntry {
     uint8_t  volume;         // 0-127, per-channel multiplier
     uint8_t  pan;            // 0=L, 64=center, 127=R
     uint8_t  flags;          // bit0=loopSample, bit1=percussion (no pitch shift)
-    uint16_t pad;
+    // 0 = no choke; non-zero = a hit on any channel sharing this id
+    // silences this channel's currently-held note. Canonical use is
+    // open-hat / closed-hat sharing one group so a closed strike cuts
+    // a ringing open hi-hat. Repurposes the former 2-byte pad: old
+    // splashpack bins zero-fill these bytes, so legacy sequences read
+    // chokeGroup = 0 = "no choke" — backwards-compatible without a
+    // format bump.
+    uint8_t  chokeGroup;
+    uint8_t  pad;            // reserved (was upper byte of pad)
 };
 static_assert(sizeof(MusicChannelEntry) == 8, "MusicChannelEntry must be 8 bytes");
 

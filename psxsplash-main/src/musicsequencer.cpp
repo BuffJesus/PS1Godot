@@ -416,6 +416,25 @@ void MusicSequencer::noteOn(uint8_t channel, uint8_t note, uint8_t velocity) {
 
     if (clipIdx < 0 || clipIdx >= MAX_AUDIO_CLIPS) return;
 
+    // Choke group: silence any other channel whose configured chokeGroup
+    // matches this one. The canonical use is closed-hat note silencing
+    // a ringing open-hat note (both share one non-zero group). Old
+    // splashpacks zero-pad the entry, which reads as group 0 → no
+    // choke ever fires — backwards-compatible.
+    uint8_t chokeGroup = cfg.chokeGroup;
+    if (chokeGroup != 0) {
+        int chanCount = m_active->header->channelCount;
+        if (chanCount > MAX_CHANNELS) chanCount = MAX_CHANNELS;
+        for (int i = 0; i < chanCount; i++) {
+            if (i == (int)channel) continue;
+            if (m_channels[i].activeVoice < 0) continue;
+            if (m_active->channels[i].chokeGroup != chokeGroup) continue;
+            psyqo::SPU::silenceChannels(1u << m_channels[i].activeVoice);
+            m_channels[i].activeVoice = -1;
+            m_channels[i].activeNote  = 0;
+        }
+    }
+
     // Compose final volume: channel × velocity × master × region.
     // Each factor is 0-127 except master (0-128). Normalised to 0..128.
     int combinedVol = ((int)m_channels[channel].volume * (int)velocity)

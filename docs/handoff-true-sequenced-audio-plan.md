@@ -88,8 +88,10 @@ unchanged.
 Drum kits expand the same way: one binding per kit mapping with
 `MidiNoteMin == MidiNoteMax == kit-mapping note`, `Percussion=true`
 to inhibit pitch shift, `MidiChannel = PS1MusicSequence.DrumMidiChannel`
-(default 9 = GM convention). Choke groups and per-drum priority stay on
-the kit resource but the runtime ignores them today (Phase 2.5+).
+(default 9 = GM convention). Per-drum priority stays on the kit
+resource but the runtime ignores it today (relevant only when a
+global voice allocator with stealing arrives; see Phase 4). Choke
+groups are wired end-to-end as of Phase 2.6 (see below).
 
 Voice budget caveat: a 4-region instrument used on one MIDI channel
 reserves 4 SPU voices, not 1. The Phase 0 voice-pressure diagnostics
@@ -312,7 +314,18 @@ top of PS1M2; defer.
   expression, CC#1 modulation, CC#64 sustain) later does not
   need a format bump. Older runtimes default-skip kind=7. No
   format bump.
-- **Phase 2.6 — text marker** (this commit, both sides): MIDI
+- **Phase 2.6 — drum-kit choke groups** (this commit, both sides):
+  `PS1DrumKit.ChokeGroups[i]` now propagates from kit expansion in
+  `SceneCollector` through `PS1MSerializer.ChannelBinding.ChokeGroup`
+  into `MusicChannelEntry.chokeGroup` (1 byte, repurposing the
+  former 2-byte pad — old splashpack bins zero-fill, so legacy
+  sequences read group=0 = no choke, backwards-compatible without
+  a format bump). Runtime `noteOn` scans music channels and
+  silences any active voice whose configured chokeGroup matches
+  the firing note's. Canonical use: open-hat / closed-hat sharing
+  one group. Per-drum priority is still ignored (relevant only
+  for cross-allocator stealing — Phase 4 work).
+- **Phase 2.6 — text marker** (commit `05456b9`, both sides): MIDI
   marker / cue-point meta-events whose text is *not*
   loopStart/loopEnd are emitted as PS2M event kind=8.
   `data1 = hash & 0xFF`, `data2 = (hash >> 8) & 0xFF` where hash
@@ -329,10 +342,13 @@ top of PS1M2; defer.
 
 ## What to ship next
 
-Phase 2.6 wrap-up: runtime drum-kit dispatch (today kits expand
-to bindings at export, but choke groups + per-drum priority on
-`PS1DrumKit` are runtime-driven by design and need a voice-scanner
-that watches active music voices for matching choke groups).
-Optional: extend the kind=7 whitelist to CC#11 (expression —
-needs a new ChannelState field), CC#1 (modulation — needs an
-LFO), CC#64 (sustain pedal — needs deferred noteOff release).
+Phase 2.6 is effectively complete: every reserved event kind
+(4 ProgramChange, 5 PitchBend, 7 Controller, 8 Marker, 9/10
+LoopStart/End) is now end-to-end, and drum-kit choke groups
+ship. Optional polish that doesn't gate further phases:
+- Extend the kind=7 whitelist to CC#11 (expression — needs a new
+  ChannelState field), CC#1 (modulation — needs an LFO), CC#64
+  (sustain pedal — needs deferred noteOff release).
+- Wire per-drum priority once a global voice allocator with
+  stealing exists (Phase 4 territory — today every music channel
+  has a dedicated reserved voice, so priority has nothing to do).

@@ -2514,6 +2514,7 @@ public static class SceneCollector
 
                     int drumVol = (kit.Volumes != null && i < kit.Volumes.Count) ? kit.Volumes[i] : 100;
                     int drumPan = (kit.Pans != null && i < kit.Pans.Count) ? kit.Pans[i] : 64;
+                    int drumChoke = (kit.ChokeGroups != null && i < kit.ChokeGroups.Count) ? kit.ChokeGroups[i] : 0;
 
                     bindings.Add(new PS1MSerializer.ChannelBinding
                     {
@@ -2527,6 +2528,7 @@ public static class SceneCollector
                         Pan            = drumPan,
                         LoopSample     = false,          // drums never loop
                         Percussion     = true,
+                        ChokeGroup     = drumChoke,
                     });
                     bindingDefaultPrograms.Add(0);  // drum bindings don't use bank programs
                     kitExpanded++;

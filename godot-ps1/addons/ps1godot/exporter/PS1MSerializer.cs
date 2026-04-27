@@ -45,6 +45,11 @@ public static class PS1MSerializer
         public required int Pan { get; init; }
         public required bool LoopSample { get; init; }
         public required bool Percussion { get; init; }
+        // 0 = no choke. Non-zero = a noteOn on any channel sharing this
+        // group silences this channel's currently-held note. Drum-kit
+        // expansion populates this from PS1DrumKit.ChokeGroups[i];
+        // melodic bindings leave it at 0.
+        public int ChokeGroup { get; init; } = 0;
     }
 
     // Produce a PS1M (legacy) or PS2M (Phase 2.5 bank-driven) blob.
@@ -434,7 +439,11 @@ public static class PS1MSerializer
             w.Write((byte)Math.Clamp(b.Volume, 0, 127));
             w.Write((byte)Math.Clamp(b.Pan, 0, 127));
             w.Write(flags);
-            w.Write((ushort)0);                   // pad
+            // Repurposes the former 2-byte pad: chokeGroup byte +
+            // 1 reserved byte. Older runtimes read pad=0, which reads
+            // as chokeGroup=0 = no choke — backwards-compatible.
+            w.Write((byte)Math.Clamp(b.ChokeGroup, 0, 255));
+            w.Write((byte)0);                     // reserved
         }
 
         // PS2M only: u8[N] default-program table, padded to 4-byte
