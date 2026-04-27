@@ -1252,6 +1252,31 @@ table, Auto rules, and per-clip migration shortlist.
   properties, import/export plumbing).
 - Validation scaffold (per-asset VRAM table, 16bpp warn, atlas dedup) is
   Slot A in the asset-pipeline plan; lands alongside the Phase 3 VRAM viewer.
+  - [x] **A1. Per-asset VRAM rows** — `TextureValidationReport` prints
+        one row per atlas entry + classifies risks (oversized source,
+        16bpp gameplay clip, small cutout that should be 4bpp,
+        single-mesh-use atlas candidate). Returns warning count for
+        the dock summary aggregator.
+  - [x] **A2. Animation linter** — `AnimationLinter` covers PS1Animation
+        simple tracks (dead tracks, frame-out-of-range, dense KFs) and
+        SkinnedMeshRecord baked clips (size mismatch, fps>30, bones>24,
+        big one-shots, tiny loops).
+  - [x] **Audio validation pulled forward** — `AudioValidationReport`
+        rounds out the trio: per-clip rows + warn on big SPU clips that
+        should route XA, big resident loops, dangling XA payloads (the
+        "psxavenc missing" fallback), CDDA track #0.
+  - [x] **Mesh dedup summary** — `MeshDedupAnalyzer` + post-collection
+        report identify low-reuse meshes (< 1.5× vertex reuse) the v31
+        pool can't recover; flagged as Blender Merge-By-Distance targets.
+  - [x] **Dock summary line** — single "Last export: N issues across M
+        scenes (X KB saved by v31 mesh pool)" label below SPU bar in the
+        PS1Godot dock; tooltip expands to per-category subtotals + worst
+        mesh-cleanup names. Wired through `LastExportSummary`.
+  - [ ] **A3. Decal stack warning** — per-region overlap counter; WARN
+        at >6 alpha quads in any 320×240 screen rect. Not started.
+  - [ ] **A4. Static-vs-dynamic classifier (warning only)** — flag
+        meshes that should be baked into a static render group. Not
+        started; gates Slot D render-group batching.
 
 - [ ] **F5 to play.** Hook Godot's Play button: build splashpack → launch
       PCSX-Redux with PCdrv → attach C# debugger → tail `printf` output in
