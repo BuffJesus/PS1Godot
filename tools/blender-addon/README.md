@@ -92,6 +92,21 @@ The wire identifiers (the first item of each enum tuple in
 `"VertexColor"`) are the round-trip contract. Don't rename them once a
 project ships.
 
+## Smoke test
+
+`tools/blender-addon/test_register.py` registers the add-on against a
+factory-startup Blender, exercises the PropertyGroups + validator, and
+unregisters. Useful for catching breaks after Blender API bumps:
+
+```text
+"C:\Programs\Blender\blender.exe" --background --factory-startup ^
+  --python tools\blender-addon\test_register.py
+```
+
+(Substitute your Blender path on macOS/Linux.) Last verified green
+2026-04-27 against Blender 5.0.0. Exits with code 1 on any
+registration / round-trip / validator failure so it can plug into CI.
+
 ## Layout
 
 ```text
