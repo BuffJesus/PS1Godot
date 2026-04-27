@@ -2112,6 +2112,63 @@ public static class SceneCollector
                             GD.PushWarning($"[PS1Godot] PS1MusicSequence '{name}': MIDI channel {ch.MidiChannel} has both Instrument and a direct AudioClipName='{ch.AudioClipName}' — using Instrument. Clear AudioClipName to silence this warning.");
                         }
 
+                        // PS2M fast path: when the instrument is in the
+                        // scene-wide bank, emit ONE binding per source
+                        // MIDI channel. The runtime PS2M dispatcher
+                        // resolves the correct region per NoteOn via
+                        // resolveBankRegion(currentProgram, note,
+                        // velocity), so multi-region expansion would
+                        // just inflate the runtime voice reservation.
+                        // First region is the fallback clip the runtime
+                        // uses if bank lookup fails.
+                        if (data.InstrumentResourceToBankIndex.TryGetValue(ch.Instrument, out int ch_bankIdx))
+                        {
+                            // Pick the first valid region as the
+                            // fallback. Walk regions in order; first
+                            // one that resolves wins.
+                            int fallbackClipIdx = -1;
+                            int fallbackRootKey = 60;
+                            bool fallbackLoop = false;
+                            for (int ri = 0; ri < ch.Instrument.Regions.Count; ri++)
+                            {
+                                var r0 = ch.Instrument.Regions[ri];
+                                if (r0 == null || string.IsNullOrEmpty(r0.AudioClipName)) continue;
+                                if (!clipIndexByName.TryGetValue(r0.AudioClipName, out int rIdx)) continue;
+                                if (data.AudioClips[rIdx].Routing != 0) continue;
+                                fallbackClipIdx = rIdx;
+                                fallbackRootKey = r0.RootKey;
+                                fallbackLoop    = r0.LoopEnabled;
+                                break;
+                            }
+                            if (fallbackClipIdx < 0)
+                            {
+                                GD.PushError($"[PS1Godot] PS1MusicSequence '{name}': MIDI channel {ch.MidiChannel} instrument '{ch.Instrument.InstrumentName}' has no valid region for fallback — channel skipped.");
+                                continue;
+                            }
+                            bindings.Add(new PS1MSerializer.ChannelBinding
+                            {
+                                MidiChannel    = ch.MidiChannel,
+                                MidiTrackIndex = ch.MidiTrackIndex,
+                                MidiNoteMin    = ch.MidiNoteMin,
+                                MidiNoteMax    = ch.MidiNoteMax,
+                                AudioClipIndex = fallbackClipIdx,
+                                BaseNoteMidi   = fallbackRootKey,
+                                Volume         = ch.Volume,
+                                Pan            = ch.Pan,
+                                LoopSample     = fallbackLoop,
+                                Percussion     = ch.Percussion,
+                            });
+                            bindingDefaultPrograms.Add(data.Instruments[ch_bankIdx].ProgramId);
+                            sequenceUsesBank = true;
+                            continue;  // skip the multi-region expansion
+                        }
+
+                        // PS1M legacy path: instrument not in the bank
+                        // (or no bank exists). Expand every region into
+                        // its own binding so the per-note pitch-range
+                        // router can hand the correct sample to each
+                        // NoteOn — runtime has no bank to dispatch
+                        // through here.
                         int expandedThisChannel = 0;
                         for (int ri = 0; ri < ch.Instrument.Regions.Count; ri++)
                         {
