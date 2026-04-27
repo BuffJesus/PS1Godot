@@ -28,6 +28,7 @@ public partial class PS1GodotDock : VBoxContainer
     private BudgetRow? _triRow;
     private BudgetRow? _vramRow;
     private BudgetRow? _spuRow;
+    private Label? _lastExportLabel;
     private VBoxContainer? _setupBox;
     private Label? _setupSummary;
 
@@ -124,6 +125,18 @@ public partial class PS1GodotDock : VBoxContainer
         _spuRow = new BudgetRow("SPU");
         inner.AddChild(_spuRow.Label);
         inner.AddChild(_spuRow.Bar);
+
+        // Last-export summary line. Hidden until OnExportEmptySplashpack
+        // pushes a non-empty summary; tooltip carries the per-category
+        // breakdown + worst mesh-cleanup candidates.
+        _lastExportLabel = new Label
+        {
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+            Visible = false,
+            MouseFilter = MouseFilterEnum.Pass,  // tooltip needs hover events
+        };
+        _lastExportLabel.AddThemeColorOverride("font_color", new Color(1, 1, 1, 0.70f));
+        inner.AddChild(_lastExportLabel);
 
         // ── Setup section ───────────────────────────────────────────────
         AddSectionHeader(inner, "Setup");
@@ -246,6 +259,28 @@ public partial class PS1GodotDock : VBoxContainer
         _spuRow.Show(
             $"SPU  {FormatKb(stats.SpuEstimateBytes)} / {FormatKb(SceneStats.SpuBudgetBytes)}  (gameplay-resident)",
             stats.SpuEstimateBytes, SceneStats.SpuBudgetBytes);
+    }
+
+    // Push the validation summary built during the last
+    // OnExportEmptySplashpack run. Color-codes the line: green when no
+    // issues, amber when there are. Tooltip carries the multi-line
+    // breakdown.
+    public void ApplyLastExportSummary(LastExportSummary? summary)
+    {
+        if (_lastExportLabel == null) return;
+        if (summary == null || summary.ScenesExported == 0)
+        {
+            _lastExportLabel.Visible = false;
+            return;
+        }
+
+        _lastExportLabel.Text = summary.LabelText;
+        _lastExportLabel.TooltipText = summary.TooltipText;
+        Color c = summary.TotalIssues == 0
+            ? new Color(0.55f, 0.85f, 0.55f)
+            : new Color(0.95f, 0.75f, 0.35f);
+        _lastExportLabel.AddThemeColorOverride("font_color", c);
+        _lastExportLabel.Visible = true;
     }
 
     private static string FormatKb(long bytes) => $"{bytes / 1024} KB";

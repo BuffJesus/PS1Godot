@@ -56,6 +56,28 @@ public sealed class LuaFileRecord
     public required string SourcePath { get; init; }
 }
 
+// Per-scene snapshot of MeshDedupAnalyzer output. Captures the totals
+// the dock summary line shows + the worst-N reuse meshes the tooltip
+// expands. Set by SceneCollector.ReportMeshDedupSummary.
+public sealed class MeshDedupSummary
+{
+    public required int MeshesAnalyzed { get; init; }
+    public required long TotalBytesV29 { get; init; }   // pre-pool legacy 52 B/tri layout
+    public required long TotalBytesV31 { get; init; }   // v31 actual on-disk pooled size
+    public required long TotalBytesSaved { get; init; }
+    public required float SavingsPercent { get; init; }
+    // Names of low-reuse meshes (authoring cleanup candidates) sorted
+    // worst-first. Used as tooltip text on the dock summary line.
+    public required List<MeshDedupSummaryEntry> WorstReuse { get; init; } = new();
+}
+
+public sealed record MeshDedupSummaryEntry(
+    string MeshName,
+    int TriCount,
+    int UniqueVertices,
+    float ReuseFactor,
+    float SavingsPercent);
+
 // One pre-encoded ADPCM audio clip. AdpcmData is the bytes that land in
 // the .spu sidecar file; the rest goes in the main splashpack's audio
 // clip table.
@@ -573,6 +595,12 @@ public sealed class SceneData
     // Audio clips authored on PS1Scene.AudioClips, already ADPCM-encoded.
     // Parallel name table lets Lua resolve `Audio.Play("name")` at runtime.
     public List<AudioClipRecord> AudioClips { get; } = new();
+
+    // Post-collection dedup analysis (v31 vertex-pool format). Populated
+    // by SceneCollector.ReportMeshDedupSummary at the end of FromRoot;
+    // null if no static meshes were eligible. Read by the plugin to push
+    // a "last export summary" into the dock.
+    public MeshDedupSummary? MeshDedup { get; set; }
 
     // Sequenced music tracks (.mid → PS1M). Parallel name lookup via
     // Music.Play("..."). Capped at 8 entries by the runtime.

@@ -2,13 +2,16 @@ using System.Collections.Generic;
 
 namespace PS1Godot.Exporter;
 
-// Vertex-pool dedup analyzer for the planned Phase A.1 static-mesh format
-// change (splashpack v30). Computes how much each authored mesh would
-// shrink if the on-disk layout switched from "Tri[] (52 B per tri,
-// vertices expanded ×3)" to "Vertex[] + Face[]" with deduplicated
-// vertex storage. Read-only — never mutates the input mesh, never
-// touches the splashpack writer. Used to size up the win before
-// committing to the format change.
+// Vertex-pool dedup analyzer for the static-mesh format (splashpack
+// v31, shipped Phase A.1). Computes how much each authored mesh shrinks
+// from the legacy "Tri[] (52 B per tri, vertices expanded ×3)" layout
+// to the live "Vertex[] + Face[]" pooled layout. Read-only — never
+// mutates the input mesh, never touches the splashpack writer.
+//
+// We keep computing the legacy size as a comparison baseline so the
+// summary line in the dock + console can report "saved X B vs the old
+// format". The pooled size we compute here matches what
+// SplashpackWriter.WriteStaticMeshPooled actually emits.
 //
 // Dedup key: (vx, vy, vz, u, v, r, g, b). Vertex normals are *not*
 // part of the key because the on-disk Tri format already collapses to
@@ -16,11 +19,11 @@ namespace PS1Godot.Exporter;
 // merge cleanly even if their authored vertex normals differ.
 //
 // Size model:
-//   v29 layout:  triCount × 52 bytes (current Tri struct, mesh.hh)
-//   v30 layout:  4 B header (vertexCount + triCount)
-//              + uniqueVertices × 12 B (pos 6 + color 4-aligned + uv 2)
-//              + triCount × 20 B (3 × u16 indices + face-normal 6 +
-//                                 tpage 2 + clutX/Y 4 + pad 2)
+//   pre-pool layout: triCount × 52 bytes (legacy Tri struct, mesh.hh)
+//   v31 pooled:      4 B header (vertexCount + triCount)
+//                  + uniqueVertices × 12 B (pos 6 + color 4-aligned + uv 2)
+//                  + triCount × 20 B (3 × u16 indices + face-normal 6 +
+//                                     tpage 2 + clutX/Y 4 + pad 2)
 //
 // For a typical mesh with vertex reuse ≈ 2× (each vertex shared by two
 // tris on average) the savings work out to ~50%; tighter manifold
