@@ -1,4 +1,4 @@
-# Splashpack format v31
+# Splashpack format v30
 
 Extracted from `psxsplash-main/src/splashpack.{hh,cpp}` and
 `godot-ps1/addons/ps1godot/exporter/SplashpackWriter.cs`. Keep this in sync when
@@ -240,21 +240,6 @@ export-time, not runtime.
   `XaAudioBackend` (`xaaudio.cpp`) drives Form-2 disc streaming via
   `psyqo::CDRomDevice::Action` for SETMODE 0x24 → SETLOC → READS. See
   `splashpack.hh:120`.
-- v31: static-mesh vertex-pool format. Per-object mesh storage
-  shrinks from `Tri[polyCount]` (52 B per triangle, vertices
-  expanded ×3) to a `MeshBlob` header (4 B: u16 vertexCount + u16
-  triCount) followed by `Vertex[vertexCount]` (12 B each: 6 B pos +
-  2 B uv + 4 B color, fields reordered for natural alignment) and
-  `Face[triCount]` (20 B each: 3 × u16 indices + 6 B face normal +
-  2 B tpage + 4 B CLUT XY + 2 B pad). Vertices are deduplicated
-  by `(pos, post-expander uv, color)` — 50–55% smaller in typical
-  manifold meshes; ~32% smaller in worst-case zero-reuse meshes.
-  Skinned meshes keep the legacy `Tri[]` layout: their per-tri-vertex
-  bone-indices array can't pool across triangles that share a vertex
-  but assign different bones, and the savings would be smaller anyway
-  given the boneIndices overhead. Renderer expands a Tri on the
-  stack via `expandTri(verts, face)` per-iteration; no in-RAM Tri[]
-  is held. Hard cutover: v30 splashpacks no longer load.
 - v30: skin-animation pose compression. Per-bone-frame storage
   shrinks from 24 B `BakedBoneMatrix` (9 int16 row-major rotation +
   3 int16 translation, fp12) to 14 B `BakedBonePose` (4 int16

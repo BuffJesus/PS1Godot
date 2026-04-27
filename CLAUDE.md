@@ -29,10 +29,10 @@ project with our plugin at `godot-ps1/addons/ps1godot/`.
 ```
 
 The **splashpack binary format** is the integration contract. Current version is
-**v31** (bumped through v22–v31 between 2026-04-20 and 2026-04-27 for sequenced
+**v30** (bumped through v22–v30 between 2026-04-20 and 2026-04-27 for sequenced
 music, UI 3D-model HUD widgets, audio routing, XA sidecar table, scene-wide
-instrument bank, sound macros + sound families, v30's quaternion-encoded
-skin-animation poses, and v31's static-mesh vertex-pool format; see
+instrument bank, sound macros + sound families, and v30's quaternion-encoded
+skin-animation poses; see
 `godot-ps1/addons/ps1godot/exporter/SplashpackWriter.cs` and
 `psxsplash-main/src/splashpack.{hh,cpp}`). The loader hard-asserts
 `version >= 29`; older exports won't load. We are the sole consumer — the
@@ -58,11 +58,9 @@ Magic bytes are `"SP"`, header is **224 bytes** (see `SPLASHPACKFileHeader` in
 bit-for-bit. Each version bump appends to the end of the header (e.g. v21 added
 the third-person camera-rig fields, v27 added the XA sidecar table, v29 added
 sound-macro/family table offsets, v30 swapped the per-bone-frame format from
-24 B BakedBoneMatrix to 14 B BakedBonePose in the skin section, v31 swapped
-the static-mesh per-object Tri[] for a Vertex[] + Face[] vertex pool with a
-4 B MeshBlob header). v30 and v31 reshuffled per-section data — both were
-one-time exceptions justified by the savings; subsequent bumps must follow
-append-only unless a comparable size win justifies another rewrite.
+24 B BakedBoneMatrix to 14 B BakedBonePose in the skin section) — never
+reshuffle existing fields *outside* the skin section. The v30 skin-format
+rewrite was a one-time exception; subsequent bumps must follow append-only.
 
 A human-readable extract of the format lives in `docs/splashpack-format.md`.
 
@@ -138,9 +136,8 @@ floor geometry deferred), 8–12 ✅ (rooms/portals shipped 2026-04-22).
 Phase 2.5 + 2.6 audio shipped end-to-end: SPU + CDDA + XA all play via
 `Audio.PlayMusic`, sequenced music via PS2M with scene-wide instrument
 banks, sound macros + sound families wired through runtime dispatch,
-voice allocator with priority stealing. Format at **v31** (skin animation
-storage shrunk ~42% via quaternion-encoded BakedBonePose; static-mesh
-storage shrunk ~50% via vertex-pool MeshBlob/Vertex/Face). Phase 3 has
+voice allocator with priority stealing. Format at **v30** (skin animation
+storage shrunk ~42% via quaternion-encoded BakedBonePose). Phase 3 has
 landed a dockable plugin panel with live scene-budget bars + dependency
 detection + texture/UV/budget validators at every export; most other
 Phase 3 items (WYSIWYG UI editor, F5 to play, VRAM viewer dock) still
