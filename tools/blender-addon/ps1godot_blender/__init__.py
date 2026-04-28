@@ -55,6 +55,7 @@ from .operators import (
     export_to_godot,
     vertex_lighting,
     collision_helpers,
+    material_toolkit,
 )
 
 # Each module exposes a matching register() / unregister() pair built
@@ -71,6 +72,7 @@ _modules = (
     export_to_godot,
     vertex_lighting,
     collision_helpers,
+    material_toolkit,
     project_panel,
     metadata_panel,
     vertex_lighting_panel,

@@ -105,6 +105,15 @@ class PS1GODOT_PT_material_metadata(bpy.types.Panel):
         row.prop(props, "force_no_filter", toggle=True)
         row.prop(props, "approved_16bpp", toggle=True)
 
+        # ── Phase 5 actions: create a properly-tagged material in one
+        # click + preview the texture as PSX would actually quantize it. ──
+        col.separator()
+        col.label(text="Actions", icon="TOOL_SETTINGS")
+        col.operator("ps1godot.create_material", icon="MATERIAL")
+        row = col.row(align=True)
+        row.operator("ps1godot.preview_4bpp", icon="IMAGE_DATA")
+        row.operator("ps1godot.preview_8bpp", icon="IMAGE_DATA")
+
 
 register, unregister = bpy.utils.register_classes_factory((
     PS1GODOT_PT_object_metadata,
