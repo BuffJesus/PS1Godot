@@ -512,6 +512,11 @@ public partial class PS1GodotPlugin : EditorPlugin
 
         _lastExportSummary = new LastExportSummary();
 
+        // Reset the VRAM viewer dock — clears stale snapshots from any
+        // previous export run so the scene picker only lists scenes
+        // produced by the current pass.
+        _vramViewerDock?.BeginExportRun();
+
         // Export the open scene as scene_0, then iterate PS1Scene.SubScenes
         // (if any) to emit scene_1, scene_2, … in declared order. Each
         // sub-scene is instantiated, walked, exported, then disposed so its

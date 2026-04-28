@@ -20,7 +20,12 @@ public partial class PS1VRAMViewerDock : VBoxContainer
     private Label? _header;
     private Label? _stats;
     private PS1VRAMGrid? _grid;
-    private VramSnapshot? _snapshot;
+    private OptionButton? _scenePicker;
+    // sceneIndex → snapshot. Keeps every scene's snapshot from the most
+    // recent export run so authors can flip between them without
+    // re-exporting. Cleared by BeginExportRun() at the start of each
+    // multi-scene export pass.
+    private readonly System.Collections.Generic.Dictionary<int, VramSnapshot> _snapshots = new();
 
     public PS1VRAMViewerDock()
     {
@@ -45,12 +50,28 @@ public partial class PS1VRAMViewerDock : VBoxContainer
         inner.AddThemeConstantOverride("separation", 6);
         margin.AddChild(inner);
 
+        // Top row: header label + scene picker. Picker is hidden until
+        // there's more than one snapshot to choose between (i.e. a
+        // single-scene export doesn't get a useless dropdown).
+        var topRow = new HBoxContainer();
+        topRow.AddThemeConstantOverride("separation", 12);
+        inner.AddChild(topRow);
+
         _header = new Label
         {
             Text = "PS1 VRAM — no export yet (run on PSX or use Tools → Export Splashpack)",
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
         };
         _header.AddThemeColorOverride("font_color", new Color(1, 1, 1, 0.85f));
-        inner.AddChild(_header);
+        topRow.AddChild(_header);
+
+        _scenePicker = new OptionButton
+        {
+            Visible = false,
+            TooltipText = "Pick which scene's VRAM layout to display.",
+        };
+        _scenePicker.ItemSelected += OnScenePicked;
+        topRow.AddChild(_scenePicker);
 
         _grid = new PS1VRAMGrid
         {
@@ -92,10 +113,77 @@ public partial class PS1VRAMViewerDock : VBoxContainer
         return row;
     }
 
+    // Called by the plugin BEFORE iterating scenes. Clears the picker
+    // so stale entries from a previous export don't linger when the
+    // current run produces fewer scenes.
+    public void BeginExportRun()
+    {
+        _snapshots.Clear();
+        if (_scenePicker != null)
+        {
+            _scenePicker.Clear();
+            _scenePicker.Visible = false;
+        }
+    }
+
     public void ApplySnapshot(VramSnapshot snapshot)
     {
-        _snapshot = snapshot;
+        _snapshots[snapshot.SceneIndex] = snapshot;
+        RebuildScenePicker();
+        // Default to displaying the freshest snapshot — typical author
+        // flow is "I just exported, show me what I just did."
+        DisplaySnapshot(snapshot);
+    }
+
+    private void RebuildScenePicker()
+    {
+        if (_scenePicker == null) return;
+        _scenePicker.Clear();
+
+        // Stable order: ascending sceneIndex matches the runtime's
+        // Scene.Load(N) numbering and the on-disc filenames.
+        var keys = new System.Collections.Generic.List<int>(_snapshots.Keys);
+        keys.Sort();
+        foreach (var idx in keys)
+        {
+            var snap = _snapshots[idx];
+            _scenePicker.AddItem($"scene_{idx} — {snap.SceneName}", idx);
+        }
+        // Hide the dropdown when only one scene's been exported —
+        // pointless UI clutter when there's nothing to pick.
+        _scenePicker.Visible = _snapshots.Count > 1;
+    }
+
+    private void OnScenePicked(long index)
+    {
+        if (_scenePicker == null) return;
+        int sceneIdx = (int)_scenePicker.GetItemId((int)index);
+        if (_snapshots.TryGetValue(sceneIdx, out var snap))
+            DisplaySnapshot(snap);
+    }
+
+    // Push a single snapshot into the visible widgets. Separate from
+    // ApplySnapshot so the picker callback can re-display a previously
+    // captured snapshot without going through the "this is a new
+    // snapshot, rebuild the picker" path.
+    private void DisplaySnapshot(VramSnapshot snapshot)
+    {
         if (_header == null || _grid == null || _stats == null) return;
+
+        // Sync picker selection with whatever's currently displayed.
+        // Skip when the picker isn't visible (single-scene export) —
+        // there's nothing to sync.
+        if (_scenePicker != null && _scenePicker.Visible)
+        {
+            for (int i = 0; i < _scenePicker.ItemCount; i++)
+            {
+                if (_scenePicker.GetItemId(i) == snapshot.SceneIndex)
+                {
+                    _scenePicker.Selected = i;
+                    break;
+                }
+            }
+        }
 
         if (snapshot.IsEmpty)
         {

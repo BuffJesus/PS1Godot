@@ -1408,10 +1408,14 @@ The Blender ↔ Godot pipeline is now first-class in both directions:
         they're 1px tall on the source. Reserved regions (both
         framebuffers + font column) tooltip too so authors who try
         to place something in the wrong spot get a hint.
-  - [ ] **Multi-scene picker.** Today the dock shows the
-        most-recently-exported scene's snapshot. A dropdown + remembered
-        per-scene snapshots would let authors compare across scenes
-        in a multi-scene project.
+  - [x] **Multi-scene picker** *(shipped 2026-04-28)*. Dock holds a
+        `Dictionary<sceneIndex, VramSnapshot>` populated as each scene
+        exports. `BeginExportRun()` clears the dict at the start of
+        each export pass so stale entries don't linger. An OptionButton
+        appears in the header row whenever there's more than one
+        snapshot to choose between (single-scene exports stay
+        clutter-free). Picker stays in sync with whatever the grid is
+        showing.
 - [ ] **SPU / memory / BVH budget bars** in the viewport overlay.
 - [x] **Texture reuse auditor (`REF-GAP-6`)** *(shipped across 2026-04-27 / 2026-04-28)*.
       `TextureValidationReport` per-row warnings cover **one-off
