@@ -22,13 +22,13 @@ namespace PS1Godot.Exporter;
 // same file is overwritten and Godot's import scanner picks up the
 // changed mesh automatically. No manual file shuffling.
 //
-// Caveat that ships with the operator's user-facing message: the
-// PS1MeshInstance.Mesh field still references the OLD Mesh resource.
-// After Blender edits + re-export, the .glb's import produces a NEW
-// PackedScene with a new Mesh resource. The PS1MeshInstance won't
-// auto-rebind — author drags the imported mesh onto the slot manually.
-// Auto-rebind via .import config + meshes/save_to_file is Phase 2 of
-// this feature; we ship the minimum tier first.
+// Auto-rebind: after writing the .glb, we trigger the editor's import
+// pipeline + load the resulting PackedScene + walk it for the first
+// MeshInstance3D + assign its Mesh back to the PS1MeshInstance. The
+// reference is now path-backed (points at the .glb's sub-resource);
+// Godot's import scanner refreshes the Mesh data on every Blender
+// re-export, and the PS1MeshInstance picks up the changes
+// automatically. Saves the manual "drag mesh onto slot" step.
 public static class MeshExtractor
 {
     public sealed class Result
@@ -36,6 +36,10 @@ public static class MeshExtractor
         public string OutputPath = "";
         public bool Success = false;
         public string ErrorMessage = "";
+        // Rebind step ran + assigned a fresh path-backed Mesh. False
+        // when extraction succeeded but auto-rebind didn't (import
+        // pipeline may need a moment; author can re-run).
+        public bool Rebound = false;
     }
 
     public static Result ExtractToGlb(PS1MeshInstance pmi, string outputDir)
@@ -118,7 +122,71 @@ public static class MeshExtractor
 
         result.OutputPath = outputPath;
         result.Success = true;
+
+        // ── Auto-rebind ────────────────────────────────────────────
+        // Trigger Godot's editor import pipeline against the fresh
+        // .glb, then load the resulting PackedScene + extract its
+        // first MeshInstance3D's Mesh + assign back to pmi.Mesh.
+        // The reference is now PATH-BACKED (sub-resource of the
+        // imported PackedScene), so Blender re-edits flow through
+        // Godot's normal scanner without any manual rebinding.
+        try
+        {
+            string resPath = ProjectSettings.LocalizePath(outputPath);
+            if (!resPath.StartsWith("res://"))
+            {
+                // Output dir was outside res://; nothing to rebind to.
+                // Author can manually drop the .glb into the project
+                // tree afterwards.
+                return result;
+            }
+
+            // EditorInterface.GetResourceFilesystem().UpdateFile() +
+            // ReimportFiles() is the synchronous-import path. After
+            // these return, the .glb has been imported and its
+            // PackedScene is loadable.
+            var efs = EditorInterface.Singleton.GetResourceFilesystem();
+            efs.UpdateFile(resPath);
+            efs.ReimportFiles(new[] { resPath });
+
+            // Load + walk for the first Mesh.
+            var scene = ResourceLoader.Load<PackedScene>(resPath);
+            if (scene == null) return result;
+            var instance = scene.Instantiate<Node>();
+            try
+            {
+                var firstMesh = FindFirstMesh(instance);
+                if (firstMesh != null)
+                {
+                    pmi.Mesh = firstMesh;
+                    result.Rebound = true;
+                }
+            }
+            finally
+            {
+                instance.QueueFree();
+            }
+        }
+        catch (Exception ex)
+        {
+            // Auto-rebind is best-effort; extraction itself succeeded
+            // so don't flip Success=false. Surface the diagnostic so
+            // the author knows to drag the mesh manually.
+            result.ErrorMessage = $"auto-rebind failed: {ex.Message}";
+        }
+
         return result;
+    }
+
+    private static Mesh? FindFirstMesh(Node n)
+    {
+        if (n is MeshInstance3D mi && mi.Mesh != null) return mi.Mesh;
+        foreach (var child in n.GetChildren())
+        {
+            var hit = FindFirstMesh(child);
+            if (hit != null) return hit;
+        }
+        return null;
     }
 }
 #endif

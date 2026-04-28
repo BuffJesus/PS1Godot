@@ -1313,6 +1313,8 @@ public partial class PS1GodotPlugin : EditorPlugin
         string outputDir = ProjectSettings.GlobalizePath(DefaultBlenderMeshDir);
         var extracted = new System.Collections.Generic.List<string>();
         int idsGenerated = 0;
+        int rebound = 0;
+        int rebindFailed = 0;
         foreach (var pmi in targets)
         {
             bool wasEmpty = string.IsNullOrEmpty(pmi.MeshId);
@@ -1324,7 +1326,19 @@ public partial class PS1GodotPlugin : EditorPlugin
             }
             if (wasEmpty) idsGenerated++;
             extracted.Add(result.OutputPath);
-            GD.Print($"[PS1Godot]   extracted {pmi.Name} → {result.OutputPath}");
+            if (result.Rebound)
+            {
+                rebound++;
+                GD.Print($"[PS1Godot]   extracted + rebound {pmi.Name} → {result.OutputPath}");
+            }
+            else
+            {
+                rebindFailed++;
+                string suffix = string.IsNullOrEmpty(result.ErrorMessage)
+                    ? ""
+                    : $" (rebind skipped: {result.ErrorMessage})";
+                GD.Print($"[PS1Godot]   extracted {pmi.Name} → {result.OutputPath}{suffix}");
+            }
         }
 
         if (extracted.Count == 0)
@@ -1336,6 +1350,16 @@ public partial class PS1GodotPlugin : EditorPlugin
         if (idsGenerated > 0)
         {
             GD.Print($"[PS1Godot] {idsGenerated} mesh_id(s) auto-generated. Save the .tscn to persist.");
+        }
+        if (rebound > 0)
+        {
+            GD.Print($"[PS1Godot] {rebound} PS1MeshInstance.Mesh field(s) auto-rebound to the imported .glb. " +
+                     "Future Blender edits flow through Godot's import scanner — no manual rebind needed.");
+        }
+        if (rebindFailed > 0)
+        {
+            GD.PushWarning($"[PS1Godot] {rebindFailed} extraction(s) succeeded but auto-rebind didn't run — " +
+                           "drag the imported mesh onto the Mesh slot manually or re-run the operator.");
         }
 
         // Launch Blender on the first extracted .glb. If the user

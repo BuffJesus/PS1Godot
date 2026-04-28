@@ -50,6 +50,17 @@ class PS1GODOT_OT_validate_scene(bpy.types.Operator):
             self.report({"INFO"}, "PS1Godot: no mesh objects to validate.")
             return {"FINISHED"}
 
+        # Batching candidate hint (Slot D1 mirror) — reports which
+        # meshes would collapse into single GameObjects on the Godot
+        # side. Authors plan around the optimizer at author time
+        # instead of being surprised by it post-export.
+        batch_hints = self._compute_batch_hints(context.scene)
+        for hint in batch_hints:
+            print(f"[PS1Godot HINT] {hint}")
+            # INFO severity — these aren't problems, just optimization
+            # opportunities. Don't pollute the WARN stream.
+            self.report({"INFO"}, hint)
+
         # Mirror outputs to Blender's info area + console.
         for w in warnings:
             print(f"[PS1Godot WARN] {w}")
@@ -67,6 +78,107 @@ class PS1GODOT_OT_validate_scene(bpy.types.Operator):
                 f"{len(warnings)} warning(s), {len(errors)} error(s).",
             )
         return {"FINISHED"}
+
+    # ── Batching candidate hint (Slot D1 mirror) ────────────────────
+    #
+    # Bucket eligible static meshes the same way Godot's
+    # StaticBatchOptimizer.cs does, then report each multi-member
+    # bucket. Authors who tag 30 walls all `MeshRole=StaticWorld +
+    # ExportMode=MergeStatic` see "30 → 1 batch (29 GameObjects saved
+    # at export)" before they ship — encourages consistent
+    # texture_page_id and metadata so the optimizer can actually do
+    # its job.
+
+    def _compute_batch_hints(self, scene: bpy.types.Scene) -> list[str]:
+        buckets: dict[tuple[str, str, str, str, str, str], list[str]] = {}
+        for obj in scene.objects:
+            if obj.type != "MESH":
+                continue
+            if obj.hide_render:
+                continue
+            if not self._is_batch_eligible(obj):
+                continue
+            key = self._bucket_key(obj)
+            buckets.setdefault(key, []).append(obj.name)
+
+        hints: list[str] = []
+        total_saved = 0
+        for key, members in buckets.items():
+            if len(members) < 2:
+                continue
+            saved = len(members) - 1
+            total_saved += saved
+            phase, shading, alpha, atlas, _t_or_o, tpage = key
+            tpage_label = tpage if tpage else "(no texture_page_id)"
+            preview = ", ".join(members[:3])
+            if len(members) > 3:
+                preview += f", +{len(members) - 3} more"
+            hints.append(
+                f"Batch hint: {len(members)} meshes share bucket "
+                f"({phase} / {shading} / {alpha} / {atlas} / {tpage_label}) — "
+                f"will collapse to 1 GameObject on export, saving {saved}. "
+                f"Members: {preview}."
+            )
+        if total_saved > 0:
+            hints.append(
+                f"Static-batch summary: {total_saved} GameObject(s) total would be saved at export. "
+                f"Set consistent texture_page_id on related meshes to maximize bucketing."
+            )
+        return hints
+
+    @staticmethod
+    def _is_batch_eligible(obj: bpy.types.Object) -> bool:
+        """Mirror of Godot StaticBatchOptimizer.IsBatchEligible.
+
+        Only flags author signals visible from Blender — we can't see
+        Lua attachments / Tag / Interactable / StartsInactive from the
+        Blender side, so we'll over-report (some hinted meshes still
+        won't batch on Godot if those fields are non-default). That's
+        OK — the hint is a best-case estimate."""
+        p = obj.ps1godot
+        if p.mesh_role != "StaticWorld":
+            return False
+        if p.export_mode != "MergeStatic":
+            return False
+        return True
+
+    @staticmethod
+    def _bucket_key(obj: bpy.types.Object) -> tuple[str, str, str, str, str, str]:
+        """Mirror of Godot StaticBatchOptimizer.MakeBucketKey.
+
+        First-material's texture_page_id + atlas_group win — the Blender
+        side keeps both on Material PropertyGroups (the Godot side has
+        atlas_group on the mesh as a fallback). The atlas packer
+        keeps materials with the same texture_page_id on one VRAM page,
+        so consistent first-slot tagging produces consistent buckets."""
+        p = obj.ps1godot
+
+        texture_page_id = ""
+        atlas_group = "World"   # falls through when no material assigned
+        for slot in obj.material_slots:
+            if slot.material is None:
+                continue
+            mp = slot.material.ps1godot
+            if mp.texture_page_id:
+                texture_page_id = mp.texture_page_id
+            if mp.atlas_group:
+                atlas_group = mp.atlas_group
+            break
+
+        # Translucent flag isn't a Blender PropertyGroup field today —
+        # the Godot side's smart-defaults infer it from alpha_mode ==
+        # Cutout. Empty placeholder keeps the key shape matched to the
+        # Godot side; in practice alpha_mode already distinguishes
+        # opaque from cutout meshes.
+        translucent_marker = ""
+        return (
+            p.draw_phase,
+            p.shading_mode,
+            p.alpha_mode,
+            atlas_group,
+            translucent_marker,
+            texture_page_id,
+        )
 
     # ── Per-object rules ────────────────────────────────────────────
 

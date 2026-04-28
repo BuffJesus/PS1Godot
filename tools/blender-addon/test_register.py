@@ -338,6 +338,48 @@ def main() -> int:
         traceback.print_exc()
         failures += 1
 
+    # ── Batching hint validator ─────────────────────────────────
+    # Spawn three default-tagged cubes (StaticWorld + MergeStatic);
+    # validate; verify the hint fired by walking the operator's
+    # _compute_batch_hints helper directly (the operator's report
+    # output isn't easily captured from the bpy.ops call).
+    try:
+        bpy.ops.mesh.primitive_cube_add(location=(4, 0, 0))
+        cube_h1 = bpy.context.active_object
+        cube_h1.name = "BatchHintA"
+        bpy.ops.mesh.primitive_cube_add(location=(4, 2, 0))
+        cube_h2 = bpy.context.active_object
+        cube_h2.name = "BatchHintB"
+        bpy.ops.mesh.primitive_cube_add(location=(4, 4, 0))
+        cube_h3 = bpy.context.active_object
+        cube_h3.name = "BatchHintC"
+
+        # Each cube's PropertyGroup defaults to StaticWorld + MergeStatic
+        # already, so they're all batch-eligible without any explicit
+        # tagging. They also share defaults for DrawPhase / ShadingMode /
+        # AlphaMode / AtlasGroup, so they should bucket together.
+        from ps1godot_blender.operators.validate_scene import PS1GODOT_OT_validate_scene
+        op = PS1GODOT_OT_validate_scene
+        # Reading hints directly via the static helper avoids needing
+        # to capture stdout / report() output.
+        hints = op._compute_batch_hints(op, bpy.context.scene)
+        if not hints:
+            _err("expected batch hints from 3 default-tagged cubes, got none")
+            failures += 1
+        else:
+            joined = " | ".join(hints)
+            if "saving" not in joined:
+                _err(f"batch hints don't report savings: {joined}")
+                failures += 1
+            else:
+                _info(f"batch hints fired: {len(hints)} hint(s)")
+                for h in hints:
+                    _info(f"  {h}")
+    except Exception:
+        _err("batch hint smoke raised:")
+        traceback.print_exc()
+        failures += 1
+
     # ── Bulk apply: tag active, propagate to selected ───────────
     # Smart-copy semantics: only fields that DIFFER from the
     # construction default propagate, so per-mesh customization on
