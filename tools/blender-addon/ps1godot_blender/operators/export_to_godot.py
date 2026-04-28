@@ -96,6 +96,18 @@ class PS1GODOT_OT_export_to_godot(bpy.types.Operator):
                         export_extras=False,           # custom props go via JSON
                         export_lights=False,
                         export_cameras=False,
+                        # Vertex colours: PS1Godot's whole vertex-lighting
+                        # workflow (Cycles bake, scene-light bake, ambient
+                        # tint) writes a 'Col' attribute. By default glTF
+                        # only exports it when the mesh has a material
+                        # whose node tree samples it — which the default
+                        # Blender material doesn't, silently dropping the
+                        # bake. ACTIVE picks the active colour attribute;
+                        # active_vertex_color_when_no_material bypasses
+                        # the node-tree gate so the bake always rides
+                        # through to Godot's PS1MeshInstance.BakedColors.
+                        export_vertex_color="ACTIVE",
+                        export_active_vertex_color_when_no_material=True,
                     )
                     glb_paths.append(glb_path)
                     glbs_written += 1
