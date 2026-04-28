@@ -39,12 +39,23 @@ class PS1GODOT_PT_vertex_lighting(bpy.types.Panel):
         row.scale_y = 1.3
         row.operator("ps1godot.vc_bake_directional", icon="LIGHT_SUN")
 
-        # Scene-lights bake — same workflow as SplashEdit's primary
-        # path. Author drops Lights into the scene, clicks once.
+        # Scene-lights bake — author drops Lights into the scene,
+        # clicks once. PSX hardware doesn't do runtime shadows, but
+        # the bake CAN cast them (raycast at author time, written as
+        # darker bytes in the vertex color — Silent Hill / FFIX did
+        # this exact thing).
         layout.separator()
         col = layout.column(align=True)
         col.label(text="Bake from Scene", icon="OUTLINER_OB_LIGHT")
-        col.operator("ps1godot.vc_bake_scene_lights", icon="LIGHT")
+        col.prop(s, "vc_cast_shadows")
+        sub = col.column(align=True)
+        sub.enabled = s.vc_cast_shadows
+        sub.prop(s, "vc_shadow_bias")
+        col.prop(s, "vc_use_color_temperature")
+
+        row = layout.row(align=True)
+        row.scale_y = 1.3
+        row.operator("ps1godot.vc_bake_scene_lights", icon="LIGHT")
 
         layout.separator()
         col = layout.column(align=True)

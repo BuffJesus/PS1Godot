@@ -234,49 +234,107 @@ class PS1GODOT_OT_vc_bake_directional(bpy.types.Operator):
         return {"FINISHED"}
 
 
+def _kelvin_to_rgb(kelvin: float) -> tuple[float, float, float]:
+    """Convert color temperature in Kelvin to linear RGB in [0, 1].
+
+    Tanner Helland's piecewise approximation — accurate enough for
+    artist intuition (warm/neutral/cool) and matches what Blender's
+    own Cycles uses internally for the temperature->RGB conversion.
+    """
+    t = max(1000.0, min(40000.0, kelvin)) / 100.0
+
+    if t <= 66.0:
+        r = 1.0
+    else:
+        r = (329.698727446 * ((t - 60.0) ** -0.1332047592)) / 255.0
+
+    if t <= 66.0:
+        g = (99.4708025861 * math.log(t) - 161.1195681661) / 255.0
+    else:
+        g = (288.1221695283 * ((t - 60.0) ** -0.0755148492)) / 255.0
+
+    if t >= 66.0:
+        b = 1.0
+    elif t <= 19.0:
+        b = 0.0
+    else:
+        b = (138.5177312231 * math.log(t - 10.0) - 305.0447927307) / 255.0
+
+    return (max(0.0, min(1.0, r)), max(0.0, min(1.0, g)), max(0.0, min(1.0, b)))
+
+
+def _resolve_light_color(ldata, use_temp: bool) -> tuple[float, float, float]:
+    """Read the effective RGB color of a Blender Light, optionally
+    overriding via its Cycles temperature property when the addon's
+    color-temperature toggle is on.
+
+    Blender 4.x exposes use_temperature + temperature on the Light
+    datablock (cycles-side). We guard with hasattr so older versions
+    or builds without Cycles don't crash."""
+    if use_temp and hasattr(ldata, "use_temperature") and ldata.use_temperature:
+        if hasattr(ldata, "temperature"):
+            return _kelvin_to_rgb(float(ldata.temperature))
+    return (ldata.color[0], ldata.color[1], ldata.color[2])
+
+
 class PS1GODOT_OT_vc_bake_scene_lights(bpy.types.Operator):
-    """Bake vertex lighting from Blender's scene Light objects (SplashEdit-equivalent path)."""
+    """Bake vertex lighting from Blender's scene Light objects, with optional shadow casting."""
 
     bl_idname = "ps1godot.vc_bake_scene_lights"
     bl_label = "Bake from Scene Lights"
     bl_description = (
-        "Walk every visible Light object in the scene and accumulate "
-        "Lambertian diffuse per vertex (matches SplashEdit's "
-        "PSXLightingBaker behaviour). Sun, Point, and Spot supported. "
-        "Result is clamped to 0.8 for PSX 2x semi-trans headroom. "
-        "Overwrites existing vertex color data."
+        "Walk every visible SUN/POINT/SPOT light in the scene and "
+        "accumulate Lambertian diffuse per vertex. Optional bake-time "
+        "shadow raycasting (PS1 hardware doesn't do runtime shadows; "
+        "this bakes them as darker bytes in the vertex color — Silent "
+        "Hill / FFIX / MGS used the exact same technique). AREA lights "
+        "are skipped with a warning. Result is clamped to 0.8 for PSX "
+        "2x semi-trans headroom."
     )
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
-        # Gather lights once. We support SUN (directional) + POINT and
-        # SPOT (omni / cone with falloff). AREA / non-light objects are
-        # skipped — PSX has no analogue.
+        s = context.scene.ps1godot
+        cast_shadows = bool(s.vc_cast_shadows)
+        shadow_bias = float(s.vc_shadow_bias)
+        use_temp = bool(s.vc_use_color_temperature)
+
+        # Gather lights. AREA gets a one-time warning; PSX has no
+        # analogue and silently dropping it would surprise authors.
         lights = []
+        skipped_area = 0
         for o in context.scene.objects:
             if o.type != "LIGHT":
                 continue
             if o.hide_get() or o.hide_render:
                 continue
             data = o.data
-            if data is None or data.type not in {"SUN", "POINT", "SPOT"}:
+            if data is None:
                 continue
-            # World-space position + the SUN's direction (column 2 of
-            # the rotation matrix points along -Z in Blender's local
-            # space, so the world-space "where the light shines TO" is
-            # the rotated -Z; the direction it shines FROM is +Z, which
-            # is what SplashEdit's dot test wants).
+            if data.type == "AREA":
+                skipped_area += 1
+                continue
+            if data.type not in {"SUN", "POINT", "SPOT"}:
+                continue
             w = o.matrix_world
             pos = w.translation.copy()
             # Blender lights point along -Z by convention. The vector
             # FROM the surface TO the sun is the rotated +Z.
             dir_from = (w.to_3x3() @ Vector((0.0, 0.0, 1.0))).normalized()
-            lights.append((data, pos, dir_from))
+            color = _resolve_light_color(data, use_temp)
+            lights.append((data, pos, dir_from, color))
+
+        if skipped_area > 0:
+            self.report({"WARNING"},
+                        f"PS1Godot: skipped {skipped_area} AREA light(s) — "
+                        f"PSX has no analogue. Use SUN / POINT / SPOT instead.")
 
         if not lights:
             self.report({"WARNING"}, "PS1Godot: no SUN/POINT/SPOT lights in the scene — nothing to bake.")
             return {"CANCELLED"}
 
+        # Track bake stats for the final report.
+        shadow_rays = 0
         baked = 0
         for obj, mesh in _meshes_in_selection(context):
             layer = _ensure_layer(mesh)
@@ -296,37 +354,118 @@ class PS1GODOT_OT_vc_bake_scene_lights(bpy.types.Operator):
                 n_world[i] = wn
                 p_world[i] = world_mtx @ v.co
 
+            # Per-vertex aggregation cache — multiple loops on the same
+            # vertex compute the same lighting term, so cache once per
+            # vertex instead of re-raycasting per loop. Big speedup on
+            # corner-domain meshes (3-4 loops per vertex on average).
+            vertex_color_cache: dict[int, tuple[float, float, float]] = {}
+
             for li, loop in enumerate(mesh.loops):
-                wn = n_world[loop.vertex_index]
-                wp = p_world[loop.vertex_index]
-                if wn is None or wp is None:
-                    layer.data[li].color = (0.0, 0.0, 0.0, layer.data[li].color[3])
-                    continue
+                vi = loop.vertex_index
+                cached = vertex_color_cache.get(vi)
+                if cached is None:
+                    wn = n_world[vi]
+                    wp = p_world[vi]
+                    if wn is None or wp is None:
+                        cached = (0.0, 0.0, 0.0)
+                    else:
+                        cached = self._compute_vertex_color(
+                            wp, wn, lights,
+                            cast_shadows=cast_shadows,
+                            shadow_bias=shadow_bias,
+                            scene=context.scene,
+                            shadow_ray_counter=lambda: None,  # placeholder — see below
+                        )
+                    vertex_color_cache[vi] = cached
 
-                r_acc = g_acc = b_acc = 0.0
-                for ldata, lpos, ldir_from in lights:
-                    contrib = self._light_contribution(ldata, lpos, ldir_from, wp, wn)
-                    if contrib <= 0.0:
-                        continue
-                    lc = ldata.color
-                    energy = ldata.energy
-                    r_acc += lc[0] * energy * contrib
-                    g_acc += lc[1] * energy * contrib
-                    b_acc += lc[2] * energy * contrib
-
+                r, g, b = cached
                 a = layer.data[li].color[3]
-                layer.data[li].color = (
-                    _saturate(r_acc),
-                    _saturate(g_acc),
-                    _saturate(b_acc),
-                    a,
-                )
+                layer.data[li].color = (r, g, b, a)
+
+            # Shadow ray count: vertex_count × light_count when shadows
+            # are on; that's the upper bound (some skip on early-out).
+            if cast_shadows:
+                shadow_rays += len(vertex_color_cache) * len(lights)
             baked += 1
 
-        self.report({"INFO"},
-                    f"PS1Godot: baked {len(lights)} light(s) into {baked} mesh(es) "
-                    f"(clamped to {PSX_VERTEX_BAKE_CEILING:.1f} for PSX 2x semi-trans headroom).")
+        msg = (f"PS1Godot: baked {len(lights)} light(s) into {baked} mesh(es) "
+               f"(clamped to {PSX_VERTEX_BAKE_CEILING:.1f} for PSX 2x semi-trans headroom).")
+        if cast_shadows:
+            msg += f" Shadow rays cast: {shadow_rays}."
+        if use_temp:
+            msg += " Color temperature applied to use_temperature=True lights."
+        self.report({"INFO"}, msg)
         return {"FINISHED"}
+
+    def _compute_vertex_color(
+        self,
+        wp: Vector, wn: Vector,
+        lights: list,
+        *,
+        cast_shadows: bool,
+        shadow_bias: float,
+        scene,
+        shadow_ray_counter,
+    ) -> tuple[float, float, float]:
+        """Sum every light's contribution at this world-space vertex.
+
+        When `cast_shadows` is on, fires one ray per (vertex, light)
+        pair from `wp + wn*shadow_bias` toward the light. If anything
+        blocks the ray before it reaches the light's distance (or
+        anything at all for SUN), that light's contribution is zero.
+        """
+        r_acc = g_acc = b_acc = 0.0
+
+        # Scoot the ray origin off the surface so it doesn't immediately
+        # self-intersect at the source vertex.
+        origin = wp + wn * shadow_bias
+
+        for ldata, lpos, ldir_from, lcolor in lights:
+            contrib = self._light_contribution(ldata, lpos, ldir_from, wp, wn)
+            if contrib <= 0.0:
+                continue
+
+            if cast_shadows:
+                if not self._light_visible(scene, origin, ldata, lpos, ldir_from):
+                    continue
+
+            energy = ldata.energy
+            r_acc += lcolor[0] * energy * contrib
+            g_acc += lcolor[1] * energy * contrib
+            b_acc += lcolor[2] * energy * contrib
+
+        return (_saturate(r_acc), _saturate(g_acc), _saturate(b_acc))
+
+    @staticmethod
+    def _light_visible(scene, origin: Vector, ldata, lpos: Vector, ldir_from: Vector) -> bool:
+        """Return True if there's nothing between `origin` and the
+        light source. Direction + max distance differ by light type:
+          SUN: shoot toward the light direction; any hit = shadowed.
+          POINT/SPOT: shoot toward the light position; hit closer than
+                      the light = shadowed (hits past the light don't
+                      block).
+        """
+        depsgraph = bpy.context.evaluated_depsgraph_get()
+        if ldata.type == "SUN":
+            direction = ldir_from
+            max_dist = 1.0e6   # effectively infinite
+        else:
+            to_light = lpos - origin
+            max_dist = to_light.length
+            if max_dist < 1e-6:
+                return True   # light is at the surface — treat as visible
+            direction = to_light / max_dist
+
+        try:
+            hit, _location, _normal, _index, _obj, _matrix = scene.ray_cast(
+                depsgraph, origin, direction, distance=max_dist
+            )
+        except Exception:
+            # ray_cast can throw on degenerate inputs in older Blender
+            # builds; fall through as "visible" rather than blackening
+            # the whole mesh.
+            return True
+        return not hit
 
     @staticmethod
     def _light_contribution(ldata, lpos: Vector, ldir_from: Vector,

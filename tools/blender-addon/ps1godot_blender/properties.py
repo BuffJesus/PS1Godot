@@ -161,6 +161,48 @@ class PS1GodotSceneProps(bpy.types.PropertyGroup):
         default=0.4, min=0.0, max=1.0,
     )
 
+    # ── Bake-time shadow casting (vc_bake_scene_lights only) ─────────
+    # PSX hardware doesn't do runtime shadows — these are baked into
+    # the vertex color at author time, the standard PS1-era technique
+    # used by Silent Hill, FFIX, MGS, Tomb Raider. The runtime stays
+    # oblivious; shadows ship as just-darker RGB at the byte level.
+    vc_cast_shadows: BoolProperty(
+        name="Cast Shadows",
+        description=(
+            "When baking from scene lights, fire a ray from each vertex toward each light "
+            "and skip the contribution if blocked by other geometry. Standard PS1-era "
+            "authoring technique (the runtime doesn't know shadows exist — they're just "
+            "darker bytes in the vertex color)."
+        ),
+        default=True,
+    )
+    vc_shadow_bias: FloatProperty(
+        name="Shadow Bias",
+        description=(
+            "Distance to push the ray origin off the surface along the vertex normal "
+            "before casting. Prevents self-intersection at the source vertex. "
+            "Default 0.001 m works for most scenes; raise to 0.01 if shadows look stipply."
+        ),
+        default=0.001, min=0.0, max=0.1, precision=4,
+    )
+
+    # ── Color temperature (Kelvin → RGB) ──────────────────────────────
+    # If enabled, lights with their use_temperature toggle on (Cycles
+    # property) get their effective color computed from temperature.
+    # Otherwise the bake reads Light.color directly. Off by default —
+    # most authors set RGB explicitly and we don't want to silently
+    # change colors mid-session.
+    vc_use_color_temperature: BoolProperty(
+        name="Use Color Temperature",
+        description=(
+            "Read each light's Cycles temperature property (Kelvin) and "
+            "convert to RGB during the bake. Useful for warm/cool key+fill setups "
+            "(2700K incandescent / 5500K daylight / 6500K studio). Lights with the "
+            "Cycles use_temperature toggle off keep their direct RGB color."
+        ),
+        default=False,
+    )
+
 
 # ── Object-level metadata ───────────────────────────────────────────
 
