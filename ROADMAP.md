@@ -1880,20 +1880,31 @@ Only after Phases 0–3 land.
   bezel/scanlines as precedent), `PS1Sky`, fixed `PS1Camera` rigs, and
   invisible-mesh collision authoring. What's missing is the workflow
   glue + occlusion. Phased ship plan:
-  - **A.** Authoring helper — Godot dock action "Bake pre-rendered
-    background from this camera": opens Blender via the existing
-    cross-tool bridge, renders the camera-locked frame at 320×240 (or
-    256×240 to fit one VRAM page), drops the PNG back into
-    `res://assets/backgrounds/`, and creates a `PS1UICanvas` with one
-    Image element pinned at sortOrder 9999 (drawn last = behind 3D in
-    the LIFO-inverted scheme — see `project_psx_ui_sort_order_inverted`
-    memory). ~1 day.
-  - **B.** Camera lock + collision-mesh template — a `PS1Camera` mode
-    "FixedPreRendered" that disables player-driven yaw and exposes a
-    "matching collision mesh" slot the author fills with an invisible
-    `PS1MeshInstance` they trace over the BG. Validator warns when
-    a FixedPreRendered camera ships without a paired BG canvas.
-    ~½ day.
+  - **A.** Authoring helper *(shipped 2026-04-29)* — Tools menu
+    action `PS1Godot: Bake Background from Selected Camera`. Renders
+    the selected `Camera3D`'s POV through a `SubViewport` at 256×240
+    (one VRAM page wide) with shared `World3D`, saves PNG to
+    `res://assets/backgrounds/<scene>_<camera>.png`. Implementation in
+    `addons/ps1godot/exporter/BackgroundBaker.cs`. Author drops the
+    PNG onto a `PS1UICanvas` Image element with sortOrder=9999
+    (drawn last = behind 3D, per `project_psx_ui_sort_order_inverted`
+    memory). The same baker doubles as a loading-screen image
+    generator — point the Image at a LoadingScreen-residency canvas
+    instead of a gameplay canvas.
+  - **B.** Camera lock *(shipped 2026-04-29)* — Runtime
+    `PlayerCameraMode::FixedPreRendered` (value 3) bypasses the
+    per-frame camera-follow rig in `SceneManager::GameTick`. Lua
+    `Camera.SetMode("fixed")` opts in. Author calls
+    `Camera.SetPosition` + `Camera.SetRotation` once in
+    `onSceneCreationEnd` to match the bake angle; player can still
+    move freely on the floor. Authoring enum
+    `PS1CameraMode.FixedPreRendered = 3` documents the mode (it isn't
+    exported to splashpack — runtime is set via Lua). Sample scene at
+    `godot-ps1/demo/prerendered_demo.tscn` demonstrates the loop.
+    Collision-mesh template (invisible PS1MeshInstance traced over
+    the BG) is just a regular `Collision = Static` PS1MeshInstance —
+    no new authoring node needed; the auto-nav-region from flat-
+    Static AABBs handles walkability.
   - **C.** Multi-camera scenes (Resident Evil "tank-controls + camera
     cuts") — multiple `PS1Camera` nodes with trigger-zone activation
     so walking through a doorway swaps both the camera and the BG
