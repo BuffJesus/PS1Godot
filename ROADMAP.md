@@ -1272,8 +1272,16 @@ table, Auto rules, and per-clip migration shortlist.
         scenes (X KB saved by v31 mesh pool)" label below SPU bar in the
         PS1Godot dock; tooltip expands to per-category subtotals + worst
         mesh-cleanup names. Wired through `LastExportSummary`.
-  - [ ] **A3. Decal stack warning** — per-region overlap counter; WARN
-        at >6 alpha quads in any 320×240 screen rect. Not started.
+  - [x] **A3. Decal stack warning** *(shipped 2026-04-28)*.
+        `DecalValidationReport` walks each visible-on-load UICanvas,
+        counts how many other Translucent rects each Translucent rect
+        overlaps, and warns when stack depth exceeds 6 — the threshold
+        where serial blending starts to dominate fillrate. Names the
+        worst element so authors can act. Excludes LoadingScreen
+        canvases (their fillrate is moot during the load). World-mesh
+        translucency intentionally not covered: 3D AABB overlap doesn't
+        reliably predict screen overlap without camera info, and false
+        positives would teach authors to ignore the warning.
   - [ ] **A4. Static-vs-dynamic classifier (warning only)** — flag
         meshes that should be baked into a static render group.
         **Superseded 2026-04-27 by Slot D1 (already shipped, see
@@ -1380,10 +1388,15 @@ The Blender ↔ Godot pipeline is now first-class in both directions:
       OT-pressure readout (object count vs `PS1Scene.MaxActors`,
       texture-page switches per frame vs `MaxTexturePages`).
 - [ ] **SPU / memory / BVH budget bars** in the viewport overlay.
-- [ ] **Texture reuse auditor (`REF-GAP-6`).** Warn on one-off textures,
-      near-duplicate CLUTs that could merge, and meshes that each drag in a
-      unique atlas. Powered by the data `SceneCollector` + `VRAMPacker`
-      already have.
+- [x] **Texture reuse auditor (`REF-GAP-6`)** *(shipped across 2026-04-27 / 2026-04-28)*.
+      `TextureValidationReport` per-row warnings cover **one-off
+      textures** ("used by 1 mesh, N KB — bake into world atlas?",
+      shipped 2026-04-27). The 2026-04-28 pass added **near-duplicate
+      CLUT detection** — slot-by-slot Euclidean distance in 5-bit RGB
+      space, threshold 4.0/31, lists merge candidates with byte-savings
+      estimate at the bottom of the per-scene table. Per-mesh **unique
+      atlas** detection still pending — would need a richer atlas
+      grouping signal than the current `AtlasGroup` bucket exposes.
 - [x] **UV out-of-range linter.** ~~Warn when any vertex UV falls outside~~
       Shipped as `MeshLinter.cs`; runs every export and prints
       `UV linter scene[N]: all meshes clean.` (or names the offenders).

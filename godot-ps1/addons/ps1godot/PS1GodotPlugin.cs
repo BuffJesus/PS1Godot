@@ -592,6 +592,13 @@ public partial class PS1GodotPlugin : EditorPlugin
         // VRAM data as garbage. Editor's wrapping sampler hides this.
         int uvDirty = Exporter.MeshLinter.EmitForScene(sceneIndex);
 
+        // Decal stack validator: WARN on UI canvases stacking more
+        // translucent quads than the PSX GPU can blend at acceptable
+        // fillrate cost (>6 overlapping). Folded into the texture
+        // warning bucket since the dock's summary line groups
+        // texture-tier validators together.
+        textureWarnings += Exporter.DecalValidationReport.EmitForScene(sceneData, sceneIndex);
+
         // Aggregate this scene's results into the run-wide summary the
         // dock reads after OnExportEmptySplashpack returns. Mesh-dedup
         // counts come from sceneData.MeshDedup which the SceneCollector
