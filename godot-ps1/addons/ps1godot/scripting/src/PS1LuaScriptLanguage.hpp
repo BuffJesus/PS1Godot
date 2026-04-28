@@ -73,16 +73,11 @@ public:
 	// returns matching options. Implementation in PS1LuaScriptLanguage.cpp.
 	Dictionary _complete_code(const String &p_code, const String &p_path, Object *p_owner) const override;
 
-	Dictionary _lookup_code(const String &p_code, const String &p_symbol, const String &p_path, Object *p_owner) const override {
-		// Ctrl+Click / symbol lookup. Not wired yet; return "not found"
-		// so the editor just ignores it. Godot 4.7 needs BOTH "result"
-		// and "type" keys in the dict or it logs ERR_UNAVAILABLE on
-		// every click (see core/object/script_language_extension.h).
-		Dictionary d;
-		d["result"] = ERR_UNAVAILABLE;
-		d["type"] = 0; // LOOKUP_RESULT_SCRIPT_LOCATION, a safe default
-		return d;
-	}
+	// Hover-tooltip + Ctrl-Click lookup. Looks `p_symbol` up against the
+	// API table baked from luaapi.hh; when found, returns a descriptor
+	// the editor can use to render the doc tooltip. Implementation in
+	// PS1LuaScriptLanguage.cpp.
+	Dictionary _lookup_code(const String &p_code, const String &p_symbol, const String &p_path, Object *p_owner) const override;
 
 	String _auto_indent_code(const String &p_code, int32_t p_from_line, int32_t p_to_line) const override {
 		// Pass source through unchanged — CodeEdit has a built-in indenter

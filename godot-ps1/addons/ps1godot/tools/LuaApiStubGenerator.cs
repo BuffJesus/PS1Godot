@@ -69,42 +69,63 @@ public static class LuaApiStubGenerator
 
     private static List<Bind> Parse(string[] lines)
     {
+        // Convention in luaapi.hh: structured signature comment FIRST,
+        // then any number of `//` description lines, then the
+        // `static int Foo_Bar(lua_State* L);` declaration. e.g.
+        //
+        //     // Entity.Destroy(object) -> nil
+        //     // Deactivates the object (fires onDisable). Pool re-uses it.
+        //     static int Entity_Destroy(lua_State* L);
+        //
+        // Earlier versions of this parser accumulated `prevDoc` BEFORE
+        // the signature, which produced empty docs everywhere — the
+        // first bug discovered when wiring up Godot script-editor
+        // hover tooltips on 2026-04-27.
         var result = new List<Bind>();
-        var prevDoc = new List<string>();
+        Bind? cur = null;
+
+        void Finalize()
+        {
+            if (cur != null)
+            {
+                result.Add(cur);
+                cur = null;
+            }
+        }
 
         foreach (string line in lines)
         {
             var m = SigLine.Match(line);
             if (m.Success)
             {
-                var bind = new Bind
+                Finalize();
+                cur = new Bind
                 {
                     Namespace = m.Groups["ns"].Value,
                     Name = m.Groups["name"].Value,
                     RawArgs = m.Groups["args"].Value.Trim(),
                     RawReturn = m.Groups["ret"].Success ? m.Groups["ret"].Value.Trim() : "",
-                    Doc = new List<string>(prevDoc),
+                    Doc = new List<string>(),
                 };
-                result.Add(bind);
-                prevDoc.Clear();
                 continue;
             }
 
-            // Plain `// ...` line (not a signature) accumulates as docstring
-            // for the NEXT signature. Blank lines reset the accumulator so
-            // unrelated earlier comments don't leak into the next bind.
             string trimmed = line.TrimStart();
-            if (trimmed.StartsWith("//"))
+            if (trimmed.StartsWith("//") && cur != null)
             {
                 string body = trimmed.Length > 2 ? trimmed.Substring(2).TrimStart() : "";
-                prevDoc.Add(body);
+                cur.Doc.Add(body);
             }
             else
             {
-                prevDoc.Clear();
+                // Non-comment line — finalize the current entry. The
+                // static declaration that lives below the doc block is
+                // the typical trigger.
+                Finalize();
             }
         }
 
+        Finalize();
         return result;
     }
 

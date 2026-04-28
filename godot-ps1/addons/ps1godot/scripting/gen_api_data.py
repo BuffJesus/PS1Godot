@@ -29,30 +29,61 @@ SIG_LINE = re.compile(
 def parse(lines):
     """Walk `lines` top-to-bottom, return a list of dicts:
         {ns, name, args, ret, doc}
-    `doc` is a `\n`-joined string of preceding `//` comment lines;
-    a blank line resets the accumulator so unrelated earlier comments
-    don't leak into the next bind.
+
+    Convention in luaapi.hh: the structured signature comment comes
+    FIRST, then any number of `//` description lines, then the
+    `static int Foo_Bar(lua_State* L);` declaration. Example:
+
+        // Entity.Find(name) -> object or nil
+        // Finds first object with matching name (user-friendly)
+        // (and any further description lines)
+        static int Entity_Find(lua_State* L);
+
+    So the parse loop tracks an "active entry" once a SIG_LINE is
+    seen; subsequent `//` lines accumulate into that entry's doc
+    until any non-`//` line (typically the static declaration)
+    finalizes it. A new SIG_LINE before a non-comment line also
+    finalizes the previous entry — handles "two adjacent
+    signature comments with no docs" cleanly.
     """
     entries = []
-    doc_buf = []
+    cur = None        # entry currently collecting docs
+    doc_lines = []    # accumulator for cur
+
+    def finalize():
+        nonlocal cur, doc_lines
+        if cur is None:
+            return
+        cur["doc"] = "\n".join(doc_lines).strip()
+        entries.append(cur)
+        cur = None
+        doc_lines = []
+
     for line in lines:
         m = SIG_LINE.match(line)
         if m:
-            entries.append({
+            # New signature — flush any prior entry first.
+            finalize()
+            cur = {
                 "ns": m.group("ns"),
                 "name": m.group("name"),
                 "args": (m.group("args") or "").strip(),
                 "ret": (m.group("ret") or "").strip(),
-                "doc": "\n".join(doc_buf).strip(),
-            })
-            doc_buf = []
+            }
             continue
+
         stripped = line.lstrip()
-        if stripped.startswith("//"):
+        if stripped.startswith("//") and cur is not None:
             body = stripped[2:].lstrip().rstrip()
-            doc_buf.append(body)
+            doc_lines.append(body)
         else:
-            doc_buf = []
+            # Non-comment line (or `//` outside a sig context) —
+            # close out the current entry. The static declaration
+            # underneath the doc block is the typical trigger.
+            finalize()
+
+    # File may end mid-block (no trailing static decl).
+    finalize()
     return entries
 
 

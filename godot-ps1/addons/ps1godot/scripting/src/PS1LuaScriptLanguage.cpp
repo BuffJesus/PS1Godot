@@ -270,15 +270,45 @@ static String format_hint(const ps1lua::ApiEntry &e) {
 // "icon" = optional Resource ref
 // "default_value" = optional Variant
 // "location" = defaults to 1024 (LOCATION_OTHER) — treated as "builtin"
-static Dictionary make_option(int kind, const String &display, const String &insert_text) {
+//
+// Doc fields tried (different Godot versions honor different keys, so we
+// stuff the same string into all three; harmless overhead per option):
+//   "description" — what GDScript's own completion uses
+//   "tooltip"     — fallback for some 4.x branches
+//   "doc_brief"   — the EditorHelp short-summary key
+//
+// As a last-resort fallback we also embed a single-line truncation of the
+// doc right into the `display` field, so even editors that ignore every
+// description key still show *something* when the author hovers in the
+// popup.
+static Dictionary make_option(int kind, const String &display, const String &insert_text, const String &doc = String()) {
 	Dictionary d;
 	d["kind"] = kind;
-	d["display"] = display;
+	if (!doc.is_empty()) {
+		// Pad the display with a brief tail. Truncate to keep the
+		// popup line readable; full doc still travels via the
+		// description/tooltip keys below.
+		String brief = doc;
+		int nl = brief.find("\n");
+		if (nl >= 0) brief = brief.substr(0, nl);
+		const int kBriefMax = 64;
+		if (brief.length() > kBriefMax) {
+			brief = brief.substr(0, kBriefMax - 1) + String::utf8("…");
+		}
+		d["display"] = display + String::utf8("  —  ") + brief;
+	} else {
+		d["display"] = display;
+	}
 	d["insert_text"] = insert_text;
-	d["font_color"] = Color(1, 1, 1, 1);  // default white — editor overlays its own theming
+	d["font_color"] = Color(1, 1, 1, 1);
 	d["icon"] = Variant();
 	d["default_value"] = Variant();
 	d["location"] = 1024;
+	if (!doc.is_empty()) {
+		d["description"] = doc;
+		d["tooltip"]     = doc;
+		d["doc_brief"]   = doc;
+	}
 	return d;
 }
 
@@ -301,8 +331,16 @@ Dictionary PS1LuaScriptLanguage::_complete_code(const String &p_code, const Stri
 			// Display shows the full sig; insert_text is just the method
 			// name so the author can keep typing args afterward.
 			String display = String(e.name) + "(" + String(e.args) + ")";
+			String doc = String(e.doc);
+			if (!String(e.ret).is_empty()) {
+				// Prepend the return-type phrase so authors see
+				// "→ object or nil — Finds first object with matching name"
+				// at a glance, even when there's no description text.
+				String ret_prefix = String::utf8("→ ") + String(e.ret);
+				doc = doc.is_empty() ? ret_prefix : (ret_prefix + " · " + doc);
+			}
 			options.push_back(make_option(
-				(int)CodeEdit::KIND_FUNCTION, display, name));
+				(int)CodeEdit::KIND_FUNCTION, display, name, doc));
 		}
 		result["options"] = options;
 		return result;
@@ -316,8 +354,14 @@ Dictionary PS1LuaScriptLanguage::_complete_code(const String &p_code, const Stri
 			if (seen.has(ns)) continue;
 			seen.push_back(ns);
 			if (!starts_with_ci(ns, ctx.prefix)) continue;
+			// Build a quick "namespace doc" by counting members.
+			int member_count = 0;
+			for (int j = 0; j < ps1lua::API_ENTRY_COUNT; j++) {
+				if (ns == String(ps1lua::API_ENTRIES[j].ns)) member_count++;
+			}
+			String ns_doc = vformat("PS1Godot Lua namespace · %d method(s)", member_count);
 			options.push_back(make_option(
-				(int)CodeEdit::KIND_CLASS, ns, ns));
+				(int)CodeEdit::KIND_CLASS, ns, ns, ns_doc));
 		}
 	}
 
@@ -334,4 +378,100 @@ Dictionary PS1LuaScriptLanguage::_complete_code(const String &p_code, const Stri
 
 	result["options"] = options;
 	return result;
+}
+
+// ── _lookup_code — hover tooltip + Ctrl-Click navigation ────────────
+//
+// `p_symbol` arrives in either of two shapes depending on what the
+// editor parsed under the cursor:
+//   - "Audio.PlaySfx"     (namespace.method)
+//   - "Audio"             (bare namespace)
+// We walk API_ENTRIES looking for a match and build a descriptor dict
+// the editor renders as a tooltip / docs panel.
+//
+// Result dict keys mirror Godot's internal LookupResult struct:
+//   "result"        Error::OK if found, ERR_UNAVAILABLE otherwise.
+//   "type"          LookupResult enum: 1 = CLASS, 4 = CLASS_METHOD.
+//   "class_name"    The PS1Godot Lua namespace ("Audio").
+//   "class_member"  The method name ("PlaySfx") for method lookups.
+//   "description"   Full doc text — newer Godot branches render this.
+//   "tooltip"       Same content under a different key (some 4.x render
+//                   paths look here instead).
+//   "doc"           Catch-all for older / forked Godot builds.
+// Stuffing the doc into three fields is a few bytes wasted; the
+// editor picks one and ignores the rest.
+Dictionary PS1LuaScriptLanguage::_lookup_code(const String &p_code,
+                                              const String &p_symbol,
+                                              const String &p_path,
+                                              Object *p_owner) const {
+	Dictionary d;
+	d["result"] = ERR_UNAVAILABLE;
+	d["type"] = 0;   // LOOKUP_RESULT_SCRIPT_LOCATION — safe default the
+	                 // editor treats as "found nothing" alongside the
+	                 // error result.
+
+	if (p_symbol.is_empty()) return d;
+
+	// Split "ns.method" → (ns, method). Bare namespace is also valid
+	// — we look that up as a CLASS-kind result.
+	int dot = p_symbol.find(".");
+	String ns   = (dot >= 0) ? p_symbol.substr(0, dot)        : p_symbol;
+	String mem  = (dot >= 0) ? p_symbol.substr(dot + 1)       : String();
+
+	if (mem.is_empty()) {
+		// Bare namespace — check that ns appears in the API at all.
+		bool found_ns = false;
+		int member_count = 0;
+		for (int i = 0; i < ps1lua::API_ENTRY_COUNT; i++) {
+			if (ns == String(ps1lua::API_ENTRIES[i].ns)) {
+				found_ns = true;
+				member_count++;
+			}
+		}
+		if (!found_ns) return d;
+
+		String desc = vformat(
+			"PS1Godot Lua API namespace · %d method(s)\n"
+			"Type `%s.` to see members.",
+			member_count, ns);
+		d["result"]       = OK;
+		d["type"]         = 1;   // LOOKUP_RESULT_CLASS
+		d["class_name"]   = ns;
+		d["description"]  = desc;
+		d["tooltip"]      = desc;
+		d["doc"]          = desc;
+		return d;
+	}
+
+	// Namespace.method — look up the exact entry.
+	for (int i = 0; i < ps1lua::API_ENTRY_COUNT; i++) {
+		const ps1lua::ApiEntry &e = ps1lua::API_ENTRIES[i];
+		if (ns != String(e.ns) || mem != String(e.name)) continue;
+
+		// Build a humanly-readable tooltip:
+		//   Audio.PlaySfx(name [, vol]) → boolean
+		//
+		//   Plays a one-shot SFX clip by name. Returns false if the
+		//   clip wasn't found.
+		String sig = String(e.ns) + "." + String(e.name) +
+		             "(" + String(e.args) + ")";
+		if (!String(e.ret).is_empty()) {
+			sig += String::utf8(" → ") + String(e.ret);
+		}
+		String body = String(e.doc);
+		String desc = body.is_empty() ? sig : (sig + "\n\n" + body);
+
+		d["result"]        = OK;
+		d["type"]          = 4;   // LOOKUP_RESULT_CLASS_METHOD
+		d["class_name"]    = ns;
+		d["class_member"]  = mem;
+		d["description"]   = desc;
+		d["tooltip"]       = desc;
+		d["doc"]           = desc;
+		return d;
+	}
+
+	// Symbol not in our API table — not an error, just not ours. The
+	// editor falls back to its built-in lookup (Lua keywords, locals).
+	return d;
 }

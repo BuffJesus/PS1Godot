@@ -108,29 +108,32 @@ public static class LuaApiStubGeneratorTests
 
     private static void TestDocstringPreserved()
     {
+        // luaapi.hh writes the description line(s) AFTER the structured
+        // signature comment, NOT before. The parser collects everything
+        // between the sig and the next non-comment line.
         var s = GenerateFrom(
             "    // Entity.Destroy(object) -> nil",
-            "    // Deactivates the object (fires onDisable). Lets the pool re-use it.");
-        // First bind has no prior doc; the explanatory line is attached to the
-        // NEXT bind (or discarded if there is none). Simpler: split into two
-        // binds where the doc line precedes the sig.
-        var s2 = GenerateFrom(
             "    // Deactivates the object (fires onDisable). Lets the pool re-use it.",
-            "    // Entity.Destroy(object) -> nil");
-        AssertContains(s2, "--- Deactivates the object", "prior doc preserved");
-        AssertContains(s2, "function Entity.Destroy(object) end", "sig still emitted");
+            "    static int Entity_Destroy(lua_State* L);");
+        AssertContains(s, "--- Deactivates the object", "post-sig doc preserved");
+        AssertContains(s, "function Entity.Destroy(object) end", "sig still emitted");
     }
 
     private static void TestBlankLineResets()
     {
-        // A blank line should clear the doc accumulator so stale comments
-        // don't leak into the next bind.
+        // The static declaration (or any non-comment line) terminates
+        // the doc accumulator so unrelated `//` comments later in the
+        // file don't leak into the next bind.
         var s = GenerateFrom(
-            "    // Stale doc unrelated to Audio.Stop",
+            "    // Audio.Stop()",
+            "    static int Audio_Stop(lua_State* L);",
             "",
-            "    // Audio.Stop()");
-        AssertNotContains(s, "Stale doc unrelated", "blank line reset");
-        AssertContains(s, "function Audio.Stop() end", "sig still emitted");
+            "    // Unrelated comment between binds",
+            "    // Music.Play(name)",
+            "    static int Music_Play(lua_State* L);");
+        AssertNotContains(s, "Unrelated comment between binds", "non-comment finalizes doc");
+        AssertContains(s, "function Audio.Stop() end", "first sig still emitted");
+        AssertContains(s, "function Music.Play(name) end", "second sig still emitted");
     }
 
     private static void TestReturnObjectOrNil()
