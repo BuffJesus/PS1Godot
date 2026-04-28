@@ -1624,6 +1624,36 @@ Only after Phases 0–3 land.
   [`docs/ps1godot_missing_pieces_production_tooling_roadmap.md`](docs/ps1godot_missing_pieces_production_tooling_roadmap.md).
 - **GDExtension hot path** for heavy inner loops (texture quantization, BVH
   build, VRAM pack) if iteration time hurts.
+- **Cel shading via PSn00bSDK technique** — runtime per-mesh feature
+  ported from `PSn00bSDK-master/libpsn00b/smd/smd_cel.s` +
+  `examples/demos/n00bdemo/main.c::hatkidstuff`. The technique is
+  load-bearing-clever: per-vertex GTE lighting computes RGB from
+  `dot(normal, light_dir) × light_color`, then the resulting RGB is
+  re-used as **texture UVs** (bit-shifted to 0..31) into a small
+  inverted "shading map" texture, drawn over the original mesh with
+  **subtractive semi-trans blending**. Composes with both textured
+  and untextured polys; ambient must be black for the look to read.
+  Phased ship plan:
+  - **A1.** Runtime port — mirror `smd_cel.s` math in
+    `psxsplash-main/src/renderer.cpp`. Per-cel-mesh second pass:
+    GTE lighting → RGB→UV bit-shift → subtractive textured POLY_FT3
+    over the original. Splashpack v32 adds `CelShaded: bool +
+    CelShadingMapTexIndex: u16` per GameObject. ~2 days.
+  - **A2.** Default ramp — ship a 32×4 inverted 3-band ramp at
+    `addons/ps1godot/textures/celmap.png` so authors don't have to
+    author one to start. ~½ day (+ atlas-pack integration).
+  - **B1.** Godot author UI — `[Export] PS1MeshInstance.CelShaded` +
+    `CelShadingMap: Texture2D` (defaults to bundled celmap).
+    SceneCollector + SplashpackWriter wire it through. Validator
+    warns on `CelShaded=true` with non-black scene ambient. ~½ day.
+  - **B2.** Blender authoring — `PS1MaterialMetadata.CelShaded` flag
+    round-trips through JSON sidecars; preview shader in Blender
+    approximates the runtime ramp. ~1 day.
+  - **C.** Backface-extruded outlines — second-second-pass for the
+    silhouette stroke (Wind Waker / PS2-cel-game style). Independent
+    feature; doesn't compose with A1. ~2 days.
+  Total to ship the runtime cel look (A1 + A2 + B1): ~3 days. PSn00bSDK
+  source vendored in `PSn00bSDK-master/` for reference.
 - Serial-link upload to real hardware.
 - Multi-scene / persistent-data workflow with Godot-native resource references.
 - Upstream patches / feedback to psxsplash based on what we learn. Tracker
