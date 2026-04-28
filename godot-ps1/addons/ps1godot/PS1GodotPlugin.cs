@@ -35,6 +35,7 @@ public partial class PS1GodotPlugin : EditorPlugin
     private const string SendToBlenderMenuLabel        = "PS1Godot: Send to Blender";
     private const string BakeVertexLightingMenuLabel   = "PS1Godot: Bake Vertex Lighting from Scene Lights";
     private const string EditMeshInBlenderMenuLabel    = "PS1Godot: Edit Mesh in Blender";
+    private const string BakeVertexAOMenuLabel         = "PS1Godot: Bake Vertex AO into BakedColors";
 
     // Where extracted .glb files land. Matches the Blender add-on's
     // default `asset_subdir` so the round-trip back overwrites the
@@ -76,6 +77,7 @@ public partial class PS1GodotPlugin : EditorPlugin
         AddToolMenuItem(SendToBlenderMenuLabel,        Callable.From(OnSendToBlender));
         AddToolMenuItem(BakeVertexLightingMenuLabel,   Callable.From(OnBakeVertexLighting));
         AddToolMenuItem(EditMeshInBlenderMenuLabel,    Callable.From(OnEditMeshInBlender));
+        AddToolMenuItem(BakeVertexAOMenuLabel,         Callable.From(OnBakeVertexAO));
 
         _triggerBoxGizmo = new PS1TriggerBoxGizmo();
         AddNode3DGizmoPlugin(_triggerBoxGizmo);
@@ -179,6 +181,7 @@ public partial class PS1GodotPlugin : EditorPlugin
         RemoveToolMenuItem(SendToBlenderMenuLabel);
         RemoveToolMenuItem(BakeVertexLightingMenuLabel);
         RemoveToolMenuItem(EditMeshInBlenderMenuLabel);
+        RemoveToolMenuItem(BakeVertexAOMenuLabel);
 
         SceneChanged -= OnSceneChanged;
         EditorInterface.Singleton.GetSelection().SelectionChanged -= OnEditorSelectionChanged;
@@ -1270,6 +1273,70 @@ public partial class PS1GodotPlugin : EditorPlugin
             }
         }
         return false;
+    }
+
+    // ── Phase L2: bake vertex AO into BakedColors ───────────────────
+    //
+    // Pure additive over Phase L1 — meant to run AFTER a directional
+    // bake. Walks every visible mesh in the scene as occluder
+    // geometry, fires N rays per vertex into the hemisphere above its
+    // normal, multiplies the AO term into existing BakedColors.
+    //
+    // Doesn't require authored colliders — uses raw triangle data
+    // straight from each mesh. Brute-force ray-tri intersection is
+    // O(verts × rays × triangles); fine for typical PS1 scenes.
+    //
+    // Layered authoring loop:
+    //   1. Bake Vertex Lighting from Scene Lights → fills BakedColors
+    //      with Lambert directional contribution.
+    //   2. Bake Vertex AO into BakedColors → multiplies AO term in.
+    //   3. Save .tscn. Done.
+    private void OnBakeVertexAO()
+    {
+        var sceneRoot = EditorInterface.Singleton.GetEditedSceneRoot();
+        if (sceneRoot == null)
+        {
+            GD.PushError("[PS1Godot] No scene open — open a .tscn before baking AO.");
+            return;
+        }
+
+        var selection = EditorInterface.Singleton.GetSelection().GetSelectedNodes();
+        if (selection.Count == 0)
+        {
+            GD.PushError("[PS1Godot] Bake Vertex AO: select one or more PS1MeshInstance nodes first.");
+            return;
+        }
+
+        // Default options — author tunes via inspector / hand-edit
+        // post-bake. Intentionally not exposed to a popup since the
+        // values are well-tuned for typical PS1-scale scenes.
+        var opts = new Exporter.VertexAOBaker.Options
+        {
+            RayCount = 12,
+            MaxRayDistance = 0.5f,
+            Strength = 0.5f,
+            Bias = 0.001f,
+        };
+
+        var startNs = System.Diagnostics.Stopwatch.GetTimestamp();
+        var result = Exporter.VertexAOBaker.Bake(sceneRoot, selection, opts);
+        double elapsedMs = (System.Diagnostics.Stopwatch.GetTimestamp() - startNs)
+                         * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+
+        GD.Print(
+            $"[PS1Godot] Bake Vertex AO: {result.MeshesBaked} mesh(es), " +
+            $"{result.VerticesPainted} vertices painted, " +
+            $"{result.TrianglesInScene} occluder triangles, " +
+            $"{result.RaysCast} rays cast in {elapsedMs:F0} ms. " +
+            $"{result.Skipped} skipped.");
+        foreach (var reason in result.SkippedReasons)
+        {
+            GD.PushWarning($"[PS1Godot]   skipped: {reason}");
+        }
+        if (result.MeshesBaked > 0)
+        {
+            GD.Print("[PS1Godot] Save the .tscn to persist the AO-multiplied BakedColors.");
+        }
     }
 
     // ── UX-C: extract Mesh from Godot, open in Blender ──────────────
