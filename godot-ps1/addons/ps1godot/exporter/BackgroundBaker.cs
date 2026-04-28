@@ -85,6 +85,10 @@ public static class BackgroundBaker
         var matSkinned = ResourceLoader.Load<ShaderMaterial>("res://addons/ps1godot/shaders/ps1_skinned.tres");
         var saved = SaveBakeShaderState(matDefault, matSkinned);
         ApplyBakeShaderState(matDefault, matSkinned);
+        // Confirmation print — if you don't see this when running the
+        // baker, Godot is still on the old C# DLL (memory pin
+        // project_godot_dll_hot_reload). Close + reopen the editor.
+        GD.Print($"[PS1Godot] BG baker: muting PSX shader during bake (modulate {saved.DefaultModulate} → 1, quantize bits {saved.DefaultBits} → 0, dither {saved.DefaultDither} → false).");
 
         var subviewport = new SubViewport
         {
