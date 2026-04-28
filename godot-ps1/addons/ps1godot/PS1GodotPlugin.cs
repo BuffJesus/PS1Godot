@@ -128,7 +128,29 @@ public partial class PS1GodotPlugin : EditorPlugin
             }
         }
 
-        GD.Print("[PS1Godot] Plugin enabled.");
+        GD.Print("[PS1Godot] Plugin enabled. F5 = Run on PSX (export + build + launch).");
+    }
+
+    // Hook Godot's Play button (F5 / F6 / Shift+F5) into the Run-on-PSX
+    // pipeline. The PS1 game runs in PCSX-Redux, not in a Godot window,
+    // so we intercept here and route to OnRunOnPsx instead of letting
+    // Godot's scene runner spin up.
+    //
+    // Returning false is Godot's documented way to say "build step
+    // failed, don't proceed with running" — which suppresses the scene
+    // runner exactly as we want, but also pops a "Project run failed"
+    // toast. The toast is harmless (PCSX-Redux is already launching by
+    // the time it appears) and there's no cleaner override hook in
+    // EditorPlugin's API today; the GD.Print below tells authors what's
+    // actually happening so the toast doesn't read as a real error.
+    public override bool _Build()
+    {
+        GD.Print("[PS1Godot] F5: routing Run to PSX (export + build + launch). " +
+                 "Ignore any 'Project run failed' toast Godot pops — that's its " +
+                 "stock response to a custom run handler. PCSX-Redux is launching " +
+                 "with your game; check its window for the actual run.");
+        OnRunOnPsx();
+        return false;
     }
 
     private void OnEditorSelectionChanged()

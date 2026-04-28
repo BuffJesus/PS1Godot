@@ -1364,9 +1364,15 @@ The Blender ↔ Godot pipeline is now first-class in both directions:
 
   See `docs/handoff-2026-04-27.md` for the full commit ledger.
 
-- [ ] **F5 to play.** Hook Godot's Play button: build splashpack → launch
-      PCSX-Redux with PCdrv → attach C# debugger → tail `printf` output in
-      the Godot Output dock.
+- [x] **F5 to play** *(shipped 2026-04-28)*. `PS1GodotPlugin._Build()`
+      overrides Godot's Play button so F5 / F6 / Shift+F5 all route to
+      the Run-on-PSX pipeline (export → build psxsplash if missing →
+      ISO build if XA-routed clips → launch PCSX-Redux). Returning
+      false from `_Build` is the only way to suppress Godot's own
+      scene runner; that pops a "Project run failed" toast which the
+      editor log proactively explains is harmless (the GD.Print fires
+      before the toast). Debugger attach + printf-tailing into the
+      Godot Output dock not yet wired — separate item.
 - [ ] **VRAM viewer** as a dockable panel (not a separate window like SplashEdit).
       **Amendment (`REF-GAP-1` / `REF-GAP-2` / `REF-GAP-3`):** framed around
       *per-scene residency* (environment / character / UI / effects broken
@@ -1411,10 +1417,18 @@ The Blender ↔ Godot pipeline is now first-class in both directions:
 - [ ] Lua hot-swap: re-exporting a single `.lua` while the emulator is running
       re-uploads only that bytecode via PCdrv.
 - [ ] Project template (`PS1 Game`) installable into Godot's project manager.
-- [ ] ISO build path via `mkpsxiso` for real-hardware testing.
-      **Amendment (`REF-GAP-10`):** disc-layout-aware. Place adjacent-chunk
-      archives physically close on the disc to reduce seeks. Only matters
-      once Phase 2.5 chunk streaming is real.
+- [x] **ISO build path via `mkpsxiso`** *(shipped 2026-04-27)*.
+      `tools/build_iso/build_iso.py` walks `godot-ps1/build/` for scene
+      triplets (+ optional `.xa` / `.loading` sidecars), generates an
+      mkpsxiso XML config, and produces a BIOS-bootable `.bin`/`.cue`
+      pair. Run-on-PSX auto-routes to the ISO path when any scene has
+      `Route=XA` clips (PCdrv can't carry XA). `scripts/launch-emulator-iso.cmd`
+      mounts the disc in PCSX-Redux's CD-ROM mode.
+  - [ ] **Disc-layout-aware placement (`REF-GAP-10`).** Place
+        adjacent-chunk archives physically close on the disc to
+        reduce seeks. Only matters once Phase 2.5 chunk streaming
+        is real — current single-archive-per-scene layout doesn't
+        benefit.
 - [x] **Loading screens** *(end-to-end 2026-04-28)*. Runtime side
       (`psxsplash-main/src/loadingscreen.{cpp,hh}`) reads a
       `scene_N.loading` "LP"-magic LoaderPack with header + atlases +
