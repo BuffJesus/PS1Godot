@@ -64,6 +64,28 @@ public static class BackgroundBaker
         string outDir = Path.GetDirectoryName(outAbsPath)!;
         Directory.CreateDirectory(outDir);
 
+        // Mute the PSX preview shader before rendering. The bake should
+        // capture *Godot's* native shading — high-quality colors that
+        // ship to PSX as a texture, NOT the runtime's PSX-shaded
+        // appearance. Two reasons:
+        //   1. modulate_scale=2.0 is the PSYQo vertex-color convention
+        //      where 0.5 means "neutral" and 1.0 means "double". Vertex
+        //      colors at 0.5 get drawn correctly on PSX hardware, but if
+        //      the bake doubles them, the saved PNG ends up over-bright.
+        //      Then PSX samples that already-bright texture and the BG
+        //      visibly washes out (or saturates to white where vertex
+        //      colors hit 0.8 from a Vertex Lighting bake).
+        //   2. The 5-bit quantize + Bayer dither shipped in Phase L3 are
+        //      meant for the *editor preview* of how runtime geometry
+        //      will look — they shouldn't bake into a BG texture, since
+        //      the runtime samples that texture as-is (no shader pass).
+        // Saved values get restored on the way out so the editor's main
+        // viewport returns to the PSX preview look once the bake completes.
+        var matDefault = ResourceLoader.Load<ShaderMaterial>("res://addons/ps1godot/shaders/ps1_default.tres");
+        var matSkinned = ResourceLoader.Load<ShaderMaterial>("res://addons/ps1godot/shaders/ps1_skinned.tres");
+        var saved = SaveBakeShaderState(matDefault, matSkinned);
+        ApplyBakeShaderState(matDefault, matSkinned);
+
         var subviewport = new SubViewport
         {
             Name = "PS1GodotBgBaker_Viewport",
@@ -117,6 +139,12 @@ public static class BackgroundBaker
         await host.ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
 
         Image? image = subviewport.GetTexture()?.GetImage();
+
+        // Restore the PSX preview shader state regardless of whether the
+        // capture succeeded. Done before any early return so the editor
+        // viewport never gets stuck without modulate.
+        RestoreBakeShaderState(matDefault, matSkinned, saved);
+
         if (image == null || image.IsEmpty())
         {
             GD.PushError($"[PS1Godot] BackgroundBaker: render produced an empty image (camera: {sourceCam.Name}).");
@@ -145,6 +173,56 @@ public static class BackgroundBaker
         // .tscn save can reference it without a manual reimport.
         EditorInterface.Singleton?.GetResourceFilesystem()?.Scan();
         return outAbsPath;
+    }
+
+    // Saved shader-uniform snapshot used by the bake mute/restore pair.
+    // Each tuple holds (modulate_scale, preview_quantize_bits, preview_dither_enabled).
+    private record struct BakeShaderState(
+        Variant DefaultModulate, Variant DefaultBits, Variant DefaultDither,
+        Variant SkinnedModulate, Variant SkinnedBits, Variant SkinnedDither);
+
+    private static BakeShaderState SaveBakeShaderState(ShaderMaterial? def, ShaderMaterial? skin)
+    {
+        Variant Get(ShaderMaterial? m, string name) =>
+            m == null ? new Variant() : m.GetShaderParameter(name);
+        return new BakeShaderState(
+            DefaultModulate: Get(def, "modulate_scale"),
+            DefaultBits:     Get(def, "preview_quantize_bits"),
+            DefaultDither:   Get(def, "preview_dither_enabled"),
+            SkinnedModulate: Get(skin, "modulate_scale"),
+            SkinnedBits:     Get(skin, "preview_quantize_bits"),
+            SkinnedDither:   Get(skin, "preview_dither_enabled"));
+    }
+
+    private static void ApplyBakeShaderState(ShaderMaterial? def, ShaderMaterial? skin)
+    {
+        // modulate_scale=1 → no PSYQo 2× doubling on vertex colors.
+        // preview_quantize_bits=0 → disable the 5-bit channel quantize.
+        // preview_dither_enabled=false → disable Bayer dither.
+        // Together these give us a clean Godot-native render to capture.
+        foreach (var m in new[] { def, skin })
+        {
+            if (m == null) continue;
+            m.SetShaderParameter("modulate_scale", 1.0f);
+            m.SetShaderParameter("preview_quantize_bits", 0);
+            m.SetShaderParameter("preview_dither_enabled", false);
+        }
+    }
+
+    private static void RestoreBakeShaderState(ShaderMaterial? def, ShaderMaterial? skin, BakeShaderState saved)
+    {
+        if (def != null)
+        {
+            def.SetShaderParameter("modulate_scale", saved.DefaultModulate);
+            def.SetShaderParameter("preview_quantize_bits", saved.DefaultBits);
+            def.SetShaderParameter("preview_dither_enabled", saved.DefaultDither);
+        }
+        if (skin != null)
+        {
+            skin.SetShaderParameter("modulate_scale", saved.SkinnedModulate);
+            skin.SetShaderParameter("preview_quantize_bits", saved.SkinnedBits);
+            skin.SetShaderParameter("preview_dither_enabled", saved.SkinnedDither);
+        }
     }
 
     private static string ResolveDefaultPath(Camera3D cam)

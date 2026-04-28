@@ -438,6 +438,21 @@ public static class SceneCollector
         }
         if (n is PS1MeshInstance pmi && pmi.Visible && pmi.Mesh != null)
         {
+            // ExportMode=CollisionOnly skips render-side emission — the
+            // mesh contributes collision only. Used for fixed-camera
+            // (Resident Evil / FFVII) scenes where the static room is
+            // baked into the BG image: the collision mesh must still
+            // exist so the player walks on the right shapes, but
+            // re-rendering it at runtime would double-draw on top of
+            // the BG. Author keeps the mesh Visible in the editor (so
+            // it bakes into the BG) and sets ExportMode=CollisionOnly
+            // to suppress runtime rendering.
+            if (pmi.ExportMode == ExportMode.CollisionOnly)
+            {
+                EmitCollisionFor(pmi, ushort.MaxValue, data);
+                return;
+            }
+
             int surfaceCount = pmi.Mesh.GetSurfaceCount();
             var surfaceTextureIndices = new int[surfaceCount];
             for (int s = 0; s < surfaceCount; s++)
