@@ -160,6 +160,37 @@ The corresponding Godot-side bake operators are tracked in
 — phases L1 (scene-lights bake), L2 (vertex AO), L3 (PSX preview
 shader with 5-bit quantization + dither), L4 (bake-stack UI).
 
+## Collision helpers
+
+The **PS1 Collision Helpers** panel ships four one-click spawn
+operators. Each drops a properly-tagged primitive at the 3D cursor —
+authors stop doing the "add a cube → rename → wireframe → hide-render
+→ tag CollisionOnly → set collision_layer" dance.
+
+| Button | Spawns | Layer | Use |
+|---|---|---|---|
+| **Add Player Collision Box** | 0.6 × 0.6 × 1.8 m wireframe box | `Player` | Block player movement against walls / props |
+| **Add Camera Blocker** | 1 × 1 × 1 m wireframe box | `Camera` | Keep camera out of walls without blocking the player |
+| **Add Trigger Volume** | 2 × 2 × 2 m wireframe box | `Trigger` | Cutscene starts, area transitions, encounter zones |
+| **Add Interaction Volume** | 0.75 m radius wireframe sphere | `Interaction` | "Press X to talk / open / read" volumes |
+
+All helpers are tagged `mesh_role=CollisionOnly` + `export_mode=CollisionOnly`,
+hidden from render, and named `<Kind>_01`, `<Kind>_02`, … so multiple
+instances stay distinguishable. They travel through the JSON sidecar
+pipeline naturally — Godot side sees them as collision-only meshes
+with the layer string carried via `collision_layer`.
+
+The validator gains two collision-specific rules: warns on
+CollisionOnly meshes with empty `collision_layer` and on ones
+carrying assigned material slots (Blender clones the active material
+onto new meshes by default; the GLB then carries unused material
+slots).
+
+RPG-specific helpers (NavRegion / TransitionPoint / SavePoint /
+EncounterVolume) are listed in the integration plan but deferred —
+they need Godot-side wire format + runtime hooks that don't exist
+yet.
+
 ## Roadmap
 
 See
@@ -174,7 +205,9 @@ for the full plan. Phase progression:
 - ⏳ Phase 5 — Material / texture page workflow (4bpp/8bpp preview).
   *Phase 5 metadata round-trip already shipped via PS1MaterialMetadata
   on the Godot side; only the texture-page preview remains.*
-- ⏳ Phase 6 — Collision-helper authoring.
+- ✅ **Phase 6** — Collision-helper authoring (4 spawn operators —
+  see *Collision helpers* above; RPG-specific Nav / Transition /
+  SavePoint helpers deferred).
 - ⏳ Phase 7 — Animation metadata + event markers.
 - ✅ **Phase 8** — PS1Godot manifest import / round-trip ID
   preservation (Godot writer + Blender importer both shipped).

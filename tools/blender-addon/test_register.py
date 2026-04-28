@@ -338,6 +338,61 @@ def main() -> int:
         traceback.print_exc()
         failures += 1
 
+    # ── Phase 6: collision helpers ──────────────────────────────
+    # Spawn each helper, verify it lands tagged correctly + with the
+    # right viewport presentation. We don't validate the geometry
+    # (the helpers are simple primitives — visual inspection is the
+    # only meaningful check there).
+    try:
+        before = set(bpy.data.objects.keys())
+        for op_name, expected_layer, expected_prefix in (
+            ("ps1godot.add_player_collision",   "Player",      "PlayerCollision"),
+            ("ps1godot.add_camera_blocker",     "Camera",      "CameraBlocker"),
+            ("ps1godot.add_trigger_volume",     "Trigger",     "TriggerVolume"),
+            ("ps1godot.add_interaction_volume", "Interaction", "InteractionVolume"),
+        ):
+            r = getattr(bpy.ops, op_name.split(".")[0])
+            r = getattr(r, op_name.split(".")[1])()
+            if "CANCELLED" in r:
+                _err(f"{op_name} cancelled: {r}")
+                failures += 1
+                continue
+
+            # Find the new helper — exactly one new object should appear.
+            after = set(bpy.data.objects.keys())
+            new_names = after - before
+            before = after
+            if len(new_names) != 1:
+                _err(f"{op_name} created {len(new_names)} objects (want 1): {new_names}")
+                failures += 1
+                continue
+            helper = bpy.data.objects[next(iter(new_names))]
+
+            if not helper.name.startswith(expected_prefix):
+                _err(f"{op_name} produced '{helper.name}', expected prefix '{expected_prefix}'")
+                failures += 1
+            elif helper.ps1godot.mesh_role != "CollisionOnly":
+                _err(f"{helper.name}: mesh_role = {helper.ps1godot.mesh_role}, want CollisionOnly")
+                failures += 1
+            elif helper.ps1godot.export_mode != "CollisionOnly":
+                _err(f"{helper.name}: export_mode = {helper.ps1godot.export_mode}, want CollisionOnly")
+                failures += 1
+            elif helper.ps1godot.collision_layer != expected_layer:
+                _err(f"{helper.name}: collision_layer = {helper.ps1godot.collision_layer!r}, want {expected_layer!r}")
+                failures += 1
+            elif helper.display_type != "WIRE":
+                _err(f"{helper.name}: display_type = {helper.display_type}, want WIRE")
+                failures += 1
+            elif not helper.hide_render:
+                _err(f"{helper.name}: hide_render = False, want True")
+                failures += 1
+            else:
+                _info(f"{op_name} → {helper.name} (layer={expected_layer}, WIRE, hidden from render)")
+    except Exception:
+        _err("collision helper smoke raised:")
+        traceback.print_exc()
+        failures += 1
+
     # ── Unregister cleanly (catches detach-order bugs) ──────────
     try:
         ps1godot_blender.unregister()

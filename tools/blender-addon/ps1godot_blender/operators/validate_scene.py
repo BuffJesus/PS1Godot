@@ -116,6 +116,20 @@ class PS1GODOT_OT_validate_scene(bpy.types.Operator):
                     f"'{obj.name}' is CollisionOnly with {len(mesh.polygons)} faces — "
                     f"PSX collision wants simplified hulls."
                 )
+            if not props.collision_layer:
+                warnings.append(
+                    f"'{obj.name}' is CollisionOnly but collision_layer is empty — "
+                    f"set Player / Camera / Trigger / Interaction (or use the "
+                    f"PS1 Collision Helpers panel which sets it automatically)."
+                )
+            # Collision helpers carry materials by accident sometimes
+            # (Blender clones the active material onto new mesh objects).
+            # The runtime ignores them but the GLB carries unused slots.
+            if any(s.material is not None for s in obj.material_slots):
+                warnings.append(
+                    f"'{obj.name}' is CollisionOnly with material slots assigned — "
+                    f"clear slots so the GLB doesn't carry unused materials."
+                )
             return
 
         # UV layer presence. Untextured (vertex-color-only) meshes are

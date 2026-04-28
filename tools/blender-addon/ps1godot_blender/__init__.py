@@ -42,13 +42,19 @@ bl_info = {
 }
 
 from . import properties
-from .panels import project_panel, metadata_panel, vertex_lighting_panel
+from .panels import (
+    project_panel,
+    metadata_panel,
+    vertex_lighting_panel,
+    collision_panel,
+)
 from .operators import (
     validate_scene,
     export_metadata,
     import_metadata,
     export_to_godot,
     vertex_lighting,
+    collision_helpers,
 )
 
 # Each module exposes a matching register() / unregister() pair built
@@ -64,9 +70,11 @@ _modules = (
     import_metadata,
     export_to_godot,
     vertex_lighting,
+    collision_helpers,
     project_panel,
     metadata_panel,
     vertex_lighting_panel,
+    collision_panel,
 )
 
 
