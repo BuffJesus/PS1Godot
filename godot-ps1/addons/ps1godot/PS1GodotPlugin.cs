@@ -53,6 +53,7 @@ public partial class PS1GodotPlugin : EditorPlugin
     private PS1UICanvasEditor? _uiCanvasEditor;
     private EditorSyntaxHighlighter? _luaHighlighter;
     private PS1TexturePreviewInspector? _texturePreviewInspector;
+    private PS1VRAMViewerDock? _vramViewerDock;
 
     public override void _EnterTree()
     {
@@ -134,6 +135,14 @@ public partial class PS1GodotPlugin : EditorPlugin
         // texture quantizes at the chosen BitDepth without exporting.
         _texturePreviewInspector = new PS1TexturePreviewInspector();
         AddInspectorPlugin(_texturePreviewInspector);
+
+        // VRAM viewer — bottom-panel tab that visualises the packed
+        // 1024×512 layout after each export (atlases, textures, CLUTs,
+        // reserved framebuffer + font regions).
+        _vramViewerDock = new PS1VRAMViewerDock();
+#pragma warning disable CS0618 // Obsolete: AddControlToBottomPanel — see AddControlToDock site above.
+        AddControlToBottomPanel(_vramViewerDock, "PS1 VRAM");
+#pragma warning restore CS0618
 
         GD.Print("[PS1Godot] Plugin enabled. F5 = Run on PSX (export + build + launch).");
     }
@@ -250,6 +259,15 @@ public partial class PS1GodotPlugin : EditorPlugin
         {
             RemoveInspectorPlugin(_texturePreviewInspector);
             _texturePreviewInspector = null;
+        }
+
+        if (_vramViewerDock != null)
+        {
+#pragma warning disable CS0618 // Obsolete — see AddControlToBottomPanel site above.
+            RemoveControlFromBottomPanel(_vramViewerDock);
+#pragma warning restore CS0618
+            _vramViewerDock.QueueFree();
+            _vramViewerDock = null;
         }
 
         GD.Print("[PS1Godot] Plugin disabled.");
@@ -619,6 +637,12 @@ public partial class PS1GodotPlugin : EditorPlugin
             GD.Print($"[PS1Godot]   .splashpack = {packBytes}B");
             GD.Print($"[PS1Godot]   .vram       = {vramBytes}B  (cap {UI.SceneStats.VramBudgetBytes}B)");
             GD.Print($"[PS1Godot]   .spu        = {spuBytes}B  (cap {UI.SceneStats.SpuBudgetBytes}B)");
+
+            // Push the packed VRAM layout to the dock for visual review.
+            // SceneData.Packer is non-null at this point (SplashpackWriter
+            // ran the pack pass before serialising), so the snapshot
+            // captures the same coords the .vram file holds.
+            _vramViewerDock?.ApplySnapshot(UI.VramSnapshot.Capture(sceneData, sceneIndex));
 
             // Cap warnings: explicit PushWarning when a bus is over its
             // hardware-usable cap so authors don't have to do the math.

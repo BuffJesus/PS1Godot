@@ -1381,12 +1381,32 @@ The Blender ↔ Godot pipeline is now first-class in both directions:
       editor log proactively explains is harmless (the GD.Print fires
       before the toast). Debugger attach + printf-tailing into the
       Godot Output dock not yet wired — separate item.
-- [ ] **VRAM viewer** as a dockable panel (not a separate window like SplashEdit).
-      **Amendment (`REF-GAP-1` / `REF-GAP-2` / `REF-GAP-3`):** framed around
-      *per-scene residency* (environment / character / UI / effects broken
-      out), not project totals. Includes texture-page grouping view and
-      OT-pressure readout (object count vs `PS1Scene.MaxActors`,
-      texture-page switches per frame vs `MaxTexturePages`).
+- [x] **VRAM viewer dock — base layout view** *(shipped 2026-04-28)*.
+      `PS1VRAMViewerDock` (bottom panel "PS1 VRAM") + `PS1VRAMGrid`
+      custom-`_Draw` Control render the 1024×512 VRAM grid at every
+      export: reserved regions (framebuffers + font column),
+      atlases color-coded by bit depth (4bpp green / 8bpp blue / 16bpp
+      orange), per-texture sub-rects on top, CLUT strips in yellow.
+      `VramSnapshot` decouples the dock from live `SceneData` /
+      `VRAMPacker` state. Header line shows scene name + percent of
+      usable VRAM consumed; legend chip explains the color scheme.
+  - [ ] **Per-scene residency view (`REF-GAP-1` / `-2` / `-3`).**
+        Environment / character / UI / effects broken out — needs
+        residency tagging on assets (not yet authored). Coloring or
+        sub-section per residency once tags exist.
+  - [ ] **Texture-page grouping view.** Highlight which textures share
+        a tpage, show tpage switch count per draw call.
+  - [ ] **OT-pressure readout.** Object count vs `PS1Scene.MaxActors`
+        and texture-page switches per frame vs `MaxTexturePages` —
+        gameplay-frame metrics, not just static layout.
+  - [ ] **Hover tooltips on the grid.** Hovering a rect shows source
+        path, dimensions, bit depth, atlas index. Trivial extension
+        of the `_Draw` Control — needs `_GuiInput` + a hit-test pass
+        over the snapshot's rects.
+  - [ ] **Multi-scene picker.** Today the dock shows the
+        most-recently-exported scene's snapshot. A dropdown + remembered
+        per-scene snapshots would let authors compare across scenes
+        in a multi-scene project.
 - [ ] **SPU / memory / BVH budget bars** in the viewport overlay.
 - [x] **Texture reuse auditor (`REF-GAP-6`)** *(shipped across 2026-04-27 / 2026-04-28)*.
       `TextureValidationReport` per-row warnings cover **one-off
