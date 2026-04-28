@@ -203,6 +203,32 @@ class PS1GodotSceneProps(bpy.types.PropertyGroup):
         default=False,
     )
 
+    # ── Cycles vertex-color bake ─────────────────────────────────────
+    # The Lambert+shadow bake above is for iteration; this is for
+    # final ship. Cycles does full GI / bounce / area-shaped shadows.
+    # Slow but matches what FFVIII / Silent Hill interiors actually
+    # looked like.
+    vc_cycles_mode: EnumProperty(
+        name="Cycles Bake Mode",
+        description="Which Cycles render pass to bake into vertex colors.",
+        items=[
+            ("COMBINED", "Combined", "Direct + indirect + emit + shadow + AO. The single-pass 'final lighting' result. Slowest but most complete."),
+            ("DIFFUSE",  "Diffuse",  "Diffuse contribution only (with bounce). Use when you want lighting without specular highlights."),
+            ("AO",       "AO",       "Ambient occlusion only. Multiply this into a separate directional bake to add corner-cavity darkening — the PS1-art technique that turned plastic-looking props into gritty environments."),
+        ],
+        default="COMBINED",
+    )
+    vc_cycles_samples: IntProperty(
+        name="Cycles Samples",
+        description=(
+            "Sample count for the bake. Higher = less noise but slower. "
+            "PSX-era visuals don't need much (the 8-bit byte quantization "
+            "hides noise below 64-sample-quality anyway). 64 is a good "
+            "default; bump to 256 for reference renders."
+        ),
+        default=64, min=1, max=4096,
+    )
+
 
 # ── Object-level metadata ───────────────────────────────────────────
 

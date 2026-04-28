@@ -57,6 +57,19 @@ class PS1GODOT_PT_vertex_lighting(bpy.types.Panel):
         row.scale_y = 1.3
         row.operator("ps1godot.vc_bake_scene_lights", icon="LIGHT")
 
+        # ── Cycles full-GI bake — final-ship pass ──
+        # Slow but gorgeous. Cycles handles GI / bounce / area-shaped
+        # shadows / emissives properly; the Bake from Scene Lights
+        # above is the iteration loop, this is the ship pass.
+        layout.separator()
+        col = layout.column(align=True)
+        col.label(text="Cycles Bake (final ship)", icon="RENDER_STILL")
+        col.prop(s, "vc_cycles_mode")
+        col.prop(s, "vc_cycles_samples")
+        row = col.row(align=True)
+        row.scale_y = 1.3
+        row.operator("ps1godot.vc_bake_cycles", icon="RENDER_STILL")
+
         layout.separator()
         col = layout.column(align=True)
         col.label(text="Other", icon="MOD_TINT")

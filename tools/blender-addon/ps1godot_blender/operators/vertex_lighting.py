@@ -546,10 +546,130 @@ class PS1GODOT_OT_vc_clear(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class PS1GODOT_OT_vc_bake_cycles(bpy.types.Operator):
+    """Bake into vertex colors using Cycles' full path-traced render — final-ship pass."""
+
+    bl_idname = "ps1godot.vc_bake_cycles"
+    bl_label = "Bake via Cycles"
+    bl_description = (
+        "Run Cycles' full path-traced render and bake the chosen pass "
+        "(COMBINED / DIFFUSE / AO) into each selected mesh's 'Col' "
+        "vertex color layer. Slow but gorgeous — full GI, soft shadows, "
+        "bounce, area-light-shaped highlights, emissive geometry. "
+        "Result is clamped to 0.8 for PSX 2x semi-trans headroom. "
+        "The fast Bake from Scene Lights above is the iteration path; "
+        "this is the final-ship path."
+    )
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        s = context.scene.ps1godot
+        mode = s.vc_cycles_mode
+        samples = int(s.vc_cycles_samples)
+
+        # Collect target meshes — we bake one at a time so the active-
+        # object selection rule of bpy.ops.object.bake doesn't surprise
+        # authors who selected a multi-mesh prop.
+        targets = list(_meshes_in_selection(context))
+        if not targets:
+            self.report({"ERROR"}, "PS1Godot: no mesh objects selected.")
+            return {"CANCELLED"}
+
+        # Each target needs at least one material slot — Cycles has to
+        # have material nodes to evaluate. Helpers that have nothing
+        # surface a clear error rather than a silent zero-fill.
+        for obj, _mesh in targets:
+            if not obj.material_slots or not any(s.material for s in obj.material_slots):
+                self.report({"ERROR"},
+                            f"PS1Godot: '{obj.name}' has no material — Cycles needs one to bake. "
+                            f"Add a material (or use Create PS1 Material) and try again.")
+                return {"CANCELLED"}
+
+        # Save render state so we can restore exactly what the author
+        # had set up. Cycles runs at scene level; we mutate scene-wide
+        # properties for the duration of the bake and put them back.
+        scene = context.scene
+        prev_engine = scene.render.engine
+        try:
+            prev_samples = scene.cycles.samples
+        except AttributeError:
+            self.report({"ERROR"}, "PS1Godot: Cycles is not available in this Blender build.")
+            return {"CANCELLED"}
+        prev_active = context.view_layer.objects.active
+        prev_selected = [o for o in bpy.data.objects if o.select_get()]
+
+        # Switch to Cycles for the duration of the bake. Eevee can also
+        # bake but its result misses GI which is the whole point of
+        # opting into this slow path; Cycles is the right default.
+        scene.render.engine = "CYCLES"
+        scene.cycles.samples = samples
+
+        baked = 0
+        clamped_count = 0
+        try:
+            for obj, mesh in targets:
+                # Ensure the Col layer exists + is the active vertex
+                # color attribute (Cycles' bake-to-VERTEX_COLORS
+                # writes to the active attribute).
+                layer = _ensure_layer(mesh)
+                if layer is None:
+                    continue
+                mesh.color_attributes.active_color = layer
+
+                # Lone-active selection — bake operator targets the
+                # active object only.
+                bpy.ops.object.select_all(action="DESELECT")
+                obj.select_set(True)
+                context.view_layer.objects.active = obj
+
+                try:
+                    bpy.ops.object.bake(
+                        type=mode,
+                        target="VERTEX_COLORS",
+                        margin=0,           # margin is image-only
+                        use_clear=True,     # overwrite previous bake
+                    )
+                except RuntimeError as e:
+                    self.report({"ERROR"}, f"PS1Godot: Cycles bake failed on '{obj.name}': {e}")
+                    return {"CANCELLED"}
+
+                # Clamp the result to the 0.8 PSX 2× ceiling. Cycles
+                # writes 0..1 unclamped — without this, any mesh with
+                # an emissive or bright direct light hits 1.0 and the
+                # PSX semi-trans blend can blow out to 2.0+.
+                this_clamped = 0
+                for c in layer.data:
+                    r, g, b, a = c.color
+                    nr = min(r, PSX_VERTEX_BAKE_CEILING)
+                    ng = min(g, PSX_VERTEX_BAKE_CEILING)
+                    nb = min(b, PSX_VERTEX_BAKE_CEILING)
+                    if nr != r or ng != g or nb != b:
+                        c.color = (nr, ng, nb, a)
+                        this_clamped += 1
+                clamped_count += this_clamped
+                baked += 1
+        finally:
+            scene.render.engine = prev_engine
+            scene.cycles.samples = prev_samples
+            bpy.ops.object.select_all(action="DESELECT")
+            for o in prev_selected:
+                if o.name in bpy.data.objects:
+                    o.select_set(True)
+            if prev_active is not None and prev_active.name in bpy.data.objects:
+                context.view_layer.objects.active = prev_active
+
+        msg = (f"PS1Godot: Cycles {mode} bake → {baked} mesh(es) "
+               f"@ {samples} samples (clamped to {PSX_VERTEX_BAKE_CEILING:.1f}). "
+               f"{clamped_count} loop value(s) clipped at the PSX ceiling.")
+        self.report({"INFO"}, msg)
+        return {"FINISHED"}
+
+
 register, unregister = bpy.utils.register_classes_factory((
     PS1GODOT_OT_vc_create_layer,
     PS1GODOT_OT_vc_ambient,
     PS1GODOT_OT_vc_bake_directional,
     PS1GODOT_OT_vc_bake_scene_lights,
+    PS1GODOT_OT_vc_bake_cycles,
     PS1GODOT_OT_vc_clear,
 ))

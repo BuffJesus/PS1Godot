@@ -141,9 +141,21 @@ turn ~30 minutes of manual paint into one click:
   one-tweak-one-click.
 - **Bake from Scene Lights** — walks every visible Light object
   (`SUN` / `POINT` / `SPOT`), accumulates Lambertian diffuse with
-  inverse-square falloff + cone cutoff. Mirrors what SplashEdit's
-  `PSXLightingBaker` does — author drops a key + fill light pair
-  into the scene, clicks once.
+  inverse-square falloff + cone cutoff. Optional bake-time **shadow
+  casting** via raycast (PSX hardware doesn't do runtime shadows;
+  this bakes them as darker bytes — Silent Hill / FFIX did the same
+  thing). Optional **color temperature** (Kelvin → RGB) when lights
+  have their Cycles `use_temperature` toggle on. AREA lights are
+  reported + skipped (no PSX analogue).
+- **Bake via Cycles** — final-ship pass. Wraps `bpy.ops.object.bake`
+  with `target=VERTEX_COLORS` + Cycles render engine. Three modes:
+  `COMBINED` (full GI / direct + indirect + emit + shadow + AO),
+  `DIFFUSE` (no specular), `AO` (just ambient occlusion — multiply
+  this into a directional bake for the corner-cavity darkening
+  that turned PS1 props from plastic-looking to gritty). Slow but
+  gorgeous. Sample count is configurable (default 64); the byte
+  quantization at the end hides noise below 64-sample quality
+  anyway.
 - **Apply Ambient Tint** — multiply existing colors by the scene's
   ambient color. Use after a directional bake for global mood
   (night-mode washes, faction palettes).
