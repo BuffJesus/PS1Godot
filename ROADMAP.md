@@ -1399,10 +1399,15 @@ The Blender ↔ Godot pipeline is now first-class in both directions:
   - [ ] **OT-pressure readout.** Object count vs `PS1Scene.MaxActors`
         and texture-page switches per frame vs `MaxTexturePages` —
         gameplay-frame metrics, not just static layout.
-  - [ ] **Hover tooltips on the grid.** Hovering a rect shows source
-        path, dimensions, bit depth, atlas index. Trivial extension
-        of the `_Draw` Control — needs `_GuiInput` + a hit-test pass
-        over the snapshot's rects.
+  - [x] **Hover tooltips on the grid** *(shipped 2026-04-28)*.
+        `PS1VRAMGrid._GetTooltip(Vector2)` maps screen-space hover
+        position back to VRAM coords and hit-tests against the
+        snapshot. Tooltips show source path, dimensions (in source
+        pixels — undoes the bit-depth pack ratio), VRAM coords, bit
+        depth label. CLUT strips get a 1px hover-padding band since
+        they're 1px tall on the source. Reserved regions (both
+        framebuffers + font column) tooltip too so authors who try
+        to place something in the wrong spot get a hint.
   - [ ] **Multi-scene picker.** Today the dock shows the
         most-recently-exported scene's snapshot. A dropdown + remembered
         per-scene snapshots would let authors compare across scenes

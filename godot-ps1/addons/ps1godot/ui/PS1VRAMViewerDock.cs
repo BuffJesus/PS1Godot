@@ -149,7 +149,105 @@ public partial class PS1VRAMGrid : Control
         // a sliver before the user has resized; the actual draw scales
         // to whatever size the parent gives us.
         CustomMinimumSize = new Vector2(512, 256);
+        // MouseFilter.Pass keeps gui_input firing for hover tracking
+        // without consuming clicks (we don't have click handlers yet).
+        MouseFilter = MouseFilterEnum.Pass;
     }
+
+    // Native Godot 4 dynamic tooltip — fires on hover, no manual
+    // timing/positioning. Hit-tests the hover position against our
+    // snapshot's rects (textures first since they're nested inside
+    // atlases; CLUTs are tiny so they need a generous tolerance).
+    // Returns empty string for "no tooltip" — Godot suppresses the
+    // popup in that case.
+    public override string _GetTooltip(Vector2 atPosition)
+    {
+        if (_snapshot == null) return "";
+
+        // Map screen-space `atPosition` back to VRAM coords. Inverse
+        // of the transform _Draw uses (origin + scale).
+        var avail = Size;
+        if (avail.X <= 0 || avail.Y <= 0) return "";
+        float scale = Mathf.Min(avail.X / VramW, avail.Y / VramH);
+        if (scale <= 0) return "";
+        var drawSize = new Vector2(VramW * scale, VramH * scale);
+        var origin = (avail - drawSize) * 0.5f;
+
+        float vramX = (atPosition.X - origin.X) / scale;
+        float vramY = (atPosition.Y - origin.Y) / scale;
+        if (vramX < 0 || vramX >= VramW || vramY < 0 || vramY >= VramH) return "";
+
+        // CLUT strips are 1 px tall — hard to hit at small scales.
+        // Add a 1-pixel tolerance band so they're hoverable.
+        const float ClutHitPadding = 1f;
+        foreach (var c in _snapshot.Cluts)
+        {
+            if (vramX >= c.X && vramX < c.X + c.Length &&
+                vramY >= c.Y - ClutHitPadding && vramY < c.Y + 1 + ClutHitPadding)
+            {
+                return $"CLUT — {c.OwnerTextureName}\n" +
+                       $"VRAM ({c.X},{c.Y}) · {c.Length} entries · {BppLabel(c.BitDepth)}";
+            }
+        }
+
+        // Textures next — they sit on top of atlas footprints in
+        // _Draw, so the hit ordering should match.
+        foreach (var t in _snapshot.Textures)
+        {
+            if (vramX >= t.X && vramX < t.X + t.Width &&
+                vramY >= t.Y && vramY < t.Y + t.Height)
+            {
+                int srcW = SourcePixelWidth(t);
+                return $"Texture — {t.Name}\n" +
+                       $"VRAM ({t.X},{t.Y}) · {srcW}×{t.Height} px · {BppLabel(t.BitDepth)}\n" +
+                       $"{t.Width} VRAM word(s) wide";
+            }
+        }
+
+        // Atlases last — the "empty" slack inside an atlas tooltips
+        // as the atlas itself, which is exactly what authors want
+        // when scanning for "where's the room to grow."
+        foreach (var a in _snapshot.Atlases)
+        {
+            if (vramX >= a.X && vramX < a.X + a.Width &&
+                vramY >= a.Y && vramY < a.Y + a.Height)
+            {
+                return $"Atlas — {BppLabel(a.BitDepth)}\n" +
+                       $"VRAM ({a.X},{a.Y}) · {a.Width}×{a.Height}";
+            }
+        }
+
+        // Reserved region tooltips — useful for authors trying to
+        // place something in the wrong spot ("why can't I put art
+        // here? oh, that's the framebuffer").
+        if (vramX < 320 && vramY < 240)
+            return "Reserved — framebuffer A (320×240)";
+        if (vramX < 320 && vramY >= 256 && vramY < 256 + 240)
+            return "Reserved — framebuffer B (320×240)";
+        if (vramX >= 960)
+            return "Reserved — font column (system + custom fonts)";
+
+        return "";
+    }
+
+    // Source pixel width = QuantizedWidth × pack ratio. 4bpp packs 4
+    // source pixels per VRAM word; 8bpp packs 2; 16bpp is 1:1. Lets
+    // the tooltip show authors the original art dimensions, not the
+    // packed VRAM cells.
+    private static int SourcePixelWidth(VramSnapshot.TextureRect t) => t.BitDepth switch
+    {
+        PSXBPP.TEX_4BIT => t.Width * 4,
+        PSXBPP.TEX_8BIT => t.Width * 2,
+        _ => t.Width,
+    };
+
+    private static string BppLabel(PSXBPP bpp) => bpp switch
+    {
+        PSXBPP.TEX_4BIT => "4bpp",
+        PSXBPP.TEX_8BIT => "8bpp",
+        PSXBPP.TEX_16BIT => "16bpp",
+        _ => bpp.ToString(),
+    };
 
     public void SetSnapshot(VramSnapshot? s)
     {
