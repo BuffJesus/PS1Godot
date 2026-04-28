@@ -1280,7 +1280,7 @@ table, Auto rules, and per-clip migration shortlist.
         below); the Blender side validator surfaces "would batch N→M"
         hints which is the same author signal A4 was scoped to deliver.**
 
-### Slot D1 — automatic static-mesh batching *(shipped 2026-04-27)*
+### Slot D1 — automatic static-mesh batching *(disabled 2026-04-27, pending rework)*
 
 `exporter/StaticBatchOptimizer.cs` runs at the end of `SceneCollector.FromRoot`,
 walks `data.Objects`, and merges meshes sharing
@@ -1291,10 +1291,47 @@ anchor-local fp12 vertex baking. Eligibility: `MeshRole == StaticWorld`,
 Blender-side validator mirrors the bucket key + reports candidates at
 author time so artists plan around the optimizer.
 
-**Production tier (still pending):** per-chunk scoping +
-`VRAMPacker`-aware bucket key. Current minimum tier buckets scene-wide,
-which works for typical interior chunks but loses visibility-culling
-granularity on huge open exteriors.
+**Currently disabled** via a `s_enabled = false` kill-switch at the top
+of `StaticBatchOptimizer.cs`. Three latent bugs surfaced when the demo
+monitor scene started using it:
+
+  1. *Parentless synthetic batch node.* The optimizer creates a
+     `Node3D` outside the scene tree, so Godot's `GlobalPosition` /
+     `GlobalBasis` / `GlobalTransform` returns `Transform3D()` (identity)
+     and the GO is written at world (0,0,0) instead of the anchor.
+     Fixed in `SplashpackWriter.cs` + `PS1GodotPlugin.cs` with an
+     `IsInsideTree() ? GlobalTransform : Transform` fallback.
+  2. *Bucket key has no spatial component.* All world meshes sharing
+     a texture page collapse into one batch regardless of distance,
+     overflowing the int16 fp12 vert envelope (~±32 Godot units around
+     the anchor). Fixed by adding a 24 m world-AABB-centre cell to the
+     bucket key + a per-merge safety guard that bails out if the
+     combined extent still exceeds the envelope.
+  3. *(Suspected, not fully diagnosed.)* `combinedTexIndices` appends
+     each member's `SurfaceTextureIndices` without remapping — when
+     the merged GameObject's per-tri `TextureIndex` references a
+     surface authored on member B, it still points at the surface slot
+     from member A's range, so the runtime samples a wrong texture
+     and the batch renders as off-camera garbage. With (1) and (2)
+     fixed, the merged mesh's anchor + AABB are correct and the
+     non-batched neighbours render fine, but the batches themselves
+     still don't show — disabling the optimizer brings them all back.
+     Confirmed empirically 2026-04-27; not yet patched.
+
+**Rework scope** before re-enabling:
+  - Re-think surface merging — the per-member `SurfaceTextureIndices`
+    list needs an offset map so per-tri `TextureIndex` points at the
+    right slot in the combined surface array.
+  - Add a round-trip / texture-correctness check to
+    `MeshFormatRoundTripVerifier` so this regression can't ship silently.
+  - Per-chunk scoping + `VRAMPacker`-aware bucket key (still pending
+    from the original plan — current scene-wide bucketing loses
+    visibility-culling granularity on huge open exteriors anyway).
+
+Until the rework lands, every static mesh exports as its own GameObject
+with its own AABB-cell entry. That costs the iteration savings the
+optimizer was meant to deliver but is otherwise indistinguishable
+from pre-Slot-D1 behaviour.
 
 ### Phase L1 + L2 — Godot-side vertex lighting *(shipped 2026-04-27)*
 
@@ -1703,6 +1740,45 @@ Only after Phases 0–3 land.
     feature; doesn't compose with A1. ~2 days.
   Total to ship the runtime cel look (A1 + A2 + B1): ~3 days. PSn00bSDK
   source vendored in `PSn00bSDK-master/` for reference.
+- **Pre-rendered backgrounds (Resident Evil / FFVII–IX style).**
+  Community-requested in Discord. Author renders a high-quality scene
+  in Blender, displays the bake as a fullscreen image on PSX, and the
+  player + dynamic props render as 3D on top of it. The runtime infra
+  is mostly already there — `PS1UICanvas` Image elements (with
+  bezel/scanlines as precedent), `PS1Sky`, fixed `PS1Camera` rigs, and
+  invisible-mesh collision authoring. What's missing is the workflow
+  glue + occlusion. Phased ship plan:
+  - **A.** Authoring helper — Godot dock action "Bake pre-rendered
+    background from this camera": opens Blender via the existing
+    cross-tool bridge, renders the camera-locked frame at 320×240 (or
+    256×240 to fit one VRAM page), drops the PNG back into
+    `res://assets/backgrounds/`, and creates a `PS1UICanvas` with one
+    Image element pinned at sortOrder 9999 (drawn last = behind 3D in
+    the LIFO-inverted scheme — see `project_psx_ui_sort_order_inverted`
+    memory). ~1 day.
+  - **B.** Camera lock + collision-mesh template — a `PS1Camera` mode
+    "FixedPreRendered" that disables player-driven yaw and exposes a
+    "matching collision mesh" slot the author fills with an invisible
+    `PS1MeshInstance` they trace over the BG. Validator warns when
+    a FixedPreRendered camera ships without a paired BG canvas.
+    ~½ day.
+  - **C.** Multi-camera scenes (Resident Evil "tank-controls + camera
+    cuts") — multiple `PS1Camera` nodes with trigger-zone activation
+    so walking through a doorway swaps both the camera and the BG
+    image. Builds on existing trigger volumes. ~1 day.
+  - **D (optional).** Z-strip occlusion — author slices the BG in
+    Blender into 2–4 horizontal/vertical depth bands and exports each
+    as a separate UI image at a different sortOrder, letting characters
+    walk between them (e.g. behind a foreground pillar). The PSX OT
+    already does the sorting; we just need the slicing UX. ~2 days.
+  - **E (optional).** XA-driven CD background streaming — pre-rendered
+    BGs are heavy (256×240 4bpp = 30 KB; 256×240 8bpp = 60 KB). For
+    multi-room games, stream BGs from CD on room change instead of
+    keeping them resident. Builds on existing XA sidecar pipeline.
+    ~2 days.
+  Total to ship the basic experience (A + B): ~1.5 days. C unlocks
+  the full Resident Evil camera-cuts feel; D unlocks proper occlusion;
+  E unlocks games with many BG rooms.
 - Serial-link upload to real hardware.
 - Multi-scene / persistent-data workflow with Godot-native resource references.
 - Upstream patches / feedback to psxsplash based on what we learn. Tracker
