@@ -748,6 +748,16 @@ public sealed class SceneData
     public bool FogEnabled { get; set; } = false;
     public Color FogColor { get; set; } = new Color(0.5f, 0.5f, 0.6f);
     public byte FogDensity { get; set; } = 5;
+    // v32+: explicit GTE-Z near/far. 0 = let runtime derive from
+    // density (legacy behavior). See PS1Scene Fog group docs.
+    public ushort FogNear { get; set; } = 0;
+    public ushort FogFar  { get; set; } = 0;
+
+    // ─── Background (v32+) ──
+    // Independent of fog tone. When enabled, runtime clears each frame
+    // to BackgroundColor instead of fog color. Set in SceneCollector.
+    public bool BackgroundColorEnabled { get; set; } = false;
+    public Color BackgroundColor { get; set; } = new Color(0f, 0f, 0f);
 
     // ─── Sky (pulled from a PS1Sky node, if any) ──
     // Single skybox per scene. Null = no sky (writer stamps 16 zero

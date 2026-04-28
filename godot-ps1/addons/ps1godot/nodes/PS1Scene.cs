@@ -64,14 +64,33 @@ public partial class PS1Scene : Node3D
     [ExportGroup("Fog")]
     [Export] public bool FogEnabled { get; set; } = false;
     [Export] public Color FogColor { get; set; } = new Color(0.5f, 0.5f, 0.6f);
-    // Higher = thicker / closer fog wall. Lower = fog starts farther
-    // away and is fainter. Runtime maps this to fogFarSZ = 20000 /
-    // density (so density 1 → fogFar ≈ 20000 GTE-Z, density 100 →
-    // ≈200). Fog start is hardcoded by the runtime to fogFar/8 — true
-    // independent near/far range is tracked in docs/psxsplash-
-    // improvements.md (entry N+3) as a runtime feature request.
+    // Legacy density. Used only when FogNear and FogFar are both 0
+    // (their defaults). Runtime maps density → fogFarSZ = 20000/density
+    // and derives fogNear = fogFarSZ/8. Set FogNear / FogFar instead
+    // for explicit control — see those fields below.
     [Export(PropertyHint.Range, "1,100,1")]
     public int FogDensity { get; set; } = 1;
+    // v32+: explicit near / far in PSX GTE-Z space. 0 = use legacy
+    // density-derived behavior. Typical authored range is 2000 (close
+    // fog wall) – 30000 (far horizon). The runtime clamps an inverted
+    // setup (Near >= Far) to (Far - 1) so a typo doesn't crash.
+    [Export(PropertyHint.Range, "0,65535,1")]
+    public int FogNear { get; set; } = 0;
+    [Export(PropertyHint.Range, "0,65535,1")]
+    public int FogFar { get; set; } = 0;
+
+    // v32+: scene-level backdrop tone, separate from fog color. Default
+    // OFF — the runtime falls back to using FogColor as the GPU clear
+    // (legacy behavior) so existing scenes look identical until an
+    // author opts in. When ON, the GPU clears each frame to
+    // BackgroundColor regardless of fog tint, letting interiors keep
+    // pitch-black void behind dim mood-lit geometry while a separate
+    // gray fog still ramps mid-distance objects toward haze.
+    //
+    // Doc: ps1godot_current_implementation_review_next_steps.md §4.
+    [ExportGroup("Background")]
+    [Export] public bool BackgroundColorEnabled { get; set; } = false;
+    [Export] public Color BackgroundColor { get; set; } = new Color(0f, 0f, 0f);
 
     [ExportGroup("Scripting")]
     [Export(PropertyHint.File, "*.lua")]

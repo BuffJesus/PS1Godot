@@ -29,11 +29,11 @@ namespace PS1Godot.Exporter;
 //                  Name table — referenced by header.nameTableOffset.
 public static class SplashpackWriter
 {
-    public const ushort SplashpackVersion = 31;
+    public const ushort SplashpackVersion = 32;
     // Header layout grew by 16 bytes in v24 (sky struct: tpage + clut + UVs
     // + bitDepth + tint + enabled flag, mirroring the UI Image typeData
     // union slot). See WriteHeader and the runtime's SPLASHPACKFileHeader.
-    public const int HeaderSize = 224;
+    public const int HeaderSize = 232;
     public const int GameObjectSize = 92;
     public const int TriSize = 52;
     public const int LuaFileSize = 8; // luaCodeOffset (u32) + length (u32)
@@ -1661,6 +1661,18 @@ public static class SplashpackWriter
         w.Write((uint)0);      // soundFamilyTableOffset      (backfilled)
         offsets.FamilyClipIndexTableOffsetPos = w.BaseStream.Position;
         w.Write((uint)0);      // familyClipIndexTableOffset  (backfilled)
+
+        // v32: separated background color from fog tone, and explicit
+        // fog near/far in PSX GTE-Z space. See PS1Scene Background +
+        // Fog ExportGroups for the authoring fields. 8 bytes total.
+        // Runtime treats bgEnabled=0 as "fall back to fog color"; 0
+        // for fogNear/Far means "derive from density" (legacy behavior).
+        w.Write((byte)Mathf.Clamp((int)(scene.BackgroundColor.R * 255f), 0, 255));  // bgR
+        w.Write((byte)Mathf.Clamp((int)(scene.BackgroundColor.G * 255f), 0, 255));  // bgG
+        w.Write((byte)Mathf.Clamp((int)(scene.BackgroundColor.B * 255f), 0, 255));  // bgB
+        w.Write((byte)(scene.BackgroundColorEnabled ? 1 : 0));                      // bgEnabled
+        w.Write(scene.FogNear);                                                     // fogNearSZ (ushort)
+        w.Write(scene.FogFar);                                                      // fogFarSZ  (ushort)
 
         long written = w.BaseStream.Position - headerStart;
         if (written != HeaderSize)
