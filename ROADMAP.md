@@ -1378,28 +1378,28 @@ The Blender ↔ Godot pipeline is now first-class in both directions:
       near-duplicate CLUTs that could merge, and meshes that each drag in a
       unique atlas. Powered by the data `SceneCollector` + `VRAMPacker`
       already have.
-- [ ] **UV out-of-range linter.** Warn when any vertex UV falls outside
-      `[0, 1]` — the PSX rasteriser doesn't wrap/clamp, so out-of-range
-      UVs pull whatever atlas neighbor happens to sit at that tpage
-      offset (usually garbage). Exporter already walks every mesh's
-      UVs; one bounds check per vertex. Option to auto-wrap `(u % 1)`
-      with a warning when the mesh is tagged "intended-tiling".
-      Discord ask "Fix UVs of meshes when exporting if the UV
+- [x] **UV out-of-range linter.** ~~Warn when any vertex UV falls outside~~
+      Shipped as `MeshLinter.cs`; runs every export and prints
+      `UV linter scene[N]: all meshes clean.` (or names the offenders).
+      Closes Discord ask "Fix UVs of meshes when exporting if the UV
       coordinates are too large" (2 upvotes).
 - [ ] Quantized texture preview in the inspector for any PS1Texture asset.
-- [ ] EmmyLua stub generation from `luaapi.hh` on plugin load; dropped into
-      `.godot/ps1godot/lua-stubs/` for Rider/VSCode to pick up.
-- [ ] **PS1Lua syntax highlighting in Godot's built-in script editor.**
-      Subclass `EditorSyntaxHighlighter` in the GDExtension; register via
-      `ScriptEditor::register_syntax_highlighter`. Keywords + delimiters
-      already declared in `_get_reserved_words` etc. — wire to the
-      highlighter and pick a color palette.
-- [ ] **PS1Lua autocomplete in Godot's built-in script editor.** Implement
-      `ScriptLanguageExtension::_complete_code` with at least: keyword
-      completion, local-variable completion (single-pass tokenizer), and
-      function names from the EmmyLua stubs above. Full Lua semantic
-      completion is out of scope without a real parser — defer Tree-sitter
-      integration unless authors complain.
+- [x] **EmmyLua stub generation from `luaapi.hh`.** Shipped as
+      `tools/LuaApiStubGenerator.cs` with regression tests
+      (`Project > Tools > PS1Godot: Run Lua API Stub Generator Tests`).
+      Run-on-demand rather than plugin-load; output goes wherever the
+      author points it.
+- [x] **PS1Lua syntax highlighting in Godot's built-in script editor.**
+      Shipped as `scripting/src/PS1LuaSyntaxHighlighter.cpp` (registered
+      via the GDExtension; keywords + delimiters wired through
+      `_get_reserved_words` etc.).
+- [x] **PS1Lua autocomplete in Godot's built-in script editor.**
+      Shipped as `_complete_code` + `_lookup_code` in
+      `scripting/src/PS1LuaScriptLanguage.cpp`, backed by the
+      `ApiData.gen.cpp` table that `gen_api_data.py` regenerates from
+      `luaapi.hh` at every build. Hover tooltips + Ctrl-Click lookup
+      both work as of 2026-04-27 (commit 1bcd107 fixed the parser
+      bugs that blanked out tooltips).
 - [ ] **More built-in PS1Lua templates** — extend
       `PS1LuaScriptLanguage::_get_built_in_templates` from one stub to a
       handful (input handler, trigger callback, animated prop, dialog
