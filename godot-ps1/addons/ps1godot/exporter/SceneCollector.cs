@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Godot;
 
@@ -859,6 +860,15 @@ public static class SceneCollector
                                                      textureCache, elementName: elName);
             }
 
+            byte progressBgR = 0, progressBgG = 0, progressBgB = 0, progressValue = 0;
+            if (el.Type == PS1UIElementType.Progress)
+            {
+                progressBgR = (byte)Mathf.Clamp((int)(el.BgColor.R * 255f), 0, 255);
+                progressBgG = (byte)Mathf.Clamp((int)(el.BgColor.G * 255f), 0, 255);
+                progressBgB = (byte)Mathf.Clamp((int)(el.BgColor.B * 255f), 0, 255);
+                progressValue = (byte)Mathf.Clamp((int)el.InitialValue, 0, 100);
+            }
+
             elements.Add(new UIElementRecord
             {
                 Name = elName,
@@ -879,6 +889,10 @@ public static class SceneCollector
                 TextureIndex = textureIndex,
                 UVRect = el.UVRect,
                 BitDepthByte = (byte)el.BitDepth,
+                ProgressBgR = progressBgR,
+                ProgressBgG = progressBgG,
+                ProgressBgB = progressBgB,
+                ProgressInitialValue = progressValue,
             });
         }
 
@@ -905,12 +919,9 @@ public static class SceneCollector
         // runtime reads BEFORE the main splashpack. Validation:
         //   - At most one LoadingScreen canvas per scene (later ones win,
         //     warn loudly so authors notice the misconfiguration).
-        // The runtime additionally expects a Progress-type element named
-        // "loading" so it can drive the percentage during file load — but
-        // PS1UIElementType only exposes Image/Box/Text today, so progress
-        // bars must come through a future element-type addition. Until
-        // that lands, LoadingScreen canvases render their static elements
-        // but the bar stays frozen.
+        //   - A Progress-type element named "loading" lets the runtime
+        //     auto-update the bar during file loads. Warn if missing —
+        //     the screen still renders, the bar just stays frozen.
         if (canvas.Residency == PS1UIResidency.LoadingScreen)
         {
             if (data.LoadingScreenCanvasIndex >= 0)
@@ -922,9 +933,27 @@ public static class SceneCollector
                     $"canvas per scene — runtime only reads the first one in the loader pack.");
             }
             data.LoadingScreenCanvasIndex = newCanvasIndex;
+
+            bool hasProgressBar = false;
+            foreach (var el in elements)
+            {
+                if (el.Type == PS1UIElementType.Progress &&
+                    string.Equals(el.Name, "loading", StringComparison.Ordinal))
+                {
+                    hasProgressBar = true;
+                    break;
+                }
+            }
+            if (!hasProgressBar)
+            {
+                GD.PushWarning(
+                    $"[PS1Godot] Loading screen '{name}' has no Progress element named " +
+                    $"'loading'. The static elements will render but the bar won't update " +
+                    $"during file load. Add a PS1UIElement with Type=Progress and " +
+                    $"ElementName='loading'.");
+            }
             GD.Print($"[PS1Godot] Loading screen detected: '{name}' " +
-                     $"({elements.Count} elements). LoaderPack writer + Progress " +
-                     $"element type still TODO — won't ship a .loading file yet.");
+                     $"({elements.Count} elements, progress bar: {(hasProgressBar ? "yes" : "missing")}).");
         }
     }
 

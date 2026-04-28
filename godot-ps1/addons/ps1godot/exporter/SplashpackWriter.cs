@@ -64,6 +64,12 @@ public static class SplashpackWriter
         // Splashpack XA table records (offset, size, name) into this file
         // by clip name; runtime joins them at boot.
         WriteXaSidecar(Path.ChangeExtension(splashpackPath, ".xa"), scene);
+        // Loading-screen LoaderPack — separate from the splashpack so the
+        // runtime can render the screen BEFORE the splashpack is loaded.
+        // Carries its own atlas/CLUT/font copies inline; targets the same
+        // VRAM positions the splashpack will later overwrite. Only emitted
+        // when the scene has a UICanvas with Residency=LoadingScreen.
+        LoaderPackWriter.Write(Path.ChangeExtension(splashpackPath, ".loading"), scene);
     }
 
     // ─── Splashpack file ─────────────────────────────────────────────────
@@ -350,7 +356,9 @@ public static class SplashpackWriter
         //   [Element arrays (48 B/elem), canvas names, element names,
         //    text bodies — all elsewhere in the file, referenced by
         //    offset]
-        if (scene.UICanvases.Count > 0)
+        // Excludes LoadingScreen-residency canvases — those go in the
+        // LoaderPack file. See GameplayCanvases().
+        if (GameplayCanvases(scene).Count > 0)
         {
             WriteUISection(w, scene, headerOffsets.UiTableOffsetPos);
         }
@@ -694,6 +702,10 @@ public static class SplashpackWriter
         int total = 0;
         foreach (var canvas in scene.UICanvases)
         {
+            // Match the skip in WriteUIModelSection — LoadingScreen
+            // canvases ship via the LoaderPack and don't contribute to
+            // the splashpack's UI 3D model section.
+            if (canvas.Residency == PS1UIResidency.LoadingScreen) continue;
             total += canvas.Models.Count;
         }
         if (total > MaxUiModels) total = MaxUiModels;
@@ -710,6 +722,10 @@ public static class SplashpackWriter
         for (int ci = 0; ci < scene.UICanvases.Count && emitted < MaxUiModels; ci++)
         {
             var canvas = scene.UICanvases[ci];
+            // LoadingScreen canvases ship via the LoaderPack and reference
+            // no gameplay GameObjects (no scene loaded yet); their UIModels
+            // would have no valid TargetObjectIndex.
+            if (canvas.Residency == PS1UIResidency.LoadingScreen) continue;
             foreach (var m in canvas.Models)
             {
                 if (emitted >= MaxUiModels) break;
@@ -1093,6 +1109,23 @@ public static class SplashpackWriter
         }
     }
 
+    // Filter out LoadingScreen-residency canvases — those ship in the
+    // LoaderPack file (scene_N.loading), not in the main splashpack UI
+    // section. Without this filter the loading-screen canvas would
+    // double-render: once during scene load (correct) and again as a
+    // gameplay overlay (wrong, sticks to the screen forever because
+    // VisibleOnLoad defaults to true).
+    private static List<UICanvasRecord> GameplayCanvases(SceneData scene)
+    {
+        var result = new List<UICanvasRecord>(scene.UICanvases.Count);
+        foreach (var c in scene.UICanvases)
+        {
+            if (c.Residency != PS1UIResidency.LoadingScreen)
+                result.Add(c);
+        }
+        return result;
+    }
+
     // Emit UI table + element arrays + strings. Runtime's parser starts at
     // uiTableOffset, walks fontCount×112 B font descriptors (zero in MVP),
     // then canvasCount×12 B canvas descriptors. Element arrays and string
@@ -1102,15 +1135,36 @@ public static class SplashpackWriter
         AlignTo4(w);
         long uiTableStart = w.BaseStream.Position;
         BackfillUInt32(w, uiTableOffsetPos, (uint)uiTableStart);
+        WriteUITableBlock(w, scene, scene.UIFonts, GameplayCanvases(scene));
+    }
 
+    // Reusable writer for the UI table block — font descriptors, canvas
+    // descriptors, element arrays, strings, font pixels. The on-disk
+    // layout from this point onward is identical between splashpack UI
+    // sections and LoaderPack files (loadingscreen.cpp parses both via
+    // UISystem::loadFromSplashpack), so this helper is shared.
+    //
+    // Caller is responsible for: (a) aligning to 4 and capturing the
+    // table start offset before calling, (b) backfilling that offset
+    // into whatever header field references it.
+    //
+    // `scene` is still passed so WriteUIImageTypeData can read absolute
+    // VRAM positions from scene.Textures — those positions match across
+    // splashpack + loaderpack since both upload to the same VRAM region.
+    internal static void WriteUITableBlock(
+        BinaryWriter w,
+        SceneData scene,
+        IList<UIFontRecord> fonts,
+        IList<UICanvasRecord> canvases)
+    {
         // Font descriptors (112 B each). Pixel-data offsets are
         // placeholders until we write the actual 4bpp blobs at the
         // end of this section, then backfill.
-        int fontCount = scene.UIFonts.Count;
+        int fontCount = fonts.Count;
         var fontDataOffPositions = new long[fontCount];
         for (int fi = 0; fi < fontCount; fi++)
         {
-            var f = scene.UIFonts[fi];
+            var f = fonts[fi];
             long fontStart = w.BaseStream.Position;
             w.Write(f.GlyphW);
             w.Write(f.GlyphH);
@@ -1127,7 +1181,7 @@ public static class SplashpackWriter
                 throw new InvalidOperationException($"UIFontDesc size mismatch: {written} vs 112.");
         }
 
-        int canvasCount = scene.UICanvases.Count;
+        int canvasCount = canvases.Count;
 
         // Canvas descriptor table (12 B each). Offsets backfilled after the
         // element arrays / strings are placed.
@@ -1135,7 +1189,7 @@ public static class SplashpackWriter
         var canvasNameOffPositions = new long[canvasCount];
         for (int ci = 0; ci < canvasCount; ci++)
         {
-            var c = scene.UICanvases[ci];
+            var c = canvases[ci];
             canvasDataOffPositions[ci] = w.BaseStream.Position;
             w.Write((uint)0);                             // dataOffset (backfilled)
             byte nameLen = (byte)Math.Min(Encoding.UTF8.GetByteCount(c.Name ?? ""), 255);
@@ -1156,7 +1210,7 @@ public static class SplashpackWriter
         var elementTextOffPositions = new long[canvasCount][];
         for (int ci = 0; ci < canvasCount; ci++)
         {
-            var c = scene.UICanvases[ci];
+            var c = canvases[ci];
             AlignTo4(w);
             long arrStart = w.BaseStream.Position;
             BackfillUInt32(w, canvasDataOffPositions[ci], (uint)arrStart);
@@ -1195,9 +1249,10 @@ public static class SplashpackWriter
                 // Type-specific (16 B). Layout matches the runtime's
                 // UIImageData / UITextData / UIProgressData unions in
                 // uisystem.hh / uisystem.cpp:loadFromSplashpack.
-                //   Text:  fontIndex(1) hAlign(1) vAlign(1) + 13 pad
-                //   Image: texpageX(1) texpageY(1) clutX(2) clutY(2)
-                //          u0(1) v0(1) u1(1) v1(1) bitDepth(1) + 5 pad
+                //   Text:     fontIndex(1) hAlign(1) vAlign(1) + 13 pad
+                //   Image:    texpageX(1) texpageY(1) clutX(2) clutY(2)
+                //             u0(1) v0(1) u1(1) v1(1) bitDepth(1) + 5 pad
+                //   Progress: bgR(1) bgG(1) bgB(1) value(1) + 12 pad
                 //   Box / unmapped: 16 zero bytes
                 if (el.Type == PS1UIElementType.Text)
                 {
@@ -1209,6 +1264,14 @@ public static class SplashpackWriter
                 else if (el.Type == PS1UIElementType.Image)
                 {
                     WriteUIImageTypeData(w, el, scene);
+                }
+                else if (el.Type == PS1UIElementType.Progress)
+                {
+                    w.Write(el.ProgressBgR);
+                    w.Write(el.ProgressBgG);
+                    w.Write(el.ProgressBgB);
+                    w.Write(el.ProgressInitialValue);
+                    for (int k = 0; k < 12; k++) w.Write((byte)0);
                 }
                 else
                 {
@@ -1230,7 +1293,7 @@ public static class SplashpackWriter
         // element arrays, backfilled into the descriptors above.
         for (int ci = 0; ci < canvasCount; ci++)
         {
-            var c = scene.UICanvases[ci];
+            var c = canvases[ci];
             if (!string.IsNullOrEmpty(c.Name))
             {
                 long off = w.BaseStream.Position;
@@ -1268,7 +1331,7 @@ public static class SplashpackWriter
         {
             AlignTo4(w);
             long dataOff = w.BaseStream.Position;
-            w.Write(scene.UIFonts[fi].PixelData4bpp);
+            w.Write(fonts[fi].PixelData4bpp);
             BackfillUInt32(w, fontDataOffPositions[fi], (uint)dataOff);
         }
     }
@@ -1281,7 +1344,7 @@ public static class SplashpackWriter
     // uisystem.cpp:153-163. Falls back to all-zeros when the texture
     // is missing — runtime then renders a tinted untextured triangle
     // pair (a flat-colored rect, basically).
-    private static void WriteUIImageTypeData(BinaryWriter w, UIElementRecord el, SceneData scene)
+    internal static void WriteUIImageTypeData(BinaryWriter w, UIElementRecord el, SceneData scene)
     {
         if (el.TextureIndex < 0 || el.TextureIndex >= scene.Textures.Count)
         {
@@ -1483,7 +1546,10 @@ public static class SplashpackWriter
         offsets.CutsceneTableOffsetPos = w.BaseStream.Position;
         w.Write((uint)0);              // cutsceneTableOffset (backfilled)
 
-        w.Write((ushort)scene.UICanvases.Count); // uiCanvasCount
+        // Loading-screen canvases ship in the LoaderPack (.loading file),
+        // not in the splashpack's UI section — count only the gameplay
+        // canvases here so the runtime parser doesn't walk past them.
+        w.Write((ushort)GameplayCanvases(scene).Count); // uiCanvasCount
         w.Write((byte)scene.UIFonts.Count); // uiFontCount — custom fonts only; system font is built into the runtime
         w.Write((byte)0);              // uiPad5
         offsets.UiTableOffsetPos = w.BaseStream.Position;
@@ -2314,7 +2380,7 @@ public static class SplashpackWriter
 
     // ─── Helpers ─────────────────────────────────────────────────────────
 
-    private static void AlignTo4(BinaryWriter w)
+    internal static void AlignTo4(BinaryWriter w)
     {
         long pos = w.BaseStream.Position;
         int padding = (int)(4 - (pos % 4)) % 4;
@@ -2326,7 +2392,7 @@ public static class SplashpackWriter
         if ((w.BaseStream.Position & 1) != 0) w.Write((byte)0);
     }
 
-    private static void BackfillUInt32(BinaryWriter w, long position, uint value)
+    internal static void BackfillUInt32(BinaryWriter w, long position, uint value)
     {
         long curPos = w.BaseStream.Position;
         w.Seek((int)position, SeekOrigin.Begin);

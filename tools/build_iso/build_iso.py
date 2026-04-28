@@ -7,10 +7,11 @@ What this does:
   2. Walk godot-ps1/build/ for splashpack triplets:
        scene_<n>.splashpack + .vram + .spu  (required)
        scene_<n>.xa                          (optional; XA-routed clips)
+       scene_<n>.loading                     (optional; loading screen)
   3. Generate an mkpsxiso XML config that lays the data track out as:
        SYSTEM.CNF
        PSXSPLASH.PS-EXE      (the runtime, built with LOADER=cdrom)
-       SCENE_n.SPK / .VRM / .SPU / .XA  (per scene)
+       SCENE_n.SPK / .VRM / .SPU / .XA / .LDG  (per scene)
   4. Run mkpsxiso → game.bin + game.cue.
 
 Why XA needs this: the PSX SPU decodes XA-ADPCM in hardware from the
@@ -58,7 +59,7 @@ def find_mkpsxiso() -> str | None:
 
 def find_scenes(build_dir: Path) -> list[dict]:
     """Find scene_*.splashpack files and their sidecars. Returns list of
-    {index, splashpack, vram, spu, xa?} dicts in numeric order."""
+    {index, splashpack, vram, spu, xa?, loading?} dicts in numeric order."""
     scenes = []
     for splashpack in sorted(build_dir.glob("scene_*.splashpack")):
         # Parse "scene_<n>.splashpack"
@@ -73,11 +74,17 @@ def find_scenes(build_dir: Path) -> list[dict]:
             "vram":       splashpack.with_suffix(".vram"),
             "spu":        splashpack.with_suffix(".spu"),
             "xa":         splashpack.with_suffix(".xa"),
+            "loading":    splashpack.with_suffix(".loading"),
         }
         # The .xa sidecar is optional — only present when at least one
         # clip in the scene is Route=XA AND psxavenc was available.
         if not record["xa"].is_file():
             record["xa"] = None
+        # The .loading sidecar is optional — only present when the scene
+        # has a UICanvas marked Residency=LoadingScreen. Runtime falls
+        # back to a system-font progress message when absent.
+        if not record["loading"].is_file():
+            record["loading"] = None
         if not record["vram"].is_file() or not record["spu"].is_file():
             print(f"  skipping: {splashpack.name} (missing .vram or .spu sidecar)")
             continue
@@ -162,6 +169,12 @@ def emit_xml(
             # type="xa" routes the file through Form-2 sectors with the
             # XA flag set; PSX SPU decodes them directly from disc reads.
             add(f'      <file name="SCENE_{idx}.XA"  type="xa"   source="{escape(str(s["xa"]))}"/>')
+        if s["loading"] is not None:
+            # Loading-screen LoaderPack — disc filename matches what
+            # FileLoader::BuildLoadingFilename returns under LOADER=cdrom
+            # (SCENE_n.LDG). Plain `type="data"` is fine — runtime reads
+            # the whole file in one go before parsing.
+            add(f'      <file name="SCENE_{idx}.LDG" type="data" source="{escape(str(s["loading"]))}"/>')
 
     add('    </directory_tree>')
     add('  </track>')
@@ -251,9 +264,14 @@ def main() -> int:
     out_xml = out_bin.with_suffix(".xml")
 
     print(f"runtime: {psxexec}")
-    print(f"scenes : {len(scenes)} (XA payload on {sum(1 for s in scenes if s['xa'])})")
+    xa_count = sum(1 for s in scenes if s['xa'])
+    ldg_count = sum(1 for s in scenes if s['loading'])
+    print(f"scenes : {len(scenes)} (XA payload on {xa_count}, loading screen on {ldg_count})")
     for s in scenes:
-        marker = " [+xa]" if s["xa"] else ""
+        markers = []
+        if s["xa"]: markers.append("xa")
+        if s["loading"]: markers.append("ldg")
+        marker = f" [+{'+'.join(markers)}]" if markers else ""
         print(f"  - scene_{s['index']}{marker}")
     print(f"output : {out_bin}")
 

@@ -429,6 +429,16 @@ public sealed class UIElementRecord
     public int TextureIndex { get; init; } = -1;
     public Rect2 UVRect { get; init; } = new Rect2(0f, 0f, 1f, 1f);
     public byte BitDepthByte { get; init; } = 1; // 8bpp default
+
+    // Progress-type fields. BgR/G/B is the unfilled-track color (fill
+    // color comes from ColorR/G/B). InitialValue is the starting fill
+    // 0–100; Lua / loading-screen runtime mutates this. Stored as the
+    // first 4 bytes of the element's 16 B typeData (UIProgressData).
+    // Ignored for non-Progress types.
+    public byte ProgressBgR { get; init; } = 0;
+    public byte ProgressBgG { get; init; } = 0;
+    public byte ProgressBgB { get; init; } = 0;
+    public byte ProgressInitialValue { get; init; } = 0;
 }
 
 // A custom UI font ready for splashpack emission. Built by

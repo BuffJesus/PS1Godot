@@ -12,7 +12,11 @@ namespace PS1Godot;
 //   - Image: textured quad. Set `Texture` (Texture2D), `UVRect`
 //     (sub-region within the texture; default = full), `BitDepth`
 //     (4/8/16). `Color` modulates as a tint (white = unmodified).
-//   - Progress: runtime supports these but exporter MVP skips them.
+//   - Progress: horizontal bar. `Color` is the fill color, `BgColor`
+//     is the unfilled background. `InitialValue` (0–100) sets the
+//     starting fill percentage. Used on LoadingScreen canvases —
+//     name the element "loading" for the runtime to auto-update it
+//     during file loads.
 //
 // Enum values match the runtime's UIElementType in
 // psxsplash-main/src/uisystem.hh — do not renumber.
@@ -26,6 +30,7 @@ public enum PS1UIElementType
     Image = 0,
     Box = 1,
     Text = 2,
+    Progress = 3,
 }
 
 // Which `PS1Theme` slot this element should pull its color from at
@@ -171,6 +176,23 @@ public partial class PS1UIElement : Node
     // CRT bezels and HUD icons usually fit 4bpp comfortably; photo-
     // realistic textures want 8bpp+. Ignored for non-Image types.
     [Export] public PSXBPP BitDepth { get; set; } = PSXBPP.TEX_8BIT;
+
+    [ExportGroup("Progress (when Type = Progress)")]
+    // Background color for the unfilled portion of the bar. The
+    // foreground (fill) color comes from `Color`. Match the visual
+    // weight you want for the empty track: black for max contrast,
+    // a darker shade of the fill for a subtler look. Stored as
+    // typeData[0..2] in the runtime's UIProgressData. Ignored when
+    // Type != Progress.
+    [Export] public Color BgColor { get; set; } = new Color(0.1f, 0.1f, 0.1f, 1f);
+
+    // Initial fill, 0–100. Loading screens typically start at 0;
+    // pre-filled bars are useful for HUD demo shots. The runtime
+    // mutates this value via `setProgress` calls (Lua API or, on
+    // LoadingScreen canvases, the file-loader auto-update). Stored
+    // as typeData[3] in UIProgressData. Ignored when Type != Progress.
+    [Export(PropertyHint.Range, "0,100,1")]
+    public byte InitialValue { get; set; } = 0;
 
     [ExportGroup("Slot (when nested inside a container)")]
     // These fields are read by PS1UIHBox / PS1UIVBox / PS1UISizeBox /
