@@ -7,8 +7,10 @@
 #include <psyqo/trigonometry.hh>
 #include <psyqo/xprintf.h>
 
+#include "fileloader.hh"
 #include "gameobject.hh"
 #include "gtemath.hh"
+#include "scenemanager.hh"
 
 // Naive needle-in-haystack. Freestanding build doesn't pull <string.h>,
 // and this only runs on load errors so a straight two-pointer scan is
@@ -328,6 +330,15 @@ void psxsplash::Lua::Shutdown() {
     m_metatableReference = LUA_NOREF;
     m_luascriptsReference = LUA_NOREF;
     m_luaSceneScriptsReference = LUA_NOREF;
+
+    // Hot-swap buffers and version counter are scene-local: a scene
+    // transition wipes m_bytecodeRefs and any newly-loaded scene's
+    // bytecode is authoritative regardless of prior swaps.
+    for (int i = 0; i < MAX_LUA_FILES; i++) {
+        if (m_hotSwapBuffers[i]) { delete[] m_hotSwapBuffers[i]; m_hotSwapBuffers[i] = nullptr; }
+    }
+    m_lastHotSwapVersion = 0;
+    m_bytecodeRefCount = 0;
 }
 
 void psxsplash::Lua::Reset() {
@@ -640,6 +651,93 @@ void psxsplash::Lua::RelocateGameObjects(GameObject** objects, size_t count, int
         }
         L.pop();
     }
+}
+
+// Hot-swap protocol — see godot-ps1/addons/ps1godot/exporter/LuaHotSwapWatcher.cs
+// for the writer side. File layout (little-endian):
+//   [4]  magic 'PHSW' = 0x57534850
+//   [4]  u32 version
+//   [2]  u16 fileIndex
+//   [2]  u16 codeLen
+//   [N]  u8  code (LuaDecimalRewriter-rewritten source text)
+namespace {
+constexpr uint32_t kHotSwapMagic = 0x57534850u;  // 'P','H','S','W'
+constexpr int      kHotSwapHeaderBytes = 12;
+
+inline uint32_t readU32LE(const uint8_t* p) {
+    return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
+}
+inline uint16_t readU16LE(const uint8_t* p) {
+    return (uint16_t)((uint16_t)p[0] | ((uint16_t)p[1] << 8));
+}
+}  // namespace
+
+void psxsplash::Lua::TryHotSwap(SceneManager& sm) {
+    auto& loader = FileLoader::Get();
+    int size = 0;
+    uint8_t* buf = loader.LoadFileSync("hotswap.luac", size);
+    if (!buf) return;  // file absent — fast path
+
+    if (size < kHotSwapHeaderBytes) { loader.FreeFile(buf); return; }
+    if (readU32LE(buf) != kHotSwapMagic) { loader.FreeFile(buf); return; }
+
+    uint32_t version  = readU32LE(buf + 4);
+    uint16_t fileIdx  = readU16LE(buf + 8);
+    uint16_t codeLen  = readU16LE(buf + 10);
+
+    // Already applied (or stale leftover from a prior session that
+    // outlived the editor). Nothing to do.
+    if (version <= m_lastHotSwapVersion) { loader.FreeFile(buf); return; }
+
+    if (fileIdx >= m_bytecodeRefCount) {
+        printf("Lua hot-swap: idx %u out of range (have %d) — re-export the scene\n",
+               (unsigned)fileIdx, m_bytecodeRefCount);
+        m_lastHotSwapVersion = version;  // suppress repeat warnings
+        loader.FreeFile(buf);
+        return;
+    }
+    if (size < kHotSwapHeaderBytes + codeLen) {
+        printf("Lua hot-swap: truncated payload (size=%d, want=%d)\n", size, kHotSwapHeaderBytes + codeLen);
+        loader.FreeFile(buf);
+        return;
+    }
+
+    // Copy the code into an owned buffer keyed by file index. The file
+    // loader's buffer goes back to the heap; the owned copy stays put
+    // for the rest of the scene (or until the next hot-swap of this idx).
+    if (m_hotSwapBuffers[fileIdx]) delete[] m_hotSwapBuffers[fileIdx];
+    uint8_t* owned = new uint8_t[codeLen];
+    for (int i = 0; i < codeLen; i++) owned[i] = buf[kHotSwapHeaderBytes + i];
+    m_hotSwapBuffers[fileIdx] = owned;
+    m_bytecodeRefs[fileIdx] = { reinterpret_cast<const char*>(owned), (size_t)codeLen };
+
+    loader.FreeFile(buf);
+
+    // Re-load the chunk into the script-environment table so any future
+    // RegisterGameObject (and OnTriggerEnterScript / OnTriggerExitScript
+    // calls keyed by file index) see the new code. LoadLuaFile rewrites
+    // m_bytecodeRefs[idx] back to the same pointer, which is fine — it's
+    // now our owned buffer.
+    LoadLuaFile(reinterpret_cast<const char*>(owned), (size_t)codeLen, fileIdx);
+
+    // Walk every GameObject and re-register the ones using this script.
+    // RegisterGameObject does NOT fire onCreate (that's
+    // FireAllOnCreate's job, called once per scene boot), so the swap
+    // refreshes the per-object env without re-running init. Per-object
+    // file-level locals are reset; C++-side state (position, rotation,
+    // active flag) is untouched.
+    int affected = 0;
+    size_t objCount = sm.getGameObjectCount();
+    for (size_t i = 0; i < objCount; i++) {
+        GameObject* go = sm.getGameObject((uint16_t)i);
+        if (go && go->luaFileIndex == (int16_t)fileIdx) {
+            RegisterGameObject(go);
+            affected++;
+        }
+    }
+    m_lastHotSwapVersion = version;
+    printf("Lua hot-swap v%u applied: idx %u (%u B) -> %d object(s)\n",
+           (unsigned)version, (unsigned)fileIdx, (unsigned)codeLen, affected);
 }
 
 void psxsplash::Lua::PushGameObject(GameObject* go) {

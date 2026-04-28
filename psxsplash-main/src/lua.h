@@ -40,6 +40,8 @@ enum EventMask : uint32_t {
     EVENT_ON_BUTTON_RELEASE = 1 << 10,
 };
 
+class SceneManager;  // forward; TryHotSwap walks its game-object list
+
 class Lua {
   public:
     void Init();
@@ -51,6 +53,14 @@ class Lua {
     void RegisterGameObject(GameObject* go);
     void FireAllOnCreate(GameObject** objects, size_t count);
     void RelocateGameObjects(GameObject** objects, size_t count, intptr_t delta);
+
+    // Hot-swap: poll PCdrv for `hotswap.luac` written by the Godot plugin
+    // (LuaHotSwapWatcher.cs). On a newer version, replace the bytecode for
+    // the named file index and re-register every GameObject that uses it
+    // — without firing onCreate. Cheap no-op when the file is absent.
+    // Caller throttles the polling cadence; this method does no internal
+    // rate-limiting.
+    void TryHotSwap(SceneManager& sm);
     
     // Get the underlying psyqo::Lua state for API registration
     psyqo::Lua& getState() { return m_state; }
@@ -190,6 +200,13 @@ class Lua {
     };
     BytecodeRef m_bytecodeRefs[MAX_LUA_FILES];
     int m_bytecodeRefCount = 0;
+
+    // Per-index owned hot-swap buffers. Allocated on first hot-swap for
+    // a given index; freed when the index is hot-swapped again or when
+    // the scene unloads (Reset). nullptr while the splashpack copy is
+    // authoritative.
+    uint8_t* m_hotSwapBuffers[MAX_LUA_FILES] = {};
+    uint32_t m_lastHotSwapVersion = 0;
 
     template <int methodId, typename methodName>
     friend struct FunctionWrapper;

@@ -37,6 +37,14 @@ class MainScene final : public psyqo::Scene {
     // After init completes, loadScene() handles everything synchronously.
     psyqo::TaskQueue m_initQueue;
     bool m_ready = false;
+
+    // Lua hot-swap polling. Every kHotSwapPollFrames the runtime opens
+    // hotswap.luac via PCdrv. Cheap when the file is absent (one PCopen
+    // returning -1); the editor only writes the file on actual saves.
+    // 30 frames @ 30 fps ≈ 1 s — matches the watcher's poll cadence so
+    // worst-case end-to-end latency is ~2 s.
+    static constexpr uint32_t kHotSwapPollFrames = 30;
+    uint32_t m_hotSwapTickAccum = 0;
 };
 
 PSXSplash app;
@@ -116,7 +124,16 @@ void MainScene::frame() {
     }
 
     mainScene.m_lastFrameCounter = currentFrameCounter;
-    
+
+    // Lua hot-swap poll. Runs before GameTick so a swap takes effect
+    // on the same frame it's detected — and so the VM is in a known
+    // quiescent state (no in-flight Lua call) when we re-register.
+    m_hotSwapTickAccum += deltaTime;
+    if (m_hotSwapTickAccum >= kHotSwapPollFrames) {
+        m_hotSwapTickAccum = 0;
+        m_sceneManager.getLua().TryHotSwap(m_sceneManager);
+    }
+
     m_sceneManager.GameTick(gpu());
 
     #if defined(PSXSPLASH_FPSOVERLAY)
