@@ -1275,8 +1275,57 @@ table, Auto rules, and per-clip migration shortlist.
   - [ ] **A3. Decal stack warning** — per-region overlap counter; WARN
         at >6 alpha quads in any 320×240 screen rect. Not started.
   - [ ] **A4. Static-vs-dynamic classifier (warning only)** — flag
-        meshes that should be baked into a static render group. Not
-        started; gates Slot D render-group batching.
+        meshes that should be baked into a static render group.
+        **Superseded 2026-04-27 by Slot D1 (already shipped, see
+        below); the Blender side validator surfaces "would batch N→M"
+        hints which is the same author signal A4 was scoped to deliver.**
+
+### Slot D1 — automatic static-mesh batching *(shipped 2026-04-27)*
+
+`exporter/StaticBatchOptimizer.cs` runs at the end of `SceneCollector.FromRoot`,
+walks `data.Objects`, and merges meshes sharing
+`(DrawPhase, ShadingMode, AlphaMode, AtlasGroup, Translucent,
+first-material texture_page_id)` into single GameObjects with
+anchor-local fp12 vertex baking. Eligibility: `MeshRole == StaticWorld`,
+`ExportMode == MergeStatic`, no Lua / Tag / Interactable / StartsInactive.
+Blender-side validator mirrors the bucket key + reports candidates at
+author time so artists plan around the optimizer.
+
+**Production tier (still pending):** per-chunk scoping +
+`VRAMPacker`-aware bucket key. Current minimum tier buckets scene-wide,
+which works for typical interior chunks but loses visibility-culling
+granularity on huge open exteriors.
+
+### Phase L1 + L2 — Godot-side vertex lighting *(shipped 2026-04-27)*
+
+`exporter/VertexLightingBaker.cs` (L1) bakes from
+`DirectionalLight3D` / `OmniLight3D` / `SpotLight3D` into per-instance
+`PS1MeshInstance.BakedColors`. `exporter/VertexAOBaker.cs` (L2)
+multiplies AO term in via brute-force ray-tri intersection against
+all visible scene geometry. Both clamp to PSX 0.8 ceiling. Layered
+authoring loop on Godot side mirrors the Blender Cycles bake stack.
+
+**Phase L3 (still pending):** PSX preview shader with 5-bit
+quantization + 4×4 ordered dither + 2× semi-trans simulation for
+authors to see ship-equivalent output without launching the emulator.
+Tracked in `docs/ps1godot-lighting-plan.md`.
+
+### Cross-tool authoring round-trip *(shipped 2026-04-27)*
+
+The Blender ↔ Godot pipeline is now first-class in both directions:
+
+  - **Blender → Godot (geometry + metadata):** addon's
+    `Export to Godot` button writes GLB + JSON sidecars in one click.
+  - **Godot → Blender (metadata):** `Send to Blender` Tools menu
+    writes sidecars + launches Blender with the import operator
+    queued via `--python-expr`.
+  - **Godot → Blender (geometry):** `Edit Mesh in Blender` uses
+    `GltfDocument.AppendFromScene` to extract Mesh as GLB, triggers
+    the import pipeline + auto-rebinds `pmi.Mesh` to the imported
+    PackedScene's sub-resource. Blender re-edits flow through Godot's
+    scanner with no manual rebind.
+
+  See `docs/handoff-2026-04-27.md` for the full commit ledger.
 
 - [ ] **F5 to play.** Hook Godot's Play button: build splashpack → launch
       PCSX-Redux with PCdrv → attach C# debugger → tail `printf` output in
