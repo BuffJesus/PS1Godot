@@ -52,6 +52,7 @@ public partial class PS1GodotPlugin : EditorPlugin
     private PS1GodotDock? _dock;
     private PS1UICanvasEditor? _uiCanvasEditor;
     private EditorSyntaxHighlighter? _luaHighlighter;
+    private PS1TexturePreviewInspector? _texturePreviewInspector;
 
     public override void _EnterTree()
     {
@@ -127,6 +128,12 @@ public partial class PS1GodotPlugin : EditorPlugin
                     .RegisterSyntaxHighlighter(_luaHighlighter);
             }
         }
+
+        // Inspector plugin — adds a "PSX Preview (quantized)" panel to
+        // any PS1Sky / PS1UIElement(Image) so authors see how the
+        // texture quantizes at the chosen BitDepth without exporting.
+        _texturePreviewInspector = new PS1TexturePreviewInspector();
+        AddInspectorPlugin(_texturePreviewInspector);
 
         GD.Print("[PS1Godot] Plugin enabled. F5 = Run on PSX (export + build + launch).");
     }
@@ -237,6 +244,12 @@ public partial class PS1GodotPlugin : EditorPlugin
         {
             RemoveNode3DGizmoPlugin(_triggerBoxGizmo);
             _triggerBoxGizmo = null;
+        }
+
+        if (_texturePreviewInspector != null)
+        {
+            RemoveInspectorPlugin(_texturePreviewInspector);
+            _texturePreviewInspector = null;
         }
 
         GD.Print("[PS1Godot] Plugin disabled.");

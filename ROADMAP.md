@@ -1389,7 +1389,19 @@ The Blender ↔ Godot pipeline is now first-class in both directions:
       `UV linter scene[N]: all meshes clean.` (or names the offenders).
       Closes Discord ask "Fix UVs of meshes when exporting if the UV
       coordinates are too large" (2 upvotes).
-- [ ] Quantized texture preview in the inspector for any PS1Texture asset.
+- [x] **Quantized texture preview in the inspector** *(shipped 2026-04-28)*.
+      `PS1TexturePreviewInspector` (an `EditorInspectorPlugin`)
+      attaches to any `PS1Sky` and any `PS1UIElement` with `Type=Image`,
+      adding a "PSX Preview (quantized)" panel below the standard
+      fields. Quantization runs the same pipeline the exporter uses
+      (`ImageProcessing.Quantize` + 5-bit-per-channel clamp from
+      `VRAMPixel`), so what authors see is what ships. Auto-refreshes
+      on `Texture` / `BitDepth` / `Type` edits via the inspector's
+      `property_edited` signal. `PS1MeshInstance` / `PS1MeshGroup`
+      previews still pending — those textures flow through
+      `material_override` / per-surface materials, not a direct field;
+      adding mesh preview means probing the material chain to find
+      the active albedo.
 - [x] **EmmyLua stub generation from `luaapi.hh`.** Shipped as
       `tools/LuaApiStubGenerator.cs` with regression tests
       (`Project > Tools > PS1Godot: Run Lua API Stub Generator Tests`).
