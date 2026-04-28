@@ -144,3 +144,7 @@ docs/handoff-2026-04-25.md
 docs/handoff-2026-04-26.md
 # Original jam-game source files staging area (Unity export, audio, etc.).
 SaunaGameSourceFiles/
+
+# Built Blender add-on zip — regenerated on demand:
+#   cd tools/blender-addon && python -m zipfile -c ps1godot_blender.zip ps1godot_blender/
+tools/blender-addon/ps1godot_blender.zip
