@@ -162,6 +162,11 @@ public static class SceneCollector
             }
         }
 
+        // Slot D1 — automatic static-mesh batching. Runs BEFORE the
+        // dedup analysis so the analyzer sees the post-batch mesh
+        // counts (which is what the splashpack actually ships).
+        StaticBatchOptimizer.Optimize(data);
+
         ReportMeshDedupSummary(data);
         VerifyMeshFormatRoundTrip(data);
 
