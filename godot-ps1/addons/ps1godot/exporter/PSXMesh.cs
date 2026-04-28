@@ -102,11 +102,29 @@ public sealed class PSXMesh
             var normals = arrays[(int)Mesh.ArrayType.Normal].AsVector3Array();
             var uvs = arrays[(int)Mesh.ArrayType.TexUV].AsVector2Array();
             var indices = arrays[(int)Mesh.ArrayType.Index].AsInt32Array();
+            // Mesh-intrinsic vertex colours (e.g., a Blender Cycles bake
+            // imported through glTF, or any Godot ImportPlugin that
+            // populates the COLOR channel). Used as a fallback when no
+            // per-instance BakedColors override exists, so authors who
+            // baked in Blender + re-imported don't have to re-bake on
+            // the Godot side. Per-surface, length-matched against
+            // verts so multi-material meshes can colour each surface
+            // independently.
+            var meshColors = arrays[(int)Mesh.ArrayType.Color].AsColorArray();
 
             MeshLinter.RecordSurface(node.Name, uvs,
                 tilingExpected: node is PS1MeshInstance tilingPmi && tilingPmi.TilingUV);
 
             int triCount = indices.Length > 0 ? indices.Length / 3 : verts.Length / 3;
+
+            // Per-surface decision: prefer the per-instance BakedColors
+            // override (Godot-side bake), fall back to the mesh's COLOR
+            // channel (Blender-side bake), fall back to flat colour.
+            bool useBaked0 = s == 0
+                && bakedColorsSurface0 != null
+                && bakedColorsSurface0.Length == verts.Length;
+            bool useMeshColors = !useBaked0
+                && meshColors.Length == verts.Length;
 
             for (int t = 0; t < triCount; t++)
             {
@@ -130,23 +148,21 @@ public sealed class PSXMesh
                 Vector2 uv1 = uvs.Length > i1 ? uvs[i1] : Vector2.Zero;
                 Vector2 uv2 = uvs.Length > i2 ? uvs[i2] : Vector2.Zero;
 
-                // Phase L1: BakedColors override is per-vertex on
-                // surface 0 only. When populated + length matches,
-                // we look up each vertex's baked color and feed
-                // that to MakeVertex instead of the flat bytes.
-                bool useBaked0 = s == 0
-                    && bakedColorsSurface0 != null
-                    && bakedColorsSurface0.Length == verts.Length;
-
                 (byte r0, byte g0, byte b0) = useBaked0
                     ? PSXBytesFromColor(bakedColorsSurface0![i0])
-                    : (rByte, gByte, bByte);
+                    : useMeshColors
+                        ? PSXBytesFromColor(meshColors[i0])
+                        : (rByte, gByte, bByte);
                 (byte r1, byte g1, byte b1) = useBaked0
                     ? PSXBytesFromColor(bakedColorsSurface0![i1])
-                    : (rByte, gByte, bByte);
+                    : useMeshColors
+                        ? PSXBytesFromColor(meshColors[i1])
+                        : (rByte, gByte, bByte);
                 (byte r2, byte g2, byte b2) = useBaked0
                     ? PSXBytesFromColor(bakedColorsSurface0![i2])
-                    : (rByte, gByte, bByte);
+                    : useMeshColors
+                        ? PSXBytesFromColor(meshColors[i2])
+                        : (rByte, gByte, bByte);
 
                 psx.Triangles.Add(new Tri
                 {
@@ -183,6 +199,13 @@ public sealed class PSXMesh
         var normals = arrays[(int)Mesh.ArrayType.Normal].AsVector3Array();
         var uvs = arrays[(int)Mesh.ArrayType.TexUV].AsVector2Array();
         var indices = arrays[(int)Mesh.ArrayType.Index].AsInt32Array();
+        // Mesh-intrinsic vertex colours (Blender Cycles bake via glTF,
+        // or any ImportPlugin that populates Mesh.ArrayType.Color).
+        // Uses the mesh's own COLOR channel as the per-vertex tint when
+        // present + length-matched. Falls back to the (rByte,gByte,bByte)
+        // flat colour passed by the caller.
+        var meshColors = arrays[(int)Mesh.ArrayType.Color].AsColorArray();
+        bool useMeshColors = meshColors.Length == verts.Length;
 
         MeshLinter.RecordSurface(sub.Name, uvs, tilingExpected);
 
@@ -214,11 +237,18 @@ public sealed class PSXMesh
             Vector2 uv1 = uvs.Length > i1 ? uvs[i1] : Vector2.Zero;
             Vector2 uv2 = uvs.Length > i2 ? uvs[i2] : Vector2.Zero;
 
+            (byte r0, byte g0, byte b0) = useMeshColors
+                ? PSXBytesFromColor(meshColors[i0]) : (rByte, gByte, bByte);
+            (byte r1, byte g1, byte b1) = useMeshColors
+                ? PSXBytesFromColor(meshColors[i1]) : (rByte, gByte, bByte);
+            (byte r2, byte g2, byte b2) = useMeshColors
+                ? PSXBytesFromColor(meshColors[i2]) : (rByte, gByte, bByte);
+
             Triangles.Add(new Tri
             {
-                v0 = MakeVertex(p0, n0, uv0, tex, gteScaling, rByte, gByte, bByte),
-                v1 = MakeVertex(p1, n1, uv1, tex, gteScaling, rByte, gByte, bByte),
-                v2 = MakeVertex(p2, n2, uv2, tex, gteScaling, rByte, gByte, bByte),
+                v0 = MakeVertex(p0, n0, uv0, tex, gteScaling, r0, g0, b0),
+                v1 = MakeVertex(p1, n1, uv1, tex, gteScaling, r1, g1, b1),
+                v2 = MakeVertex(p2, n2, uv2, tex, gteScaling, r2, g2, b2),
                 TextureIndex = texIdx,
             });
         }
