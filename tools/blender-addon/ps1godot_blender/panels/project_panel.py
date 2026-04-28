@@ -25,6 +25,7 @@ class PS1GODOT_PT_project(bpy.types.Panel):
 
         col = layout.column(align=True)
         col.prop(props, "project_root")
+        col.prop(props, "asset_subdir")
         col.prop(props, "output_subdir")
 
         col.separator()
@@ -36,20 +37,27 @@ class PS1GODOT_PT_project(bpy.types.Panel):
         # but authors don't typically change it manually.
         col.prop(props, "metadata_version")
 
-        # Action row. Validate is always safe (read-only); Export
-        # writes files under project_root, so keep them visually
-        # distinct via separate rows rather than side-by-side.
+        # ── Primary CTA: one-click round-trip out to Godot. ──
+        # Most authoring sessions land here: edit, click, switch
+        # windows. The granular per-step buttons live under "Advanced"
+        # below for the rare case of "I want to write only the
+        # sidecars without re-exporting GLBs."
+        layout.separator()
         row = layout.row(align=True)
-        row.scale_y = 1.2
-        row.operator("ps1godot.validate_scene", icon="CHECKMARK")
+        row.scale_y = 1.5
+        row.operator("ps1godot.export_to_godot", icon="EXPORT")
 
-        row = layout.row(align=True)
-        row.scale_y = 1.2
-        row.operator("ps1godot.export_metadata", icon="EXPORT")
-
+        # ── Read direction: pull Godot-side state back into Blender. ──
         row = layout.row(align=True)
         row.scale_y = 1.2
         row.operator("ps1godot.import_metadata", icon="IMPORT")
+
+        # ── Advanced / per-step actions ──
+        layout.separator()
+        col_adv = layout.column(align=True)
+        col_adv.label(text="Advanced", icon="TOOL_SETTINGS")
+        col_adv.operator("ps1godot.validate_scene", icon="CHECKMARK")
+        col_adv.operator("ps1godot.export_metadata", icon="FILE_TEXT", text="Write Sidecars Only")
 
 
 register, unregister = bpy.utils.register_classes_factory((PS1GODOT_PT_project,))

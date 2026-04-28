@@ -99,9 +99,14 @@ class PS1GodotSceneProps(bpy.types.PropertyGroup):
         subtype="DIR_PATH",
     )
     output_subdir: StringProperty(
-        name="Output Subdir",
-        description="Folder under project_root where this addon writes sidecars (Phase 2+).",
+        name="Sidecar Subdir",
+        description="Folder under project_root where the addon writes .ps1meshmeta.json sidecars.",
         default="ps1godot_assets/blender_sources",
+    )
+    asset_subdir: StringProperty(
+        name="Asset Subdir",
+        description="Folder under project_root where the addon writes exported .glb meshes (one file per tagged Object).",
+        default="ps1godot_assets/meshes",
     )
     default_chunk_id: StringProperty(
         name="Default ChunkId",
