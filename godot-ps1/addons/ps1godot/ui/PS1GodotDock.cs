@@ -93,6 +93,22 @@ public partial class PS1GodotDock : VBoxContainer
         analyze.Pressed += () => EmitSignal(SignalName.AnalyzeTexturesRequested);
         actions.AddChild(analyze);
 
+        // ── Preview toggle ──────────────────────────────────────────────
+        // Flips the shared ps1.gdshader's quantize+dither uniforms so
+        // authors can compare PSX-quantized output to the un-quantized
+        // source without editing the .tres files. Works by mutating the
+        // ShaderMaterial parameters in place — every PS1MeshInstance
+        // sharing ps1_default.tres / ps1_skinned.tres picks it up
+        // immediately.
+        var previewToggle = new CheckBox
+        {
+            Text = "PSX preview (5-bit quantize + dither)",
+            ButtonPressed = true,
+            TooltipText = "When ON: viewport matches shipped PSX look (5-bit/channel + 4×4 Bayer dither). OFF: source colors, no banding/dither.",
+        };
+        previewToggle.Toggled += pressed => SetPsxPreviewEnabled(pressed);
+        inner.AddChild(previewToggle);
+
         // ── Scene section ───────────────────────────────────────────────
         AddSectionHeader(inner, "Scene");
 
@@ -223,6 +239,27 @@ public partial class PS1GodotDock : VBoxContainer
         h.AddChild(name);
 
         return h;
+    }
+
+    // Toggle the PSX preview pass on every PS1 ShaderMaterial that
+    // shares ps1.gdshader. Loads the two stock .tres files directly
+    // (PS1MeshInstance default + PS1SkinnedMesh default) and mutates
+    // their uniforms — author-overridden materials with their own
+    // ShaderMaterial copy are unaffected (intentional: power users get
+    // their own toggle on their own material).
+    private static void SetPsxPreviewEnabled(bool enabled)
+    {
+        int bits = enabled ? 5 : 0;
+        SetUniformOnMaterial("res://addons/ps1godot/shaders/ps1_default.tres", bits, enabled);
+        SetUniformOnMaterial("res://addons/ps1godot/shaders/ps1_skinned.tres", bits, enabled);
+    }
+
+    private static void SetUniformOnMaterial(string resPath, int quantizeBits, bool dither)
+    {
+        var mat = ResourceLoader.Load<ShaderMaterial>(resPath);
+        if (mat == null) return;
+        mat.SetShaderParameter("preview_quantize_bits", quantizeBits);
+        mat.SetShaderParameter("preview_dither_enabled", dither);
     }
 
     // Called by the plugin on scene-change or manual refresh.
