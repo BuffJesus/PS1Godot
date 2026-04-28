@@ -69,6 +69,28 @@ public static class VertexLightingBaker
         {
             if (node is not PS1MeshInstance pmi)
             {
+                // Silent-skip used to be the rule here, but a freshly-
+                // imported GLB loads as MeshInstance3D — authors hit the
+                // "0 meshes baked / 0 skipped" no-feedback wall and gave
+                // up. Surface a real reason + name the fix tool.
+                if (node is MeshInstance3D)
+                {
+                    result.Skipped++;
+                    result.SkippedReasons.Add(
+                        $"{node.Name}: MeshInstance3D, not PS1MeshInstance. " +
+                        $"Run Tools → 'PS1Godot: Convert selected MeshInstance3D to " +
+                        $"PS1MeshInstance' first, then re-bake.");
+                }
+                else if (node is Node3D)
+                {
+                    result.Skipped++;
+                    result.SkippedReasons.Add(
+                        $"{node.Name}: {node.GetType().Name} — only PS1MeshInstance " +
+                        $"(or MeshInstance3D after conversion) carries BakedColors.");
+                }
+                // Other selection types (Camera3D, lights, the scene root,
+                // etc.) are intentionally ignored — common when the author
+                // multi-selects + bakes the whole tree.
                 continue;
             }
             if (pmi.Mesh == null)
