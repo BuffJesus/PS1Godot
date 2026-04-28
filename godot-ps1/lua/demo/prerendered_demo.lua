@@ -1,46 +1,69 @@
 -- Pre-rendered background sample scene script.
--- ROADMAP Phase 4 stretch — Resident Evil / FFVII style fixed camera.
+-- ROADMAP Phase 4 stretch (A + B + C) — Resident Evil / FFVII style
+-- multi-room fixed-camera demo.
 --
--- The PS1UICanvas with `bg` image (sortOrder=9999) shows the baked
--- backdrop. The PS1Camera in the scene tree was used to bake the
--- backdrop; this script re-applies that camera's transform at runtime
--- so the player + dynamic props render with the same projection the
--- baked image used. SetMode("fixed") tells the runtime to leave the
--- camera alone after that — player movement won't drag it around.
+-- The scene has two rooms connected by a corridor. Each room has its
+-- own PS1Camera + PS1UICanvas (with the baked BG Image at sortOrder
+-- 9999) + PS1TriggerBox. Walking from one room to the other crosses
+-- a trigger that swaps both the camera pose and the visible canvas —
+-- the same authoring pattern Resident Evil used for tank-controls
+-- camera cuts.
 --
--- IMPORTANT: PS1Godot's Lua camera coords are PSX-runtime coords (not
--- Godot coords). Conversion: x_psx = x_godot / GteScaling, y_psx =
--- -y_godot / GteScaling, z_psx = -z_godot / GteScaling. With the
--- demo's GteScaling=4 and the PS1Camera placed at Godot world
--- (0, 6, 10) looking at (0, 0.5, 0):
---   pos_psx = (0, -1.5, -2.5)
---   yaw     = 0   (camera faces along -Z which is "+Z PSX")
---   pitch   = atan2(5.5, 10) ≈ 28.8° ≈ 0.5 rad — but PSX pitch is
---             inverted (memory `project_camera_pitch_sign`), so use a
---             SMALL OR NEGATIVE pitch to look DOWN at the floor.
--- Tune these by eye until the live render frames the backdrop.
+-- COORDS: PSX-runtime, not Godot. With the demo's GteScaling=4:
+--   x_psx =  x_godot / 4
+--   y_psx = -y_godot / 4
+--   z_psx = -z_godot / 4
+-- And PSX pitch is sign-inverted vs intuition (negative pitch = look
+-- DOWN — memory `project_camera_pitch_sign`).
+--
+-- TRIGGER INDICES: assigned in scene-walk order. With this scene's
+-- two triggers, TriggerA=0 and TriggerB=1. If you add more triggers
+-- elsewhere in the scene, renumber the dispatch below.
+
+-- Camera A frames Room A. Editor placement: (0, 6, 10) → PSX (0, -1.5, -2.5).
+local function poseRoomA()
+    Camera.SetPosition(Vec3.new(0, -1.5, -2.5))
+    Camera.SetRotation(Vec3.new(-0.16, 0.0, 0.0))
+end
+
+-- Camera B frames Room B. Editor placement: (0, 6, -2) → PSX (0, -1.5, 0.5).
+-- Same downward pitch as A; just a different XZ anchor.
+local function poseRoomB()
+    Camera.SetPosition(Vec3.new(0, -1.5, 0.5))
+    Camera.SetRotation(Vec3.new(-0.16, 0.0, 0.0))
+end
 
 function onSceneCreationStart()
-    Debug.Log("prerendered_demo: scene boot — fixed camera + baked BG")
+    Debug.Log("prerendered_demo: scene boot — multi-room fixed cameras")
 end
 
 function onSceneCreationEnd()
-    -- Lock player input off if the scene is observation-only; leave on
-    -- so Cross / D-pad / left stick can wiggle the player around the
-    -- floor for movement testing against the invisible collision.
     Controls.SetEnabled(true)
 
-    -- Camera placement (PSX coords). Match these to where the PS1Camera
-    -- node was placed when the BG was baked.
-    Camera.SetPosition(Vec3.new(0, -1.5, -2.5))
-
-    -- Pitch / yaw / roll in pi-units (FixedPoint<12>). Negative pitch
-    -- = look DOWN (memory: pitch sign is inverted in psyqo).
-    -- 0.16 ≈ 28° down for a high-angle isometric framing.
-    Camera.SetRotation(Vec3.new(-0.16, 0.0, 0.0))
-
-    -- Disable the per-frame "follow player" rig. From this point on the
-    -- camera holds at the position/rotation we just set; only Lua can
-    -- move it again.
+    -- Player spawns in Room A; show Room A's backdrop, hide B's, lock
+    -- the camera to Room A's pose. The runtime stays on this pose
+    -- until a trigger handler below changes it.
+    poseRoomA()
     Camera.SetMode("fixed")
+
+    UI.SetVisible("background_a", true)
+    UI.SetVisible("background_b", false)
+end
+
+-- Fires when the player's AABB enters either trigger box.
+-- Indices are assigned in scene-walk order:
+--   0 = TriggerA (re-entering Room A from the corridor)
+--   1 = TriggerB (entering Room B from the corridor)
+function onTriggerEnter(triggerIndex)
+    if triggerIndex == 0 then
+        Debug.Log("prerendered_demo: enter Room A")
+        poseRoomA()
+        UI.SetVisible("background_a", true)
+        UI.SetVisible("background_b", false)
+    elseif triggerIndex == 1 then
+        Debug.Log("prerendered_demo: enter Room B")
+        poseRoomB()
+        UI.SetVisible("background_a", false)
+        UI.SetVisible("background_b", true)
+    end
 end

@@ -1905,10 +1905,19 @@ Only after Phases 0–3 land.
     the BG) is just a regular `Collision = Static` PS1MeshInstance —
     no new authoring node needed; the auto-nav-region from flat-
     Static AABBs handles walkability.
-  - **C.** Multi-camera scenes (Resident Evil "tank-controls + camera
-    cuts") — multiple `PS1Camera` nodes with trigger-zone activation
-    so walking through a doorway swaps both the camera and the BG
-    image. Builds on existing trigger volumes. ~1 day.
+  - **C.** Multi-camera scenes *(shipped 2026-04-29)* — pure
+    authoring pattern, no runtime change required. Author drops 2+
+    `PS1Camera` nodes (one per room), bakes each via the Phase A
+    helper, drops 2+ `PS1UICanvas` nodes (one per room, each with a
+    full-screen Image at sortOrder=9999, only one `VisibleOnLoad =
+    true`), and 2+ `PS1TriggerBox` nodes pointing at a shared scene
+    Lua file. The Lua's `onTriggerEnter(triggerIndex)` dispatches:
+    each branch calls `Camera.SetPosition` + `Camera.SetRotation` to
+    the matching pose and `UI.SetVisible(canvas_name, on/off)` to
+    swap the visible backdrop. Sample expanded at
+    `godot-ps1/demo/prerendered_demo.tscn` — two rooms connected by
+    a corridor, each with its own camera + canvas + trigger. Pure
+    Resident Evil tank-control camera-cut feel.
   - **D (optional).** Z-strip occlusion — author slices the BG in
     Blender into 2–4 horizontal/vertical depth bands and exports each
     as a separate UI image at a different sortOrder, letting characters

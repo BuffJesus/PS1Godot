@@ -1,22 +1,31 @@
-[gd_scene load_steps=11 format=3]
+[gd_scene load_steps=14 format=3]
 
-; Pre-rendered background sample scene — ROADMAP Phase 4 stretch.
+; Pre-rendered background sample scene — ROADMAP Phase 4 stretch (A+B+C).
+; Resident Evil / FFVII-style fixed-camera multi-room demo.
 ;
-; Workflow:
+; LAYOUT
+;   Room A: floor + 2 cube props at world origin.
+;   Corridor: narrow 2-wide floor connecting Room A → Room B.
+;   Room B: floor + 1 cube prop at z=-12.
+;   FixedCameraA frames Room A from (0, 6, 10) high-angle iso.
+;   FixedCameraB frames Room B from (0, 6, -2) high-angle iso (mirror).
+;   2 PS1TriggerBoxes — one inside each room near the corridor mouth.
+;   2 PS1UICanvases — background_a (visible on load) and background_b
+;   (hidden on load). Each holds one full-screen Image showing the
+;   baked BG for its camera.
+;
+; AUTHORING WORKFLOW
 ;   1. Open this scene.
-;   2. Select the FixedCamera node in the scene tree.
-;   3. Tools menu → "PS1Godot: Bake Background from Selected Camera".
-;      The plugin renders the camera's POV to
-;      res://assets/backgrounds/prerendered_demo_FixedCamera.png
-;      (overwriting the placeholder).
-;   4. F5 to Run on PSX. Player walks on the floor; camera stays
-;      pinned at the bake angle thanks to the scene's Lua script
-;      (Camera.SetMode("fixed")).
+;   2. Select FixedCameraA → Tools menu → "PS1Godot: Bake Background
+;      from Selected Camera" → overwrites prerendered_demo_FixedCamera.png.
+;   3. Select FixedCameraB → bake → overwrites prerendered_demo_FixedCameraB.png.
+;   4. F5. Player spawns in Room A; camera A is active. Walk north
+;      (-Z) through the corridor → on entering Room B, TriggerB fires
+;      and the Lua swaps to Camera B's pose + makes background_b visible.
+;      Walk back south → TriggerA flips it the other way.
 ;
-; The scene's Lua (lua/demo/prerendered_demo.lua) re-applies the
-; camera's transform at runtime in PSX coords. Tune the values in the
-; Lua file when you change the editor camera so the live render aligns
-; with the baked image.
+; The Lua scene script (lua/demo/prerendered_demo.lua) handles
+; onSceneCreationEnd (initial pose) + onTriggerEnter (room swap).
 
 [ext_resource type="Script" uid="uid://b8ogc8krip2k" path="res://addons/ps1godot/nodes/PS1Scene.cs" id="1_scene"]
 [ext_resource type="Script" uid="uid://cfdlp12g2rtct" path="res://addons/ps1godot/nodes/PS1Player.cs" id="2_player"]
@@ -25,10 +34,15 @@
 [ext_resource type="Script" uid="uid://bp1p1kqop2wwy" path="res://addons/ps1godot/nodes/PS1UICanvas.cs" id="5_canvas"]
 [ext_resource type="Script" uid="uid://c01mt2tth0oll" path="res://addons/ps1godot/nodes/PS1UIElement.cs" id="6_elem"]
 [ext_resource type="Resource" path="res://addons/ps1godot/themes/PS1Theme.tres" id="7_theme"]
-[ext_resource type="Texture2D" path="res://assets/backgrounds/prerendered_demo_FixedCamera.png" id="8_bg"]
+[ext_resource type="Texture2D" path="res://assets/backgrounds/prerendered_demo_FixedCamera.png" id="8_bg_a"]
+[ext_resource type="Texture2D" path="res://assets/backgrounds/prerendered_demo_FixedCameraB.png" id="9_bg_b"]
+[ext_resource type="Script" uid="uid://bbl6b0g2qjisp" path="res://addons/ps1godot/nodes/PS1TriggerBox.cs" id="10_trigger"]
 
 [sub_resource type="BoxMesh" id="floor_mesh"]
 size = Vector3(8, 0.5, 8)
+
+[sub_resource type="BoxMesh" id="corridor_mesh"]
+size = Vector3(2, 0.5, 4)
 
 [sub_resource type="BoxMesh" id="cube_mesh"]
 size = Vector3(1, 1, 1)
@@ -48,55 +62,118 @@ BackgroundColor = Color(0, 0, 0, 1)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 2)
 script = ExtResource("2_player")
 
-[node name="FixedCamera" type="Camera3D" parent="."]
-; Editor pose used for the BG bake. Position (0, 6, 10) looking at
-; (0, 0.5, 0) gives a high-angle isometric framing that flatters
-; props against the floor — Resident Evil / FFVII style. After
-; baking, the Lua script re-applies this same pose at runtime in
-; PSX coords (x/=4, y=-y/4, z=-z/4 → (0, -1.5, -2.5)).
+; Room A camera. Bake from this for prerendered_demo_FixedCamera.png.
+[node name="FixedCameraA" type="Camera3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 0.876, 0.482, 0, -0.482, 0.876, 0, 6, 10)
 fov = 50.0
 script = ExtResource("3_camera")
 
-[node name="Floor" type="MeshInstance3D" parent="."]
+; Room B camera. Mirror of Camera A around z=-6 corridor midpoint —
+; same high-angle isometric framing but pointing into Room B. Bake
+; from this for prerendered_demo_FixedCameraB.png.
+[node name="FixedCameraB" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.876, 0.482, 0, -0.482, 0.876, 0, 6, -2)
+fov = 50.0
+script = ExtResource("3_camera")
+
+; ── Room A geometry ─────────────────────────────────────────────────
+[node name="FloorA" type="MeshInstance3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.25, 0)
 mesh = SubResource("floor_mesh")
 script = ExtResource("4_mesh")
 BitDepth = 1
 Collision = 1
 
-[node name="Cube_A" type="MeshInstance3D" parent="."]
+[node name="Cube_A1" type="MeshInstance3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 0.5, -1)
 mesh = SubResource("cube_mesh")
 script = ExtResource("4_mesh")
 BitDepth = 1
 Collision = 1
 
-[node name="Cube_B" type="MeshInstance3D" parent="."]
+[node name="Cube_A2" type="MeshInstance3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0.5, 0)
 mesh = SubResource("cube_mesh")
 script = ExtResource("4_mesh")
 BitDepth = 1
 Collision = 1
 
-; Pre-rendered backdrop. SortOrder=9999 puts it FIRST in the LIFO-
-; inverted UI order = drawn LAST = behind 3D (memory pin
-; project_psx_ui_sort_order_inverted). 256×240 fits one VRAM page
-; with 32px gutters left/right of the 320×240 framebuffer; the
-; gutters fall back to BackgroundColor (set on PS1Scene above).
-[node name="background" type="Node" parent="."]
+; ── Corridor connecting the two rooms ───────────────────────────────
+[node name="Corridor" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.25, -6)
+mesh = SubResource("corridor_mesh")
+script = ExtResource("4_mesh")
+BitDepth = 1
+Collision = 1
+
+; ── Room B geometry (offset z=-12) ──────────────────────────────────
+[node name="FloorB" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.25, -12)
+mesh = SubResource("floor_mesh")
+script = ExtResource("4_mesh")
+BitDepth = 1
+Collision = 1
+
+[node name="Cube_B1" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, -13)
+mesh = SubResource("cube_mesh")
+script = ExtResource("4_mesh")
+BitDepth = 1
+Collision = 1
+
+; ── Trigger zones ───────────────────────────────────────────────────
+; Each trigger fires onTriggerEnter(triggerIndex) on the linked Lua
+; script. The script dispatches by index — TriggerA = index 0,
+; TriggerB = index 1 (assigned in scene-walk order). Add more
+; triggers and renumber the Lua dispatch if needed.
+[node name="TriggerA" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, -3.7)
+script = ExtResource("10_trigger")
+HalfExtents = Vector3(4, 1.5, 0.3)
+ScriptFile = "res://lua/demo/prerendered_demo.lua"
+
+[node name="TriggerB" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, -8.3)
+script = ExtResource("10_trigger")
+HalfExtents = Vector3(4, 1.5, 0.3)
+ScriptFile = "res://lua/demo/prerendered_demo.lua"
+
+; ── Pre-rendered backdrops ──────────────────────────────────────────
+; SortOrder=9999 puts these FIRST in LIFO-inverted draw order = drawn
+; LAST = behind 3D (memory pin project_psx_ui_sort_order_inverted).
+; Lua toggles VisibleOnLoad-equivalent via UI.SetVisible at runtime.
+[node name="background_a" type="Node" parent="."]
 script = ExtResource("5_canvas")
-CanvasName = "background"
+CanvasName = "background_a"
 SortOrder = 9999
+VisibleOnLoad = true
 Theme = ExtResource("7_theme")
 
-[node name="bg" type="Node" parent="background"]
+[node name="bg_image" type="Node" parent="background_a"]
 script = ExtResource("6_elem")
-ElementName = "bg"
+ElementName = "bg_image_a"
 Type = 0
 X = 32
 Y = 0
 Width = 256
 Height = 240
-Texture = ExtResource("8_bg")
+Texture = ExtResource("8_bg_a")
+BitDepth = 0
+
+[node name="background_b" type="Node" parent="."]
+script = ExtResource("5_canvas")
+CanvasName = "background_b"
+SortOrder = 9999
+VisibleOnLoad = false
+Theme = ExtResource("7_theme")
+
+[node name="bg_image" type="Node" parent="background_b"]
+script = ExtResource("6_elem")
+ElementName = "bg_image_b"
+Type = 0
+X = 32
+Y = 0
+Width = 256
+Height = 240
+Texture = ExtResource("9_bg_b")
 BitDepth = 0
