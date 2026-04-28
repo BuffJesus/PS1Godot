@@ -54,6 +54,7 @@ public partial class PS1GodotPlugin : EditorPlugin
     private EditorSyntaxHighlighter? _luaHighlighter;
     private PS1TexturePreviewInspector? _texturePreviewInspector;
     private PS1VRAMViewerDock? _vramViewerDock;
+    private LuaHotSwapWatcher? _luaHotSwapWatcher;
 
     public override void _EnterTree()
     {
@@ -143,6 +144,13 @@ public partial class PS1GodotPlugin : EditorPlugin
 #pragma warning disable CS0618 // Obsolete: AddControlToBottomPanel — see AddControlToDock site above.
         AddControlToBottomPanel(_vramViewerDock, "PS1 VRAM");
 #pragma warning restore CS0618
+
+        // Lua hot-swap watcher: polls scene_0's exported .lua files and
+        // writes res://build/hotswap.luac when one changes. Runtime side
+        // (psxsplash-main/src/lua.cpp Lua::TryHotSwap) consumes that file
+        // via PCdrv. Idle until the first export hands it a script map.
+        _luaHotSwapWatcher = new LuaHotSwapWatcher { Name = "PS1GodotLuaHotSwap" };
+        AddChild(_luaHotSwapWatcher);
 
         GD.Print("[PS1Godot] Plugin enabled. F5 = Run on PSX (export + build + launch).");
     }
@@ -268,6 +276,12 @@ public partial class PS1GodotPlugin : EditorPlugin
 #pragma warning restore CS0618
             _vramViewerDock.QueueFree();
             _vramViewerDock = null;
+        }
+
+        if (_luaHotSwapWatcher != null)
+        {
+            _luaHotSwapWatcher.QueueFree();
+            _luaHotSwapWatcher = null;
         }
 
         GD.Print("[PS1Godot] Plugin disabled.");
@@ -648,6 +662,18 @@ public partial class PS1GodotPlugin : EditorPlugin
             // ran the pack pass before serialising), so the snapshot
             // captures the same coords the .vram file holds.
             _vramViewerDock?.ApplySnapshot(UI.VramSnapshot.Capture(sceneData, sceneIndex));
+
+            // Hand the lua-file map to the hot-swap watcher. Only scene_0
+            // (the boot scene) participates — sub-scenes loaded via
+            // Scene.Load have their bytecode in a different splashpack and
+            // can't be hot-swapped without a re-export anyway.
+            if (sceneIndex == 0 && _luaHotSwapWatcher != null)
+            {
+                var entries = new System.Collections.Generic.List<(string, int)>();
+                for (int i = 0; i < sceneData.LuaFiles.Count; i++)
+                    entries.Add((sceneData.LuaFiles[i].SourcePath, i));
+                _luaHotSwapWatcher.SetActiveSceneMap(buildDir, entries, sceneData.SceneLuaFileIndex);
+            }
 
             // Cap warnings: explicit PushWarning when a bus is over its
             // hardware-usable cap so authors don't have to do the math.
