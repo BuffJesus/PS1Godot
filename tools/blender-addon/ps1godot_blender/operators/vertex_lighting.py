@@ -111,12 +111,17 @@ def _show_vertex_color_in_viewport(context):
     material's albedo + the bake looks like it did nothing — a
     surprisingly common "did it work?" pitfall.
 
-    Touches each VIEW_3D area's first space; leaves shading.type alone
-    if it isn't SOLID (RENDERED / MATERIAL_PREVIEW are explicit author
-    choices we shouldn't stomp). Returns True if any viewport changed."""
-    changed = False
+    Switches both shading.type → SOLID and shading.color_type → VERTEX
+    unconditionally. Earlier versions guarded on shading.type=='SOLID'
+    which silently no-op'd whenever Blender was in Material Preview or
+    Rendered mode (the Blender 4.x default for new scenes can land
+    there). Authors can switch back to Material/Rendered after
+    reviewing the bake. Returns a (changed, viewports_touched) tuple
+    so the caller can log meaningfully."""
     if context is None or context.screen is None:
-        return False
+        return (False, 0)
+    changed = False
+    touched = 0
     for area in context.screen.areas:
         if area.type != "VIEW_3D":
             continue
@@ -124,11 +129,15 @@ def _show_vertex_color_in_viewport(context):
             if space.type != "VIEW_3D":
                 continue
             shading = space.shading
-            if shading.type == "SOLID" and shading.color_type != "VERTEX":
+            if shading.type != "SOLID":
+                shading.type = "SOLID"
+                changed = True
+            if shading.color_type != "VERTEX":
                 shading.color_type = "VERTEX"
                 changed = True
+            touched += 1
             break  # first VIEW_3D space per area is the active one
-    return changed
+    return (changed, touched)
 
 
 class PS1GODOT_OT_vc_create_layer(bpy.types.Operator):
@@ -426,7 +435,11 @@ class PS1GODOT_OT_vc_bake_scene_lights(bpy.types.Operator):
         # Flip the viewport to vertex-color preview so authors see the bake
         # without thinking the operator did nothing.
         if baked > 0:
-            _show_vertex_color_in_viewport(context)
+            changed, touched = _show_vertex_color_in_viewport(context)
+            if touched > 0:
+                self.report({"INFO"},
+                    f"PS1Godot: viewport set to Solid + Vertex Color "
+                    f"({touched} viewport(s){', changed' if changed else ', already in mode'}).")
         return {"FINISHED"}
 
     def _compute_vertex_color(
@@ -702,7 +715,16 @@ class PS1GODOT_OT_vc_bake_cycles(bpy.types.Operator):
         # material's albedo and "did it work?" requires re-exporting to
         # PSX to find out.
         if baked > 0:
-            _show_vertex_color_in_viewport(context)
+            changed, touched = _show_vertex_color_in_viewport(context)
+            if touched > 0:
+                self.report({"INFO"},
+                    f"PS1Godot: viewport set to Solid + Vertex Color "
+                    f"({touched} viewport(s){', changed' if changed else ', already in mode'}). "
+                    f"Switch back to Material Preview / Rendered any time.")
+            else:
+                self.report({"WARNING"},
+                    "PS1Godot: bake completed but no 3D viewport found to preview it in. "
+                    "Switch a viewport to Solid + Color → Vertex manually.")
 
         # Surface a clear warning when most loops clipped — the failure
         # mode that gave authors a uniform-white cube on PSX even though
