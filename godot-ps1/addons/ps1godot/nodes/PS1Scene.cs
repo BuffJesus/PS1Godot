@@ -145,4 +145,14 @@ public partial class PS1Scene : Node3D
     // what a room-scale Godot demo expects.
     [Export(PropertyHint.Range, "0.1,1000.0,0.1")]
     public float GteScaling { get; set; } = 4.0f;
+
+    [ExportGroup("Round-trip")]
+    // Path to the source .blend file this scene's geometry was authored in.
+    // Used by "Send to Blender" to launch Blender opening the right file
+    // and auto-running the import-metadata operator. Empty = "Send to
+    // Blender" still works but launches Blender without an open file
+    // (the author opens the .blend manually). res:// or absolute paths
+    // are both accepted; the launcher resolves via ProjectSettings.GlobalizePath.
+    [Export(PropertyHint.File, "*.blend")]
+    public string SourceBlendFile { get; set; } = "";
 }

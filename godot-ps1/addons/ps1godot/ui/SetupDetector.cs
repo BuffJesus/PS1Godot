@@ -106,6 +106,21 @@ public static class SetupDetector
             }
         }
 
+        // ── Blender ───────────────────────────────────────────────────
+        // Optional dependency — only the round-trip workflow ("Send to
+        // Blender" / opening the .blend) needs it. Same env-var-or-PATH
+        // shape as PCSX-Redux above.
+        string? blender = ResolveBlenderExe();
+        if (blender != null)
+        {
+            rows.Add(new Row("Blender", Status.Ok, TrimHome(blender)));
+        }
+        else
+        {
+            rows.Add(new Row("Blender", Status.Optional,
+                "Optional — needed for 'Send to Blender'. Set BLENDER_EXE or add Blender to PATH."));
+        }
+
         // ── psxsplash vendored submodule ───────────────────────────────
         // The vendor tree in psxsplash-main/ drags in a nugget submodule.
         // Zip-downloads of the repo arrive with the submodule empty,
@@ -122,6 +137,38 @@ public static class SetupDetector
         }
 
         return rows;
+    }
+
+    /// <summary>
+    /// Locate Blender via BLENDER_EXE env var, then PATH, then a couple
+    /// of conventional Windows install locations. Public so the
+    /// "Send to Blender" handler can use the same resolution logic.
+    /// </summary>
+    public static string? ResolveBlenderExe()
+    {
+        string? envPath = System.Environment.GetEnvironmentVariable("BLENDER_EXE");
+        if (!string.IsNullOrEmpty(envPath) && File.Exists(envPath)) return envPath;
+
+        string? onPath = FindOnPath("blender.exe") ?? FindOnPath("blender");
+        if (onPath != null) return onPath;
+
+        // Conventional install locations as a last resort. Authors who
+        // installed elsewhere should set BLENDER_EXE; we don't probe
+        // every drive letter.
+        var candidates = new[]
+        {
+            @"C:\Programs\Blender\blender.exe",
+            @"C:\Program Files\Blender Foundation\Blender 5.0\blender.exe",
+            @"C:\Program Files\Blender Foundation\Blender 4.5\blender.exe",
+            @"C:\Program Files\Blender Foundation\Blender 4.4\blender.exe",
+            @"C:\Program Files\Blender Foundation\Blender 4.3\blender.exe",
+            @"C:\Program Files\Blender Foundation\Blender 4.2\blender.exe",
+        };
+        foreach (var c in candidates)
+        {
+            if (File.Exists(c)) return c;
+        }
+        return null;
     }
 
     // Walks PATH looking for an exact filename match. Returns the first

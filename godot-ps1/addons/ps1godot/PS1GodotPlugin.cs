@@ -32,6 +32,7 @@ public partial class PS1GodotPlugin : EditorPlugin
     private const string WriteBlenderMetadataMenuLabel = "PS1Godot: Write Blender Metadata Sidecars";
     private const string PopulateMaterialsMenuLabel    = "PS1Godot: Populate PS1MaterialMetadata for Selected";
     private const string InferDefaultsMenuLabel        = "PS1Godot: Infer PS1 Defaults for Selected";
+    private const string SendToBlenderMenuLabel        = "PS1Godot: Send to Blender";
 
     // Default sidecar dir matches the Blender add-on default
     // (tools/blender-addon/.../properties.py: "ps1godot_assets/blender_sources").
@@ -65,6 +66,7 @@ public partial class PS1GodotPlugin : EditorPlugin
         AddToolMenuItem(WriteBlenderMetadataMenuLabel, Callable.From(OnWriteBlenderMetadata));
         AddToolMenuItem(PopulateMaterialsMenuLabel,    Callable.From(OnPopulateMaterials));
         AddToolMenuItem(InferDefaultsMenuLabel,        Callable.From(OnInferDefaults));
+        AddToolMenuItem(SendToBlenderMenuLabel,        Callable.From(OnSendToBlender));
 
         _triggerBoxGizmo = new PS1TriggerBoxGizmo();
         AddNode3DGizmoPlugin(_triggerBoxGizmo);
@@ -165,6 +167,7 @@ public partial class PS1GodotPlugin : EditorPlugin
         RemoveToolMenuItem(WriteBlenderMetadataMenuLabel);
         RemoveToolMenuItem(PopulateMaterialsMenuLabel);
         RemoveToolMenuItem(InferDefaultsMenuLabel);
+        RemoveToolMenuItem(SendToBlenderMenuLabel);
 
         SceneChanged -= OnSceneChanged;
         EditorInterface.Singleton.GetSelection().SelectionChanged -= OnEditorSelectionChanged;
@@ -1256,6 +1259,102 @@ public partial class PS1GodotPlugin : EditorPlugin
             }
         }
         return false;
+    }
+
+    // ── UX-B: "Send to Blender" — write sidecars + launch Blender ────
+    //
+    // Symmetric counterpart to the Blender-side "Export to Godot"
+    // button. One click does the round-trip-out half of the loop:
+    //   1. Write JSON sidecars from the active scene's PS1MeshInstance /
+    //      PS1MeshGroup state via BlenderMetadataWriter.
+    //   2. Launch Blender, opening the configured PS1Scene.SourceBlendFile
+    //      if any, with --python-expr running ps1godot.import_metadata so
+    //      the Blender-side state refreshes immediately.
+    //
+    // No SourceBlendFile? Launch Blender empty; the author opens the
+    // .blend manually and clicks "Import Metadata" in the addon. The
+    // sidecars still wrote successfully so the manual path works.
+    //
+    // No Blender on the system? Stop after step 1 and surface a hint.
+    // Same fall-through used by other Setup-detected deps.
+    private void OnSendToBlender()
+    {
+        var sceneRoot = EditorInterface.Singleton.GetEditedSceneRoot();
+        if (sceneRoot == null)
+        {
+            GD.PushError("[PS1Godot] No scene open — open a .tscn before Send to Blender.");
+            return;
+        }
+
+        // 1. Write sidecars (same path as the existing Tools menu item).
+        string sidecarDir = ProjectSettings.GlobalizePath(DefaultBlenderSidecarDir);
+        var write = Exporter.BlenderMetadataWriter.WriteScene(sceneRoot, sidecarDir);
+        GD.Print(
+            $"[PS1Godot] Send to Blender: {write.Written} sidecar(s) → {sidecarDir} " +
+            $"(skipped {write.Skipped}, new IDs {write.IdsGenerated}, errors {write.IoErrors}).");
+        if (write.IdsGenerated > 0)
+        {
+            GD.Print("[PS1Godot] Save the .tscn to persist the new asset_id / mesh_id values.");
+        }
+
+        // 2. Launch Blender if available.
+        string? blenderExe = UI.SetupDetector.ResolveBlenderExe();
+        if (blenderExe == null)
+        {
+            GD.PushWarning(
+                "[PS1Godot] Send to Blender: Blender executable not found. " +
+                "Set the BLENDER_EXE environment variable or install Blender to a conventional location. " +
+                "Sidecars were written; you can run 'Import Metadata' in the addon manually.");
+            return;
+        }
+
+        // PS1Scene.SourceBlendFile — when set, open that .blend so the
+        // import operator runs against the right scene. Otherwise launch
+        // Blender empty and the author opens the file themselves.
+        string? blendFile = null;
+        if (sceneRoot is PS1Scene ps1 && !string.IsNullOrEmpty(ps1.SourceBlendFile))
+        {
+            string abs = ProjectSettings.GlobalizePath(ps1.SourceBlendFile);
+            if (System.IO.File.Exists(abs))
+            {
+                blendFile = abs;
+            }
+            else
+            {
+                GD.PushWarning(
+                    $"[PS1Godot] Send to Blender: PS1Scene.SourceBlendFile = '{ps1.SourceBlendFile}' " +
+                    $"resolves to '{abs}' which does not exist. Launching Blender without an open file.");
+            }
+        }
+
+        // The --python-expr trick: run the import operator after Blender
+        // finishes loading. The addon must already be enabled in the
+        // user's Blender prefs for the op to be registered. If the
+        // expression fails (e.g. addon not installed), Blender still
+        // opens the .blend — author does the import manually.
+        var args = new System.Collections.Generic.List<string>();
+        if (blendFile != null) args.Add(blendFile);
+        args.Add("--python-expr");
+        args.Add("import bpy; bpy.app.timers.register(lambda: bpy.ops.ps1godot.import_metadata() and None, first_interval=0.5)");
+
+        try
+        {
+            int pid = (int)OS.CreateProcess(blenderExe, args.ToArray());
+            if (pid > 0)
+            {
+                GD.Print($"[PS1Godot] Launched Blender (pid {pid})" +
+                         (blendFile != null ? $" with '{blendFile}'" : "") +
+                         "; import operator queued to run on load.");
+            }
+            else
+            {
+                GD.PushError("[PS1Godot] Failed to launch Blender — OS.CreateProcess returned no PID.");
+            }
+        }
+        catch (System.Exception ex)
+        {
+            GD.PushError($"[PS1Godot] Failed to launch Blender: {ex.Message}");
+        }
     }
 
     private static bool HasVertexColors(Mesh? mesh)
