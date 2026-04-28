@@ -34,6 +34,12 @@ public partial class PS1GodotPlugin : EditorPlugin
     private const string InferDefaultsMenuLabel        = "PS1Godot: Infer PS1 Defaults for Selected";
     private const string SendToBlenderMenuLabel        = "PS1Godot: Send to Blender";
     private const string BakeVertexLightingMenuLabel   = "PS1Godot: Bake Vertex Lighting from Scene Lights";
+    private const string EditMeshInBlenderMenuLabel    = "PS1Godot: Edit Mesh in Blender";
+
+    // Where extracted .glb files land. Matches the Blender add-on's
+    // default `asset_subdir` so the round-trip back overwrites the
+    // same path and Godot's import scanner picks up the change.
+    private const string DefaultBlenderMeshDir = "res://ps1godot_assets/meshes/";
 
     // Default sidecar dir matches the Blender add-on default
     // (tools/blender-addon/.../properties.py: "ps1godot_assets/blender_sources").
@@ -69,6 +75,7 @@ public partial class PS1GodotPlugin : EditorPlugin
         AddToolMenuItem(InferDefaultsMenuLabel,        Callable.From(OnInferDefaults));
         AddToolMenuItem(SendToBlenderMenuLabel,        Callable.From(OnSendToBlender));
         AddToolMenuItem(BakeVertexLightingMenuLabel,   Callable.From(OnBakeVertexLighting));
+        AddToolMenuItem(EditMeshInBlenderMenuLabel,    Callable.From(OnEditMeshInBlender));
 
         _triggerBoxGizmo = new PS1TriggerBoxGizmo();
         AddNode3DGizmoPlugin(_triggerBoxGizmo);
@@ -171,6 +178,7 @@ public partial class PS1GodotPlugin : EditorPlugin
         RemoveToolMenuItem(InferDefaultsMenuLabel);
         RemoveToolMenuItem(SendToBlenderMenuLabel);
         RemoveToolMenuItem(BakeVertexLightingMenuLabel);
+        RemoveToolMenuItem(EditMeshInBlenderMenuLabel);
 
         SceneChanged -= OnSceneChanged;
         EditorInterface.Singleton.GetSelection().SelectionChanged -= OnEditorSelectionChanged;
@@ -1262,6 +1270,104 @@ public partial class PS1GodotPlugin : EditorPlugin
             }
         }
         return false;
+    }
+
+    // ── UX-C: extract Mesh from Godot, open in Blender ──────────────
+    //
+    // Godot → Blender geometry round-trip. Author selects one or more
+    // PS1MeshInstance(s), clicks once: their Mesh resources are
+    // exported as <mesh_id>.glb files at res://ps1godot_assets/meshes/
+    // (the same path Blender's "Export to Godot" writes back to), then
+    // Blender launches pointing at the first extracted file. Author
+    // edits → saves → uses Blender's "Export to Godot" → the same .glb
+    // gets overwritten → Godot's import scanner picks up the change.
+    //
+    // Honest limitation surfaced in the post-extract message: the
+    // PS1MeshInstance.Mesh field still references the OLD Mesh
+    // resource. After re-export, the new .glb produces a fresh
+    // PackedScene with a fresh Mesh resource — author drags the new
+    // mesh onto the Mesh slot manually to pick up the changes. Auto-
+    // rebind via .import config + meshes/save_to_file is a future
+    // enhancement; we ship the minimum tier first.
+    private void OnEditMeshInBlender()
+    {
+        var sceneRoot = EditorInterface.Singleton.GetEditedSceneRoot();
+        if (sceneRoot == null)
+        {
+            GD.PushError("[PS1Godot] No scene open — open a .tscn before extracting meshes.");
+            return;
+        }
+
+        var selection = EditorInterface.Singleton.GetSelection().GetSelectedNodes();
+        var targets = new System.Collections.Generic.List<PS1MeshInstance>();
+        foreach (var n in selection)
+        {
+            if (n is PS1MeshInstance pmi) targets.Add(pmi);
+        }
+        if (targets.Count == 0)
+        {
+            GD.PushError("[PS1Godot] Edit Mesh in Blender: select one or more PS1MeshInstance nodes first.");
+            return;
+        }
+
+        string outputDir = ProjectSettings.GlobalizePath(DefaultBlenderMeshDir);
+        var extracted = new System.Collections.Generic.List<string>();
+        int idsGenerated = 0;
+        foreach (var pmi in targets)
+        {
+            bool wasEmpty = string.IsNullOrEmpty(pmi.MeshId);
+            var result = Exporter.MeshExtractor.ExtractToGlb(pmi, outputDir);
+            if (!result.Success)
+            {
+                GD.PushWarning($"[PS1Godot] Extract failed for '{pmi.Name}': {result.ErrorMessage}");
+                continue;
+            }
+            if (wasEmpty) idsGenerated++;
+            extracted.Add(result.OutputPath);
+            GD.Print($"[PS1Godot]   extracted {pmi.Name} → {result.OutputPath}");
+        }
+
+        if (extracted.Count == 0)
+        {
+            GD.PushError("[PS1Godot] No meshes extracted — see warnings above.");
+            return;
+        }
+
+        if (idsGenerated > 0)
+        {
+            GD.Print($"[PS1Godot] {idsGenerated} mesh_id(s) auto-generated. Save the .tscn to persist.");
+        }
+
+        // Launch Blender on the first extracted .glb. If the user
+        // selected multiple meshes, the others sit on disk waiting
+        // for the author to open them in subsequent Blender sessions.
+        string? blenderExe = UI.SetupDetector.ResolveBlenderExe();
+        if (blenderExe == null)
+        {
+            GD.PushWarning(
+                "[PS1Godot] Blender not found (set BLENDER_EXE or install to a conventional path). " +
+                $"Extracted .glb(s) are ready at {outputDir}; open manually.");
+            return;
+        }
+
+        try
+        {
+            int pid = (int)OS.CreateProcess(blenderExe, new[] { extracted[0] });
+            if (pid > 0)
+            {
+                GD.Print($"[PS1Godot] Launched Blender on {extracted[0]} (pid {pid}).");
+                GD.Print("[PS1Godot] Edit, then click 'Export to Godot' in the addon to send back. " +
+                         "Drag the newly-imported Mesh onto this PS1MeshInstance's Mesh slot to pick up the changes.");
+            }
+            else
+            {
+                GD.PushError("[PS1Godot] Failed to launch Blender — OS.CreateProcess returned no PID.");
+            }
+        }
+        catch (System.Exception ex)
+        {
+            GD.PushError($"[PS1Godot] Failed to launch Blender: {ex.Message}");
+        }
     }
 
     // ── Phase L1: bake vertex lighting from scene lights ────────────
