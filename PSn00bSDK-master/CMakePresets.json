@@ -1,0 +1,44 @@
+{
+	"version": 3,
+	"cmakeMinimumRequired": {
+		"major": 3,
+		"minor": 21,
+		"patch": 0
+	},
+	"configurePresets": [
+		{
+			"name":        "default",
+			"displayName": "Default configuration",
+			"description": "Use this preset when building the SDK for local installation.",
+			"generator":   "Ninja",
+			"binaryDir":   "${sourceDir}/build",
+			"warnings": {
+				"dev": false
+			}
+		},
+		{
+			"name":        "package",
+			"displayName": "Installer package",
+			"description": "Use this preset to build installer packages via CPack.",
+			"inherits":    "default",
+			"cacheVariables": {
+				"CMAKE_BUILD_TYPE": "Release",
+				"SKIP_EXAMPLES":    "ON"
+			}
+		},
+		{
+			"name":        "ci",
+			"displayName": "CI build",
+			"description": "This preset is used by GitHub Actions to build PSn00bSDK.",
+			"inherits":    "default",
+			"binaryDir":   "${sourceDir}/../build",
+			"cacheVariables": {
+				"CMAKE_BUILD_TYPE":     "Release",
+				"LIBPSN00B_GENERATOR":  "Ninja",
+				"PSN00BSDK_TARGET":     "$env{GCC_TARGET}",
+				"PSN00BSDK_GIT_TAG":    "$env{GITHUB_REF_NAME}",
+				"PSN00BSDK_GIT_COMMIT": "$env{GITHUB_SHA}"
+			}
+		}
+	]
+}
