@@ -102,22 +102,151 @@ Dictionary PS1LuaScriptLanguage::_get_public_constants() const { return Dictiona
 TypedArray<Dictionary> PS1LuaScriptLanguage::_get_public_annotations() const { return TypedArray<Dictionary>(); }
 
 TypedArray<Dictionary> PS1LuaScriptLanguage::_get_built_in_templates(const StringName &p_object) const {
-	Dictionary t;
-	t["inherit"] = "Node";
-	t["name"] = "Empty";
-	t["description"] = "Empty PS1 Lua behavior script.";
-	t["content"] = String(
-			"-- _CLASS_NAME_.lua\n"
-			"function onEnable(self)\n"
-			"end\n"
-			"\n"
-			"function onUpdate(self, dt)\n"
-			"end\n");
-	t["id"] = 0;
-	t["origin"] = 0;
-
+	// Templates surfaced in Godot's "New Script" dialog under PS1 Lua.
+	// Each one is a self-contained starter that compiles + runs as-is
+	// against the runtime API. Keep the bodies tight — authors will
+	// customise them, the goal is "doesn't blank-page-stare".
 	TypedArray<Dictionary> arr;
-	arr.push_back(t);
+
+	auto make_template = [&](const char *name, const char *desc, const char *content, int id) {
+		Dictionary t;
+		t["inherit"] = "Node";
+		t["name"] = name;
+		t["description"] = desc;
+		t["content"] = String(content);
+		t["id"] = id;
+		t["origin"] = 0;
+		arr.push_back(t);
+	};
+
+	make_template("Empty",
+		"Empty PS1 Lua behavior script.",
+		"-- _CLASS_NAME_.lua\n"
+		"function onEnable(self)\n"
+		"end\n"
+		"\n"
+		"function onUpdate(self, dt)\n"
+		"end\n",
+		0);
+
+	make_template("Input handler",
+		"Reads stick + button input every frame and moves the owner. Good base for player-style controllers.",
+		"-- _CLASS_NAME_.lua\n"
+		"-- Player-style input handler. Stick moves on XZ; Cross jumps.\n"
+		"\n"
+		"local moveSpeed = 4   -- world units per second\n"
+		"\n"
+		"function onUpdate(self, dt)\n"
+		"    if not Controls.IsEnabled() then return end\n"
+		"\n"
+		"    -- Input.GetAnalog(0) is the left stick, returns -1..+1 each axis\n"
+		"    -- (already normalised by the runtime).\n"
+		"    local sx, sy = Input.GetAnalog(0)\n"
+		"    if math.abs(sx) > 0.1 or math.abs(sy) > 0.1 then\n"
+		"        local p = Entity.GetPosition(self)\n"
+		"        p.x = p.x + sx * moveSpeed * dt\n"
+		"        p.z = p.z - sy * moveSpeed * dt   -- stick-up pushes -Z\n"
+		"        Entity.SetPosition(self, p)\n"
+		"    end\n"
+		"\n"
+		"    if Input.IsPressed(Input.CROSS) then\n"
+		"        Audio.PlaySfx(\"jump\")\n"
+		"    end\n"
+		"end\n",
+		1);
+
+	make_template("Trigger volume",
+		"Fires a one-shot effect when the player enters this object's proximity. Useful for cutscene triggers, alarms, doors.",
+		"-- _CLASS_NAME_.lua\n"
+		"-- Proximity trigger: fires once when the player gets close enough.\n"
+		"\n"
+		"local triggerRadius = 3.0\n"
+		"local fired = false\n"
+		"\n"
+		"function onUpdate(self, dt)\n"
+		"    if fired then return end\n"
+		"\n"
+		"    local me = Entity.GetPosition(self)\n"
+		"    local pl = Player.GetPosition()\n"
+		"    local dx = me.x - pl.x\n"
+		"    local dz = me.z - pl.z\n"
+		"    if dx*dx + dz*dz < triggerRadius*triggerRadius then\n"
+		"        fired = true\n"
+		"        Debug.Log(\"trigger fired\")\n"
+		"        -- One-shot effects go here:\n"
+		"        -- Audio.PlaySfx(\"alarm\")\n"
+		"        -- Cutscene.Play(\"intro\")\n"
+		"    end\n"
+		"end\n",
+		2);
+
+	make_template("Animated prop",
+		"Plays an idle animation on enable; switches to an action animation on interact.",
+		"-- _CLASS_NAME_.lua\n"
+		"-- Animated prop: idle loop + action one-shot on interact.\n"
+		"\n"
+		"local idleClip   = \"idle\"\n"
+		"local actionClip = \"open\"\n"
+		"\n"
+		"function onEnable(self)\n"
+		"    Animation.Play(idleClip, { loop = true })\n"
+		"end\n"
+		"\n"
+		"function onInteract(self)\n"
+		"    Animation.Stop(idleClip)\n"
+		"    Animation.Play(actionClip, { onComplete = function()\n"
+		"        Animation.Play(idleClip, { loop = true })\n"
+		"    end })\n"
+		"end\n",
+		3);
+
+	make_template("Dialog driver",
+		"Steps through a list of dialog lines on Cross-button press. Wires up to a UI canvas named 'dialog_box' with a Text element 'line_text'.",
+		"-- _CLASS_NAME_.lua\n"
+		"-- Dialog driver. Author a UICanvas named 'dialog_box' with a\n"
+		"-- Text element named 'line_text'; this script steps through\n"
+		"-- the lines on Cross press.\n"
+		"\n"
+		"local lines = {\n"
+		"    \"Hello, traveler.\",\n"
+		"    \"Have you seen the moon tonight?\",\n"
+		"    \"It is full of strange light...\",\n"
+		"}\n"
+		"local cursor    = 0\n"
+		"local canvasIdx = -1\n"
+		"local textElem  = -1\n"
+		"\n"
+		"function onCreate(self)\n"
+		"    canvasIdx = UI.FindCanvas(\"dialog_box\")\n"
+		"    if canvasIdx >= 0 then\n"
+		"        textElem = UI.FindElement(canvasIdx, \"line_text\")\n"
+		"        UI.SetCanvasVisible(canvasIdx, false)\n"
+		"    end\n"
+		"end\n"
+		"\n"
+		"function onInteract(self)\n"
+		"    advance()\n"
+		"end\n"
+		"\n"
+		"function onUpdate(self, dt)\n"
+		"    if cursor > 0 and Input.IsPressed(Input.CROSS) then\n"
+		"        advance()\n"
+		"    end\n"
+		"end\n"
+		"\n"
+		"function advance()\n"
+		"    if canvasIdx < 0 or textElem < 0 then return end\n"
+		"    cursor = cursor + 1\n"
+		"    if cursor > #lines then\n"
+		"        UI.SetCanvasVisible(canvasIdx, false)\n"
+		"        cursor = 0\n"
+		"        return\n"
+		"    end\n"
+		"    UI.SetCanvasVisible(canvasIdx, true)\n"
+		"    UI.SetText(textElem, lines[cursor])\n"
+		"end\n",
+		4);
+
 	return arr;
 }
 

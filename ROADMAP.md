@@ -1400,10 +1400,14 @@ The Blender ↔ Godot pipeline is now first-class in both directions:
       `luaapi.hh` at every build. Hover tooltips + Ctrl-Click lookup
       both work as of 2026-04-27 (commit 1bcd107 fixed the parser
       bugs that blanked out tooltips).
-- [ ] **More built-in PS1Lua templates** — extend
-      `PS1LuaScriptLanguage::_get_built_in_templates` from one stub to a
-      handful (input handler, trigger callback, animated prop, dialog
-      driver). Pulls from `psxsplash-main/src/luaapi.hh` patterns.
+- [x] **More built-in PS1Lua templates** *(shipped 2026-04-27)* —
+      `PS1LuaScriptLanguage::_get_built_in_templates` now returns five
+      ready-to-run starters: Empty, Input handler (stick + Cross-button
+      input → movement + jump SFX), Trigger volume (proximity-fired
+      one-shot), Animated prop (idle loop + onInteract action with
+      auto-return to idle), Dialog driver (canvas + text-element wiring
+      with Cross-step). Authors picking "New Script" in Godot's editor
+      see all five and can pick one matching the node's role.
 - [ ] Lua hot-swap: re-exporting a single `.lua` while the emulator is running
       re-uploads only that bytecode via PCdrv.
 - [ ] Project template (`PS1 Game`) installable into Godot's project manager.
