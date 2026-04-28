@@ -662,6 +662,15 @@ public sealed class SceneData
     // children. Lua resolves by name via UI.FindCanvas.
     public List<UICanvasRecord> UICanvases { get; } = new();
 
+    // Index into UICanvases of the canvas marked Residency=LoadingScreen,
+    // or -1 if no loading screen was authored. The runtime expects this
+    // canvas to be serialized into a separate scene_N.loading LoaderPack
+    // file (NOT the main splashpack), so SplashpackWriter / LoaderPackWriter
+    // need to know which canvas to extract. Authors mark this on
+    // PS1UICanvas.Residency; SceneCollector validates the canvas has a
+    // Progress element named "loading" before stamping the index.
+    public int LoadingScreenCanvasIndex { get; set; } = -1;
+
     // Custom UI fonts referenced by elements. Deduped by resource
     // identity during collection. Max 2 custom fonts per splashpack
     // (runtime cap UI_MAX_FONTS - 1 reserved for the built-in system

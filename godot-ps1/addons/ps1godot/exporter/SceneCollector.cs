@@ -887,6 +887,7 @@ public static class SceneCollector
         var models = new System.Collections.Generic.List<UIModelRecord>();
         CollectUIModels(canvas, models, data, name);
 
+        int newCanvasIndex = data.UICanvases.Count;
         data.UICanvases.Add(new UICanvasRecord
         {
             Name = name,
@@ -898,6 +899,33 @@ public static class SceneCollector
         });
         GD.Print($"[PS1Godot] UICanvas '{name}': residency={canvas.Residency}, " +
                  $"{elements.Count} elements, {models.Count} 3D models");
+
+        // Loading-screen contract: a canvas marked Residency=LoadingScreen
+        // exports into a separate scene_N.loading LoaderPack file the
+        // runtime reads BEFORE the main splashpack. Validation:
+        //   - At most one LoadingScreen canvas per scene (later ones win,
+        //     warn loudly so authors notice the misconfiguration).
+        // The runtime additionally expects a Progress-type element named
+        // "loading" so it can drive the percentage during file load — but
+        // PS1UIElementType only exposes Image/Box/Text today, so progress
+        // bars must come through a future element-type addition. Until
+        // that lands, LoadingScreen canvases render their static elements
+        // but the bar stays frozen.
+        if (canvas.Residency == PS1UIResidency.LoadingScreen)
+        {
+            if (data.LoadingScreenCanvasIndex >= 0)
+            {
+                string prev = data.UICanvases[data.LoadingScreenCanvasIndex].Name;
+                GD.PushWarning(
+                    $"[PS1Godot] Loading screen: scene already has a LoadingScreen canvas " +
+                    $"('{prev}'); replacing with '{name}'. Author at most one LoadingScreen " +
+                    $"canvas per scene — runtime only reads the first one in the loader pack.");
+            }
+            data.LoadingScreenCanvasIndex = newCanvasIndex;
+            GD.Print($"[PS1Godot] Loading screen detected: '{name}' " +
+                     $"({elements.Count} elements). LoaderPack writer + Progress " +
+                     $"element type still TODO — won't ship a .loading file yet.");
+        }
     }
 
     // VRAM slot assignments for custom fonts. Slot 0 is the runtime's

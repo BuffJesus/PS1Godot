@@ -1415,7 +1415,28 @@ The Blender ↔ Godot pipeline is now first-class in both directions:
       **Amendment (`REF-GAP-10`):** disc-layout-aware. Place adjacent-chunk
       archives physically close on the disc to reduce seeks. Only matters
       once Phase 2.5 chunk streaming is real.
-- [ ] Loading screens (uses existing PSXCanvas path; just a convention).
+- [ ] **Loading screens** *(authoring contract landed 2026-04-27,
+      LoaderPack file emitter still TODO)*. Runtime side is fully
+      implemented (`psxsplash-main/src/loadingscreen.{cpp,hh}` reads
+      a `scene_N.loading` "LP"-magic LoaderPack with header + atlases
+      + CLUTs + fonts + 1 canvas; renders to both framebuffers; updates
+      a Progress element named "loading" during the actual file load).
+      Godot side now exposes a `PS1UIResidency.LoadingScreen` enum
+      value + detection in `SceneCollector.EmitUICanvas` that stamps
+      `SceneData.LoadingScreenCanvasIndex` and warns if multiple
+      canvases claim the role. Two pieces still pending before
+      authors actually see a loading screen:
+        - Add `PS1UIElementType.Progress` (currently only Image / Box /
+          Text are exposed — runtime supports Progress as type 3 with
+          full setProgress / setProgressColors plumbing, just not
+          surfaced in Godot yet).
+        - `LoaderPackWriter.cs` that takes the LoadingScreen canvas
+          + its referenced fonts / atlases / CLUTs and emits the
+          `scene_N.loading` file alongside the main splashpack.
+          The header is 16 bytes; canvas/font/atlas tables reuse the
+          same layout SplashpackWriter already serialises for the main
+          UI section, so the bulk of the work is extracting that
+          serialiser into a reusable helper.
 
 ### Graph authoring framework (PS1Graph)
 

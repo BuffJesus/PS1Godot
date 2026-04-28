@@ -13,6 +13,12 @@ namespace PS1Godot;
 //     opens; unloaded on close. Examples: inventory, status screen.
 //   - LoadOnDemand: loaded when Lua calls UI.LoadCanvas(name). Catches
 //     everything between — rare dialog prompts, end-of-area popups.
+//   - LoadingScreen: shown DURING scene loads (between the previous
+//     scene's teardown and the new scene's first frame). Exported into
+//     a separate `scene_N.loading` LoaderPack file the runtime reads
+//     before the main splashpack. Must contain a Progress element
+//     named exactly "loading" so the runtime can drive the percentage
+//     during file load. Author one canvas per scene at most.
 // MVP exporter encodes this in the canvas flags byte upper bits; the
 // runtime currently only reads bit 0 (visible). Runtime patch to gate
 // font VRAM upload by residency is a follow-up.
@@ -21,6 +27,7 @@ public enum PS1UIResidency
     Gameplay = 0,
     MenuOnly = 1,
     LoadOnDemand = 2,
+    LoadingScreen = 3,
 }
 
 [Tool]
