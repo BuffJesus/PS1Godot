@@ -524,7 +524,12 @@ public partial class PS1GodotPlugin : EditorPlugin
         foreach (var obj in sceneData.Objects)
         {
             totalTris += obj.Mesh.Triangles.Count;
-            var p = obj.Node.GlobalPosition;
+            // Static-batch synthetic nodes are parentless. Godot's
+            // GlobalPosition returns Vector3.Zero for not-in-tree nodes,
+            // hiding the actual anchor in this diagnostic. Use the local
+            // Position in that case so the printed coords match what gets
+            // written to the splashpack.
+            var p = obj.Node.IsInsideTree() ? obj.Node.GlobalPosition : obj.Node.Position;
             // PS1-specific fields only exist on PS1MeshInstance; auto-detected
             // raw MeshInstance3D avatars (FBX characters under PS1Player) get
             // 8bpp + no collision defaults, reported here as "(auto)".

@@ -52,6 +52,12 @@ namespace PS1Godot.Exporter;
 // KeepSeparate for streaming-cell granularity anyway).
 public static class StaticBatchOptimizer
 {
+    // Slot D1 kill-switch. When chasing a regression, flip to `false`
+    // to bypass the optimizer entirely so each member exports as its
+    // own GameObject. The static-batch GO iteration savings disappear,
+    // but you get unambiguous "is this the optimizer or not" signal.
+    private const bool s_enabled = false;
+
     /// <summary>
     /// Bucket eligible static meshes and replace each multi-member
     /// bucket with a single merged SceneObject. Mutates data.Objects
@@ -59,6 +65,11 @@ public static class StaticBatchOptimizer
     /// </summary>
     public static void Optimize(SceneData data)
     {
+        if (!s_enabled)
+        {
+            GD.Print("[PS1Godot] Static batch: DISABLED via s_enabled=false (kill-switch).");
+            return;
+        }
         if (data.Objects == null || data.Objects.Count == 0) return;
 
         var pinned = new List<SceneObject>();
@@ -161,6 +172,17 @@ public static class StaticBatchOptimizer
 
     // ── Bucket key ───────────────────────────────────────────────────
 
+    // Members of one bucket merge into a single batch with vertex
+    // positions stored as anchor-local fp12 in int16 (~±32 Godot units
+    // of headroom from the anchor at gteScaling=4). If the bucket spans
+    // a wider radius than that, far verts clamp and render off-screen.
+    // Quantising the world AABB centre to a coarse grid forces members
+    // farther apart than the cell size into different buckets. Cell
+    // size = 24m gives ~12m of headroom either side of the anchor —
+    // safely under the int16 envelope, with room for member-internal
+    // mesh extent on top.
+    private const float SpatialCellSize = 24.0f;
+
     /// <summary>
     /// Build a stable string key for the bucket this SceneObject
     /// belongs to. Members with the same key merge into a single
@@ -184,13 +206,34 @@ public static class StaticBatchOptimizer
             if (firstMeta != null) texturePageId = firstMeta.TexturePageId ?? "";
         }
 
+        // Spatial bucket: world AABB centre quantised to SpatialCellSize.
+        // Falls back to the node's world position when the AABB is
+        // unavailable / degenerate so single-vertex meshes still group.
+        Vector3 worldCentre;
+        if (obj.LocalAabb.Size != Vector3.Zero && obj.Node.IsInsideTree())
+        {
+            var memberWorld = obj.Node.GlobalTransform;
+            var local = obj.LocalAabb;
+            worldCentre = memberWorld * (local.Position + local.Size * 0.5f);
+        }
+        else
+        {
+            worldCentre = obj.Node.IsInsideTree()
+                ? obj.Node.GlobalPosition
+                : obj.Node.Position;
+        }
+        int gx = Mathf.FloorToInt(worldCentre.X / SpatialCellSize);
+        int gy = Mathf.FloorToInt(worldCentre.Y / SpatialCellSize);
+        int gz = Mathf.FloorToInt(worldCentre.Z / SpatialCellSize);
+
         return string.Join("|",
             obj.DrawPhase.ToString(),
             obj.ShadingMode.ToString(),
             obj.AlphaMode.ToString(),
             obj.AtlasGroup.ToString(),
             obj.Translucent ? "T" : "O",   // legacy Translucent bool — must match for batchability
-            texturePageId);
+            texturePageId,
+            $"{gx},{gy},{gz}");
     }
 
     // ── Merge ────────────────────────────────────────────────────────
@@ -203,6 +246,45 @@ public static class StaticBatchOptimizer
         // the merged mesh's vertices stay symmetric around 0 in
         // anchor-local space (kindest to fp12 short range).
         Vector3 anchor = ComputeWorldAabbCentre(members);
+
+        // Safety guard: PSX vertex positions are int16 fp12, capping
+        // anchor-local extent at ~32 Godot units (32767 / 4096 * gteScaling).
+        // The spatial bucket key keeps members within one cell, but a
+        // single member with an oversize local AABB (long floor / wall)
+        // can still push the combined extent past the envelope. Bail
+        // out here and pass members through individually rather than
+        // shipping clamped verts that render as scrambled geometry.
+        float safeRadius = 32767.0f / PSXTrig.FixedScale * data.GteScaling - 0.5f;
+        Vector3 worldMin = new(float.MaxValue, float.MaxValue, float.MaxValue);
+        Vector3 worldMax = new(float.MinValue, float.MinValue, float.MinValue);
+        foreach (var member in members)
+        {
+            var mw = member.Node.GlobalTransform;
+            var laabb = member.LocalAabb;
+            for (int c = 0; c < 8; c++)
+            {
+                var corner = new Vector3(
+                    (c & 1) != 0 ? laabb.Position.X + laabb.Size.X : laabb.Position.X,
+                    (c & 2) != 0 ? laabb.Position.Y + laabb.Size.Y : laabb.Position.Y,
+                    (c & 4) != 0 ? laabb.Position.Z + laabb.Size.Z : laabb.Position.Z);
+                Vector3 wc = mw * corner;
+                worldMin = new Vector3(Mathf.Min(worldMin.X, wc.X), Mathf.Min(worldMin.Y, wc.Y), Mathf.Min(worldMin.Z, wc.Z));
+                worldMax = new Vector3(Mathf.Max(worldMax.X, wc.X), Mathf.Max(worldMax.Y, wc.Y), Mathf.Max(worldMax.Z, wc.Z));
+            }
+        }
+        float maxExtent = Mathf.Max(Mathf.Max(
+            Mathf.Max(Mathf.Abs(worldMax.X - anchor.X), Mathf.Abs(anchor.X - worldMin.X)),
+            Mathf.Max(Mathf.Abs(worldMax.Y - anchor.Y), Mathf.Abs(anchor.Y - worldMin.Y))),
+            Mathf.Max(Mathf.Abs(worldMax.Z - anchor.Z), Mathf.Abs(anchor.Z - worldMin.Z)));
+        if (maxExtent > safeRadius)
+        {
+            GD.PushWarning(
+                $"[PS1Godot] Static batch '{keyForName}' would overflow int16 fp12 envelope " +
+                $"(extent {maxExtent:F1}m > safe {safeRadius:F1}m at gteScaling={data.GteScaling}). " +
+                $"Passing {members.Count} member(s) through unmerged. " +
+                $"Likely cause: an oversize floor/wall mesh; split it or shrink SpatialCellSize.");
+            return null;
+        }
 
         var combinedTris = new List<Tri>();
         var combinedTexIndices = new List<int>();
@@ -306,11 +388,20 @@ public static class StaticBatchOptimizer
     private static PSXVertex TransformVertex(PSXVertex v, Transform3D memberWorld,
                                              Basis memberRot, Vector3 anchor, float gteScaling)
     {
-        // Position: fp12 short → Godot member-local units → world → anchor-local.
+        // Coordinate frames: PSXMesh.cs stored these verts as
+        //   vx =  pos.X,  vy = -pos.Y,  vz = -pos.Z   (PSX is left-handed,
+        // Godot right-handed; SplashpackWriter applies the same negation
+        // to GO position + AABB at write time). To run a Godot Transform3D
+        // through the position we must first flip Y/Z back to Godot space,
+        // then flip again on re-encode so the runtime renderer sees the
+        // same convention as a non-batched mesh. Skipping these flips
+        // happens to cancel for identity-rotation members but mangles
+        // anything rotated — walls, doors, props — and the broken verts
+        // get clamped off-camera.
         Vector3 memberLocal = new(
-            (v.vx / PSXTrig.FixedScale) * gteScaling,
-            (v.vy / PSXTrig.FixedScale) * gteScaling,
-            (v.vz / PSXTrig.FixedScale) * gteScaling);
+             (v.vx / PSXTrig.FixedScale) * gteScaling,
+            -(v.vy / PSXTrig.FixedScale) * gteScaling,
+            -(v.vz / PSXTrig.FixedScale) * gteScaling);
         Vector3 world = memberWorld * memberLocal;
         Vector3 anchorLocal = world - anchor;
 
@@ -318,21 +409,22 @@ public static class StaticBatchOptimizer
         // vectors stored as (component × 4096). Don't normalize after —
         // the member's basis may include uniform scale we want to keep
         // (the existing pipeline already normalizes during PSXMesh
-        // construction; this is a re-rotation only).
+        // construction; this is a re-rotation only). Same Y/Z flip
+        // dance as positions.
         Vector3 memberLocalN = new(
-            v.nx / PSXTrig.FixedScale,
-            v.ny / PSXTrig.FixedScale,
-            v.nz / PSXTrig.FixedScale);
+             v.nx / PSXTrig.FixedScale,
+            -v.ny / PSXTrig.FixedScale,
+            -v.nz / PSXTrig.FixedScale);
         Vector3 worldN = memberRot * memberLocalN;
 
         return new PSXVertex
         {
-            vx = PSXTrig.ConvertCoordinateToPSX(anchorLocal.X, gteScaling),
-            vy = PSXTrig.ConvertCoordinateToPSX(anchorLocal.Y, gteScaling),
-            vz = PSXTrig.ConvertCoordinateToPSX(anchorLocal.Z, gteScaling),
-            nx = PSXTrig.ConvertToFixed12(worldN.X),
-            ny = PSXTrig.ConvertToFixed12(worldN.Y),
-            nz = PSXTrig.ConvertToFixed12(worldN.Z),
+            vx = PSXTrig.ConvertCoordinateToPSX( anchorLocal.X, gteScaling),
+            vy = PSXTrig.ConvertCoordinateToPSX(-anchorLocal.Y, gteScaling),
+            vz = PSXTrig.ConvertCoordinateToPSX(-anchorLocal.Z, gteScaling),
+            nx = PSXTrig.ConvertToFixed12( worldN.X),
+            ny = PSXTrig.ConvertToFixed12(-worldN.Y),
+            nz = PSXTrig.ConvertToFixed12(-worldN.Z),
             u = v.u, v = v.v,
             r = v.r, g = v.g, b = v.b,
         };

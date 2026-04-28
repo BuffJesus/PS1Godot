@@ -1886,14 +1886,21 @@ public static class SplashpackWriter
         long polygonsOffsetPos = w.BaseStream.Position;
         w.Write((uint)0); // polygonsOffset placeholder
 
+        // Synthetic static-batch nodes are parentless; Godot's Global*
+        // accessors return identity for not-in-tree nodes, dropping the
+        // anchor and rendering the batch at world (0,0,0). Fall back to
+        // the local Transform (which is what the optimizer set) in that
+        // case. Real scene-tree nodes still use Global* for nested xforms.
+        Transform3D xform = obj.Node.IsInsideTree() ? obj.Node.GlobalTransform : obj.Node.Transform;
+
         // Position: psyqo::Vec3 = 3 × int32. Godot → PSX: negate Y and Z.
-        var pos = obj.Node.GlobalPosition;
+        Vector3 pos = xform.Origin;
         w.Write(PSXTrig.ConvertWorldToFixed12( pos.X / gteScaling));
         w.Write(PSXTrig.ConvertWorldToFixed12(-pos.Y / gteScaling));
         w.Write(PSXTrig.ConvertWorldToFixed12(-pos.Z / gteScaling));
 
         // Rotation: 3×3 int32 matrix
-        Quaternion q = obj.Node.GlobalBasis.GetRotationQuaternion();
+        Quaternion q = xform.Basis.GetRotationQuaternion();
         int[,] rot = PSXTrig.ConvertRotationToPSXMatrix(q);
         for (int r = 0; r < 3; r++)
             for (int c = 0; c < 3; c++)
@@ -1934,7 +1941,10 @@ public static class SplashpackWriter
         Vector3 wmin = new(float.MaxValue, float.MaxValue, float.MaxValue);
         Vector3 wmax = new(float.MinValue, float.MinValue, float.MinValue);
 
-        var xform = obj.Node.GlobalTransform;
+        // Same parentless-synthetic guard as WriteGameObjectEntry: synthetic
+        // static-batch nodes need the local transform since they're not in
+        // the tree.
+        var xform = obj.Node.IsInsideTree() ? obj.Node.GlobalTransform : obj.Node.Transform;
         for (int i = 0; i < 8; i++)
         {
             var corner = new Vector3(
