@@ -16,7 +16,8 @@ public sealed class PSXMesh
 
     public static PSXMesh FromGodotMesh(MeshInstance3D node, float gteScaling,
         PS1MeshInstance.ColorMode colorMode, Color flatColor,
-        int[] surfaceTextureIndices, List<PSXTexture> textures)
+        int[] surfaceTextureIndices, List<PSXTexture> textures,
+        Color[]? bakedColorsSurface0 = null)
     {
         var psx = new PSXMesh();
         var mesh = node.Mesh;
@@ -129,11 +130,29 @@ public sealed class PSXMesh
                 Vector2 uv1 = uvs.Length > i1 ? uvs[i1] : Vector2.Zero;
                 Vector2 uv2 = uvs.Length > i2 ? uvs[i2] : Vector2.Zero;
 
+                // Phase L1: BakedColors override is per-vertex on
+                // surface 0 only. When populated + length matches,
+                // we look up each vertex's baked color and feed
+                // that to MakeVertex instead of the flat bytes.
+                bool useBaked0 = s == 0
+                    && bakedColorsSurface0 != null
+                    && bakedColorsSurface0.Length == verts.Length;
+
+                (byte r0, byte g0, byte b0) = useBaked0
+                    ? PSXBytesFromColor(bakedColorsSurface0![i0])
+                    : (rByte, gByte, bByte);
+                (byte r1, byte g1, byte b1) = useBaked0
+                    ? PSXBytesFromColor(bakedColorsSurface0![i1])
+                    : (rByte, gByte, bByte);
+                (byte r2, byte g2, byte b2) = useBaked0
+                    ? PSXBytesFromColor(bakedColorsSurface0![i2])
+                    : (rByte, gByte, bByte);
+
                 psx.Triangles.Add(new Tri
                 {
-                    v0 = MakeVertex(p0, normals.Length > i0 ? normals[i0] : Vector3.Up, uv0, tex, gteScaling, rByte, gByte, bByte),
-                    v1 = MakeVertex(p1, normals.Length > i1 ? normals[i1] : Vector3.Up, uv1, tex, gteScaling, rByte, gByte, bByte),
-                    v2 = MakeVertex(p2, normals.Length > i2 ? normals[i2] : Vector3.Up, uv2, tex, gteScaling, rByte, gByte, bByte),
+                    v0 = MakeVertex(p0, normals.Length > i0 ? normals[i0] : Vector3.Up, uv0, tex, gteScaling, r0, g0, b0),
+                    v1 = MakeVertex(p1, normals.Length > i1 ? normals[i1] : Vector3.Up, uv1, tex, gteScaling, r1, g1, b1),
+                    v2 = MakeVertex(p2, normals.Length > i2 ? normals[i2] : Vector3.Up, uv2, tex, gteScaling, r2, g2, b2),
                     TextureIndex = texIdx,
                 });
             }
@@ -203,6 +222,15 @@ public sealed class PSXMesh
                 TextureIndex = texIdx,
             });
         }
+    }
+
+    private static (byte r, byte g, byte b) PSXBytesFromColor(Color c)
+    {
+        // PSXTrig.ColorChannelToPSX clamps to [0, 255] and rounds.
+        // Same conversion the rest of the pipeline uses for FlatColor.
+        return (PSXTrig.ColorChannelToPSX(c.R),
+                PSXTrig.ColorChannelToPSX(c.G),
+                PSXTrig.ColorChannelToPSX(c.B));
     }
 
     private static PSXVertex MakeVertex(Vector3 pos, Vector3 normal, Vector2 uv, PSXTexture? tex,

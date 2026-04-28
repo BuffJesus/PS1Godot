@@ -33,6 +33,7 @@ public partial class PS1GodotPlugin : EditorPlugin
     private const string PopulateMaterialsMenuLabel    = "PS1Godot: Populate PS1MaterialMetadata for Selected";
     private const string InferDefaultsMenuLabel        = "PS1Godot: Infer PS1 Defaults for Selected";
     private const string SendToBlenderMenuLabel        = "PS1Godot: Send to Blender";
+    private const string BakeVertexLightingMenuLabel   = "PS1Godot: Bake Vertex Lighting from Scene Lights";
 
     // Default sidecar dir matches the Blender add-on default
     // (tools/blender-addon/.../properties.py: "ps1godot_assets/blender_sources").
@@ -67,6 +68,7 @@ public partial class PS1GodotPlugin : EditorPlugin
         AddToolMenuItem(PopulateMaterialsMenuLabel,    Callable.From(OnPopulateMaterials));
         AddToolMenuItem(InferDefaultsMenuLabel,        Callable.From(OnInferDefaults));
         AddToolMenuItem(SendToBlenderMenuLabel,        Callable.From(OnSendToBlender));
+        AddToolMenuItem(BakeVertexLightingMenuLabel,   Callable.From(OnBakeVertexLighting));
 
         _triggerBoxGizmo = new PS1TriggerBoxGizmo();
         AddNode3DGizmoPlugin(_triggerBoxGizmo);
@@ -168,6 +170,7 @@ public partial class PS1GodotPlugin : EditorPlugin
         RemoveToolMenuItem(PopulateMaterialsMenuLabel);
         RemoveToolMenuItem(InferDefaultsMenuLabel);
         RemoveToolMenuItem(SendToBlenderMenuLabel);
+        RemoveToolMenuItem(BakeVertexLightingMenuLabel);
 
         SceneChanged -= OnSceneChanged;
         EditorInterface.Singleton.GetSelection().SelectionChanged -= OnEditorSelectionChanged;
@@ -1259,6 +1262,46 @@ public partial class PS1GodotPlugin : EditorPlugin
             }
         }
         return false;
+    }
+
+    // ── Phase L1: bake vertex lighting from scene lights ────────────
+    //
+    // Mirrors the Blender add-on's vc_bake_scene_lights — same
+    // formula, same 0.8 PSX 2x semi-trans ceiling, same iteration
+    // loop. Authors who already lit a Godot scene for editor preview
+    // get a one-click bake that produces vertex colors matching the
+    // viewport. Per-instance storage on PS1MeshInstance.BakedColors
+    // means same mesh in two scenes can have two lighting setups
+    // (something SplashEdit can't do — it bakes into the source mesh).
+    private void OnBakeVertexLighting()
+    {
+        var sceneRoot = EditorInterface.Singleton.GetEditedSceneRoot();
+        if (sceneRoot == null)
+        {
+            GD.PushError("[PS1Godot] No scene open — open a .tscn before baking lighting.");
+            return;
+        }
+
+        var selection = EditorInterface.Singleton.GetSelection().GetSelectedNodes();
+        if (selection.Count == 0)
+        {
+            GD.PushError("[PS1Godot] Bake Vertex Lighting: select one or more PS1MeshInstance nodes first.");
+            return;
+        }
+
+        var result = Exporter.VertexLightingBaker.Bake(sceneRoot, selection);
+        GD.Print(
+            $"[PS1Godot] Bake Vertex Lighting: {result.MeshesBaked} mesh(es), " +
+            $"{result.VerticesPainted} vertices painted, {result.LightsUsed} light(s) used. " +
+            $"{result.Skipped} skipped.");
+        foreach (var reason in result.SkippedReasons)
+        {
+            GD.PushWarning($"[PS1Godot]   skipped: {reason}");
+        }
+        if (result.MeshesBaked > 0)
+        {
+            GD.Print("[PS1Godot] Save the .tscn to persist the BakedColors override.");
+        }
     }
 
     // ── UX-B: "Send to Blender" — write sidecars + launch Blender ────

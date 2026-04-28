@@ -441,9 +441,16 @@ public static class SceneCollector
             }
 
             Color effectiveFlat = ResolveEffectiveFlatColor(pmi);
+            // Phase L1: per-instance BakedColors override. Empty
+            // array = no override; PSXMesh falls back to FlatColor.
+            // Length-checked inside FromGodotMesh against surface 0
+            // vertex count.
+            Color[]? bakedOverride = pmi.BakedColors != null && pmi.BakedColors.Length > 0
+                ? pmi.BakedColors
+                : null;
             var psxMesh = PSXMesh.FromGodotMesh(
                 pmi, data.GteScaling, pmi.VertexColorMode, effectiveFlat,
-                surfaceTextureIndices, data.Textures);
+                surfaceTextureIndices, data.Textures, bakedOverride);
 
             ushort objectIndex = (ushort)data.Objects.Count;
             if (pmi.StartsInactive && pmi.Tag == 0)

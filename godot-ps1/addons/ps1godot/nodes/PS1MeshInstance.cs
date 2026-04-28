@@ -118,6 +118,21 @@ public partial class PS1MeshInstance : MeshInstance3D
     // to every surface (the pre-Phase-5 behavior).
     [Export] public Godot.Collections.Array<PS1MaterialMetadata> Materials { get; set; } = new();
 
+    // Phase L1 vertex-light bake override. One Color per mesh vertex
+    // (surface 0 only in the minimum tier — multi-surface support is
+    // Phase L2). Empty = no override; PSXMesh reads the mesh's COLOR
+    // channel as before. Populated = bake operator wrote it; PSXMesh
+    // uses these instead. Per-instance storage means same mesh in two
+    // scenes can have two lighting setups (something SplashEdit can't
+    // do because it bakes into the source mesh).
+    //
+    // Survives .glb re-import: this lives on the .tscn, not on the
+    // mesh asset. Authors clear by re-baking with empty lights / by
+    // assigning an empty PackedColorArray.
+    //
+    // See docs/ps1godot-lighting-plan.md for the full storage spec.
+    [Export] public Color[] BakedColors { get; set; } = System.Array.Empty<Color>();
+
     [ExportGroup("PS1 / Interactable")]
     // When true, the runtime treats this mesh as an interactable. Pressing
     // InteractButton within InteractionRadiusMeters fires onInteract on
