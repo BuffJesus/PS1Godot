@@ -45,6 +45,11 @@ enum class PlayerCameraMode : uint8_t {
     FirstPerson = 1,  // Lives at m_playerPosition; player avatar hidden.
     // Orbit mode (radius + right-stick rotation) sits in ROADMAP Phase
     // 2.5 still — adding later so the enum stays stable.
+    // FixedPreRendered (3) — camera ignores player position entirely.
+    // Author calls Camera.SetPosition + SetRotation once and the runtime
+    // holds it there. Used for Resident Evil / FFVII pre-rendered BG
+    // scenes (ROADMAP Phase 4 stretch). Player avatar still renders.
+    FixedPreRendered = 3,
 };
 
 class SceneManager {

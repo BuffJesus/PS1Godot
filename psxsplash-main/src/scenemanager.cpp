@@ -848,7 +848,14 @@ void psxsplash::SceneManager::GameTick(psyqo::GPU &gpu) {
     // (no nav regions / no PSXPlayer), the camera is driven entirely
     // by cutscenes and Lua. After a cutscene ends in free mode, the
     // camera stays at the last cutscene position.
-    if (m_cameraFollowsPlayer && !(m_cutscenePlayer.isPlaying() && m_cutscenePlayer.hasCameraTracks())) {
+    //
+    // FixedPreRendered (Phase 4 stretch — Resident Evil / FFVII pre-
+    // rendered backgrounds): also bypass the rig — author placed the
+    // camera explicitly via Lua Camera.SetPosition + SetRotation; we
+    // must not stomp it each frame. Player still moves; camera doesn't.
+    if (m_cameraFollowsPlayer
+        && m_cameraMode != PlayerCameraMode::FixedPreRendered
+        && !(m_cutscenePlayer.isPlaying() && m_cutscenePlayer.hasCameraTracks())) {
         // Third-person rig: offset is captured at export time from the
         // Camera3D child of PS1Player (editor-tunable), player-local.
         // First-person: camera at player eye, no offset. Runtime rotates

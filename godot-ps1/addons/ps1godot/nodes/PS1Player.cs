@@ -11,6 +11,13 @@ public enum PS1CameraMode
     ThirdPerson = 0,  // Camera trails behind + above the player (default).
     FirstPerson = 1,  // Camera locked at player head height, player mesh hidden.
     Orbit       = 2,  // Right stick orbits the camera around the player.
+    // Author drives the camera via Lua Camera.SetPosition + SetRotation
+    // and the runtime never updates it from player position. Used for
+    // Resident Evil / FFVII pre-rendered background scenes (ROADMAP
+    // Phase 4 stretch). Pair with a PS1UICanvas Image at sortOrder 9999
+    // showing the baked backdrop and an invisible PS1MeshInstance traced
+    // over the BG for collision.
+    FixedPreRendered = 3,
 }
 
 // Spawn point for the PS1 player. Place one in each scene where you

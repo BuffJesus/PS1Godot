@@ -1872,19 +1872,25 @@ int LuaAPI::Camera_SetMode(lua_State* L) {
     psyqo::Lua lua(L);
     if (!s_sceneManager) return 0;
 
-    // Accept either an integer (0=third, 1=first) or a string ("third",
-    // "first"). Strings are kinder at the Lua call-site.
+    // Accept either an integer (0=third, 1=first, 3=fixed) or a string
+    // ("third", "first", "fixed"). Strings are kinder at the Lua
+    // call-site. "fixed" = FixedPreRendered: camera ignores player
+    // position; author drives via Camera.SetPosition + SetRotation.
+    // Used for Resident Evil / FFVII-style pre-rendered BG scenes.
     if (lua.isString(1)) {
         const char* s = lua.toString(1);
         if (streq(s, "first")) {
             s_sceneManager->setCameraMode(PlayerCameraMode::FirstPerson);
         } else if (streq(s, "third")) {
             s_sceneManager->setCameraMode(PlayerCameraMode::ThirdPerson);
+        } else if (streq(s, "fixed")) {
+            s_sceneManager->setCameraMode(PlayerCameraMode::FixedPreRendered);
         }
     } else if (lua.isNumber(1)) {
         int n = static_cast<int>(lua.toNumber(1));
         if (n == 0) s_sceneManager->setCameraMode(PlayerCameraMode::ThirdPerson);
         else if (n == 1) s_sceneManager->setCameraMode(PlayerCameraMode::FirstPerson);
+        else if (n == 3) s_sceneManager->setCameraMode(PlayerCameraMode::FixedPreRendered);
     }
     return 0;
 }
