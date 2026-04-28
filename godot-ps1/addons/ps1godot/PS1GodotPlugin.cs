@@ -36,6 +36,7 @@ public partial class PS1GodotPlugin : EditorPlugin
     private const string BakeVertexLightingMenuLabel   = "PS1Godot: Bake Vertex Lighting from Scene Lights";
     private const string EditMeshInBlenderMenuLabel    = "PS1Godot: Edit Mesh in Blender";
     private const string BakeVertexAOMenuLabel         = "PS1Godot: Bake Vertex AO into BakedColors";
+    private const string BakeBackgroundMenuLabel       = "PS1Godot: Bake Background from Selected Camera";
 
     // Where extracted .glb files land. Matches the Blender add-on's
     // default `asset_subdir` so the round-trip back overwrites the
@@ -81,6 +82,7 @@ public partial class PS1GodotPlugin : EditorPlugin
         AddToolMenuItem(BakeVertexLightingMenuLabel,   Callable.From(OnBakeVertexLighting));
         AddToolMenuItem(EditMeshInBlenderMenuLabel,    Callable.From(OnEditMeshInBlender));
         AddToolMenuItem(BakeVertexAOMenuLabel,         Callable.From(OnBakeVertexAO));
+        AddToolMenuItem(BakeBackgroundMenuLabel,       Callable.From(OnBakeBackground));
 
         _triggerBoxGizmo = new PS1TriggerBoxGizmo();
         AddNode3DGizmoPlugin(_triggerBoxGizmo);
@@ -228,6 +230,7 @@ public partial class PS1GodotPlugin : EditorPlugin
         RemoveToolMenuItem(BakeVertexLightingMenuLabel);
         RemoveToolMenuItem(EditMeshInBlenderMenuLabel);
         RemoveToolMenuItem(BakeVertexAOMenuLabel);
+        RemoveToolMenuItem(BakeBackgroundMenuLabel);
 
         SceneChanged -= OnSceneChanged;
         EditorInterface.Singleton.GetSelection().SelectionChanged -= OnEditorSelectionChanged;
@@ -1439,6 +1442,47 @@ public partial class PS1GodotPlugin : EditorPlugin
         {
             GD.Print("[PS1Godot] Save the .tscn to persist the AO-multiplied BakedColors.");
         }
+    }
+
+    // ── Phase 4 stretch: pre-rendered background baker ──────────────
+    //
+    // Author selects a Camera3D (or PS1Camera) in the scene tree, clicks
+    // the menu item, and the plugin renders that camera's POV to a 256×240
+    // PNG saved under res://assets/backgrounds/. Drop that PNG onto a
+    // PS1UICanvas Image element pinned at sortOrder 9999 to ship a
+    // Resident Evil / FFVII-style fixed-camera scene where the player +
+    // dynamic props render on top of the pre-rendered backdrop. Pairs
+    // with the runtime's PlayerCameraMode::FixedPreRendered (Phase B) to
+    // disable player-driven camera tracking.
+    private async void OnBakeBackground()
+    {
+        var sceneRoot = EditorInterface.Singleton.GetEditedSceneRoot();
+        if (sceneRoot == null)
+        {
+            GD.PushError("[PS1Godot] Bake Background: open a .tscn first.");
+            return;
+        }
+
+        Camera3D? cam = null;
+        foreach (var n in EditorInterface.Singleton.GetSelection().GetSelectedNodes())
+        {
+            if (n is Camera3D c) { cam = c; break; }
+        }
+        if (cam == null)
+        {
+            GD.PushError("[PS1Godot] Bake Background: select a Camera3D (or PS1Camera) in the scene tree first.");
+            return;
+        }
+
+        GD.Print($"[PS1Godot] Baking background from camera '{cam.Name}'…");
+        string? path = await Exporter.BackgroundBaker.BakeAsync(this, cam);
+        if (path == null) return;  // error already pushed
+
+        GD.Print(
+            "[PS1Godot] Drop the PNG onto a PS1UICanvas Image element with sortOrder=9999 " +
+            "for a fixed-camera scene, or onto your LoadingScreen canvas for a loading-screen image. " +
+            "Pair with PlayerCameraMode::FixedPreRendered (Camera.SetMode(\"fixed\") in Lua) to " +
+            "lock the camera to its authored pose.");
     }
 
     // ── UX-C: extract Mesh from Godot, open in Blender ──────────────
