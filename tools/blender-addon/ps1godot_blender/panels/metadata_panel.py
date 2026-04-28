@@ -89,11 +89,14 @@ class PS1GODOT_PT_material_metadata(bpy.types.Panel):
 
     @classmethod
     def poll(cls, context):
+        # Show whenever an active mesh object exists. The panel adapts
+        # internally: when there's no material slot we surface the
+        # Create button as the primary action so authors don't fall off
+        # the path. (Old behaviour gated on existing material slots,
+        # which silently hid the Create button after authors deleted
+        # the default material.)
         obj = context.active_object
-        if obj is None:
-            return False
-        # Show when the active object has at least one material slot.
-        return any(slot and slot.material for slot in obj.material_slots)
+        return obj is not None and obj.type == "MESH"
 
     def draw(self, context):
         layout = self.layout
@@ -104,7 +107,13 @@ class PS1GODOT_PT_material_metadata(bpy.types.Panel):
         slot = obj.material_slots[obj.active_material_index] if obj.material_slots else None
         mat = slot.material if slot else None
         if mat is None:
-            layout.label(text="(no active material)")
+            # No material yet — give the author the one button that
+            # gets them unstuck. The Cycles bake operator and the gltf
+            # vertex-colour export both need a material on the mesh.
+            box = layout.box()
+            box.label(text="No material assigned.", icon="ERROR")
+            box.label(text="Cycles vertex bakes + glTF colour export both need a material on this mesh.")
+            box.operator("ps1godot.create_material", icon="MATERIAL")
             return
 
         props = mat.ps1godot
