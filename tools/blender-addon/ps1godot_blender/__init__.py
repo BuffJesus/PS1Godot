@@ -42,8 +42,14 @@ bl_info = {
 }
 
 from . import properties
-from .panels import project_panel, metadata_panel
-from .operators import validate_scene, export_metadata, import_metadata, export_to_godot
+from .panels import project_panel, metadata_panel, vertex_lighting_panel
+from .operators import (
+    validate_scene,
+    export_metadata,
+    import_metadata,
+    export_to_godot,
+    vertex_lighting,
+)
 
 # Each module exposes a matching register() / unregister() pair built
 # via bpy.utils.register_classes_factory. Order matters here:
@@ -57,8 +63,10 @@ _modules = (
     export_metadata,
     import_metadata,
     export_to_godot,
+    vertex_lighting,
     project_panel,
     metadata_panel,
+    vertex_lighting_panel,
 )
 
 

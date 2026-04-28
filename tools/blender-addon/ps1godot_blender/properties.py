@@ -20,6 +20,8 @@ from bpy.props import (
     EnumProperty,
     IntProperty,
     BoolProperty,
+    FloatProperty,
+    FloatVectorProperty,
     PointerProperty,
 )
 
@@ -124,6 +126,39 @@ class PS1GodotSceneProps(bpy.types.PropertyGroup):
         description="PS1GodotBlenderMetadataVersion stamped into exported JSON. Bump when changing schema.",
         default=1,
         min=1,
+    )
+
+    # ── Vertex-color lighting bake parameters ────────────────────────
+    # Persisted on the scene so authors can iterate (bake → tweak →
+    # bake again) without re-typing values. Defaults match a typical
+    # PS1-era "sun from above-front" key-light setup.
+    vc_sun_dir: FloatVectorProperty(
+        name="Sun Direction",
+        description="Direction the directional light comes FROM, in world space. Bake intensity = saturate(dot(normal, sun_dir)).",
+        default=(0.3, 1.0, 0.4),
+        size=3,
+        subtype="DIRECTION",
+    )
+    vc_sun_color: FloatVectorProperty(
+        name="Sun Color",
+        description="Tint applied to lit faces (multiplied by the dot-product intensity).",
+        default=(1.0, 0.95, 0.85),
+        size=3,
+        subtype="COLOR",
+        min=0.0, max=1.0,
+    )
+    vc_ambient_color: FloatVectorProperty(
+        name="Ambient Color",
+        description="Floor lighting under the directional bake — vertices facing away from the sun darken to this colour instead of pure black.",
+        default=(0.15, 0.18, 0.25),
+        size=3,
+        subtype="COLOR",
+        min=0.0, max=1.0,
+    )
+    vc_ambient_strength: FloatProperty(
+        name="Ambient Strength",
+        description="Weight of the ambient term in the directional bake. 0 = pure dot-product (PS1 'hard' lighting); 1 = pure ambient (flat).",
+        default=0.4, min=0.0, max=1.0,
     )
 
 

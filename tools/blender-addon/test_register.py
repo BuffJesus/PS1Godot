@@ -295,6 +295,49 @@ def main() -> int:
             traceback.print_exc()
             failures += 1
 
+    # ── Phase 4: vertex-lighting bake ───────────────────────────
+    # Quick exercise of the bake operators against the cube. We don't
+    # validate exact byte values (the bake formula is its own concern);
+    # we just check the layer gets created and the operators run
+    # without raising.
+    try:
+        bpy.ops.object.select_all(action="DESELECT")
+        cube = bpy.data.objects.get("Cube")
+        if cube is not None:
+            cube.select_set(True)
+            bpy.context.view_layer.objects.active = cube
+
+            r1 = bpy.ops.ps1godot.vc_create_layer()
+            r2 = bpy.ops.ps1godot.vc_bake_directional()
+            r3 = bpy.ops.ps1godot.vc_ambient_tint()
+            r4 = bpy.ops.ps1godot.vc_clear()
+            for name, r in (("create_layer", r1), ("bake_directional", r2),
+                            ("ambient_tint", r3), ("clear", r4)):
+                if "CANCELLED" in r:
+                    _err(f"vc.{name} cancelled: {r}")
+                    failures += 1
+                else:
+                    _info(f"vc.{name} returned {r}")
+
+            mesh = cube.data
+            layer = mesh.color_attributes.get("Col")
+            if layer is None:
+                _err("vc 'Col' attribute missing after create_layer + clear")
+                failures += 1
+            else:
+                # After clear, every loop should be (1, 1, 1, 1).
+                bad = next((c for c in layer.data
+                            if c.color[0] != 1.0 or c.color[1] != 1.0 or c.color[2] != 1.0), None)
+                if bad is not None:
+                    _err(f"vc clear left a non-white loop: {tuple(bad.color)}")
+                    failures += 1
+                else:
+                    _info(f"vc 'Col' attribute exists and clear left it white ({len(layer.data)} loops).")
+    except Exception:
+        _err("vertex-lighting smoke raised:")
+        traceback.print_exc()
+        failures += 1
+
     # ── Unregister cleanly (catches detach-order bugs) ──────────
     try:
         ps1godot_blender.unregister()

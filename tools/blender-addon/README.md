@@ -125,19 +125,57 @@ Each panel / operator file exposes `register()` / `unregister()`; the
 top-level `__init__.py` iterates the modules in dependency order so
 property groups land before the panels that draw them.
 
+## Vertex-color lighting
+
+The **PS1 Vertex Lighting** panel ships five bake operators —
+vertex-color is the cheapest "real" lighting path on PSX, and these
+turn ~30 minutes of manual paint into one click:
+
+- **Create Vertex Color Layer** — adds a `Col` byte-color attribute at
+  corner domain on every selected mesh, white-filled at the PSX 0.8
+  cap.
+- **Bake Directional Light** — `saturate(dot(normal, sun_dir)) ×
+  sun_color + ambient_color × ambient_strength`. Quick scene-less
+  bake when you just want the basic "lit from above" look. Sun
+  direction + colors live as scene properties so iterating is
+  one-tweak-one-click.
+- **Bake from Scene Lights** — walks every visible Light object
+  (`SUN` / `POINT` / `SPOT`), accumulates Lambertian diffuse with
+  inverse-square falloff + cone cutoff. Mirrors what SplashEdit's
+  `PSXLightingBaker` does — author drops a key + fill light pair
+  into the scene, clicks once.
+- **Apply Ambient Tint** — multiply existing colors by the scene's
+  ambient color. Use after a directional bake for global mood
+  (night-mode washes, faction palettes).
+- **Clear Vertex Lighting** — reset to white. Lets you redo a bake
+  without piling artifacts.
+
+All bakes clamp to **0.8** on each channel, not 1.0. PSX hardware
+2× semi-trans blend would otherwise white-out any mesh later tagged
+`AlphaMode = SemiTransparent`. Matches SplashEdit's
+`Runtime/PSXLightingBaker.cs:79-83` behaviour for the same reason.
+
+The corresponding Godot-side bake operators are tracked in
+[`docs/ps1godot-lighting-plan.md`](../../docs/ps1godot-lighting-plan.md)
+— phases L1 (scene-lights bake), L2 (vertex AO), L3 (PSX preview
+shader with 5-bit quantization + dither), L4 (bake-stack UI).
+
 ## Roadmap
 
 See
 [docs/ps1godot_blender_addon_integration_plan.md](../../docs/ps1godot_blender_addon_integration_plan.md)
 for the full plan. Phase progression:
 
-- ✅ **Phase 1** — Metadata + validation skeleton (this).
-- ⏳ Phase 2 — JSON sidecar export + IDE resource summary.
+- ✅ **Phase 1** — Metadata + validation skeleton.
+- ✅ **Phase 2** — JSON sidecar export.
 - ⏳ Phase 3 — Mesh validation deep-dive (vertex format, index format, atlas usage).
-- ⏳ Phase 4 — Vertex-color lighting bake tools (the highest-leverage
-  artist feature per the plan's § 4.5).
+- ✅ **Phase 4** — Vertex-color lighting bake tools (5 operators —
+  see *Vertex-color lighting* above).
 - ⏳ Phase 5 — Material / texture page workflow (4bpp/8bpp preview).
+  *Phase 5 metadata round-trip already shipped via PS1MaterialMetadata
+  on the Godot side; only the texture-page preview remains.*
 - ⏳ Phase 6 — Collision-helper authoring.
 - ⏳ Phase 7 — Animation metadata + event markers.
-- ⏳ Phase 8 — PS1Godot manifest import / round-trip ID preservation.
+- ✅ **Phase 8** — PS1Godot manifest import / round-trip ID
+  preservation (Godot writer + Blender importer both shipped).
 - ⏳ Phase 9 (optional) — Direct binary mesh-bank preview export.
