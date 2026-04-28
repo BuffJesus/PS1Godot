@@ -976,8 +976,10 @@ but it can afford cheap global modulation.
 
 ### Dev / iteration
 
-- [ ] **Lua hot-swap over PCdrv** — re-export one `.lua`, runtime picks up
-      without reboot. Complements Phase 3 "F5 to play."
+- [x] **Lua hot-swap over PCdrv** *(shipped 2026-04-29)* — see Phase 3
+      detail entry. Edit `.lua` in Godot's editor; runtime picks up the
+      new bytecode within ~2 s, re-runs per-object env init without
+      firing `onCreate` again.
 - [ ] `Debug.Watch("name", value)` — live watch panel in the overlay.
 - [ ] `Debug.Assert(cond, msg)` with stack dump (silent Lua failures today).
 
@@ -1468,8 +1470,21 @@ The Blender ↔ Godot pipeline is now first-class in both directions:
       auto-return to idle), Dialog driver (canvas + text-element wiring
       with Cross-step). Authors picking "New Script" in Godot's editor
       see all five and can pick one matching the node's role.
-- [ ] Lua hot-swap: re-exporting a single `.lua` while the emulator is running
-      re-uploads only that bytecode via PCdrv.
+- [x] **Lua hot-swap over PCdrv** *(shipped 2026-04-29)*. Plugin's
+      `LuaHotSwapWatcher` polls scene_0's exported `.lua` files (0.5 s
+      cadence) and writes `res://build/hotswap.luac` (`[magic 'PHSW'][u32
+      version][u16 fileIdx][u16 codeLen][u8 code]`) on save. Runtime polls
+      every 30 frames in `MainScene::frame`, replaces the bytecode for
+      the named index, and re-runs `Lua::RegisterGameObject` for every
+      matching GameObject — without firing `onCreate` again. Per-object
+      file-level Lua locals reset; C++ state (position, rotation, active)
+      untouched. Scene scripts (`SceneLuaFileIndex`) are out of scope for
+      MVP — the plugin logs "needs full restart" rather than swapping.
+      Hot-swap only fires for the active boot scene; sub-scenes loaded
+      via `Scene.Load` need a re-export. Worst-case end-to-end latency
+      ~2 s (editor poll + runtime poll). PSX hardware verification
+      pending (no behavior change beyond the new poll path; expected
+      regression risk minimal).
 - [ ] Project template (`PS1 Game`) installable into Godot's project manager.
 - [x] **ISO build path via `mkpsxiso`** *(shipped 2026-04-27)*.
       `tools/build_iso/build_iso.py` walks `godot-ps1/build/` for scene
