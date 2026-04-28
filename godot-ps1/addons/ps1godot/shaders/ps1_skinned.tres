@@ -20,3 +20,5 @@ shader_parameter/fog_enabled = false
 shader_parameter/fog_color = Color(0.5, 0.5, 0.6, 1)
 shader_parameter/fog_near = 10.0
 shader_parameter/fog_far = 50.0
+shader_parameter/preview_quantize_bits = 5
+shader_parameter/preview_dither_enabled = true

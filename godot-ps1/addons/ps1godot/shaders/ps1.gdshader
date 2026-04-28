@@ -42,6 +42,16 @@ uniform vec3 fog_color : source_color = vec3(0.5, 0.5, 0.6);
 uniform float fog_near : hint_range(0.0, 1000.0) = 10.0;
 uniform float fog_far : hint_range(0.0, 1000.0) = 50.0;
 
+// PSX hardware quantizes vertex/texture color to 5 bits per channel (15bpp
+// framebuffer) and ordered-dithers to break banding. Default ON so the
+// editor viewport matches the shipped look — flip preview_quantize_bits to
+// 0 to see the un-quantized source colors. Dither lives on its own toggle
+// because some authors prefer the cleaner banded look while iterating on
+// gradients.
+group_uniforms preview;
+uniform int preview_quantize_bits : hint_range(0, 8) = 5;
+uniform bool preview_dither_enabled = true;
+
 varying vec3 v_vertex_color;
 varying float v_fog;
 
@@ -74,6 +84,29 @@ void fragment() {
     if (fog_enabled) {
         col = mix(col, fog_color, v_fog);
     }
+
+    // PSX preview pass — applied AFTER fog so distance haze quantizes too.
+    if (preview_quantize_bits > 0) {
+        float steps = pow(2.0, float(preview_quantize_bits)) - 1.0;
+        if (preview_dither_enabled) {
+            // 4×4 Bayer matrix, biased to [-0.5, 0.5)/16 so the post-add
+            // average is unchanged. Magnitude ÷ steps so dither width is
+            // exactly one quantization step — no flicker between bands.
+            // Indexed by ivec2 of FRAGCOORD.xy mod 4.
+            const float bayer[16] = float[16](
+                 0.0, 8.0, 2.0,10.0,
+                12.0, 4.0,14.0, 6.0,
+                 3.0,11.0, 1.0, 9.0,
+                15.0, 7.0,13.0, 5.0
+            );
+            ivec2 p = ivec2(FRAGCOORD.xy) % 4;
+            float d = (bayer[p.y * 4 + p.x] - 7.5) / 16.0;
+            col += d / steps;
+        }
+        col = clamp(col, 0.0, 1.0);
+        col = floor(col * steps + 0.5) / steps;
+    }
+
     ALBEDO = col;
     ALPHA = tex.a;
 }
