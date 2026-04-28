@@ -212,11 +212,11 @@ class PS1GodotSceneProps(bpy.types.PropertyGroup):
         name="Cycles Bake Mode",
         description="Which Cycles render pass to bake into vertex colors.",
         items=[
-            ("COMBINED", "Combined", "Direct + indirect + emit + shadow + AO. The single-pass 'final lighting' result. Slowest but most complete."),
-            ("DIFFUSE",  "Diffuse",  "Diffuse contribution only (with bounce). Use when you want lighting without specular highlights."),
+            ("DIFFUSE",  "Diffuse",  "Diffuse contribution only (with bounce). Best PS1-style default — clean directional gradient without specular highlights or emission saturation. Use this unless you have a specific reason not to."),
+            ("COMBINED", "Combined", "Direct + indirect + emit + shadow + AO. Note: emission + GI add up fast and clip every vertex to the PSX 0.8 ceiling, especially on white-albedo materials. Bright scenes flatten to pure white. Useful only when you want emissive props or strong GI to actually contribute — otherwise prefer Diffuse."),
             ("AO",       "AO",       "Ambient occlusion only. Multiply this into a separate directional bake to add corner-cavity darkening — the PS1-art technique that turned plastic-looking props into gritty environments."),
         ],
-        default="COMBINED",
+        default="DIFFUSE",
     )
     vc_cycles_samples: IntProperty(
         name="Cycles Samples",

@@ -104,6 +104,33 @@ def _white_fill_value() -> float:
     return PSX_VERTEX_BAKE_CEILING
 
 
+def _show_vertex_color_in_viewport(context):
+    """Switch every 3D viewport in the current screen to Solid shading
+    with color_type='VERTEX' so authors immediately see the bake they
+    just produced. Without this the viewport keeps showing the
+    material's albedo + the bake looks like it did nothing — a
+    surprisingly common "did it work?" pitfall.
+
+    Touches each VIEW_3D area's first space; leaves shading.type alone
+    if it isn't SOLID (RENDERED / MATERIAL_PREVIEW are explicit author
+    choices we shouldn't stomp). Returns True if any viewport changed."""
+    changed = False
+    if context is None or context.screen is None:
+        return False
+    for area in context.screen.areas:
+        if area.type != "VIEW_3D":
+            continue
+        for space in area.spaces:
+            if space.type != "VIEW_3D":
+                continue
+            shading = space.shading
+            if shading.type == "SOLID" and shading.color_type != "VERTEX":
+                shading.color_type = "VERTEX"
+                changed = True
+            break  # first VIEW_3D space per area is the active one
+    return changed
+
+
 class PS1GODOT_OT_vc_create_layer(bpy.types.Operator):
     """Add a 'Col' vertex-color layer to selected meshes (white-filled)."""
 
@@ -395,6 +422,11 @@ class PS1GODOT_OT_vc_bake_scene_lights(bpy.types.Operator):
         if use_temp:
             msg += " Color temperature applied to use_temperature=True lights."
         self.report({"INFO"}, msg)
+
+        # Flip the viewport to vertex-color preview so authors see the bake
+        # without thinking the operator did nothing.
+        if baked > 0:
+            _show_vertex_color_in_viewport(context)
         return {"FINISHED"}
 
     def _compute_vertex_color(
@@ -606,6 +638,7 @@ class PS1GODOT_OT_vc_bake_cycles(bpy.types.Operator):
 
         baked = 0
         clamped_count = 0
+        total_loops = 0
         try:
             for obj, mesh in targets:
                 # Ensure the Col layer exists + is the active vertex
@@ -647,6 +680,7 @@ class PS1GODOT_OT_vc_bake_cycles(bpy.types.Operator):
                         c.color = (nr, ng, nb, a)
                         this_clamped += 1
                 clamped_count += this_clamped
+                total_loops  += len(layer.data)
                 baked += 1
         finally:
             scene.render.engine = prev_engine
@@ -662,6 +696,26 @@ class PS1GODOT_OT_vc_bake_cycles(bpy.types.Operator):
                f"@ {samples} samples (clamped to {PSX_VERTEX_BAKE_CEILING:.1f}). "
                f"{clamped_count} loop value(s) clipped at the PSX ceiling.")
         self.report({"INFO"}, msg)
+
+        # Flip the viewport to vertex-color preview so authors actually
+        # see the bake. Without this the viewport keeps showing the
+        # material's albedo and "did it work?" requires re-exporting to
+        # PSX to find out.
+        if baked > 0:
+            _show_vertex_color_in_viewport(context)
+
+        # Surface a clear warning when most loops clipped — the failure
+        # mode that gave authors a uniform-white cube on PSX even though
+        # the bake "succeeded". 50% is the rough threshold where
+        # gradient detail collapses; tighter than that and the result
+        # is effectively a flat tint.
+        if total_loops > 0 and clamped_count >= total_loops // 2:
+            pct = round(100.0 * clamped_count / total_loops)
+            self.report({"WARNING"},
+                f"PS1Godot: {pct}% of vertex loops saturated at the PSX ceiling — "
+                f"the bake will look uniformly bright on PSX with little directional "
+                f"detail. Common fixes: switch Cycles Bake Mode to Diffuse (drops emission "
+                f"+ GI sums), lower light strength, or darken the material's albedo.")
         return {"FINISHED"}
 
 
