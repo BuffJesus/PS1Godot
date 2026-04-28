@@ -82,34 +82,38 @@ chunky PS1 aesthetic.
 - Strength (default 0.5 — pure 1.0 looks crushy at 8-bit).
 - Bias (push origin off the surface to avoid self-intersection).
 
-## Phase L3 — PSX preview shader (big, ~1–2 days)
+## Phase L3 — PSX preview shader *(shipped 2026-04-29, ~½ day)*
 
 The visual showpiece. Authors see the actual shipped look in Godot's
 viewport without launching the emulator.
 
-**Materials shipped:**
-- `addons/ps1godot/shaders/ps1_lit_preview.tres` — extends existing
-  `ps1_default.tres`.
+**Implementation as shipped** (deviates from the original plan):
+- Single shader `addons/ps1godot/shaders/ps1.gdshader` got two new
+  uniforms in a `preview` group, rather than a separate
+  `ps1_lit_preview.tres`. Keeps everything in one file; flipping the
+  uniforms on the shared `.tres` affects every PS1MeshInstance using
+  it without per-mesh material overrides.
+- `preview_quantize_bits` (int, default 5; 0 disables) and
+  `preview_dither_enabled` (bool, default true).
+- Fragment pass: dither (4×4 Bayer biased to ±0.5/16 then divided by
+  one quantization step), clamp to [0,1], quantize via
+  `floor(c * steps + 0.5) / steps`. Runs after fog so distance haze
+  quantizes too.
+- Both `ps1_default.tres` and `ps1_skinned.tres` ship with the
+  preview defaults baked in.
+- `PS1GodotDock` got a "PSX preview" checkbox (default ON) that
+  toggles both uniforms on the shared materials project-wide.
 
-**Shader operations on top of the existing vertex-snap pass:**
-1. **5-bit quantization** of vertex color: `floor(c × 31) / 31` per
-   channel. PSX hardware stores vertex color as 5 bits per channel
-   (15bpp); the 8-bit Tri struct in mesh.hh is the splashpack carry
-   format, but on actual hardware after the GPU step it becomes 5-bit.
-2. **Ordered dither** based on screen-space pixel position. 4×4
-   Bayer matrix, applied before quantization to break up bands.
-   Matches what real PSX games look like under PCSX-Redux's "8-bit
-   color path" mode.
-3. **2× semi-trans simulation** when `AlphaMode == SemiTransparent`:
-   `final = clamp(c × 2, 0, 1)` to show authors what the hardware
-   blend will do. Pairs with the 0.8 bake cap from L1 — if the bake
-   capped right, the 2× output stays in [0, 1.6] which the shader
-   then clamps to 1.0, simulating the PSX saturation.
-
-**Per-mesh toggle:**
-- New `PS1MeshInstance.PreviewMode` enum: `Editor` (Godot's normal
-  shading) / `PSX` (this preview material). Default `Editor` so
-  artists can toggle on demand without committing.
+**Skipped from the original plan**:
+- **2× semi-trans simulation** — Godot's blend pipeline already
+  handles saturation correctly for `AlphaMode == SemiTransparent`,
+  and adding a shader-level clamp risked double-saturating. If
+  authors hit a real divergence later, add it back as a separate
+  uniform.
+- **Per-mesh `PreviewMode` enum** on `PS1MeshInstance` — would force
+  a per-mesh material override, defeating material sharing. Power
+  users who want a per-mesh override can still copy the .tres
+  manually. The dock checkbox covers the common case.
 
 ## Phase L4 — Bake stack UI (cherry on top, ~2h)
 

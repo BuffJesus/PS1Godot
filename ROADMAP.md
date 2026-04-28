@@ -1352,9 +1352,34 @@ multiplies AO term in via brute-force ray-tri intersection against
 all visible scene geometry. Both clamp to PSX 0.8 ceiling. Layered
 authoring loop on Godot side mirrors the Blender Cycles bake stack.
 
-**Phase L3 (still pending):** PSX preview shader with 5-bit
-quantization + 4×4 ordered dither + 2× semi-trans simulation for
-authors to see ship-equivalent output without launching the emulator.
+### Phase L3 — PSX preview shader *(shipped 2026-04-29)*
+
+`addons/ps1godot/shaders/ps1.gdshader` got two new uniforms behind a
+`preview` group: `preview_quantize_bits` (default 5; PSX 15bpp
+framebuffer is 5-bit/channel) and `preview_dither_enabled` (default
+true). Fragment pass applies a 4×4 Bayer ordered dither, then
+quantizes each channel via `floor(c * (2^bits - 1) + 0.5) /
+(2^bits - 1)`. Runs after fog so distance haze quantizes too. Skipped
+the doc's 2× semi-trans simulation — Godot's blend pipeline already
+handles saturation correctly for `AlphaMode == SemiTransparent`.
+
+`ps1_default.tres` and `ps1_skinned.tres` ship with the preview
+defaults baked in, so every PS1MeshInstance + PS1SkinnedMesh shows
+the PSX-quantized look in Godot's viewport without per-mesh setup.
+
+`PS1GodotDock` got a "PSX preview" checkbox (default ON) that flips
+both uniforms on the shared materials — authors who want clean source
+colors while iterating on gradients can untick it. Author materials
+with their own ShaderMaterial copy aren't affected.
+
+**Iteration win**: The Monitor-style projects that ship CDROM-only
+(no PCdrv hot-swap) now see the shipped look without a full
+Run-on-PSX cycle. Pairs with the existing per-Sky / per-UI inspector
+quantize preview from 2026-04-28.
+
+**Phase L4 (still pending):** Bake-stack inspector subgroup on
+`PS1MeshInstance` listing each bake op with per-step buttons (Clear /
+Bake From Scene Lights / Apply Ambient / Bake AO / Save preset).
 Tracked in `docs/ps1godot-lighting-plan.md`.
 
 ### Cross-tool authoring round-trip *(shipped 2026-04-27)*
