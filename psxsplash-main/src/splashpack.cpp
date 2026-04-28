@@ -144,8 +144,29 @@ struct SPLASHPACKFileHeader {
     uint32_t soundMacroEventTableOffset;
     uint32_t soundFamilyTableOffset;
     uint32_t familyClipIndexTableOffset;
+    // v32+: separated background color from fog tone, and explicit
+    // near/far for the fog ramp. See
+    // docs/ps1godot_current_implementation_review_next_steps.md §4.
+    //
+    // bgEnabled = 0  → renderer's clear color stays at fogColor (the
+    //                  legacy "fog wall is the backdrop" behavior).
+    // bgEnabled = 1  → clear color = (bgR, bgG, bgB). Lets a scene have
+    //                  e.g. pitch-black behind the geometry while
+    //                  fog stays an independent gray haze for distance.
+    //
+    // fogNearSZ = 0  → derive as fogFarSZ/8 (legacy hardcode).
+    // fogFarSZ  = 0  → derive from fogDensity (20000/density, legacy).
+    //
+    // Both are PSX GTE-Z values (no unit conversion). Typical authored
+    // range: 2000 (close fog wall) – 30000 (far horizon). The renderer
+    // also clamps fogNear to fogFar so an inverted authoring won't
+    // crash — it'll just look like instantaneous fog at fogFar.
+    uint8_t  bgR, bgG, bgB;
+    uint8_t  bgEnabled;
+    uint16_t fogNearSZ;
+    uint16_t fogFarSZ;
 };
-static_assert(sizeof(SPLASHPACKFileHeader) == 224, "SPLASHPACKFileHeader must be 224 bytes");
+static_assert(sizeof(SPLASHPACKFileHeader) == 232, "SPLASHPACKFileHeader must be 232 bytes");
 
 struct MusicTableEntry {
     uint32_t dataOffset;
@@ -175,7 +196,7 @@ void SplashPackLoader::LoadSplashpack(uint8_t *data, SplashpackSceneSetup &setup
     psyqo::Kernel::assert(data != nullptr, "Splashpack loading data pointer is null");
     psxsplash::SPLASHPACKFileHeader *header = reinterpret_cast<psxsplash::SPLASHPACKFileHeader *>(data);
     psyqo::Kernel::assert(__builtin_memcmp(header->magic, "SP", 2) == 0, "Splashpack has incorrect magic");
-    psyqo::Kernel::assert(header->version >= 31, "Splashpack version too old (need v31+): re-export from PS1Godot");
+    psyqo::Kernel::assert(header->version >= 32, "Splashpack version too old (need v32+): re-export from PS1Godot");
 
     setup.playerStartPosition = header->playerStartPos;
     setup.playerStartRotation = header->playerStartRot;
@@ -462,6 +483,16 @@ void SplashPackLoader::LoadSplashpack(uint8_t *data, SplashpackSceneSetup &setup
     setup.fogB = header->fogB;
     setup.fogDensity = header->fogDensity;
     setup.sceneType = header->sceneType;
+
+    // v32+: explicit near/far + separate background. Loader passes them
+    // through unmodified; renderer's SetFog/SetBackgroundColor handle
+    // the "0 = derive legacy" fallback.
+    setup.bgEnabled = header->bgEnabled != 0;
+    setup.bgR = header->bgR;
+    setup.bgG = header->bgG;
+    setup.bgB = header->bgB;
+    setup.fogNearSZ = header->fogNearSZ;
+    setup.fogFarSZ  = header->fogFarSZ;
 
     // v22+: sequenced music table. Entries live at
     // header->musicTableOffset; each is MusicTableEntry {u32 dataOff,

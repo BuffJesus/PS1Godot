@@ -39,6 +39,11 @@ struct FogConfig {
     psyqo::Color color = {.r = 0, .g = 0, .b = 0};
     uint8_t density = 5;
     int32_t fogFarSZ = 0;
+    // v32+: explicit near plane in GTE-Z space. 0 means "derive as
+    // fogFarSZ/8" (the legacy fixed-ratio behavior). SetFog clamps
+    // fogNearSZ to (fogFarSZ - 1) so an inverted authoring still
+    // produces a non-degenerate ramp.
+    int32_t fogNearSZ = 0;
 };
 
 class Renderer final {
@@ -63,6 +68,13 @@ class Renderer final {
     static void Init(psyqo::GPU& gpuInstance);
     void SetCamera(Camera& camera);
     void SetFog(const FogConfig& fog);
+
+    // v32+: scene-level background tone. When enabled, replaces the
+    // GPU clear color (defaults to fog color) so authors can pick a
+    // backdrop independent of the fog ramp tint. Useful for interiors
+    // where you want pitch-black behind dim mood-lit geometry without
+    // the fog tone bleeding into the void.
+    void SetBackgroundColor(uint8_t r, uint8_t g, uint8_t b, bool enabled);
 
     void Render(eastl::vector<GameObject*>& objects);
     void RenderWithBVH(eastl::vector<GameObject*>& objects, const BVHManager& bvh);
@@ -130,6 +142,10 @@ class Renderer final {
 
     FogConfig m_fog;
     psyqo::Color m_clearcolor = {.r = 0, .g = 0, .b = 0};
+    // v32+: when true, m_clearcolor is the scene-authored bg and stays
+    // pinned even if SetFog is called later. When false (default), the
+    // clear color tracks fog tone (legacy behavior).
+    bool m_bgEnabled = false;
 
     UISystem* m_uiSystem = nullptr;
 #ifdef PSXSPLASH_MEMOVERLAY

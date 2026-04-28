@@ -122,14 +122,22 @@ void psxsplash::SceneManager::InitializeScene(uint8_t* splashpackData, LoadingSc
     m_roomPortalRefs = sceneSetup.roomPortalRefs;
     m_roomPortalRefCount = sceneSetup.roomPortalRefCount;
 
-    // Configure fog and back color from splashpack data (v11+)
+    // Configure fog and back color from splashpack data (v11+).
+    // v32+: forward fogNearSZ/fogFarSZ if the scene authored explicit
+    // values (0 = renderer derives the legacy density-based defaults).
+    // SetBackgroundColor must run AFTER SetFog because SetFog seeds
+    // m_clearcolor from fog tone — the bg call then overrides it.
     {
         psxsplash::FogConfig fogCfg;
         fogCfg.enabled = sceneSetup.fogEnabled;
         fogCfg.color = {.r = sceneSetup.fogR, .g = sceneSetup.fogG, .b = sceneSetup.fogB};
         fogCfg.density = sceneSetup.fogDensity;
+        fogCfg.fogNearSZ = sceneSetup.fogNearSZ;
+        fogCfg.fogFarSZ  = sceneSetup.fogFarSZ;
         Renderer::GetInstance().SetFog(fogCfg);
-    }    
+        Renderer::GetInstance().SetBackgroundColor(
+            sceneSetup.bgR, sceneSetup.bgG, sceneSetup.bgB, sceneSetup.bgEnabled);
+    }
     // Copy component arrays
     m_interactables = std::move(sceneSetup.interactables);
 

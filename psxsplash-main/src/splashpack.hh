@@ -270,6 +270,14 @@ struct SplashpackSceneSetup {
     uint8_t fogR = 0, fogG = 0, fogB = 0;
     uint8_t fogDensity = 5;
 
+    // v32+: separated background tone + explicit near/far GTE-Z. See
+    // SPLASHPACKFileHeader bg/fog comments for the "0 = legacy derive"
+    // semantics. SceneManager passes these to Renderer at scene init.
+    bool    bgEnabled = false;
+    uint8_t bgR = 0, bgG = 0, bgB = 0;
+    uint16_t fogNearSZ = 0;
+    uint16_t fogFarSZ  = 0;
+
     const RoomData* rooms = nullptr;
     uint16_t roomCount = 0;
     const PortalData* portals = nullptr;

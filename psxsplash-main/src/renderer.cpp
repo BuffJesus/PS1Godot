@@ -51,12 +51,34 @@ void psxsplash::Renderer::SetCamera(psxsplash::Camera& camera) {
 
 void psxsplash::Renderer::SetFog(const FogConfig& fog) {
     m_fog = fog;
-    // Always use fog color as the GPU clear/back color
-    m_clearcolor = fog.color;
+    // Default clear color = fog color. SetBackgroundColor(..., true)
+    // overrides this after the fact when the scene authored a separate
+    // backdrop (v32+).
+    if (!m_bgEnabled) m_clearcolor = fog.color;
     if (fog.enabled) {
-        m_fog.fogFarSZ = 20000 / fog.density;
+        // v32+: respect authored fogFarSZ; otherwise derive from density.
+        if (fog.fogFarSZ == 0) {
+            m_fog.fogFarSZ = 20000 / fog.density;
+        }
+        // v32+: respect authored fogNearSZ; otherwise legacy fogFar/8.
+        // Clamp to fogFar-1 so inverted authoring stays well-defined.
+        if (m_fog.fogNearSZ == 0) {
+            m_fog.fogNearSZ = m_fog.fogFarSZ >> 3;
+        } else if (m_fog.fogNearSZ >= m_fog.fogFarSZ) {
+            m_fog.fogNearSZ = m_fog.fogFarSZ - 1;
+        }
     } else {
         m_fog.fogFarSZ = 0;
+        m_fog.fogNearSZ = 0;
+    }
+}
+
+void psxsplash::Renderer::SetBackgroundColor(uint8_t r, uint8_t g, uint8_t b, bool enabled) {
+    m_bgEnabled = enabled;
+    if (enabled) {
+        m_clearcolor = {.r = r, .g = g, .b = b};
+    } else {
+        m_clearcolor = m_fog.color;
     }
 }
 
@@ -264,9 +286,11 @@ void psxsplash::Renderer::processTriangle(
     clampForRasterizer(projected[2]);
 
     // Per-vertex fog (deferred to leaf to avoid wasted divisions during subdivision).
+    // v32+: SetFog already populated fogNearSZ from author input (or
+    // legacy fogFar/8 derive); just read it here.
     int32_t fogIR[3] = {0, 0, 0};
     if (fogFarSZ > 0) {
-        int32_t fogNear = fogFarSZ >> 3;
+        int32_t fogNear = m_fog.fogNearSZ;
         int32_t range = fogFarSZ - fogNear;
         if (range < 1) range = 1;
         int32_t szArr[3] = {sz0, sz1, sz2};
@@ -1417,7 +1441,7 @@ void psxsplash::Renderer::renderSkinnedObjects(
             bool hasFog = false;
             int32_t fogIR[3] = {0, 0, 0};
             if (m_fog.enabled && fogFarSZ > 0) {
-                int32_t fogNear = fogFarSZ >> 3;
+                int32_t fogNear = m_fog.fogNearSZ;
                 int32_t range = fogFarSZ - fogNear;
                 if (range < 1) range = 1;
                 int32_t szArr[3] = {sz0, sz1, sz2};
