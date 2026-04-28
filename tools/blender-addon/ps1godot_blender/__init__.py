@@ -56,6 +56,7 @@ from .operators import (
     vertex_lighting,
     collision_helpers,
     material_toolkit,
+    bulk_apply,
 )
 
 # Each module exposes a matching register() / unregister() pair built
@@ -73,6 +74,7 @@ _modules = (
     vertex_lighting,
     collision_helpers,
     material_toolkit,
+    bulk_apply,
     project_panel,
     metadata_panel,
     vertex_lighting_panel,

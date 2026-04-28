@@ -31,6 +31,27 @@ class PS1GODOT_PT_object_metadata(bpy.types.Panel):
             return
         props = obj.ps1godot
 
+        # ── Selection stats — answers "what am I about to ship?" ─
+        # Walks selected meshes once per draw (cheap; meshes count
+        # is small and getattr is fast). Surfaces tri count + unique
+        # material count + selection size so authors see budget
+        # consumption inline.
+        selected_meshes = [o for o in context.selected_objects if o.type == "MESH"]
+        if len(selected_meshes) > 1:
+            tri_total = 0
+            mat_set: set[str] = set()
+            for o in selected_meshes:
+                if o.data is not None:
+                    tri_total += len(o.data.polygons)
+                    for slot in o.material_slots:
+                        if slot.material is not None:
+                            mat_set.add(slot.material.name)
+            box = layout.box()
+            row = box.row()
+            row.label(text=f"{len(selected_meshes)} meshes  ·  {tri_total} tris  ·  {len(mat_set)} materials",
+                      icon="OUTLINER_OB_GROUP_INSTANCE")
+            box.operator("ps1godot.bulk_apply", icon="DUPLICATE")
+
         # ── Stable IDs ──────────────────────────────────────────
         col = layout.column(align=True)
         col.label(text="Identity")

@@ -338,6 +338,57 @@ def main() -> int:
         traceback.print_exc()
         failures += 1
 
+    # ── Bulk apply: tag active, propagate to selected ───────────
+    # Smart-copy semantics: only fields that DIFFER from the
+    # construction default propagate, so per-mesh customization on
+    # targets survives. Verify this with a 3-cube scenario where the
+    # active has customized mesh_role + chunk_id, the targets have
+    # their own mesh_role + chunk_id pre-set, and post-apply we expect
+    # the active's customization to win.
+    try:
+        # Spawn two extra cubes so we have a multi-mesh selection.
+        bpy.ops.mesh.primitive_cube_add(location=(2, 0, 0))
+        cube_b = bpy.context.active_object
+        cube_b.name = "BulkTestB"
+        bpy.ops.mesh.primitive_cube_add(location=(-2, 0, 0))
+        cube_c = bpy.context.active_object
+        cube_c.name = "BulkTestC"
+
+        # Tag the original cube as the source.
+        cube = bpy.data.objects.get("Cube")
+        cube.ps1godot.mesh_role = "DynamicRigid"   # differs from default StaticWorld
+        cube.ps1godot.chunk_id = "bulk_chunk"      # differs from default ""
+        # mesh_role on B + C stays at default StaticWorld — smart-copy
+        # should overwrite to DynamicRigid.
+
+        # Select all three with cube as active.
+        bpy.ops.object.select_all(action="DESELECT")
+        cube.select_set(True)
+        cube_b.select_set(True)
+        cube_c.select_set(True)
+        bpy.context.view_layer.objects.active = cube
+
+        result = bpy.ops.ps1godot.bulk_apply()
+        if "CANCELLED" in result:
+            _err(f"bulk_apply cancelled: {result}")
+            failures += 1
+        else:
+            _info(f"bulk_apply returned {result}")
+
+            for tgt in (cube_b, cube_c):
+                if tgt.ps1godot.mesh_role != "DynamicRigid":
+                    _err(f"bulk_apply: '{tgt.name}' mesh_role = {tgt.ps1godot.mesh_role}, want DynamicRigid")
+                    failures += 1
+                elif tgt.ps1godot.chunk_id != "bulk_chunk":
+                    _err(f"bulk_apply: '{tgt.name}' chunk_id = {tgt.ps1godot.chunk_id}, want bulk_chunk")
+                    failures += 1
+                else:
+                    _info(f"bulk_apply: '{tgt.name}' received mesh_role + chunk_id")
+    except Exception:
+        _err("bulk_apply smoke raised:")
+        traceback.print_exc()
+        failures += 1
+
     # ── Phase 6: collision helpers ──────────────────────────────
     # Spawn each helper, verify it lands tagged correctly + with the
     # right viewport presentation. We don't validate the geometry
