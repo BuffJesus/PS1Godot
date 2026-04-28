@@ -747,12 +747,19 @@ authored alongside chunk metadata.
       that bakes one of: directional light, ambient + height
       gradient, radial fake light, ambient tint. Writes back into
       Godot mesh vertex colors so the round-trip survives.
-- [ ] **`PS1ChunkLightingProfile.tres`** — `BackgroundColor`,
-      `FogColor`, `FogNear`, `FogFar`, `AmbientColor`, `KeyLight`
-      (direction + color), `CharacterLightMode`, `PaletteMood`.
-      Replaces today's single `PS1Scene.FogColor` / single density
-      with the separate-concepts model. Per-chunk override; falls
-      back to scene default.
+- [x] **Per-scene `BackgroundColor` + explicit `FogNear` / `FogFar`**
+      *(shipped 2026-04-29)* — splashpack v32 added 8 bytes at end of
+      header (bgR/G/B/enabled + fogNearSZ/fogFarSZ). PS1Scene gets
+      Background ExportGroup (`BackgroundColorEnabled` + `BackgroundColor`)
+      and two new Fog fields (`FogNear` / `FogFar` in PSX GTE-Z space;
+      0 = legacy density-derived). Renderer's clear color now decouples
+      from fog tone. Doc:
+      `ps1godot_current_implementation_review_next_steps.md` §4.
+- [ ] **`PS1ChunkLightingProfile.tres`** — `AmbientColor`, `KeyLight`
+      (direction + color), `CharacterLightMode`, `PaletteMood`. Per-chunk
+      override; falls back to scene default. The fog/background slice
+      already shipped on PS1Scene; this profile is the chunk-scoped
+      version that supersedes it for chunked-RPG scenes.
 - [ ] **`PS1ChunkSkyProfile.tres`** — sky mode enum (`None` /
       `ClearColor` / `SkyCard` / `SkyDome` / `Skybox` /
       `PaintedBackdrop`). `SkyCard` = textured full-screen quad

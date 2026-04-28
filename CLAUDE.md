@@ -32,10 +32,11 @@ The **splashpack binary format** is the integration contract. Current version is
 **v31** (bumped through v22–v31 between 2026-04-20 and 2026-04-27 for sequenced
 music, UI 3D-model HUD widgets, audio routing, XA sidecar table, scene-wide
 instrument bank, sound macros + sound families, v30's quaternion-encoded
-skin-animation poses, and v31's static-mesh vertex-pool format; see
+skin-animation poses, v31's static-mesh vertex-pool format, and v32's
+separated background tone + explicit fog near/far in GTE-Z space; see
 `godot-ps1/addons/ps1godot/exporter/SplashpackWriter.cs` and
 `psxsplash-main/src/splashpack.{hh,cpp}`). The loader hard-asserts
-`version >= 29`; older exports won't load. We are the sole consumer — the
+`version >= 32`; older exports won't load. We are the sole consumer — the
 upstream SplashEdit Unity project still emits v20, but we've diverged. If
 bumping again, maintain the "add at the end, bump the version" discipline
 rather than reshuffling existing fields.
@@ -52,7 +53,7 @@ Splitting by destination lets the runtime DMA each blob into the right memory
 region without parsing. The `.splashpack` file references offsets into the other
 two.
 
-Magic bytes are `"SP"`, header is **224 bytes** (see `SPLASHPACKFileHeader` in
+Magic bytes are `"SP"`, header is **232 bytes** (see `SPLASHPACKFileHeader` in
 `splashpack.cpp`). Struct layouts are load-bearing — `static_assert` sizes in
 `splashpack.hh` are the source of truth, and the Godot writer must match them
 bit-for-bit. Each version bump appends to the end of the header (e.g. v21 added
@@ -60,9 +61,11 @@ the third-person camera-rig fields, v27 added the XA sidecar table, v29 added
 sound-macro/family table offsets, v30 swapped the per-bone-frame format from
 24 B BakedBoneMatrix to 14 B BakedBonePose in the skin section, v31 swapped
 the static-mesh per-object Tri[] for a Vertex[] + Face[] vertex pool with a
-4 B MeshBlob header). v30 and v31 reshuffled per-section data — both were
-one-time exceptions justified by the savings; subsequent bumps must follow
-append-only unless a comparable size win justifies another rewrite.
+4 B MeshBlob header, v32 added 8 bytes at the end for separated
+background color + explicit fog near/far in GTE-Z space). v30 and v31
+reshuffled per-section data — both were one-time exceptions justified
+by the savings; subsequent bumps must follow append-only unless a
+comparable size win justifies another rewrite.
 
 A human-readable extract of the format lives in `docs/splashpack-format.md`.
 
