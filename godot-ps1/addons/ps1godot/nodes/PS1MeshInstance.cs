@@ -208,6 +208,23 @@ public partial class PS1MeshInstance : MeshInstance3D
     /// </summary>
     [Export] public Color[] BakedColors { get; set; } = System.Array.Empty<Color>();
 
+    [ExportGroup("PS1 / Baking")]
+    /// <summary>
+    /// When true, the exporter auto-bakes vertex lighting from scene
+    /// DirectionalLight3D / OmniLight3D / SpotLight3D before writing the
+    /// splashpack. Eliminates the manual "select meshes → Bake Lighting"
+    /// step and prevents stale BakedColors when lights move. Only single-
+    /// surface meshes are supported (multi-surface falls back to existing
+    /// BakedColors with a warning).
+    /// </summary>
+    [Export] public bool AutoBakeVertexLighting { get; set; } = false;
+    /// <summary>
+    /// When true AND AutoBakeVertexLighting is true, also bake vertex AO
+    /// (hemisphere occlusion) after the lighting pass. Multiplies AO
+    /// into BakedColors. Adds ~1-2 s per mesh depending on scene tri count.
+    /// </summary>
+    [Export] public bool AutoBakeVertexAO { get; set; } = false;
+
     [ExportGroup("PS1 / Interactable")]
     /// <summary>
     /// When true, runtime treats this mesh as interactable. Player presses
@@ -278,6 +295,27 @@ public partial class PS1MeshInstance : MeshInstance3D
             float maxEdge = Mathf.Max(size.X, Mathf.Max(size.Y, size.Z));
             float dynamicMargin = Mathf.Clamp(maxEdge * 0.1f, 0.1f, 2.0f);
             if (ExtraCullMargin < dynamicMargin) ExtraCullMargin = dynamicMargin;
+        }
+    }
+
+    // Progressive disclosure: hide fields whose controlling toggle is off
+    // so the inspector only shows what's relevant.
+    public override void _ValidateProperty(Godot.Collections.Dictionary property)
+    {
+        string name = property["name"].AsString();
+        bool hidden = name switch
+        {
+            "LayerMask" => Collision == CollisionKind.None,
+            "FlatColor" => VertexColorMode != ColorMode.FlatColor,
+            "InteractionRadiusMeters" or "InteractButton" or "InteractionRepeatable"
+                or "InteractionCooldownFrames" or "InteractionPromptCanvas"
+                => !Interactable,
+            "AutoBakeVertexAO" => !AutoBakeVertexLighting,
+            _ => false,
+        };
+        if (hidden)
+        {
+            property["usage"] = (long)PropertyUsageFlags.Storage;
         }
     }
 }

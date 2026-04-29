@@ -82,6 +82,12 @@ public static class SceneCollector
         // different bit depths is intentionally two atlas entries.
         var textureCache = new Dictionary<(string path, PSXBPP bpp), int>();
 
+        // Auto-bake pass — collect meshes with AutoBakeVertexLighting
+        // enabled and batch-bake before the mesh walk reads BakedColors.
+        // Single batch is more efficient than per-mesh (AO collects scene
+        // triangles once for the whole set).
+        RunAutoBakePass(root);
+
         WalkAddMeshes(root, data, textureCache, luaCache);
 
         // After every region (auto-flat + authored) has been collected,
@@ -3954,5 +3960,47 @@ public static class SceneCollector
             if (found != null) return found;
         }
         return null;
+    }
+
+    // ── Auto-bake pre-pass ─────────────────────────────────────────────
+    // Collects every PS1MeshInstance with AutoBakeVertexLighting=true and
+    // batch-bakes lighting + optional AO in one pass. Called once before
+    // WalkAddMeshes so that BakedColors are fresh when the exporter reads
+    // them. Meshes without the toggle keep their existing BakedColors
+    // (hand-painted or from a previous manual bake).
+    private static void RunAutoBakePass(Node root)
+    {
+        var lightingTargets = new List<Node>();
+        var aoTargets = new List<Node>();
+        CollectAutoBakeTargets(root, lightingTargets, aoTargets);
+        if (lightingTargets.Count == 0) return;
+
+        GD.Print($"[PS1Godot] Auto-bake: {lightingTargets.Count} mesh(es) with AutoBakeVertexLighting" +
+                 (aoTargets.Count > 0 ? $", {aoTargets.Count} with AutoBakeVertexAO" : "") + ".");
+
+        var litResult = VertexLightingBaker.Bake(root, lightingTargets);
+        GD.Print($"[PS1Godot] Auto-bake lighting: {litResult.MeshesBaked} baked, " +
+                 $"{litResult.VerticesPainted} vertices, {litResult.LightsUsed} lights.");
+
+        if (aoTargets.Count > 0 && litResult.MeshesBaked > 0)
+        {
+            var aoResult = VertexAOBaker.Bake(root, aoTargets, new VertexAOBaker.Options());
+            GD.Print($"[PS1Godot] Auto-bake AO: {aoResult.MeshesBaked} baked, " +
+                     $"{aoResult.RaysCast} rays cast.");
+        }
+    }
+
+    private static void CollectAutoBakeTargets(Node n, List<Node> lighting, List<Node> ao)
+    {
+        if (n is PS1MeshInstance pmi && pmi.AutoBakeVertexLighting)
+        {
+            lighting.Add(pmi);
+            if (pmi.AutoBakeVertexAO)
+                ao.Add(pmi);
+        }
+        foreach (var child in n.GetChildren())
+        {
+            CollectAutoBakeTargets(child, lighting, ao);
+        }
     }
 }
