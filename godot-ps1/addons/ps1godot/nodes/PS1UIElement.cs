@@ -231,4 +231,41 @@ public partial class PS1UIElement : Node
     // Inset margin around this element inside its slot. CSS order:
     // X=Left, Y=Top, Z=Right, W=Bottom.
     [Export] public Vector4I SlotPadding { get; set; } = Vector4I.Zero;
+
+    // Type-conditional inspector — hide fields that don't apply to the
+    // current Type so the right-hand panel stops showing irrelevant
+    // controls. Author flips Type=Image and the Text fields collapse
+    // away; flips back to Text and the Image fields hide instead.
+    // Implements docs/ui-ux-plan.md principle "non-intimidating:
+    // progressive disclosure" for UI authoring.
+    public override void _ValidateProperty(Godot.Collections.Dictionary property)
+    {
+        string name = property["name"].AsString();
+
+        bool isText     = Type == PS1UIElementType.Text;
+        bool isImage    = Type == PS1UIElementType.Image;
+        bool isProgress = Type == PS1UIElementType.Progress;
+        // (Box uses no per-Type-only fields — just Color + rect.)
+
+        bool hidden = name switch
+        {
+            // Text-only fields
+            "Text" or "Font" or "TextAlign" or "TextVAlign" => !isText,
+            // Image-only fields
+            "Texture" or "UVRect" or "BitDepth" => !isImage,
+            // Progress-only fields
+            "BgColor" or "InitialValue" => !isProgress,
+            _ => false,
+        };
+
+        if (hidden)
+        {
+            // Strip the EDITOR usage flag so the inspector skips it,
+            // but keep STORAGE so existing values still serialise (an
+            // author can flip Type back and recover their old text /
+            // texture / progress settings).
+            const long Storage = (long)PropertyUsageFlags.Storage;
+            property["usage"] = Storage;
+        }
+    }
 }
