@@ -51,6 +51,9 @@ public partial class PS1GodotPlugin : EditorPlugin
     private const string DefaultBlenderSidecarDir = "res://ps1godot_assets/blender_sources/";
 
     private PS1TriggerBoxGizmo? _triggerBoxGizmo;
+    private PS1RoomGizmo? _roomGizmo;
+    private PS1PortalLinkGizmo? _portalGizmo;
+    private PS1NavRegionGizmo? _navRegionGizmo;
     private PS1GodotDock? _dock;
     private PS1UICanvasEditor? _uiCanvasEditor;
     private EditorSyntaxHighlighter? _luaHighlighter;
@@ -169,6 +172,12 @@ public partial class PS1GodotPlugin : EditorPlugin
 
         _triggerBoxGizmo = new PS1TriggerBoxGizmo();
         AddNode3DGizmoPlugin(_triggerBoxGizmo);
+        _roomGizmo = new PS1RoomGizmo();
+        AddNode3DGizmoPlugin(_roomGizmo);
+        _portalGizmo = new PS1PortalLinkGizmo();
+        AddNode3DGizmoPlugin(_portalGizmo);
+        _navRegionGizmo = new PS1NavRegionGizmo();
+        AddNode3DGizmoPlugin(_navRegionGizmo);
 
         _dock = new PS1GodotDock();
         _dock.RunOnPsxRequested += OnRunOnPsx;
@@ -361,11 +370,14 @@ public partial class PS1GodotPlugin : EditorPlugin
             _dock = null;
         }
 
-        if (_triggerBoxGizmo != null)
+        foreach (var g in new EditorNode3DGizmoPlugin?[] { _triggerBoxGizmo, _roomGizmo, _portalGizmo, _navRegionGizmo })
         {
-            RemoveNode3DGizmoPlugin(_triggerBoxGizmo);
-            _triggerBoxGizmo = null;
+            if (g != null) RemoveNode3DGizmoPlugin(g);
         }
+        _triggerBoxGizmo = null;
+        _roomGizmo = null;
+        _portalGizmo = null;
+        _navRegionGizmo = null;
 
         if (_texturePreviewInspector != null)
         {

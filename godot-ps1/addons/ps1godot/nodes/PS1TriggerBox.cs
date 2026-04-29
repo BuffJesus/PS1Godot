@@ -53,4 +53,13 @@ public partial class PS1TriggerBox : Node3D
         // without this, a trigger box is invisible and easy to lose in the
         // scene tree. Future Phase 3: add a gizmo drawer for the AABB.
     }
+
+    public override string[] _GetConfigurationWarnings()
+    {
+        var w = new System.Collections.Generic.List<string>();
+        if (string.IsNullOrEmpty(ScriptFile))
+            w.Add("ScriptFile is empty. Without a Lua script, onTriggerEnter / onTriggerExit " +
+                  "have nothing to call — the trigger will fire silently. Assign a .lua file.");
+        return w.ToArray();
+    }
 }
