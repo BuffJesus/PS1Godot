@@ -1,0 +1,48 @@
+[gd_scene load_steps=6 format=3]
+
+; Gameplay level template — floor + spawn + trigger box + minimal HUD.
+;
+; Workflow:
+;   1. Duplicate this file under your project.
+;   2. Build outward: add PS1MeshInstance walls/props, more triggers,
+;      audio clips, animation tracks. The starter geometry shows the
+;      authoring pattern; replace it with your level.
+;   3. F5 — player spawns on the floor; walking onto the trigger box
+;      fires onTriggerEnter via a Lua script you wire up later.
+
+[ext_resource type="Script" uid="uid://b8ogc8krip2k" path="res://addons/ps1godot/nodes/PS1Scene.cs" id="1_scene"]
+[ext_resource type="Script" uid="uid://cfdlp12g2rtct" path="res://addons/ps1godot/nodes/PS1Player.cs" id="2_player"]
+[ext_resource type="Script" uid="uid://bp3inh2eiwm3o" path="res://addons/ps1godot/nodes/PS1Camera.cs" id="3_camera"]
+[ext_resource type="Script" uid="uid://dng0iofdw3dk7" path="res://addons/ps1godot/nodes/PS1MeshInstance.cs" id="4_mesh"]
+[ext_resource type="Script" uid="uid://bbl6b0g2qjisp" path="res://addons/ps1godot/nodes/PS1TriggerBox.cs" id="5_trigger"]
+
+[sub_resource type="BoxMesh" id="floor_mesh"]
+size = Vector3(10, 0.5, 10)
+
+[node name="GameplayLevel" type="Node3D"]
+script = ExtResource("1_scene")
+SceneType = 0
+
+[node name="PS1Player" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
+script = ExtResource("2_player")
+
+[node name="MainCamera" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.94, 0.34, 0, -0.34, 0.94, 0, 2.5, 5)
+fov = 60.0
+script = ExtResource("3_camera")
+
+[node name="Floor" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.25, 0)
+mesh = SubResource("floor_mesh")
+script = ExtResource("4_mesh")
+BitDepth = 1
+Collision = 1
+
+[node name="ExampleTrigger" type="Node3D" parent="."]
+; AABB centered at (3, 1, 0) — walk into it after spawn to demo the
+; trigger system. Set ScriptFile to a .lua that defines
+; onTriggerEnter(triggerIndex) to react.
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 1, 0)
+script = ExtResource("5_trigger")
+HalfExtents = Vector3(1, 1, 1)

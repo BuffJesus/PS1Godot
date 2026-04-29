@@ -1,0 +1,30 @@
+[gd_scene load_steps=4 format=3]
+
+; Smallest valid PS1Godot scene — boots cleanly via F5.
+;
+; Workflow:
+;   1. Right-click in FileSystem → Duplicate this file under your project.
+;   2. Rename the duplicate (e.g. res://your_game/main.tscn).
+;   3. Project Settings → Application → Run → Main Scene = your duplicate.
+;   4. F5 to boot. PSX shows a black screen with the player at origin.
+;   5. Build outward: drop in PS1MeshInstance nodes (Add Child → Other →
+;      MeshInstance3D, then attach the PS1MeshInstance.cs script).
+
+[ext_resource type="Script" uid="uid://b8ogc8krip2k" path="res://addons/ps1godot/nodes/PS1Scene.cs" id="1_scene"]
+[ext_resource type="Script" uid="uid://cfdlp12g2rtct" path="res://addons/ps1godot/nodes/PS1Player.cs" id="2_player"]
+[ext_resource type="Script" uid="uid://bp3inh2eiwm3o" path="res://addons/ps1godot/nodes/PS1Camera.cs" id="3_camera"]
+
+[node name="EmptyScene" type="Node3D"]
+script = ExtResource("1_scene")
+
+[node name="PS1Player" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
+script = ExtResource("2_player")
+
+[node name="MainCamera" type="Camera3D" parent="."]
+; Sits behind + above the player at a sensible third-person angle.
+; Tune the transform for your scene; PS1Player.CameraMode picks how
+; the runtime uses this camera as a rig anchor.
+transform = Transform3D(1, 0, 0, 0, 0.94, 0.34, 0, -0.34, 0.94, 0, 2.5, 5)
+fov = 60.0
+script = ExtResource("3_camera")

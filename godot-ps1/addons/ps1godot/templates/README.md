@@ -13,6 +13,10 @@ modify them.
 
 | File | Purpose |
 |------|---------|
+| `empty_template.tscn` | Smallest valid scene — just `PS1Scene` + `PS1Player` + `Camera3D`. Boots black; build outward from here. |
+| `demo_template.tscn` | Empty + a floor + 2 colored cubes + a HUD label. Smallest scene that's actually visually interesting on F5. |
+| `menu_template.tscn` | Title screen / main menu — pure UI, no 3D gameplay. Title text + "PRESS START" prompt; advance to your game scene via `Scene.Load(1)` from Lua. |
+| `gameplay_template.tscn` | Level scaffolding — `PS1Player` + floor + an `ExampleTrigger` box. Add walls, props, more triggers as needed. |
 | `intro_splash_template.tscn` | Boot-logo splash screen. 3D spinning logo + studio name + "Licensed by …" text + chime + auto-transition to the main game. |
 
 ## Workflow

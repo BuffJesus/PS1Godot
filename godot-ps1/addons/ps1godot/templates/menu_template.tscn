@@ -1,0 +1,59 @@
+[gd_scene load_steps=5 format=3]
+
+; Title screen / menu template — pure UI, no 3D gameplay.
+;
+; Drop in your studio name, press-start prompt, and (optionally) a
+; logo Image element. The Lua script flips `started=true` on Cross
+; press; you wire up Scene.Load(1) to advance into your game scene.
+;
+; Workflow:
+;   1. Duplicate this file under your project.
+;   2. Edit `MenuTitle.Text` to your game's title.
+;   3. Drop your game's .tscn into SubScenes[0] on the root.
+;   4. Project Settings → Application → Run → Main Scene = duplicate.
+;   5. F5. PSX shows black with the title; press Cross to advance.
+
+[ext_resource type="Script" uid="uid://b8ogc8krip2k" path="res://addons/ps1godot/nodes/PS1Scene.cs" id="1_scene"]
+[ext_resource type="Script" uid="uid://cfdlp12g2rtct" path="res://addons/ps1godot/nodes/PS1Player.cs" id="2_player"]
+[ext_resource type="Script" uid="uid://bp1p1kqop2wwy" path="res://addons/ps1godot/nodes/PS1UICanvas.cs" id="3_canvas"]
+[ext_resource type="Script" uid="uid://c01mt2tth0oll" path="res://addons/ps1godot/nodes/PS1UIElement.cs" id="4_elem"]
+
+[node name="MenuScene" type="Node3D"]
+script = ExtResource("1_scene")
+SceneType = 5
+BackgroundColorEnabled = true
+BackgroundColor = Color(0, 0, 0, 1)
+
+[node name="PS1Player" type="Node3D" parent="."]
+script = ExtResource("2_player")
+
+[node name="menu" type="Node" parent="."]
+script = ExtResource("3_canvas")
+CanvasName = "menu"
+SortOrder = 10
+
+[node name="Title" type="Node" parent="menu"]
+script = ExtResource("4_elem")
+ElementName = "title"
+Type = 2
+Anchor = 2
+X = 0
+Y = 80
+Width = 320
+Height = 16
+Color = Color(0.95, 0.95, 0.95, 1)
+Text = "YOUR GAME TITLE"
+TextAlign = 1
+
+[node name="PressStart" type="Node" parent="menu"]
+script = ExtResource("4_elem")
+ElementName = "press_start"
+Type = 2
+Anchor = 7
+X = 0
+Y = 60
+Width = 320
+Height = 16
+Color = Color(0.7, 0.7, 0.7, 1)
+Text = "PRESS START"
+TextAlign = 1
