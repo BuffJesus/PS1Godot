@@ -161,6 +161,10 @@ public static class VertexAOBaker
                     1.0f);
             }
             pmi.BakedColors = output;
+            // Mirror BakedColors into the Mesh's COLOR vertex array so
+            // the editor viewport shows the AO-multiplied result. See
+            // BakedColorMeshHelper for the rationale.
+            BakedColorMeshHelper.ApplyBakedColorsTo(pmi);
             result.MeshesBaked++;
             result.VerticesPainted += output.Length;
         }

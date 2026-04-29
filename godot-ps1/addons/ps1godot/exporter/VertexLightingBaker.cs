@@ -147,6 +147,11 @@ public static class VertexLightingBaker
             }
 
             pmi.BakedColors = output;
+            // Also stamp into the Mesh's COLOR vertex array so Godot's
+            // editor renderer shows the bake. Without this, BakedColors
+            // is invisible in the viewport and only manifests on PSX
+            // after export.
+            BakedColorMeshHelper.ApplyBakedColorsTo(pmi);
             result.MeshesBaked++;
             result.VerticesPainted += output.Length;
         }

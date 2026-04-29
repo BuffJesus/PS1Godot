@@ -335,7 +335,7 @@ public static class BackgroundBaker
         if (n is PS1MeshInstance pmi && pmi.Visible && pmi.Mesh != null
             && pmi.BakedColors != null && pmi.BakedColors.Length > 0)
         {
-            var rebuilt = BuildMeshWithColors(pmi.Mesh, pmi.BakedColors);
+            var rebuilt = BakedColorMeshHelper.BuildMeshWithColors(pmi.Mesh, pmi.BakedColors);
             if (rebuilt != null)
             {
                 swapped.Add(new MeshSwapEntry(pmi, pmi.Mesh));
@@ -343,42 +343,6 @@ public static class BackgroundBaker
             }
         }
         foreach (var child in n.GetChildren()) WalkAndSwap(child, swapped);
-    }
-
-    // Build an ArrayMesh that mirrors `src` (per-surface arrays preserved)
-    // but with BakedColors stamped into ARRAY_COLOR. BakedColors is a
-    // single flat PackedColorArray — interpreted as concatenated per-
-    // surface colors in the same order surfaces appear. Each surface
-    // consumes `vertexCount` colors; if BakedColors is shorter than the
-    // total, the remainder pads with white (matches the splashpack
-    // writer's fallback so editor and PSX agree).
-    private static ArrayMesh? BuildMeshWithColors(Mesh src, Color[] bakedColors)
-    {
-        int surfaceCount = src.GetSurfaceCount();
-        if (surfaceCount == 0) return null;
-
-        var dst = new ArrayMesh();
-        int colorCursor = 0;
-        for (int s = 0; s < surfaceCount; s++)
-        {
-            var arrays = src.SurfaceGetArrays(s);
-            if (arrays.Count <= (int)Mesh.ArrayType.Color) continue;
-
-            var verts = arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array();
-            int vc = verts.Length;
-            var colors = new Color[vc];
-            for (int i = 0; i < vc; i++)
-            {
-                colors[i] = colorCursor < bakedColors.Length
-                    ? bakedColors[colorCursor]
-                    : Colors.White;
-                colorCursor++;
-            }
-            arrays[(int)Mesh.ArrayType.Color] = colors;
-
-            dst.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
-        }
-        return dst;
     }
 
     private static void RestoreBakedColorMeshes(System.Collections.Generic.List<MeshSwapEntry> swapped)
