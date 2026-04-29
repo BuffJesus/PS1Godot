@@ -57,6 +57,7 @@ public partial class PS1GodotPlugin : EditorPlugin
     private PS1TexturePreviewInspector? _texturePreviewInspector;
     private PS1VRAMViewerDock? _vramViewerDock;
     private LuaHotSwapWatcher? _luaHotSwapWatcher;
+    private PS1ViewportOverlay? _viewportOverlay;
 
     // Submenu PopupMenus held so we can free them on _ExitTree.
     // Project → Tools previously had 25 flat "PS1Godot: ..." items —
@@ -222,6 +223,11 @@ public partial class PS1GodotPlugin : EditorPlugin
         // VRAM viewer — bottom-panel tab that visualises the packed
         // 1024×512 layout after each export (atlases, textures, CLUTs,
         // reserved framebuffer + font regions).
+        // Viewport overlay (Surface C) — compact tri/VRAM/SPU readout
+        // at the top of the 3D viewport, color-coded by budget pressure.
+        _viewportOverlay = new PS1ViewportOverlay();
+        AddControlToContainer(CustomControlContainer.SpatialEditorMenu, _viewportOverlay);
+
         _vramViewerDock = new PS1VRAMViewerDock();
 #pragma warning disable CS0618 // Obsolete: AddControlToBottomPanel — see AddControlToDock site above.
         AddControlToBottomPanel(_vramViewerDock, "PS1 VRAM");
@@ -283,9 +289,9 @@ public partial class PS1GodotPlugin : EditorPlugin
 
     private void OnSceneChanged(Node sceneRoot)
     {
-        if (_dock == null) return;
         var stats = UI.SceneStats.Compute(sceneRoot);
-        _dock.ApplySceneStats(stats);
+        _dock?.ApplySceneStats(stats);
+        _viewportOverlay?.ApplyStats(stats);
     }
 
     public override void _ExitTree()
@@ -363,6 +369,13 @@ public partial class PS1GodotPlugin : EditorPlugin
         {
             _luaHotSwapWatcher.QueueFree();
             _luaHotSwapWatcher = null;
+        }
+
+        if (_viewportOverlay != null)
+        {
+            RemoveControlFromContainer(CustomControlContainer.SpatialEditorMenu, _viewportOverlay);
+            _viewportOverlay.QueueFree();
+            _viewportOverlay = null;
         }
 
         GD.Print("[PS1Godot] Plugin disabled.");
