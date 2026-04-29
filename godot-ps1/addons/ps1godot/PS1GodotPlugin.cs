@@ -37,6 +37,7 @@ public partial class PS1GodotPlugin : EditorPlugin
     private const string EditMeshInBlenderMenuLabel    = "PS1Godot: Edit Mesh in Blender";
     private const string BakeVertexAOMenuLabel         = "PS1Godot: Bake Vertex AO into BakedColors";
     private const string BakeBackgroundMenuLabel       = "PS1Godot: Bake Background from Selected Camera";
+    private const string ClearBakedColorsMenuLabel     = "PS1Godot: Clear BakedColors on Selected Meshes";
 
     // Where extracted .glb files land. Matches the Blender add-on's
     // default `asset_subdir` so the round-trip back overwrites the
@@ -83,6 +84,7 @@ public partial class PS1GodotPlugin : EditorPlugin
         AddToolMenuItem(EditMeshInBlenderMenuLabel,    Callable.From(OnEditMeshInBlender));
         AddToolMenuItem(BakeVertexAOMenuLabel,         Callable.From(OnBakeVertexAO));
         AddToolMenuItem(BakeBackgroundMenuLabel,       Callable.From(OnBakeBackground));
+        AddToolMenuItem(ClearBakedColorsMenuLabel,     Callable.From(OnClearBakedColors));
 
         _triggerBoxGizmo = new PS1TriggerBoxGizmo();
         AddNode3DGizmoPlugin(_triggerBoxGizmo);
@@ -231,6 +233,7 @@ public partial class PS1GodotPlugin : EditorPlugin
         RemoveToolMenuItem(EditMeshInBlenderMenuLabel);
         RemoveToolMenuItem(BakeVertexAOMenuLabel);
         RemoveToolMenuItem(BakeBackgroundMenuLabel);
+        RemoveToolMenuItem(ClearBakedColorsMenuLabel);
 
         SceneChanged -= OnSceneChanged;
         EditorInterface.Singleton.GetSelection().SelectionChanged -= OnEditorSelectionChanged;
@@ -1442,6 +1445,34 @@ public partial class PS1GodotPlugin : EditorPlugin
         {
             GD.Print("[PS1Godot] Save the .tscn to persist the AO-multiplied BakedColors.");
         }
+    }
+
+    // ── Clear BakedColors (Vertex Lighting / AO undo) ───────────────
+    //
+    // Symmetric counterpart to Bake Vertex Lighting / Bake Vertex AO.
+    // Resets selected PS1MeshInstance(s) to a "no shading" state:
+    //   - BakedColors = []
+    //   - Mesh.COLOR rebuilt with PSYQo-neutral 0.5 gray, so the
+    //     shader's 2× modulate yields original texture color.
+    private void OnClearBakedColors()
+    {
+        var selection = EditorInterface.Singleton.GetSelection().GetSelectedNodes();
+        if (selection.Count == 0)
+        {
+            GD.PushError("[PS1Godot] Clear BakedColors: select one or more PS1MeshInstance nodes first.");
+            return;
+        }
+
+        int cleared = 0;
+        foreach (var n in selection)
+        {
+            if (n is PS1MeshInstance pmi)
+            {
+                Exporter.BakedColorMeshHelper.ClearBakedColorsOn(pmi);
+                cleared++;
+            }
+        }
+        GD.Print($"[PS1Godot] Cleared BakedColors on {cleared} mesh(es). Save the .tscn to persist.");
     }
 
     // ── Phase 4 stretch: pre-rendered background baker ──────────────

@@ -40,6 +40,37 @@ public static class BakedColorMeshHelper
         if (rebuilt != null) pmi.Mesh = rebuilt;
     }
 
+    // Clear: set BakedColors to empty + rebuild Mesh.COLOR to
+    // PSYQo-neutral 0.5 gray so the runtime's 2× modulate produces
+    // the original texture color (no shading). Authors call this
+    // via the "Clear BakedColors on Selected Meshes" menu item to
+    // undo a bad Vertex Lighting / AO bake without hand-editing
+    // the .tscn or re-importing the GLB.
+    public static void ClearBakedColorsOn(PS1MeshInstance pmi)
+    {
+        if (pmi == null) return;
+        pmi.BakedColors = System.Array.Empty<Color>();
+        if (pmi.Mesh == null) return;
+
+        // Build a neutral-gray COLOR array so the editor + runtime
+        // shader (2× modulate) outputs the texture untinted.
+        var neutral = new Color(0.5f, 0.5f, 0.5f, 1f);
+        int totalVerts = 0;
+        for (int s = 0; s < pmi.Mesh.GetSurfaceCount(); s++)
+        {
+            var arrays = pmi.Mesh.SurfaceGetArrays(s);
+            if (arrays.Count <= (int)Mesh.ArrayType.Vertex) continue;
+            totalVerts += arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array().Length;
+        }
+        if (totalVerts == 0) return;
+
+        var grays = new Color[totalVerts];
+        for (int i = 0; i < totalVerts; i++) grays[i] = neutral;
+
+        var rebuilt = BuildMeshWithColors(pmi.Mesh, grays);
+        if (rebuilt != null) pmi.Mesh = rebuilt;
+    }
+
     // Build an ArrayMesh that mirrors `src` (per-surface arrays
     // preserved) but with `bakedColors` stamped into ARRAY_COLOR.
     // bakedColors is interpreted as concatenated per-surface colors
