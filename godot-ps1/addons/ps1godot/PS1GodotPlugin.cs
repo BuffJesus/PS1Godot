@@ -58,33 +58,111 @@ public partial class PS1GodotPlugin : EditorPlugin
     private PS1VRAMViewerDock? _vramViewerDock;
     private LuaHotSwapWatcher? _luaHotSwapWatcher;
 
+    // Submenu PopupMenus held so we can free them on _ExitTree.
+    // Project → Tools previously had 25 flat "PS1Godot: ..." items —
+    // hard to scan, violated docs/ui-ux-plan.md tenet "Intuitive: one
+    // obvious place per action." Now: one top-level Run on PSX (mirror
+    // of the dock CTA) + 7 grouped submenus.
+    private PopupMenu? _menuBake;
+    private PopupMenu? _menuMesh;
+    private PopupMenu? _menuMaterials;
+    private PopupMenu? _menuBlender;
+    private PopupMenu? _menuRunBuild;
+    private PopupMenu? _menuAudit;
+    private PopupMenu? _menuTests;
+
     public override void _EnterTree()
     {
-        AddToolMenuItem(SubdivideMenuLabel, Callable.From(OnSubdivide));
-        AddToolMenuItem(AnalyzeTexturesMenuLabel, Callable.From(OnAnalyzeTextures));
-        AddToolMenuItem(ToggleCompositorMenuLabel, Callable.From(OnToggleCompositor));
-        AddToolMenuItem(ExportEmptySplashpackMenuLabel, Callable.From(OnExportEmptySplashpack));
-        AddToolMenuItem(BuildPsxsplashMenuLabel, Callable.From(OnBuildPsxsplash));
-        AddToolMenuItem(LaunchEmulatorMenuLabel, Callable.From(OnLaunchEmulator));
+        // Top-level: the primary CTA only. Mirrors the dock's big red
+        // Run button — same handler, same tooltip semantics.
         AddToolMenuItem(RunOnPsxMenuLabel, Callable.From(OnRunOnPsx));
-        AddToolMenuItem(ConvertMeshToPS1MenuLabel, Callable.From(OnConvertMeshToPS1));
-        AddToolMenuItem(AddSkinnedTestMenuLabel, Callable.From(OnAddSkinnedTestMesh));
-        AddToolMenuItem(GenerateFontBitmapMenuLabel, Callable.From(OnGenerateFontBitmap));
-        AddToolMenuItem(RunMidiTestsMenuLabel, Callable.From(OnRunMidiTests));
-        AddToolMenuItem(RunLuaRewriterTestsMenuLabel, Callable.From(OnRunLuaRewriterTests));
-        AddToolMenuItem(RegenLuaStubsMenuLabel, Callable.From(OnRegenLuaStubs));
-        AddToolMenuItem(RunStubGenTestsMenuLabel, Callable.From(OnRunStubGenTests));
-        AddToolMenuItem(FrameModelMenuLabel, Callable.From(OnFrameSelectedModel));
-        AddToolMenuItem(ApplyBlenderMetadataMenuLabel, Callable.From(OnApplyBlenderMetadata));
-        AddToolMenuItem(WriteBlenderMetadataMenuLabel, Callable.From(OnWriteBlenderMetadata));
-        AddToolMenuItem(PopulateMaterialsMenuLabel,    Callable.From(OnPopulateMaterials));
-        AddToolMenuItem(InferDefaultsMenuLabel,        Callable.From(OnInferDefaults));
-        AddToolMenuItem(SendToBlenderMenuLabel,        Callable.From(OnSendToBlender));
-        AddToolMenuItem(BakeVertexLightingMenuLabel,   Callable.From(OnBakeVertexLighting));
-        AddToolMenuItem(EditMeshInBlenderMenuLabel,    Callable.From(OnEditMeshInBlender));
-        AddToolMenuItem(BakeVertexAOMenuLabel,         Callable.From(OnBakeVertexAO));
-        AddToolMenuItem(BakeBackgroundMenuLabel,       Callable.From(OnBakeBackground));
-        AddToolMenuItem(ClearBakedColorsMenuLabel,     Callable.From(OnClearBakedColors));
+
+        // Submenu groupings. Each PopupMenu carries its action items
+        // with a stable id; IdPressed dispatches via the BakeMenu /
+        // MeshMenu / etc. enums below. Adding a new menu item =
+        // extend the enum + the dispatch switch + AddItem call.
+        _menuBake = BuildSubmenu("PS1GodotBakeMenu", new[]
+        {
+            ((int)BakeMenu.VertexLighting, "Vertex Lighting from Scene Lights",
+                "Walk the scene's DirectionalLight3D / OmniLight3D / SpotLight3D nodes and bake N·L lighting into each selected PS1MeshInstance's BakedColors. Editor viewport updates immediately. Repeat after moving a light."),
+            ((int)BakeMenu.VertexAO, "Vertex AO into BakedColors",
+                "Multiply hemisphere ambient occlusion into existing BakedColors via raycasts against scene geometry. Run after Vertex Lighting; corners and crevices darken."),
+            ((int)BakeMenu.Background, "Background from Selected Camera",
+                "Render the selected Camera3D's POV to res://assets/backgrounds/<scene>_<cam>.png at 256×240. Auto-runs Vertex Lighting + AO first if scene has lights. Drop the PNG onto a PS1UICanvas Image element for a Resident Evil / FFVII-style fixed-camera scene."),
+            ((int)BakeMenu.Clear, "Clear BakedColors on Selected Meshes",
+                "Undo a bad Vertex Lighting / AO bake. Resets BakedColors to empty + rebuilds Mesh.COLOR to PSYQo-neutral 0.5 gray (texture renders untinted). Save the .tscn to persist."),
+        }, OnBakeMenuPressed);
+        AddToolSubmenuItem("PS1Godot: Bake", _menuBake);
+
+        _menuMesh = BuildSubmenu("PS1GodotMeshMenu", new[]
+        {
+            ((int)MeshMenu.ConvertToPS1, "Convert MeshInstance3D → PS1MeshInstance",
+                "Replaces selected MeshInstance3D nodes with PS1MeshInstance, preserving transform + mesh + material. Run after importing a fresh GLB to get PS1-aware export metadata."),
+            ((int)MeshMenu.Subdivide, "Subdivide Selected (×4 tris)",
+                "Splits every triangle on the selected mesh into 4. Reduces affine texture warping on large polys at the cost of triangle budget. Apply before exporting if walls have visible texture distortion."),
+            ((int)MeshMenu.FrameInViewport, "Frame Selected in Viewport",
+                "Move the editor camera to frame the selected node. Faster than Godot's stock framing for tiny PS1-scale meshes."),
+            ((int)MeshMenu.AddSkinnedTest, "Add Skinned Test Mesh (bullet 11)",
+                "Instantiate the SkinnedTestBuilder asset — a humanoid Mixamo character pre-wired for PS1 skinning. Smoke-test for the skinned-mesh export path."),
+        }, OnMeshMenuPressed);
+        AddToolSubmenuItem("PS1Godot: Mesh", _menuMesh);
+
+        _menuMaterials = BuildSubmenu("PS1GodotMaterialsMenu", new[]
+        {
+            ((int)MaterialsMenu.Populate, "Populate PS1MaterialMetadata for Selected",
+                "Adds a PS1MaterialMetadata resource alongside selected meshes' surfaces with default tags (CelShaded, ShadingMode, etc.). The Blender add-on round-trips these via JSON sidecars."),
+            ((int)MaterialsMenu.InferDefaults, "Infer PS1 Defaults for Selected",
+                "Heuristically set PS1MeshInstance fields: BitDepth from texture size, ShadingMode from vertex-color presence, AlphaMode from texture's alpha channel. Runs once; author tweaks afterward."),
+            ((int)MaterialsMenu.ToggleCompositor, "Toggle PS1 Preview on Selected Camera",
+                "Add or remove the PS1PixelizeEffect compositor on the selected Camera3D. Live PS1 preview in the editor viewport — vertex snap, dither, scanlines."),
+        }, OnMaterialsMenuPressed);
+        AddToolSubmenuItem("PS1Godot: Materials", _menuMaterials);
+
+        _menuBlender = BuildSubmenu("PS1GodotBlenderMenu", new[]
+        {
+            ((int)BlenderMenu.Send, "Send to Blender",
+                "Open the scene's source .blend file in Blender, auto-running the import-metadata operator. Set PS1Scene.SourceBlendFile to use this; otherwise launches Blender with no file open."),
+            ((int)BlenderMenu.EditMesh, "Edit Selected Mesh in Blender",
+                "Extract the selected PS1MeshInstance(s) as <mesh_id>.glb at res://ps1godot_assets/meshes/, then launch Blender pointing at the first file. The Blender add-on re-imports the round-trip back here."),
+            ((int)BlenderMenu.ApplyMetadata, "Apply Blender Metadata Sidecars",
+                "Walk res://ps1godot_assets/blender_sources/ for JSON sidecars and apply their PS1 metadata to matching nodes. Run after Blender finishes a metadata-only edit pass."),
+            ((int)BlenderMenu.WriteMetadata, "Write Blender Metadata Sidecars",
+                "Inverse of Apply: serialize current PS1 metadata back to JSON sidecars in res://ps1godot_assets/blender_sources/. Run before sending to Blender to push your latest tweaks."),
+        }, OnBlenderMenuPressed);
+        AddToolSubmenuItem("PS1Godot: Blender", _menuBlender);
+
+        _menuRunBuild = BuildSubmenu("PS1GodotRunBuildMenu", new[]
+        {
+            ((int)RunBuildMenu.Build, "Build psxsplash runtime",
+                "Compile the C++ runtime via scripts/build-psxsplash.cmd. Needed once after pulling psxsplash-main changes; F5 / Run on PSX rebuilds automatically when the runtime binary is missing."),
+            ((int)RunBuildMenu.LaunchEmulator, "Launch in PCSX-Redux",
+                "Boot PCSX-Redux against the existing godot-ps1/build/ artifacts without re-exporting. Faster iteration when you've tweaked Lua but not assets."),
+            ((int)RunBuildMenu.ExportOnly, "Export Splashpack (no build, no launch)",
+                "Write the splashpack triplet (.splashpack/.vram/.spu) for the open scene to res://build/. Skips the runtime build + emulator launch — useful for diffing exports or hand-testing the writer."),
+        }, OnRunBuildMenuPressed);
+        AddToolSubmenuItem("PS1Godot: Build / Launch", _menuRunBuild);
+
+        _menuAudit = BuildSubmenu("PS1GodotAuditMenu", new[]
+        {
+            ((int)AuditMenu.AnalyzeTextures, "Analyze Texture Compliance",
+                "Scan res://**/*.png and report every texture's effective PSX VRAM cost, bit-depth recommendation, and oversize warnings. Prints to the editor log; doesn't modify anything."),
+            ((int)AuditMenu.GenerateFont, "Generate bitmap for selected PS1UIFontAsset",
+                "Rasterize the font's TTF source into the 8×12-cell bitmap the runtime expects. Run after editing the font's character set or selecting a different TTF."),
+            ((int)AuditMenu.RegenLuaStubs, "Regenerate Lua API Stubs (EmmyLua)",
+                "Rebuild res://addons/ps1godot/scripting/api/lua_api.lua from psxsplash-main/src/luaapi.hh. Powers Rider/VSCode autocomplete for PS1Lua. Run after pulling new luaapi.hh entries."),
+        }, OnAuditMenuPressed);
+        AddToolSubmenuItem("PS1Godot: Audit", _menuAudit);
+
+        _menuTests = BuildSubmenu("PS1GodotTestsMenu", new[]
+        {
+            ((int)TestsMenu.MidiSerializer, "MIDI Serializer Tests",
+                "Run the in-editor unit tests covering MIDI → PS1M sequence conversion. Pass/fail prints to the log. CI also runs these — local execution catches regressions before commit."),
+            ((int)TestsMenu.LuaRewriter, "Lua Decimal Rewriter Tests",
+                "Exercise the rewriter that turns 0.06 into FixedPoint.newFromRaw(246) so psxlua's NOPARSER tokenizer can read decimal literals. Ensures author-written Lua keeps loading on PSX."),
+            ((int)TestsMenu.LuaStubGenerator, "Lua API Stub Generator Tests",
+                "Verify the EmmyLua stub generator's output against luaapi.hh fixtures. Catches breakage in the IDE-autocomplete pipeline."),
+        }, OnTestsMenuPressed);
+        AddToolSubmenuItem("PS1Godot: Tests", _menuTests);
 
         _triggerBoxGizmo = new PS1TriggerBoxGizmo();
         AddNode3DGizmoPlugin(_triggerBoxGizmo);
@@ -212,28 +290,25 @@ public partial class PS1GodotPlugin : EditorPlugin
 
     public override void _ExitTree()
     {
-        RemoveToolMenuItem(SubdivideMenuLabel);
-        RemoveToolMenuItem(AnalyzeTexturesMenuLabel);
-        RemoveToolMenuItem(ToggleCompositorMenuLabel);
-        RemoveToolMenuItem(ExportEmptySplashpackMenuLabel);
-        RemoveToolMenuItem(BuildPsxsplashMenuLabel);
-        RemoveToolMenuItem(LaunchEmulatorMenuLabel);
         RemoveToolMenuItem(RunOnPsxMenuLabel);
-        RemoveToolMenuItem(ConvertMeshToPS1MenuLabel);
-        RemoveToolMenuItem(AddSkinnedTestMenuLabel);
-        RemoveToolMenuItem(GenerateFontBitmapMenuLabel);
-        RemoveToolMenuItem(RunMidiTestsMenuLabel);
-        RemoveToolMenuItem(FrameModelMenuLabel);
-        RemoveToolMenuItem(ApplyBlenderMetadataMenuLabel);
-        RemoveToolMenuItem(WriteBlenderMetadataMenuLabel);
-        RemoveToolMenuItem(PopulateMaterialsMenuLabel);
-        RemoveToolMenuItem(InferDefaultsMenuLabel);
-        RemoveToolMenuItem(SendToBlenderMenuLabel);
-        RemoveToolMenuItem(BakeVertexLightingMenuLabel);
-        RemoveToolMenuItem(EditMeshInBlenderMenuLabel);
-        RemoveToolMenuItem(BakeVertexAOMenuLabel);
-        RemoveToolMenuItem(BakeBackgroundMenuLabel);
-        RemoveToolMenuItem(ClearBakedColorsMenuLabel);
+        // Submenus: RemoveToolMenuItem with the submenu's display label
+        // (Godot's Tools menu indexes both flat items and submenus by
+        // their visible text).
+        RemoveToolMenuItem("PS1Godot: Bake");
+        RemoveToolMenuItem("PS1Godot: Mesh");
+        RemoveToolMenuItem("PS1Godot: Materials");
+        RemoveToolMenuItem("PS1Godot: Blender");
+        RemoveToolMenuItem("PS1Godot: Build / Launch");
+        RemoveToolMenuItem("PS1Godot: Audit");
+        RemoveToolMenuItem("PS1Godot: Tests");
+        // Free the PopupMenus we owned. Submenus aren't reparented by
+        // AddToolSubmenuItem on Godot 4.7-dev; we keep references and
+        // QueueFree explicitly.
+        foreach (var pm in new[] { _menuBake, _menuMesh, _menuMaterials, _menuBlender, _menuRunBuild, _menuAudit, _menuTests })
+        {
+            pm?.QueueFree();
+        }
+        _menuBake = _menuMesh = _menuMaterials = _menuBlender = _menuRunBuild = _menuAudit = _menuTests = null;
 
         SceneChanged -= OnSceneChanged;
         EditorInterface.Singleton.GetSelection().SelectionChanged -= OnEditorSelectionChanged;
@@ -291,6 +366,144 @@ public partial class PS1GodotPlugin : EditorPlugin
         }
 
         GD.Print("[PS1Godot] Plugin disabled.");
+    }
+
+    // ─── Submenu plumbing ─────────────────────────────────────────────
+    //
+    // Group enum values are integers used as PopupMenu item ids.
+    // BuildSubmenu wires AddItem + SetItemTooltip + IdPressed so the
+    // submenu definition above stays declarative.
+    private enum BakeMenu
+    {
+        VertexLighting = 0,
+        VertexAO = 1,
+        Background = 2,
+        Clear = 3,
+    }
+    private enum MeshMenu
+    {
+        ConvertToPS1 = 0,
+        Subdivide = 1,
+        FrameInViewport = 2,
+        AddSkinnedTest = 3,
+    }
+    private enum MaterialsMenu
+    {
+        Populate = 0,
+        InferDefaults = 1,
+        ToggleCompositor = 2,
+    }
+    private enum BlenderMenu
+    {
+        Send = 0,
+        EditMesh = 1,
+        ApplyMetadata = 2,
+        WriteMetadata = 3,
+    }
+    private enum RunBuildMenu
+    {
+        Build = 0,
+        LaunchEmulator = 1,
+        ExportOnly = 2,
+    }
+    private enum AuditMenu
+    {
+        AnalyzeTextures = 0,
+        GenerateFont = 1,
+        RegenLuaStubs = 2,
+    }
+    private enum TestsMenu
+    {
+        MidiSerializer = 0,
+        LuaRewriter = 1,
+        LuaStubGenerator = 2,
+    }
+
+    // Build a PopupMenu populated from a (id, label, tooltip) list.
+    // Wires IdPressed once; dispatch closure receives the long id.
+    private static PopupMenu BuildSubmenu(string name,
+        (int id, string label, string tooltip)[] items,
+        PopupMenu.IdPressedEventHandler dispatch)
+    {
+        var pm = new PopupMenu { Name = name };
+        foreach (var (id, label, tooltip) in items)
+        {
+            pm.AddItem(label, id);
+            if (!string.IsNullOrEmpty(tooltip))
+            {
+                int idx = pm.GetItemIndex(id);
+                if (idx >= 0) pm.SetItemTooltip(idx, tooltip);
+            }
+        }
+        pm.IdPressed += dispatch;
+        return pm;
+    }
+
+    private void OnBakeMenuPressed(long id)
+    {
+        switch ((BakeMenu)id)
+        {
+            case BakeMenu.VertexLighting: OnBakeVertexLighting(); break;
+            case BakeMenu.VertexAO:       OnBakeVertexAO(); break;
+            case BakeMenu.Background:     OnBakeBackground(); break;
+            case BakeMenu.Clear:          OnClearBakedColors(); break;
+        }
+    }
+    private void OnMeshMenuPressed(long id)
+    {
+        switch ((MeshMenu)id)
+        {
+            case MeshMenu.ConvertToPS1:    OnConvertMeshToPS1(); break;
+            case MeshMenu.Subdivide:       OnSubdivide(); break;
+            case MeshMenu.FrameInViewport: OnFrameSelectedModel(); break;
+            case MeshMenu.AddSkinnedTest:  OnAddSkinnedTestMesh(); break;
+        }
+    }
+    private void OnMaterialsMenuPressed(long id)
+    {
+        switch ((MaterialsMenu)id)
+        {
+            case MaterialsMenu.Populate:         OnPopulateMaterials(); break;
+            case MaterialsMenu.InferDefaults:    OnInferDefaults(); break;
+            case MaterialsMenu.ToggleCompositor: OnToggleCompositor(); break;
+        }
+    }
+    private void OnBlenderMenuPressed(long id)
+    {
+        switch ((BlenderMenu)id)
+        {
+            case BlenderMenu.Send:          OnSendToBlender(); break;
+            case BlenderMenu.EditMesh:      OnEditMeshInBlender(); break;
+            case BlenderMenu.ApplyMetadata: OnApplyBlenderMetadata(); break;
+            case BlenderMenu.WriteMetadata: OnWriteBlenderMetadata(); break;
+        }
+    }
+    private void OnRunBuildMenuPressed(long id)
+    {
+        switch ((RunBuildMenu)id)
+        {
+            case RunBuildMenu.Build:          OnBuildPsxsplash(); break;
+            case RunBuildMenu.LaunchEmulator: OnLaunchEmulator(); break;
+            case RunBuildMenu.ExportOnly:     OnExportEmptySplashpack(); break;
+        }
+    }
+    private void OnAuditMenuPressed(long id)
+    {
+        switch ((AuditMenu)id)
+        {
+            case AuditMenu.AnalyzeTextures: OnAnalyzeTextures(); break;
+            case AuditMenu.GenerateFont:    OnGenerateFontBitmap(); break;
+            case AuditMenu.RegenLuaStubs:   OnRegenLuaStubs(); break;
+        }
+    }
+    private void OnTestsMenuPressed(long id)
+    {
+        switch ((TestsMenu)id)
+        {
+            case TestsMenu.MidiSerializer:   OnRunMidiTests(); break;
+            case TestsMenu.LuaRewriter:      OnRunLuaRewriterTests(); break;
+            case TestsMenu.LuaStubGenerator: OnRunStubGenTests(); break;
+        }
     }
 
     // ─── In-editor wrappers around scripts/*.cmd ──────────────────────────
