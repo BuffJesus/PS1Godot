@@ -241,6 +241,13 @@ public partial class PS1GodotPlugin : EditorPlugin
         AddChild(_luaHotSwapWatcher);
 
         GD.Print("[PS1Godot] Plugin enabled. F5 = Run on PSX (export + build + launch).");
+
+        // First-run panel — shows once per project when SetupDetector
+        // reports any Missing dependencies. Skipped via the panel's
+        // own button writes a flag at user://ps1godot_skip_first_run
+        // so it doesn't return on every editor reload. Deferred so
+        // EditorInterface.GetEditorMainScreen() is fully constructed.
+        CallDeferred(MethodName.MaybeShowFirstRunPanel);
     }
 
     // Hook Godot's Play button (F5 / F6 / Shift+F5) into the Run-on-PSX
@@ -292,6 +299,14 @@ public partial class PS1GodotPlugin : EditorPlugin
         var stats = UI.SceneStats.Compute(sceneRoot);
         _dock?.ApplySceneStats(stats);
         _viewportOverlay?.ApplyStats(stats);
+    }
+
+    private void MaybeShowFirstRunPanel()
+    {
+        if (!UI.PS1FirstRunPanel.ShouldShow()) return;
+        var panel = new UI.PS1FirstRunPanel();
+        EditorInterface.Singleton.GetBaseControl().AddChild(panel);
+        panel.PopupCentered();
     }
 
     public override void _ExitTree()
