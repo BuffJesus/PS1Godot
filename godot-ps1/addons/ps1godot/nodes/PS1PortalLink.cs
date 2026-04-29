@@ -33,4 +33,18 @@ public partial class PS1PortalLink : Node3D
     // rendered portal quad is centered on the node and spans this size
     // along the node's local +X and +Y axes.
     [Export] public Vector2 PortalSize { get; set; } = new Vector2(1.5f, 2.0f);
+
+    public override string[] _GetConfigurationWarnings()
+    {
+        var w = new System.Collections.Generic.List<string>();
+        if (RoomA == null || RoomA.IsEmpty)
+            w.Add("RoomA is not set. Point it at a PS1Room node on one side of this portal.");
+        if (RoomB == null || RoomB.IsEmpty)
+            w.Add("RoomB is not set. Point it at a PS1Room node on the other side.");
+        if (RoomA != null && RoomB != null && !RoomA.IsEmpty && !RoomB.IsEmpty && RoomA == RoomB)
+            w.Add("RoomA and RoomB point at the same node. A portal must connect two different rooms.");
+        if (PortalSize.X <= 0 || PortalSize.Y <= 0)
+            w.Add($"PortalSize ({PortalSize}) has a non-positive dimension. Both X and Y must be > 0.");
+        return w.ToArray();
+    }
 }

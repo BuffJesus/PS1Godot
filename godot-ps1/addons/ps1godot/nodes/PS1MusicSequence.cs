@@ -73,4 +73,10 @@ public partial class PS1MusicSequence : Resource
     // DrumKit is set, useful for temporarily muting drums.
     [Export(PropertyHint.Range, "-1,15,1")]
     public int DrumMidiChannel { get; set; } = 9;
+
+    public override void _ValidateProperty(Godot.Collections.Dictionary property)
+    {
+        if (property["name"].AsString() == "DrumMidiChannel" && DrumKit == null)
+            property["usage"] = (long)Godot.PropertyUsageFlags.Storage;
+    }
 }

@@ -69,4 +69,24 @@ public partial class PS1DrumKit : Resource
     // than MidiNotes.
     [Export]
     public Godot.Collections.Array<int> Priorities { get; set; } = new();
+
+    /// <summary>
+    /// Export-time validation. Call from SceneCollector before writing drum
+    /// data to surface parallel-array desync and empty kits early.
+    /// </summary>
+    public void Validate(string kitName)
+    {
+        int n = MidiNotes?.Count ?? 0;
+        if (n == 0)
+        {
+            GD.PushWarning($"[PS1Godot] DrumKit '{kitName}': no MidiNotes entries — kit is empty and will produce silence.");
+            return;
+        }
+        int clipCount = AudioClipNames?.Count ?? 0;
+        if (clipCount < n)
+        {
+            GD.PushWarning($"[PS1Godot] DrumKit '{kitName}': AudioClipNames has {clipCount} entries but MidiNotes has {n}. " +
+                           "Missing entries will have no sound. Keep the parallel arrays in sync.");
+        }
+    }
 }

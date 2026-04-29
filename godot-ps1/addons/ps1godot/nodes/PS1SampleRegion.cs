@@ -105,4 +105,16 @@ public partial class PS1SampleRegion : Resource
     [Export(PropertyHint.Range, "0,15,1")]  public int DecayRate   { get; set; } = 10;
     [Export(PropertyHint.Range, "0,127,1")] public int SustainLevel { get; set; } = 100;
     [Export(PropertyHint.Range, "0,15,1")]  public int ReleaseRate { get; set; } = 15;
+
+    public override void _ValidateProperty(Godot.Collections.Dictionary property)
+    {
+        string name = property["name"].AsString();
+        bool hidden = name switch
+        {
+            "LoopStart" or "LoopEnd" => !LoopEnabled,
+            "AttackRate" or "DecayRate" or "SustainLevel" or "ReleaseRate" => !OverrideADSR,
+            _ => false,
+        };
+        if (hidden) property["usage"] = (long)Godot.PropertyUsageFlags.Storage;
+    }
 }

@@ -239,12 +239,12 @@ public partial class PS1MeshInstance : MeshInstance3D
     [Export(PropertyHint.Range, "0.1,10.0,0.1,suffix:m")]
     public float InteractionRadiusMeters { get; set; } = 1.5f;
     /// <summary>
-    /// PSX controller button id. 12=Triangle (default — clear of jump and
-    /// sprint), 13=Circle, 14=Cross (RESERVED for jump on digital pad),
-    /// 15=Square (RESERVED for sprint). Other ids are direction/start/
-    /// shoulder buttons — see code comment for the full list.
+    /// PSX controller face button. 12=Triangle (default — interact),
+    /// 13=Circle (cancel/back), 14=Cross (jump — usually reserved),
+    /// 15=Square (sprint — usually reserved). Use Triangle for most
+    /// interactables; only override if your game remaps controls.
     /// </summary>
-    [Export(PropertyHint.Range, "0,15,1")]
+    [Export(PropertyHint.Range, "12,15,1")]
     public int InteractButton { get; set; } = 12;
     /// <summary>
     /// True = fires every time the button is pressed within cooldown

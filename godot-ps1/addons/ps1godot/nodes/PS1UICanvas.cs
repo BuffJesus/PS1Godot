@@ -76,4 +76,13 @@ public partial class PS1UICanvas : Node
     /// customize without mutating the plugin copy.
     /// </summary>
     [Export] public PS1Theme? Theme { get; set; }
+
+    public override string[] _GetConfigurationWarnings()
+    {
+        var w = new System.Collections.Generic.List<string>();
+        if (string.IsNullOrEmpty(CanvasName))
+            w.Add("CanvasName is empty. Lua calls like UI.SetVisible(name, true) " +
+                  "use this name to find the canvas — an empty name silently fails.");
+        return w.ToArray();
+    }
 }
