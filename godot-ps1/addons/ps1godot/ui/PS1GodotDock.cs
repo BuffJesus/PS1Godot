@@ -264,8 +264,35 @@ public partial class PS1GodotDock : VBoxContainer
         };
         h.AddChild(name);
 
+        // For missing deps, show a "Copy" button with the install hint.
+        if (row.Status == SetupDetector.Status.Missing)
+        {
+            string? hint = GetInstallHint(row.Name);
+            if (hint != null)
+            {
+                var copyBtn = new Button
+                {
+                    Text = "Copy",
+                    TooltipText = $"Copy to clipboard: {hint}",
+                    CustomMinimumSize = new Vector2(50, 0),
+                };
+                copyBtn.Pressed += () => DisplayServer.ClipboardSet(hint);
+                h.AddChild(copyBtn);
+            }
+        }
+
         return h;
     }
+
+    private static string? GetInstallHint(string depName) => depName switch
+    {
+        "MIPS toolchain" => "powershell -File pcsx-redux-main/mips.ps1 install 14.2.0",
+        "make"           => "winget install MSYS2.MSYS2",
+        "PCSX-Redux"     => "winget install grumpycoders.pcsx-redux",
+        "Blender"        => "winget install BlenderFoundation.Blender",
+        "psxsplash submodules" => "git submodule update --init --recursive",
+        _ => null,
+    };
 
     // Toggle the PSX preview pass on every PS1 ShaderMaterial that
     // shares ps1.gdshader. Loads the two stock .tres files directly

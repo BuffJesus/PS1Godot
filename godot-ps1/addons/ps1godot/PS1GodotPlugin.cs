@@ -599,15 +599,24 @@ public partial class PS1GodotPlugin : EditorPlugin
     private void OnBuildPsxsplash()
     {
         GD.Print("[PS1Godot] Building psxsplash runtime…");
+        _dock?.SetPipelineStatus("Building psxsplash runtime…");
         int code = RunScript("scripts/build-psxsplash.cmd", "Build psxsplash");
-        if (code == 0) GD.Print("[PS1Godot] Build OK.");
-        else GD.PushError(
-            $"[PS1Godot] psxsplash runtime build failed (exit {code}).\n" +
-            "  Why: F5 / Run on PSX needs psxsplash.ps-exe in godot-ps1/build/ to launch.\n" +
-            "  Fix: scroll up in the editor log for the first compiler error. Common causes:\n" +
-            "        • mipsel-none-elf-gcc missing from PATH (install via pcsx-redux-main/mips.ps1)\n" +
-            "        • make missing (install via Git Bash or MSYS2)\n" +
-            "        • stale .o files (run 'make clean' in psxsplash-main/ and retry)");
+        if (code == 0)
+        {
+            GD.Print("[PS1Godot] Build OK.");
+        }
+        else
+        {
+            string errorMsg = $"Build failed (exit {code}). Check Output for compiler errors.";
+            GD.PushError(
+                $"[PS1Godot] psxsplash runtime build failed (exit {code}).\n" +
+                "  Why: F5 / Run on PSX needs psxsplash.ps-exe in godot-ps1/build/ to launch.\n" +
+                "  Fix: scroll up in the editor log for the first compiler error. Common causes:\n" +
+                "        • mipsel-none-elf-gcc missing from PATH (install via pcsx-redux-main/mips.ps1)\n" +
+                "        • make missing (install via Git Bash or MSYS2)\n" +
+                "        • stale .o files (run 'make clean' in psxsplash-main/ and retry)");
+            _dock?.SetPipelineStatus("✗ " + errorMsg);
+        }
     }
 
     private void OnLaunchEmulator()
