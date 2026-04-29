@@ -85,6 +85,27 @@ public static class BackgroundBaker
         var matSkinned = ResourceLoader.Load<ShaderMaterial>("res://addons/ps1godot/shaders/ps1_skinned.tres");
         var saved = SaveBakeShaderState(matDefault, matSkinned);
         ApplyBakeShaderState(matDefault, matSkinned);
+
+        // BakedColors live on the PS1MeshInstance NODE, not on the
+        // Mesh resource — VertexLightingBaker / VertexAOBaker stamp
+        // them as a per-instance override that the splashpack writer
+        // reads at export. Godot's own renderer doesn't see them, so
+        // the SubViewport draws every vertex at COLOR=1,1,1 (white)
+        // and the bake captures blown-out silhouettes regardless of
+        // shader modulate.
+        //
+        // Fix: for each visible PS1MeshInstance with non-empty
+        // BakedColors, build an ArrayMesh copy with the bake stamped
+        // into the COLOR array, swap it in for the duration of the
+        // bake, restore afterward. Lets Godot's vertex pipeline
+        // route BakedColors through the shader's COLOR attribute
+        // exactly the way the PSX runtime will at draw time.
+        var meshSwap = ApplyBakedColorMeshes(host);
+        if (meshSwap.Count > 0)
+        {
+            GD.Print($"[PS1Godot] BG baker: applied BakedColors to {meshSwap.Count} mesh(es) for the bake render.");
+        }
+
         // Confirmation print — if you don't see this when running the
         // baker, Godot is still on the old C# DLL (memory pin
         // project_godot_dll_hot_reload). Close + reopen the editor.
@@ -144,9 +165,11 @@ public static class BackgroundBaker
 
         Image? image = subviewport.GetTexture()?.GetImage();
 
-        // Restore the PSX preview shader state regardless of whether the
-        // capture succeeded. Done before any early return so the editor
-        // viewport never gets stuck without modulate.
+        // Restore mesh swaps + PSX preview shader state regardless of
+        // whether the capture succeeded. Done before any early return so
+        // the editor viewport never gets stuck without modulate or with
+        // its meshes swapped to the bake-temporary ArrayMesh copies.
+        RestoreBakedColorMeshes(meshSwap);
         RestoreBakeShaderState(matDefault, matSkinned, saved);
 
         if (image == null || image.IsEmpty())
@@ -227,6 +250,93 @@ public static class BackgroundBaker
             skin.SetShaderParameter("preview_quantize_bits", saved.SkinnedBits);
             skin.SetShaderParameter("preview_dither_enabled", saved.SkinnedDither);
         }
+    }
+
+    // ── BakedColors → mesh.COLOR swap (transient, bake-only) ──────────
+    //
+    // Godot renders meshes using the Mesh resource's vertex arrays. The
+    // PS1MeshInstance.BakedColors property is a per-instance override
+    // the splashpack writer reads — it's NOT applied to the Mesh's
+    // COLOR array, so Godot's pipeline can't see it.
+    //
+    // For the bake to capture the lighting/AO the author saw in the
+    // editor, we duplicate each PS1MeshInstance's Mesh into an
+    // ArrayMesh, write BakedColors into the COLOR slot of every
+    // surface, and swap pmi.Mesh to that copy. Restore after the
+    // capture so editor state is untouched.
+    private record struct MeshSwapEntry(MeshInstance3D Node, Mesh Original);
+
+    private static System.Collections.Generic.List<MeshSwapEntry> ApplyBakedColorMeshes(Node host)
+    {
+        var swapped = new System.Collections.Generic.List<MeshSwapEntry>();
+        var sceneRoot = EditorInterface.Singleton?.GetEditedSceneRoot();
+        if (sceneRoot == null) return swapped;
+
+        WalkAndSwap(sceneRoot, swapped);
+        return swapped;
+    }
+
+    private static void WalkAndSwap(Node n, System.Collections.Generic.List<MeshSwapEntry> swapped)
+    {
+        if (n is PS1MeshInstance pmi && pmi.Visible && pmi.Mesh != null
+            && pmi.BakedColors != null && pmi.BakedColors.Length > 0)
+        {
+            var rebuilt = BuildMeshWithColors(pmi.Mesh, pmi.BakedColors);
+            if (rebuilt != null)
+            {
+                swapped.Add(new MeshSwapEntry(pmi, pmi.Mesh));
+                pmi.Mesh = rebuilt;
+            }
+        }
+        foreach (var child in n.GetChildren()) WalkAndSwap(child, swapped);
+    }
+
+    // Build an ArrayMesh that mirrors `src` (per-surface arrays preserved)
+    // but with BakedColors stamped into ARRAY_COLOR. BakedColors is a
+    // single flat PackedColorArray — interpreted as concatenated per-
+    // surface colors in the same order surfaces appear. Each surface
+    // consumes `vertexCount` colors; if BakedColors is shorter than the
+    // total, the remainder pads with white (matches the splashpack
+    // writer's fallback so editor and PSX agree).
+    private static ArrayMesh? BuildMeshWithColors(Mesh src, Color[] bakedColors)
+    {
+        int surfaceCount = src.GetSurfaceCount();
+        if (surfaceCount == 0) return null;
+
+        var dst = new ArrayMesh();
+        int colorCursor = 0;
+        for (int s = 0; s < surfaceCount; s++)
+        {
+            var arrays = src.SurfaceGetArrays(s);
+            if (arrays.Count <= (int)Mesh.ArrayType.Color) continue;
+
+            var verts = arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array();
+            int vc = verts.Length;
+            var colors = new Color[vc];
+            for (int i = 0; i < vc; i++)
+            {
+                colors[i] = colorCursor < bakedColors.Length
+                    ? bakedColors[colorCursor]
+                    : Colors.White;
+                colorCursor++;
+            }
+            arrays[(int)Mesh.ArrayType.Color] = colors;
+
+            dst.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
+        }
+        return dst;
+    }
+
+    private static void RestoreBakedColorMeshes(System.Collections.Generic.List<MeshSwapEntry> swapped)
+    {
+        foreach (var entry in swapped)
+        {
+            if (GodotObject.IsInstanceValid(entry.Node))
+            {
+                entry.Node.Mesh = entry.Original;
+            }
+        }
+        swapped.Clear();
     }
 
     private static string ResolveDefaultPath(Camera3D cam)
