@@ -828,7 +828,8 @@ public static class SceneCollector
                                             textureCache, elementName: "<sky>");
         if (texIdx < 0)
         {
-            GD.PushWarning($"[PS1Godot] PS1Sky '{sky.Name}': texture registration failed — sky disabled.");
+            GD.PushWarning($"[PS1Godot] PS1Sky '{sky.Name}': texture registration failed — sky disabled. " +
+                           "See the error above for details (common causes: no resource path, empty image data, or width not a multiple of the bit-depth stride).");
             return;
         }
         var tint = sky.Tint;
@@ -1025,7 +1026,9 @@ public static class SceneCollector
         byte[] advances = asset.AdvanceWidths ?? new byte[96];
         if (advances.Length != 96)
         {
-            GD.PushError($"[PS1Godot] Font '{asset.FontName}': advance widths length {advances.Length} != 96.");
+            GD.PushError($"[PS1Godot] Font '{asset.FontName}': advance widths length {advances.Length} != 96. " +
+                         "AdvanceWidths is a byte[96] array — one entry per printable ASCII character (space 0x20 through tilde 0x7E). " +
+                         "Each byte is the horizontal pixel stride for that glyph. Regenerate with Tools → Audit → Generate bitmap for the font.");
             return 0;
         }
 

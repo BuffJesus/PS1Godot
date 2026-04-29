@@ -28,6 +28,7 @@ public partial class PS1GodotDock : VBoxContainer
     private BudgetRow? _triRow;
     private BudgetRow? _vramRow;
     private BudgetRow? _spuRow;
+    private BudgetRow? _texPageRow;
     private Label? _lastExportLabel;
     private VBoxContainer? _lastExportRows;   // click-to-focus list
     private VBoxContainer? _setupBox;
@@ -128,9 +129,10 @@ public partial class PS1GodotDock : VBoxContainer
         _sceneStatsLabel.AddThemeColorOverride("font_color", new Color(1, 1, 1, 0.55f));
         inner.AddChild(_sceneStatsLabel);
 
-        // Budget rows — triangle count, VRAM, SPU. Each gets a label
-        // above its bar with "used / max" text and the bar colored per
-        // BudgetColor(). Rows hide entirely until scene stats are valid.
+        // Budget rows — triangle count, VRAM, SPU, texture pages. Each
+        // gets a label above its bar with "used / max" text and the bar
+        // colored per BudgetColor(). Rows hide entirely until scene
+        // stats are valid.
         _triRow = new BudgetRow("Triangles");
         inner.AddChild(_triRow.Label);
         inner.AddChild(_triRow.Bar);
@@ -142,6 +144,10 @@ public partial class PS1GodotDock : VBoxContainer
         _spuRow = new BudgetRow("SPU");
         inner.AddChild(_spuRow.Label);
         inner.AddChild(_spuRow.Bar);
+
+        _texPageRow = new BudgetRow("Tex Pages");
+        inner.AddChild(_texPageRow.Label);
+        inner.AddChild(_texPageRow.Bar);
 
         // Last-export summary headline + click-to-focus row list.
         // Headline carries severity-coded one-line state; rows below
@@ -173,6 +179,15 @@ public partial class PS1GodotDock : VBoxContainer
         _setupBox = new VBoxContainer();
         _setupBox.AddThemeConstantOverride("separation", 2);
         inner.AddChild(_setupBox);
+
+        var recheckBtn = new Button
+        {
+            Text = "Re-check all",
+            TooltipText = "Re-probe all dependencies (toolchain, emulator, submodules). " +
+                          "Useful after installing something the panel flagged as missing.",
+        };
+        recheckBtn.Pressed += RefreshSetupStatus;
+        inner.AddChild(recheckBtn);
 
         RefreshSetupStatus();
 
@@ -268,7 +283,8 @@ public partial class PS1GodotDock : VBoxContainer
     public void ApplySceneStats(SceneStats.Result stats)
     {
         if (_sceneNameLabel == null || _sceneStatsLabel == null ||
-            _triRow == null || _vramRow == null || _spuRow == null) return;
+            _triRow == null || _vramRow == null || _spuRow == null ||
+            _texPageRow == null) return;
 
         if (!stats.HasPS1Scene)
         {
@@ -277,6 +293,7 @@ public partial class PS1GodotDock : VBoxContainer
             _triRow.Hide();
             _vramRow.Hide();
             _spuRow.Hide();
+            _texPageRow.Hide();
             return;
         }
 
@@ -302,6 +319,17 @@ public partial class PS1GodotDock : VBoxContainer
         _spuRow.Show(
             $"SPU  {FormatKb(stats.SpuEstimateBytes)} / {FormatKb(SceneStats.SpuBudgetBytes)}  (gameplay-resident)",
             stats.SpuEstimateBytes, SceneStats.SpuBudgetBytes);
+
+        if (stats.MaxTexturePages > 0)
+        {
+            _texPageRow.Show(
+                $"Tex Pages  {stats.TexturePageEstimate} / {stats.MaxTexturePages}",
+                stats.TexturePageEstimate, stats.MaxTexturePages);
+        }
+        else
+        {
+            _texPageRow.ShowLabelOnly($"Tex Pages  {stats.TexturePageEstimate} (no budget set)");
+        }
     }
 
     // Push the validation summary built during the last

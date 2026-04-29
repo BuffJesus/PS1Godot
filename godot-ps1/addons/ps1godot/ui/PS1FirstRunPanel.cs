@@ -102,7 +102,7 @@ public partial class PS1FirstRunPanel : Window
         docsBtn.Pressed += OnOpenDocs;
         actions.AddChild(docsBtn);
 
-        var spacer = new Control { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        var spacer = new Control { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
         actions.AddChild(spacer);
 
         var skip = new Button

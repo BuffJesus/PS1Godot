@@ -34,10 +34,12 @@ public static class SceneStats
         public readonly int TargetTriangles;   // Budget from PS1Scene, 0 if unset.
         public readonly int MaxActors;
         public readonly int MaxTexturePages;
+        public readonly int TexturePageEstimate;   // Rough page count based on VRAM estimate.
 
         public Result(bool hasScene, string? name, int meshes, int tris, int audio,
                       int textures, long vramBytes, long spuBytes,
-                      int targetTris, int maxActors, int maxTexPages)
+                      int targetTris, int maxActors, int maxTexPages,
+                      int texPageEstimate)
         {
             HasPS1Scene = hasScene;
             SceneName = name;
@@ -50,6 +52,7 @@ public static class SceneStats
             TargetTriangles = targetTris;
             MaxActors = maxActors;
             MaxTexturePages = maxTexPages;
+            TexturePageEstimate = texPageEstimate;
         }
     }
 
@@ -59,13 +62,13 @@ public static class SceneStats
     {
         if (root == null)
         {
-            return new Result(false, null, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+            return new Result(false, null, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
         }
 
         var scene = FindFirst<PS1Scene>(root);
         if (scene == null)
         {
-            return new Result(false, null, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+            return new Result(false, null, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
         }
 
         int meshes = 0;
@@ -78,6 +81,12 @@ public static class SceneStats
         WalkMeshes(root, ref meshes, ref tris, textureKeys, ref vramBytes);
         WalkUIAndSky(root, textureKeys, ref vramBytes);
 
+        // Rough texture-page estimate. Each 8bpp page is 256×256 = 64 KB
+        // of pixel data; 4bpp halves that but shares the same VRAM column.
+        // Using unique texture count as a conservative upper bound (small
+        // textures pack into shared atlases, but we'd rather warn early).
+        int texPageEstimate = textureKeys.Count;
+
         return new Result(
             hasScene: true,
             name: root.Name,
@@ -89,7 +98,8 @@ public static class SceneStats
             spuBytes: spuBytes,
             targetTris: scene.TargetTriangles,
             maxActors: scene.MaxActors,
-            maxTexPages: scene.MaxTexturePages);
+            maxTexPages: scene.MaxTexturePages,
+            texPageEstimate: texPageEstimate);
     }
 
     private static void WalkMeshes(Node n, ref int meshes, ref int tris,

@@ -151,6 +151,8 @@ public partial class PS1GodotPlugin : EditorPlugin
                 "Rasterize the font's TTF source into the 8×12-cell bitmap the runtime expects. Run after editing the font's character set or selecting a different TTF."),
             ((int)AuditMenu.RegenLuaStubs, "Regenerate Lua API Stubs (EmmyLua)",
                 "Rebuild res://addons/ps1godot/scripting/api/lua_api.lua from psxsplash-main/src/luaapi.hh. Powers Rider/VSCode autocomplete for PS1Lua. Run after pulling new luaapi.hh entries."),
+            ((int)AuditMenu.ShowFirstRunPanel, "Show First-Run Panel",
+                "Re-open the first-run dependency checklist. Useful if you skipped it earlier and need to verify setup."),
         }, OnAuditMenuPressed);
         AddToolSubmenuItem("PS1Godot: Audit", _menuAudit);
 
@@ -439,6 +441,7 @@ public partial class PS1GodotPlugin : EditorPlugin
         AnalyzeTextures = 0,
         GenerateFont = 1,
         RegenLuaStubs = 2,
+        ShowFirstRunPanel = 3,
     }
     private enum TestsMenu
     {
@@ -522,7 +525,15 @@ public partial class PS1GodotPlugin : EditorPlugin
             case AuditMenu.AnalyzeTextures: OnAnalyzeTextures(); break;
             case AuditMenu.GenerateFont:    OnGenerateFontBitmap(); break;
             case AuditMenu.RegenLuaStubs:   OnRegenLuaStubs(); break;
+            case AuditMenu.ShowFirstRunPanel: ShowFirstRunPanel(); break;
         }
+    }
+
+    private void ShowFirstRunPanel()
+    {
+        var panel = new UI.PS1FirstRunPanel();
+        EditorInterface.Singleton.GetBaseControl().AddChild(panel);
+        panel.PopupCentered();
     }
     private void OnTestsMenuPressed(long id)
     {

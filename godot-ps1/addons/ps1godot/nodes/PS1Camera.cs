@@ -3,12 +3,15 @@ using PS1Godot.Effects;
 
 namespace PS1Godot;
 
-// Camera3D tagged for PS1 export. Auto-attaches the PS1PixelizeEffect
-// compositor when added to a scene so authors see the 320×240 PSX
-// look in the editor viewport without manual setup. Authors who want
-// a clean Godot view can clear pmi.Compositor.CompositorEffects in
-// the inspector. (Re-add via Tools menu → Materials → Toggle PS1
-// Preview on Selected Camera.)
+/// <summary>
+/// Camera3D tagged for PS1 export. Auto-attaches a PS1PixelizeEffect
+/// compositor so the editor viewport shows the 320×240 PSX look without
+/// manual setup. To disable the preview, clear Compositor → Effects in
+/// the inspector (re-add via Tools → Materials → Toggle PS1 Preview).
+/// At export time, the PS1Camera's transform becomes the scene's initial
+/// camera position. Only one PS1Camera per scene is expected — the
+/// exporter uses the first one it finds.
+/// </summary>
 [Tool]
 [GlobalClass]
 [Icon("res://addons/ps1godot/icons/ps1_camera.svg")]

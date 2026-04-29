@@ -53,7 +53,8 @@ public partial class PS1ViewportOverlay : HBoxContainer
         float vramPct = (float)stats.VramEstimateBytes / vramBudget;
         float spuPct  = (float)stats.SpuEstimateBytes  / spuBudget;
         float triPct  = stats.TargetTriangles > 0 ? (float)stats.TriangleCount / triBudget : 0f;
-        float worst = Mathf.Max(triPct, Mathf.Max(vramPct, spuPct));
+        float tpPct   = stats.MaxTexturePages > 0 ? (float)stats.TexturePageEstimate / stats.MaxTexturePages : 0f;
+        float worst = Mathf.Max(triPct, Mathf.Max(vramPct, Mathf.Max(spuPct, tpPct)));
 
         Color col = worst < 0.80f ? new Color(0.55f, 0.85f, 0.55f)
                   : worst < 0.95f ? new Color(0.95f, 0.75f, 0.35f)
@@ -61,11 +62,11 @@ public partial class PS1ViewportOverlay : HBoxContainer
         _label.AddThemeColorOverride("font_color", col);
 
         _label.Text = string.Format(
-            "PS1: {0} tri  ·  VRAM {1}  ·  SPU {2}  ·  {3} tex",
+            "PS1: {0} tri  ·  VRAM {1}  ·  SPU {2}  ·  {3} texpages",
             stats.TriangleCount,
             FormatKb(stats.VramEstimateBytes),
             FormatKb(stats.SpuEstimateBytes),
-            stats.UniqueTextureCount);
+            stats.TexturePageEstimate);
     }
 
     private static string FormatKb(long bytes)

@@ -52,7 +52,8 @@ public static class BackgroundBaker
     {
         if (!GodotObject.IsInstanceValid(sourceCam))
         {
-            GD.PushError("[PS1Godot] BackgroundBaker: source camera is not valid.");
+            GD.PushError($"[PS1Godot] BackgroundBaker: source camera '{sourceCam?.Name ?? "(null)"}' is not valid " +
+                         "(freed or not in the scene tree). Select a Camera3D that's part of the current scene and try again.");
             return null;
         }
 

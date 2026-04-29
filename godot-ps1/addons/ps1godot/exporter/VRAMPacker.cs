@@ -77,7 +77,9 @@ public sealed class VRAMPacker
                     atlas = NewAtlas(group.Key, atlasWidth);
                     if (!TryPlaceInAtlas(atlas, tex))
                     {
-                        Godot.GD.PushError($"[PS1Godot] VRAMPacker: can't fit texture {tex.SourcePath} ({tex.QuantizedWidth}×{tex.Height}) in a {atlasWidth}-wide atlas.");
+                        Godot.GD.PushError($"[PS1Godot] VRAMPacker: can't fit texture {tex.SourcePath} ({tex.QuantizedWidth}×{tex.Height}) in a {atlasWidth}-wide atlas. " +
+                            "PSX VRAM is 1024×512 shared across framebuffers, textures, and CLUTs — there isn't enough contiguous space left. " +
+                            "Try: lower BitDepth on large textures (8bpp→4bpp halves width), downscale oversized sources, or consolidate duplicate/similar textures into a shared atlas group.");
                     }
                 }
             }
@@ -150,7 +152,9 @@ public sealed class VRAMPacker
                     }
                 }
                 if (!placed)
-                    Godot.GD.PushError($"[PS1Godot] VRAMPacker: no room for a {atlas.Width}×256 {bpp} atlas.");
+                    Godot.GD.PushError($"[PS1Godot] VRAMPacker: no room for a {atlas.Width}×256 {bpp} atlas. " +
+                        "All usable VRAM columns are occupied. Check the VRAM viewer (PS1 VRAM tab) to see what's consuming space. " +
+                        "Try: reduce texture count, lower BitDepth on the largest textures, or split the scene into sub-scenes with separate VRAM budgets.");
             }
         }
     }
@@ -179,7 +183,9 @@ public sealed class VRAMPacker
                     }
                 }
                 if (!placed)
-                    Godot.GD.PushError($"[PS1Godot] VRAMPacker: no room for a {cw}-entry CLUT.");
+                    Godot.GD.PushError($"[PS1Godot] VRAMPacker: no room for a {cw}-entry CLUT. " +
+                        "CLUTs (color look-up tables) pack into the narrow VRAM strip below the framebuffers. " +
+                        "Too many unique palettes exhaust this space. Try: share materials across meshes so they reuse the same CLUT, or switch some 8bpp textures to 4bpp (16 CLUT entries instead of 256).");
             }
         }
     }

@@ -119,7 +119,8 @@ public partial class LuaHotSwapWatcher : Node
         var codeBytes = System.Text.Encoding.UTF8.GetBytes(rewritten);
         if (codeBytes.Length > ushort.MaxValue)
         {
-            GD.PushError($"[PS1Godot] Hot-swap: '{absLuaPath}' is {codeBytes.Length} bytes, exceeds 64 KiB hot-swap limit.");
+            GD.PushError($"[PS1Godot] Hot-swap: '{absLuaPath}' is {codeBytes.Length} bytes, exceeds 64 KiB hot-swap limit. " +
+                         "Split the script into multiple .lua files attached to separate nodes, or trim large string literals and comments.");
             return;
         }
 

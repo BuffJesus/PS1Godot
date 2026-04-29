@@ -163,7 +163,15 @@ public static class PsxAvEnc
             }
             if (exit != 0 || !File.Exists(xaPath))
             {
-                GD.PushWarning($"[PS1Godot] XA convert '{clipName}': psxavenc exit {exit}.");
+                string exitHint = exit switch
+                {
+                    1 => "invalid arguments or unsupported format",
+                    2 => "I/O error (input file missing or output path not writable)",
+                    127 => "psxavenc binary not found on PATH",
+                    _ => $"unknown error (exit code {exit})",
+                };
+                GD.PushWarning($"[PS1Godot] XA convert '{clipName}': psxavenc failed — {exitHint}. " +
+                               "Clip will fall back to SPU silence at runtime. Check that psxavenc is installed and the source WAV is valid mono/stereo PCM.");
                 return null;
             }
             byte[] result = File.ReadAllBytes(xaPath);
@@ -172,7 +180,8 @@ public static class PsxAvEnc
         }
         catch (Exception ex)
         {
-            GD.PushWarning($"[PS1Godot] XA convert '{clipName}' failed: {ex.Message}");
+            GD.PushWarning($"[PS1Godot] XA convert '{clipName}' failed: {ex.Message}. " +
+                           "This clip will use SPU silence at runtime. Common causes: psxavenc not on PATH, temp directory not writable, or corrupt source audio.");
             return null;
         }
         finally
