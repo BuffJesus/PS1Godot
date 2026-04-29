@@ -10,18 +10,33 @@ namespace PS1Godot.UI;
 //
 // Registers via AddControlToContainer(ContainerSpatialEditorMenu).
 // Updates on every SceneChanged signal, same hook the dock uses.
+// Toggleable via the tiny "i" button per ui-ux-plan.md.
 [Tool]
 public partial class PS1ViewportOverlay : HBoxContainer
 {
     private Label _label = null!;
+    private Button _toggleBtn = null!;
+    private bool _statsVisible = true;
 
     public PS1ViewportOverlay()
     {
         // Matches the 8 px grid + accent style. MarginContainer-style
         // padding via separation/theme overrides keeps the row tight
         // against neighbouring viewport controls.
-        AddThemeConstantOverride("separation", 8);
+        AddThemeConstantOverride("separation", 4);
         SizeFlagsVertical = SizeFlags.ShrinkCenter;
+
+        _toggleBtn = new Button
+        {
+            Text = "i",
+            Flat = true,
+            TooltipText = "Toggle PS1 budget readout in the viewport.",
+            CustomMinimumSize = new Vector2(20, 20),
+        };
+        _toggleBtn.AddThemeFontSizeOverride("font_size", 11);
+        _toggleBtn.AddThemeColorOverride("font_color", new Color(1, 1, 1, 0.55f));
+        _toggleBtn.Pressed += OnToggle;
+        AddChild(_toggleBtn);
 
         _label = new Label
         {
@@ -35,9 +50,19 @@ public partial class PS1ViewportOverlay : HBoxContainer
         AddChild(_label);
     }
 
+    private void OnToggle()
+    {
+        _statsVisible = !_statsVisible;
+        _label.Visible = _statsVisible;
+        _toggleBtn.AddThemeColorOverride("font_color",
+            _statsVisible ? new Color(1, 1, 1, 0.55f) : new Color(1, 1, 1, 0.30f));
+    }
+
     // Called by the plugin on SceneChanged + after each export.
     public void ApplyStats(SceneStats.Result stats)
     {
+        if (!_statsVisible) return;
+
         if (!stats.HasPS1Scene)
         {
             _label.Text = "PS1: no PS1Scene";

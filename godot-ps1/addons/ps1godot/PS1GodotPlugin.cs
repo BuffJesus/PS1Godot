@@ -641,16 +641,20 @@ public partial class PS1GodotPlugin : EditorPlugin
         //   - CD-ROM ISO: any scene_*.xa exists. XA-ADPCM streaming
         //     needs the disc bus, so we build a CDROM-loader runtime,
         //     run mkpsxiso, and boot via -iso. PCdrv won't see XA.
+        _dock?.SetPipelineStatus("Exporting splashpack…");
         OnExportEmptySplashpack();
         string buildDir = System.IO.Path.Combine(RepoRoot(), "godot-ps1", "build");
         if (HasAnyXaSidecar(buildDir))
         {
+            _dock?.SetPipelineStatus("Building CD-ROM ISO…");
             RunIsoMode(buildDir);
         }
         else
         {
+            _dock?.SetPipelineStatus("Launching PCSX-Redux…");
             RunPcdrvMode(buildDir);
         }
+        _dock?.SetPipelineStatus(null);
     }
 
     private static bool HasAnyXaSidecar(string buildDir)

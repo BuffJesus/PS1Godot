@@ -29,6 +29,7 @@ public partial class PS1GodotDock : VBoxContainer
     private BudgetRow? _vramRow;
     private BudgetRow? _spuRow;
     private BudgetRow? _texPageRow;
+    private Label? _pipelineStatusLabel;
     private Label? _lastExportLabel;
     private VBoxContainer? _lastExportRows;   // click-to-focus list
     private VBoxContainer? _setupBox;
@@ -148,6 +149,16 @@ public partial class PS1GodotDock : VBoxContainer
         _texPageRow = new BudgetRow("Tex Pages");
         inner.AddChild(_texPageRow.Label);
         inner.AddChild(_texPageRow.Bar);
+
+        // Pipeline status line — shows "Exporting…" / "Building…" /
+        // "Launching…" during the Run-on-PSX flow. Hidden when idle.
+        _pipelineStatusLabel = new Label
+        {
+            Visible = false,
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+        };
+        _pipelineStatusLabel.AddThemeColorOverride("font_color", new Color(0.65f, 0.85f, 1.0f));
+        inner.AddChild(_pipelineStatusLabel);
 
         // Last-export summary headline + click-to-focus row list.
         // Headline carries severity-coded one-line state; rows below
@@ -330,6 +341,22 @@ public partial class PS1GodotDock : VBoxContainer
         {
             _texPageRow.ShowLabelOnly($"Tex Pages  {stats.TexturePageEstimate} (no budget set)");
         }
+    }
+
+    /// <summary>
+    /// Show a transient status line during the Run-on-PSX pipeline.
+    /// Pass null or empty to hide when the pipeline is done.
+    /// </summary>
+    public void SetPipelineStatus(string? status)
+    {
+        if (_pipelineStatusLabel == null) return;
+        if (string.IsNullOrEmpty(status))
+        {
+            _pipelineStatusLabel.Visible = false;
+            return;
+        }
+        _pipelineStatusLabel.Text = status;
+        _pipelineStatusLabel.Visible = true;
     }
 
     // Push the validation summary built during the last
