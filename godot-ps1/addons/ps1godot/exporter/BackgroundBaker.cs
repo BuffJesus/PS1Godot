@@ -186,7 +186,13 @@ public static class BackgroundBaker
 
         if (image == null || image.IsEmpty())
         {
-            GD.PushError($"[PS1Godot] BackgroundBaker: render produced an empty image (camera: {sourceCam.Name}).");
+            GD.PushError(
+                $"[PS1Godot] Background bake produced an empty image (camera '{sourceCam.Name}').\n" +
+                "  Why: SubViewport rendered for 2 frames but the readback came back blank.\n" +
+                "  Fix: usually means the camera doesn't see any geometry in the scene. " +
+                "Frame the camera so the scene's meshes are in view. If you're certain meshes " +
+                "are visible, try Tools → Build / Launch → Build psxsplash runtime first to " +
+                "rule out a stale plugin DLL, then re-run the bake.");
             subviewport.QueueFree();
             return null;
         }

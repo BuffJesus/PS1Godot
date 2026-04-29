@@ -562,7 +562,13 @@ public partial class PS1GodotPlugin : EditorPlugin
         GD.Print("[PS1Godot] Building psxsplash runtime…");
         int code = RunScript("scripts/build-psxsplash.cmd", "Build psxsplash");
         if (code == 0) GD.Print("[PS1Godot] Build OK.");
-        else GD.PushError($"[PS1Godot] Build failed (exit {code}). See log above.");
+        else GD.PushError(
+            $"[PS1Godot] psxsplash runtime build failed (exit {code}).\n" +
+            "  Why: F5 / Run on PSX needs psxsplash.ps-exe in godot-ps1/build/ to launch.\n" +
+            "  Fix: scroll up in the editor log for the first compiler error. Common causes:\n" +
+            "        • mipsel-none-elf-gcc missing from PATH (install via pcsx-redux-main/mips.ps1)\n" +
+            "        • make missing (install via Git Bash or MSYS2)\n" +
+            "        • stale .o files (run 'make clean' in psxsplash-main/ and retry)");
     }
 
     private void OnLaunchEmulator()
@@ -573,7 +579,12 @@ public partial class PS1GodotPlugin : EditorPlugin
         string script = System.IO.Path.Combine(RepoRoot(), "scripts", "launch-emulator.cmd").Replace('/', '\\');
         if (!System.IO.File.Exists(script))
         {
-            GD.PushError($"[PS1Godot] launch-emulator.cmd not found at {script}");
+            GD.PushError(
+                $"[PS1Godot] PCSX-Redux launcher script missing.\n" +
+                $"  Looked at: {script}\n" +
+                "  Why: the in-editor 'Launch in PCSX-Redux' wraps the scripts/launch-emulator.cmd file.\n" +
+                "  Fix: clone the full PS1Godot repo (the script lives at repo-root/scripts/) " +
+                "or copy the file from https://github.com/BuffJesus/PS1Godot/blob/main/scripts/launch-emulator.cmd");
             return;
         }
         GD.Print("[PS1Godot] Launching PCSX-Redux…");
