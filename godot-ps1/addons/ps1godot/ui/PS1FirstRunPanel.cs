@@ -25,6 +25,9 @@ namespace PS1Godot.UI;
 [Tool]
 public partial class PS1FirstRunPanel : Window
 {
+    private VBoxContainer? _rowContainer;
+    private Label? _statusLabel;
+
     public PS1FirstRunPanel()
     {
         Title = "PS1Godot — Welcome";
@@ -72,12 +75,19 @@ public partial class PS1FirstRunPanel : Window
 
         v.AddChild(new HSeparator());
 
-        // ── Dependency rows ─────────────────────────────────────────
-        var rows = SetupDetector.Detect();
-        foreach (var row in rows)
+        // ── Dependency rows (rebuildable for Re-check) ──────────────
+        _rowContainer = new VBoxContainer();
+        _rowContainer.AddThemeConstantOverride("separation", 4);
+        v.AddChild(_rowContainer);
+
+        _statusLabel = new Label
         {
-            v.AddChild(BuildRow(row));
-        }
+            HorizontalAlignment = HorizontalAlignment.Center,
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+        };
+        v.AddChild(_statusLabel);
+
+        RefreshRows();
 
         v.AddChild(new HSeparator());
 
@@ -91,16 +101,18 @@ public partial class PS1FirstRunPanel : Window
             Text = "▶  Open demo scene",
             CustomMinimumSize = new Vector2(180, 40),
         };
+        ApplyAccentStyle(demoBtn);
         demoBtn.Pressed += OnOpenDemo;
         actions.AddChild(demoBtn);
 
-        var docsBtn = new Button
+        var recheckBtn = new Button
         {
-            Text = "📖  Open SETUP.md",
-            CustomMinimumSize = new Vector2(160, 40),
+            Text = "Re-check",
+            TooltipText = "Re-probe all dependencies. Run after installing something.",
+            CustomMinimumSize = new Vector2(100, 40),
         };
-        docsBtn.Pressed += OnOpenDocs;
-        actions.AddChild(docsBtn);
+        recheckBtn.Pressed += RefreshRows;
+        actions.AddChild(recheckBtn);
 
         var spacer = new Control { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
         actions.AddChild(spacer);
@@ -113,6 +125,37 @@ public partial class PS1FirstRunPanel : Window
         skip.AddThemeColorOverride("font_color", new Color(1, 1, 1, 0.6f));
         skip.Pressed += () => { MarkSkipped(); QueueFree(); };
         actions.AddChild(skip);
+    }
+
+    private void RefreshRows()
+    {
+        if (_rowContainer == null || _statusLabel == null) return;
+
+        foreach (var child in _rowContainer.GetChildren())
+            child.QueueFree();
+
+        var rows = SetupDetector.Detect();
+        bool anyMissing = false;
+        foreach (var row in rows)
+        {
+            _rowContainer.AddChild(BuildRow(row));
+            if (row.Status == SetupDetector.Status.Missing)
+                anyMissing = true;
+        }
+
+        if (!anyMissing)
+        {
+            _statusLabel.Text = "All dependencies found — you're ready to go!";
+            _statusLabel.AddThemeColorOverride("font_color", new Color(0.45f, 0.85f, 0.50f));
+            // Auto-dismiss after a short delay so the author sees the
+            // "all green" confirmation before the panel disappears.
+            GetTree()?.CreateTimer(1.5)?.Connect("timeout",
+                Callable.From(() => { if (IsInsideTree()) QueueFree(); }));
+        }
+        else
+        {
+            _statusLabel.Text = "";
+        }
     }
 
     private static Control BuildRow(SetupDetector.Row row)
@@ -165,11 +208,6 @@ public partial class PS1FirstRunPanel : Window
         QueueFree();
     }
 
-    private void OnOpenDocs()
-    {
-        OS.ShellOpen("https://github.com/BuffJesus/PS1Godot/blob/main/SETUP.md");
-    }
-
     // ── Skip persistence ────────────────────────────────────────────
     private const string SkipFlagPath = "user://ps1godot_skip_first_run";
 
@@ -191,5 +229,24 @@ public partial class PS1FirstRunPanel : Window
         using var f = Godot.FileAccess.Open(SkipFlagPath, Godot.FileAccess.ModeFlags.Write);
         f?.StoreString("skipped");
     }
+
+    // PS1 red accent — same #CE2127 as the dock's Run button.
+    private static readonly Color AccentRed = new(0xCE / 255f, 0x21 / 255f, 0x27 / 255f);
+
+    private static void ApplyAccentStyle(Button button)
+    {
+        button.AddThemeStyleboxOverride("normal", MakeStyle(AccentRed));
+        button.AddThemeStyleboxOverride("hover", MakeStyle(AccentRed.Lightened(0.08f)));
+        button.AddThemeStyleboxOverride("pressed", MakeStyle(AccentRed.Darkened(0.12f)));
+    }
+
+    private static StyleBoxFlat MakeStyle(Color c) => new()
+    {
+        BgColor = c,
+        CornerRadiusTopLeft = 4, CornerRadiusTopRight = 4,
+        CornerRadiusBottomLeft = 4, CornerRadiusBottomRight = 4,
+        ContentMarginLeft = 12, ContentMarginRight = 12,
+        ContentMarginTop = 4, ContentMarginBottom = 4,
+    };
 }
 #endif

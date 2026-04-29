@@ -268,4 +268,20 @@ public partial class PS1UIElement : Node
             property["usage"] = Storage;
         }
     }
+
+    // Yellow warning triangle in the scene dock when the element is
+    // partly or fully off the PSX framebuffer.
+    public override string[] _GetConfigurationWarnings()
+    {
+        var warnings = new System.Collections.Generic.List<string>();
+        if (X + Width > 320)
+            warnings.Add($"Right edge at {X + Width} px exceeds PSX screen width (320). Element will be clipped or invisible on hardware.");
+        if (Y + Height > 240)
+            warnings.Add($"Bottom edge at {Y + Height} px exceeds PSX screen height (240). Element will be clipped or invisible on hardware.");
+        if (X < 0)
+            warnings.Add($"X = {X}: element starts off-screen left. Intentional for slide-in animations; otherwise set X ≥ 0.");
+        if (Y < 0)
+            warnings.Add($"Y = {Y}: element starts off-screen top. Intentional for slide-in animations; otherwise set Y ≥ 0.");
+        return warnings.ToArray();
+    }
 }

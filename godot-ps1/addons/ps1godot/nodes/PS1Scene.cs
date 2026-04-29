@@ -233,4 +233,37 @@ public partial class PS1Scene : Node3D
     /// </summary>
     [Export(PropertyHint.File, "*.blend")]
     public string SourceBlendFile { get; set; } = "";
+
+    // Scene-type-aware budget guidance. Typical ranges come from
+    // docs/ps1_large_rpg_optimization_reference.md and real SplashEdit
+    // scenes — they're soft nudges, not hard limits.
+    public override string[] _GetConfigurationWarnings()
+    {
+        var warnings = new System.Collections.Generic.List<string>();
+
+        (int lo, int hi) typicalTris = SceneType switch
+        {
+            SceneTypeKind.ExplorationOutdoor => (800, 2500),
+            SceneTypeKind.TownSquare         => (1000, 3000),
+            SceneTypeKind.Interior           => (600, 2000),
+            SceneTypeKind.DungeonCorridor    => (400, 1500),
+            SceneTypeKind.Combat             => (300, 1200),
+            SceneTypeKind.Menu               => (50, 500),
+            SceneTypeKind.CutsceneCloseup    => (200, 1000),
+            _                                => (500, 2500),
+        };
+
+        if (TargetTriangles > 0 && TargetTriangles > typicalTris.hi)
+            warnings.Add($"TargetTriangles ({TargetTriangles}) is above the typical range for {SceneType} ({typicalTris.lo}–{typicalTris.hi}). " +
+                         "The PSX GPU can handle it, but draw calls and OT depth sorting may cause visible pop-in.");
+        if (TargetTriangles > 0 && TargetTriangles < typicalTris.lo)
+            warnings.Add($"TargetTriangles ({TargetTriangles}) is below the typical range for {SceneType} ({typicalTris.lo}–{typicalTris.hi}). " +
+                         "You may have headroom for more detail.");
+
+        if (MaxTexturePages > 12)
+            warnings.Add($"MaxTexturePages ({MaxTexturePages}) is high — PSX VRAM has 16 tpages total; " +
+                         "reserving ≤10 for scene textures leaves room for UI, fonts, and skinned characters.");
+
+        return warnings.ToArray();
+    }
 }
