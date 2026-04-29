@@ -86,6 +86,18 @@ public static class BackgroundBaker
         var saved = SaveBakeShaderState(matDefault, matSkinned);
         ApplyBakeShaderState(matDefault, matSkinned);
 
+        // Auto-bake Vertex Lighting + AO before the render if the scene
+        // has any Light3D and any PS1MeshInstance. Lets a one-click
+        // "Bake Background" replace the three-step
+        //   1) Bake Vertex Lighting
+        //   2) Bake Vertex AO
+        //   3) Bake Background
+        // workflow that's easy to forget (the failure mode is silent —
+        // BG renders white because BakedColors is empty). Overwrites
+        // any existing BakedColors on those meshes — author edits are
+        // preserved by removing the lights from the scene.
+        AutoBakeLightingAndAo();
+
         // BakedColors live on the PS1MeshInstance NODE, not on the
         // Mesh resource — VertexLightingBaker / VertexAOBaker stamp
         // them as a per-instance override that the splashpack writer
@@ -250,6 +262,48 @@ public static class BackgroundBaker
             skin.SetShaderParameter("preview_quantize_bits", saved.SkinnedBits);
             skin.SetShaderParameter("preview_dither_enabled", saved.SkinnedDither);
         }
+    }
+
+    // ── Auto-bake Vertex Lighting + AO ────────────────────────────────
+    //
+    // Walk the edited scene root, collect every Light3D + every
+    // PS1MeshInstance, and run VertexLightingBaker.Bake +
+    // VertexAOBaker.Bake on the meshes. Skip silently if either list
+    // is empty — author may have manually painted BakedColors, or the
+    // scene may not need lighting (e.g. an Unlit signpost).
+    private static void AutoBakeLightingAndAo()
+    {
+        var sceneRoot = EditorInterface.Singleton?.GetEditedSceneRoot();
+        if (sceneRoot == null) return;
+
+        var lights = new System.Collections.Generic.List<Node>();
+        var meshes = new System.Collections.Generic.List<Node>();
+        CollectLightsAndMeshes(sceneRoot, lights, meshes);
+        if (lights.Count == 0 || meshes.Count == 0) return;
+
+        var lit = VertexLightingBaker.Bake(sceneRoot, meshes);
+        // AO settings match the menu-item defaults — see PS1GodotPlugin.OnBakeVertexAO.
+        var ao = VertexAOBaker.Bake(sceneRoot, meshes, new VertexAOBaker.Options
+        {
+            RayCount = 12,
+            MaxRayDistance = 0.5f,
+            Strength = 0.5f,
+            Bias = 0.001f,
+        });
+        GD.Print(
+            $"[PS1Godot] BG baker: auto-baked Vertex Lighting ({lit.MeshesBaked} mesh(es), " +
+            $"{lights.Count} light(s)) + AO ({ao.MeshesBaked} mesh(es), {ao.RaysCast} rays). " +
+            $"Authors who want to preserve hand-tuned BakedColors should remove scene lights " +
+            $"or skip this menu item and use the standalone Bake Vertex Lighting + Background actions separately.");
+    }
+
+    private static void CollectLightsAndMeshes(Node n,
+        System.Collections.Generic.List<Node> lights,
+        System.Collections.Generic.List<Node> meshes)
+    {
+        if (n is Light3D l && l.Visible) lights.Add(n);
+        if (n is PS1MeshInstance pmi && pmi.Visible) meshes.Add(n);
+        foreach (var child in n.GetChildren()) CollectLightsAndMeshes(child, lights, meshes);
     }
 
     // ── BakedColors → mesh.COLOR swap (transient, bake-only) ──────────
