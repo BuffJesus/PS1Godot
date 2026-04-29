@@ -215,7 +215,8 @@ public partial class PS1MeshInstance : MeshInstance3D
     /// splashpack. Eliminates the manual "select meshes → Bake Lighting"
     /// step and prevents stale BakedColors when lights move. Only single-
     /// surface meshes are supported (multi-surface falls back to existing
-    /// BakedColors with a warning).
+    /// BakedColors with a warning). Note: baking mutates BakedColors on
+    /// the live scene — if export fails partway, the scene will be dirty.
     /// </summary>
     [Export] public bool AutoBakeVertexLighting { get; set; } = false;
     /// <summary>

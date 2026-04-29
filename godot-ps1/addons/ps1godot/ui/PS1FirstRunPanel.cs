@@ -1,5 +1,4 @@
 #if TOOLS
-using System.IO;
 using Godot;
 
 namespace PS1Godot.UI;
@@ -27,6 +26,7 @@ public partial class PS1FirstRunPanel : Window
 {
     private VBoxContainer? _rowContainer;
     private Label? _statusLabel;
+    private bool _dismissScheduled;
 
     public PS1FirstRunPanel()
     {
@@ -149,8 +149,13 @@ public partial class PS1FirstRunPanel : Window
             _statusLabel.AddThemeColorOverride("font_color", new Color(0.45f, 0.85f, 0.50f));
             // Auto-dismiss after a short delay so the author sees the
             // "all green" confirmation before the panel disappears.
-            GetTree()?.CreateTimer(1.5)?.Connect("timeout",
-                Callable.From(() => { if (IsInsideTree()) QueueFree(); }));
+            // Guard against multiple timers from re-check mashing.
+            if (!_dismissScheduled)
+            {
+                _dismissScheduled = true;
+                GetTree()?.CreateTimer(1.5)?.Connect("timeout",
+                    Callable.From(() => { if (IsInsideTree()) QueueFree(); }));
+            }
         }
         else
         {
