@@ -36,24 +36,44 @@ public enum PS1UIResidency
 public partial class PS1UICanvas : Node
 {
     [ExportGroup("Identity")]
+    /// <summary>
+    /// Lua-callable name. UI.SetVisible("name", true/false), UI.FindElement,
+    /// etc. all match by this string. Must be unique within the scene.
+    /// </summary>
     [Export] public string CanvasName { get; set; } = "";
+    /// <summary>
+    /// When this canvas's VRAM lives. Gameplay = always resident
+    /// (HUD, health bar). MenuOnly = loaded when a menu opens (inventory).
+    /// LoadOnDemand = loaded by Lua via UI.LoadCanvas. LoadingScreen =
+    /// shown during scene load — must contain a Progress element named
+    /// "loading"; ships in the .loading LoaderPack file.
+    /// </summary>
     [Export] public PS1UIResidency Residency { get; set; } = PS1UIResidency.Gameplay;
 
-    // Initial visibility. Gameplay canvases typically start visible;
-    // MenuOnly / LoadOnDemand typically start hidden and Lua toggles them.
+    /// <summary>
+    /// Initial visibility on scene load. Gameplay canvases (HUD) usually
+    /// start visible. MenuOnly / LoadOnDemand usually start hidden and Lua
+    /// toggles them via UI.SetVisible.
+    /// </summary>
     [Export] public bool VisibleOnLoad { get; set; } = true;
 
     [ExportGroup("Rendering")]
-    // Back-to-front draw order. Lower sortOrder draws first (behind
-    // higher). 8-bit to match the runtime's UICanvas.sortOrder.
+    /// <summary>
+    /// Draw order — LIFO-inverted: LOWEST sortOrder draws LAST (= ON TOP).
+    /// HIGHEST sortOrder draws FIRST (= behind). Use 0–10 for full-screen
+    /// overlays (title fades, dialog boxes); use 200+ for backdrops
+    /// (pre-rendered BG canvas).
+    /// </summary>
     [Export(PropertyHint.Range, "0,255,1")]
     public int SortOrder { get; set; } = 0;
 
     [ExportGroup("Theming")]
-    // Palette source for this canvas's elements. When set, each
-    // PS1UIElement child with a non-Custom ThemeSlot pulls its color
-    // from the theme. Leave null for "authored colors only" (current
-    // behavior). Shipped default is addons/ps1godot/themes/PS1Theme.tres —
-    // duplicate + edit to customise without mutating the plugin copy.
+    /// <summary>
+    /// Optional shared palette. When set, child elements with a non-Custom
+    /// ThemeSlot read their color from this Theme resource. Leave null to
+    /// use authored colors only. Default shipped at
+    /// addons/ps1godot/themes/PS1Theme.tres — duplicate + edit to
+    /// customize without mutating the plugin copy.
+    /// </summary>
     [Export] public PS1Theme? Theme { get; set; }
 }

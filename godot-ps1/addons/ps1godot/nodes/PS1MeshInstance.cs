@@ -31,53 +31,80 @@ public partial class PS1MeshInstance : MeshInstance3D
     }
 
     [ExportGroup("PS1 / Look")]
+    /// <summary>
+    /// Texture bit depth at export. 4bpp = 16-color CLUT (best VRAM, harshest
+    /// quantize), 8bpp = 256-color CLUT (default; safe middle ground), 16bpp =
+    /// direct color (no palette but eats 2× VRAM). Pick 4bpp for decals/sprites,
+    /// 8bpp for world geometry, 16bpp only for skies / cinematics.
+    /// </summary>
     [Export] public PSXBPP BitDepth { get; set; } = PSXBPP.TEX_8BIT;
+    /// <summary>
+    /// How vertex colors get filled. FlatColor = every vertex gets the same
+    /// FlatColor field (default — works without baking). MeshVertexColors =
+    /// use the mesh's COLOR attribute. BakedLighting = walk scene lights.
+    /// </summary>
     [Export] public ColorMode VertexColorMode { get; set; } = ColorMode.FlatColor;
+    /// <summary>
+    /// Color stamped on every vertex when VertexColorMode = FlatColor. Default
+    /// 0.5 gray = PSYQo neutral (runtime 2× modulate yields texture untinted).
+    /// </summary>
     [Export] public Color FlatColor { get; set; } = new Color(0.5f, 0.5f, 0.5f, 1.0f);
 
     [ExportGroup("PS1 / Collision")]
+    /// <summary>
+    /// None = no collision (decals, fog cards). Static = participates in BVH /
+    /// world push-back (floors, walls). Dynamic = per-object AABB collider
+    /// (moving platforms, doors).
+    /// </summary>
     [Export] public CollisionKind Collision { get; set; } = CollisionKind.None;
+    /// <summary>
+    /// Bitmask deciding which layers this collider participates in. Default
+    /// 0xFF = collides with everything. Use bits to separate player vs.
+    /// camera vs. trigger collision channels.
+    /// </summary>
     [Export(PropertyHint.Range, "0,255,1")]
     public int LayerMask { get; set; } = 0xFF;
 
     [ExportGroup("PS1 / Scripting")]
+    /// <summary>
+    /// Optional Lua script attached to this object. Runtime calls
+    /// onCreate/onUpdate/onCollideWithPlayer/onInteract on it as events fire.
+    /// Empty = no script. See lua/templates/ for starter snippets.
+    /// </summary>
     [Export(PropertyHint.File, "*.lua")]
     public string ScriptFile { get; set; } = "";
 
-    // Gameplay tag. 0 = untagged. GameObject.Spawn(tag, pos) scans for an
-    // INACTIVE object with this tag to activate — so template instances you
-    // want to pool should share a Tag and set StartsInactive = true, and
-    // scripts call GameObject.Spawn(MY_TAG, pos) to draw from the pool.
+    /// <summary>
+    /// Gameplay tag (0 = untagged). GameObject.Spawn(tag, pos) scans for an
+    /// inactive object with this tag and activates it. Pool template instances
+    /// share a Tag + set StartsInactive=true; scripts call Spawn to draw from
+    /// the pool.
+    /// </summary>
     [Export(PropertyHint.Range, "0,65535,1")]
     public int Tag { get; set; } = 0;
 
-    // When true, the object is exported but starts with flags.isActive = 0.
-    // Intended for pre-placed pool instances: author drops N copies of a
-    // "bullet" template, sets StartsInactive + matching Tag on each, and
-    // scripts activate them via GameObject.Spawn at runtime.
+    /// <summary>
+    /// When true, the object exports but boots inactive. Pair with a non-zero
+    /// Tag and let GameObject.Spawn activate it at runtime. Used for pre-placed
+    /// pools (bullets, particles, drop items).
+    /// </summary>
     [Export] public bool StartsInactive { get; set; } = false;
 
-    // Render this mesh's textured tris with PSX hardware semi-trans
-    // (alpha-keyed via CLUT[0]=0x0000). Use for decals (blood splatter,
-    // graffiti), foliage planes, hair cards, glass overlays. The
-    // exporter writes CLUT[0]=0 automatically when the source texture
-    // has alpha; authors just set Translucent=true on the mesh node.
-    // Untextured tris are unaffected — PS1 hardware can't alpha them
-    // without a texture sample.
+    /// <summary>
+    /// Render textured tris with PSX hardware semi-trans (alpha-keyed via
+    /// CLUT[0]=0). Use for decals, foliage planes, hair cards, glass. Exporter
+    /// writes CLUT[0]=0 automatically when the source PNG has alpha.
+    /// Untextured tris ignore this flag.
+    /// </summary>
     [Export] public bool Translucent { get; set; } = false;
 
-    // The PS1 GPU rasterises UVs as 8-bit texel coords within the bound
-    // texture page — out-of-range source UVs sample neighbouring atlas
-    // data as garbage (no wrap, no clamp). The MeshLinter warns by
-    // default. Set TilingUV=true on meshes whose authoring genuinely
-    // expects UV repeats (e.g. some Kenney FBX furniture ships with
-    // tiled-atlas UVs scaled past [0, 1]) to silence the warning.
-    //
-    // NOTE: this only mutes the diagnostic. PSX still doesn't wrap, so
-    // the rendered sampling is whatever the per-vertex linear UV interp
-    // happens to land on — usually visibly chaotic. Real PS1 tiling
-    // requires subdividing the mesh at integer UV boundaries; that's
-    // not done here. Use the flag knowingly.
+    /// <summary>
+    /// Silence the MeshLinter's "UV out of [0,1]" warning. PSX hardware does
+    /// NOT wrap or clamp — out-of-range UVs sample garbage from neighbouring
+    /// VRAM regardless of this flag. Set true ONLY on meshes whose authoring
+    /// genuinely expects UV repeats AND you've subdivided at integer UV edges;
+    /// otherwise the sampling looks chaotic.
+    /// </summary>
     [Export] public bool TilingUV { get; set; } = false;
 
     // ── Slot C metadata (round-trip with Blender add-on) ────────────
@@ -93,72 +120,132 @@ public partial class PS1MeshInstance : MeshInstance3D
     // Don't rename the enum members — they ARE the wire identifiers
     // (see exporter/PS1Metadata.cs).
     [ExportGroup("PS1 / Metadata")]
+    /// <summary>
+    /// Authoring role this mesh plays. Drives Slot D batching + chunk
+    /// residency decisions. StaticWorld = walls/floors/props that don't
+    /// move. DynamicRigid = moving doors/elevators. Skinned = characters.
+    /// CollisionOnly = invisible mesh that supplies collision only (e.g.
+    /// for fixed-camera scenes — see CollisionOnly in ExportMode below).
+    /// </summary>
     [Export] public MeshRole MeshRole { get; set; } = MeshRole.StaticWorld;
+    /// <summary>
+    /// How this mesh ships. MergeStatic = batched into static draw lists.
+    /// KeepSeparate = own GameObject (needed for animation/scripts/Lua).
+    /// CollisionOnly = collision only, NO render (for fixed-camera /
+    /// pre-rendered backdrop scenes where the room is in the BG image).
+    /// Ignore = skip entirely.
+    /// </summary>
     [Export] public ExportMode ExportMode { get; set; } = ExportMode.MergeStatic;
+    /// <summary>
+    /// Render-order bucket. Runtime draws phases in order: OpaqueStatic →
+    /// OpaqueDynamic → Characters → CutoutDecals → SemiTrans. Cutout/decal
+    /// meshes (foliage, blood splatters) need CutoutDecals; UI overlays
+    /// belong in their own UICanvas.
+    /// </summary>
     [Export] public DrawPhase DrawPhase { get; set; } = DrawPhase.OpaqueStatic;
+    /// <summary>
+    /// PSX shading mode. FlatColor = single color per face. VertexColor =
+    /// per-vertex Gouraud (use MeshVertexColors / BakedLighting). CelShaded
+    /// = stepped ramp (Phase 4 stretch). MeshVertexColors needs the mesh's
+    /// COLOR channel populated (Vertex Lighting baker writes it).
+    /// </summary>
     [Export] public ShadingMode ShadingMode { get; set; } = ShadingMode.FlatColor;
+    /// <summary>
+    /// Opaque = no transparency. Cutout = alpha-tested via CLUT[0]=0
+    /// (decals, foliage). SemiTransparent = additive 50/50 blend (smoke,
+    /// glass). Wired into the texture quantize step so the right CLUT
+    /// entries are reserved.
+    /// </summary>
     [Export] public AlphaMode AlphaMode { get; set; } = AlphaMode.Opaque;
+    /// <summary>
+    /// Texture-page grouping hint. World = packed into the world atlas
+    /// (default). Characters = own atlas (skin/face textures group). UI =
+    /// uses the UI atlas. Different groups can swap independently for
+    /// chunk streaming.
+    /// </summary>
     [Export] public AtlasGroup AtlasGroup { get; set; } = AtlasGroup.World;
+    /// <summary>
+    /// When does this mesh's data live in memory. Scene = always loaded
+    /// (default). Chunk = loaded with the chunk it belongs to. Prefetch =
+    /// loaded ahead of time before chunk transition.
+    /// </summary>
     [Export] public Residency Residency { get; set; } = Residency.Scene;
 
-    // Stable IDs — auto-populated by Phase 2 sidecar reader. Empty
-    // strings until the Blender import runs; downstream code falls
-    // back to node Name.
+    /// <summary>
+    /// Stable string ID for cross-language references (Lua, save data,
+    /// Blender sidecars). Auto-populated by the Blender import; empty =
+    /// downstream code falls back to node Name.
+    /// </summary>
     [Export] public string AssetId { get; set; } = "";
+    /// <summary> Stable mesh-resource ID (separate from AssetId so the same
+    /// mesh shared across instances stays one ID). </summary>
     [Export] public string MeshId { get; set; } = "";
+    /// <summary> Chunk this mesh belongs to. Empty = scene-resident; non-empty
+    /// = participates in the chunk-streaming residency tier. </summary>
     [Export] public string ChunkId { get; set; } = "";
+    /// <summary> Logical region (room/area) the mesh sits in. Used for
+    /// per-region budget rollups + camera-zone matching. </summary>
     [Export] public string RegionId { get; set; } = "";
+    /// <summary> Multi-disc archive this mesh ships in. Empty = single-disc
+    /// project; non-empty = per-disc residency tracking (Phase 4 multi-
+    /// disc). </summary>
     [Export] public string AreaArchiveId { get; set; } = "";
 
-    // Per-material PS1 metadata, one entry per surface that wants
-    // texture-page / CLUT / atlas-group overrides. Round-trips with
-    // the Blender side's per-material PropertyGroup. Match strategy
-    // at export: PS1MaterialMetadata.MaterialName ⇄ surface
-    // Material.ResourceName. Empty array = mesh-level defaults apply
-    // to every surface (the pre-Phase-5 behavior).
+    /// <summary>
+    /// Per-material PS1 metadata. One entry per surface that wants
+    /// texture-page / CLUT / atlas-group overrides. Match by
+    /// PS1MaterialMetadata.MaterialName ⇄ surface Material.ResourceName.
+    /// Empty = mesh-level defaults apply to every surface.
+    /// </summary>
     [Export] public Godot.Collections.Array<PS1MaterialMetadata> Materials { get; set; } = new();
 
-    // Phase L1 vertex-light bake override. One Color per mesh vertex
-    // (surface 0 only in the minimum tier — multi-surface support is
-    // Phase L2). Empty = no override; PSXMesh reads the mesh's COLOR
-    // channel as before. Populated = bake operator wrote it; PSXMesh
-    // uses these instead. Per-instance storage means same mesh in two
-    // scenes can have two lighting setups (something SplashEdit can't
-    // do because it bakes into the source mesh).
-    //
-    // Survives .glb re-import: this lives on the .tscn, not on the
-    // mesh asset. Authors clear by re-baking with empty lights / by
-    // assigning an empty PackedColorArray.
-    //
-    // See docs/ps1godot-lighting-plan.md for the full storage spec.
+    /// <summary>
+    /// Per-instance vertex-color override. Vertex Lighting + AO bakers
+    /// write here. Empty = use the mesh's COLOR channel as-is. Populated =
+    /// these colors override at export. Same mesh in two scenes can have
+    /// two lighting setups. Survives .glb re-import (lives on the .tscn).
+    /// Use "PS1Godot: Bake / Clear BakedColors" to reset.
+    /// </summary>
     [Export] public Color[] BakedColors { get; set; } = System.Array.Empty<Color>();
 
     [ExportGroup("PS1 / Interactable")]
-    // When true, the runtime treats this mesh as an interactable. Pressing
-    // InteractButton within InteractionRadiusMeters fires onInteract on
-    // this object's attached script. Disabled by default — most meshes
-    // are not interactive.
+    /// <summary>
+    /// When true, runtime treats this mesh as interactable. Player presses
+    /// InteractButton within InteractionRadiusMeters → fires onInteract on
+    /// the attached ScriptFile. Most meshes are NOT interactive — opt in.
+    /// </summary>
     [Export] public bool Interactable { get; set; } = false;
+    /// <summary>
+    /// Distance in meters at which the interact prompt becomes available.
+    /// 1.5 m ≈ arm's reach.
+    /// </summary>
     [Export(PropertyHint.Range, "0.1,10.0,0.1,suffix:m")]
     public float InteractionRadiusMeters { get; set; } = 1.5f;
-    // PSX controller button ids — must match psyqo::AdvancedPad::Button:
-    //   0=Select  1=L3       2=R3       3=Start
-    //   4=Up      5=Right    6=Down     7=Left
-    //   8=L2      9=R2      10=L1      11=R1
-    //   12=Triangle 13=Circle 14=Cross 15=Square
-    // Runtime reserves Cross (14) for jump and Square (15) for sprint on a
-    // digital pad, so those collide if used for interact. Default to
-    // Triangle (12) — PS1-era convention for "action/menu" buttons and
-    // clear of both reservations. Circle (13) is also free.
+    /// <summary>
+    /// PSX controller button id. 12=Triangle (default — clear of jump and
+    /// sprint), 13=Circle, 14=Cross (RESERVED for jump on digital pad),
+    /// 15=Square (RESERVED for sprint). Other ids are direction/start/
+    /// shoulder buttons — see code comment for the full list.
+    /// </summary>
     [Export(PropertyHint.Range, "0,15,1")]
     public int InteractButton { get; set; } = 12;
-    // Repeatable = fires every time within cooldown. Non-repeatable = once, then locked.
+    /// <summary>
+    /// True = fires every time the button is pressed within cooldown
+    /// (looped dialogue, repeated examines). False = fires once, then
+    /// the trigger locks (one-shot pickups, story flags).
+    /// </summary>
     [Export] public bool InteractionRepeatable { get; set; } = true;
+    /// <summary>
+    /// Frames between successive interact firings (60 fps PAL / NTSC). 30
+    /// frames ≈ 0.5 s. Set 0 to disable cooldown (every poll fires).
+    /// </summary>
     [Export(PropertyHint.Range, "0,600,1,suffix:frames")]
     public int InteractionCooldownFrames { get; set; } = 30;
-    // UI canvas to show as a "Press X to ..." prompt while in range. Empty
-    // = no prompt. Wire-up lands when the UI bullet ships; for now the
-    // field is stored but the runtime just ignores missing canvases.
+    /// <summary>
+    /// PS1UICanvas name to show as a "Press X to ..." prompt while in
+    /// range. Empty = no prompt. Wire-up pending; the field is stored but
+    /// runtime ignores missing canvases.
+    /// </summary>
     [Export] public string InteractionPromptCanvas { get; set; } = "";
 
     // _EnterTree runs every time the node enters the scene tree — both at

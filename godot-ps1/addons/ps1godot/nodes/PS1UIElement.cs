@@ -77,41 +77,65 @@ public enum PS1UITextVAlign
 public partial class PS1UIElement : Node
 {
     [ExportGroup("Identity")]
+    /// <summary>
+    /// Lookup name (UI.FindElement uses this). Unique within the canvas.
+    /// </summary>
     [Export] public string ElementName { get; set; } = "";
+    /// <summary>
+    /// What kind of widget this is. Text = font glyphs, Box = solid
+    /// rectangle fill, Image = textured quad, Progress = filled bar.
+    /// Switching type changes which fields below apply.
+    /// </summary>
     [Export] public PS1UIElementType Type { get; set; } = PS1UIElementType.Text;
+    /// <summary>
+    /// Initial visibility. Lua toggles via UI.SetElementVisible at runtime.
+    /// </summary>
     [Export] public bool VisibleOnLoad { get; set; } = true;
 
     [ExportGroup("Layout")]
-    // Placement mode. Custom = X/Y are the absolute top-left corner
-    // (backward-compatible default). Non-Custom = the element snaps
-    // to one of the nine PSX-screen reference points and X/Y become
-    // insets (edge anchors) or offsets (center anchors). See
-    // PS1UIAnchor's doc comment for full semantics.
+    /// <summary>
+    /// Placement mode. Custom = X/Y are absolute top-left corner. Non-Custom
+    /// = element snaps to one of nine PSX-screen anchor points; X/Y become
+    /// insets (edge anchors) or offsets (center anchors). Use anchors so
+    /// you don't hand-compute X = 312 for "right edge minus 8".
+    /// </summary>
     [Export] public PS1UIAnchor Anchor { get; set; } = PS1UIAnchor.Custom;
 
-    // Interpretation depends on Anchor:
-    //   - Custom / TopLeft: absolute position of the top-left corner.
-    //   - TopRight, CenterRight, BottomRight: X is the inset in
-    //     pixels from the right edge (positive = onto the screen).
-    //   - BottomLeft, BottomCenter, BottomRight: Y is the inset from
-    //     the bottom edge.
-    //   - Center-aligned axes: the value is an offset from the PSX
-    //     center (160 horizontally, 120 vertically).
+    /// <summary>
+    /// Horizontal position in pixels. Custom anchor = absolute X. Right
+    /// anchors = inset from right edge. Center anchors = offset from screen
+    /// center (160 px). PSX framebuffer is 320 px wide.
+    /// </summary>
     [Export(PropertyHint.Range, "-256,576,1,suffix:px")]
     public int X { get; set; } = 16;
+    /// <summary>
+    /// Vertical position in pixels. Custom anchor = absolute Y. Bottom
+    /// anchors = inset from bottom. Center anchors = offset from screen
+    /// center (120 px). PSX framebuffer is 240 px tall.
+    /// </summary>
     [Export(PropertyHint.Range, "-256,576,1,suffix:px")]
     public int Y { get; set; } = 16;
 
-    // Width/height in pixels. For Text elements, used only when the
-    // element needs layout (wrapping — not in MVP). For Box, the
-    // rectangle extent.
+    /// <summary>
+    /// Element width in pixels. Used for Box/Image extents and Text wrap
+    /// box. Cap at 256 if the element will eventually live in one VRAM
+    /// page (1 tpage = 256 px wide).
+    /// </summary>
     [Export(PropertyHint.Range, "0,576,1,suffix:px")]
     public int Width { get; set; } = 100;
+    /// <summary>
+    /// Element height in pixels. Box/Image extent or Text vertical alignment
+    /// box. PSX framebuffer is 240 px tall.
+    /// </summary>
     [Export(PropertyHint.Range, "0,576,1,suffix:px")]
     public int Height { get; set; } = 16;
 
     [ExportGroup("Appearance")]
-    // Tint. Text = foreground color, Box = fill color.
+    /// <summary>
+    /// Tint. Text = foreground color (white default). Box = fill color.
+    /// Progress = bar's filled portion. Image = ignored (texture is the
+    /// color).
+    /// </summary>
     [Export] public Color Color { get; set; } = new Color(1f, 1f, 1f, 1f);
 
     // Render this element with PSX hardware semi-transparency.

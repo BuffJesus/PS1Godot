@@ -41,15 +41,24 @@ public enum PS1CameraMode
 public partial class PS1Player : Node3D
 {
     [ExportGroup("Camera")]
+    /// <summary>
+    /// Authoring hint for the camera rig. ThirdPerson = trails behind +
+    /// above the player (uses the child Camera3D's offset). FirstPerson =
+    /// camera at player head, avatar mesh hidden. Orbit = right-stick
+    /// rotates around the player. FixedPreRendered = camera ignores the
+    /// player; author drives via Lua Camera.SetMode("fixed") for Resident
+    /// Evil / FFVII style scenes.
+    /// </summary>
     [Export] public PS1CameraMode CameraMode { get; set; } = PS1CameraMode.ThirdPerson;
 
     [ExportGroup("Avatar")]
-    // Texture applied to the auto-wired avatar mesh. Lives here (not as a
-    // material_override on the nested FBX mesh) because instanced-scene
-    // overrides break the moment the FBX's internal node names change —
-    // and "Mixamo renamed my mesh" is a perennial FBX gotcha. Setting it
-    // here survives re-imports. Wired into the ps1_default shader's
-    // `albedo_tex` parameter by _EnterTree below.
+    /// <summary>
+    /// Texture for the auto-wired avatar mesh. Lives here (not on the
+    /// nested FBX mesh's material_override) because instanced-scene
+    /// overrides break when Mixamo renames internal mesh nodes. Setting it
+    /// here survives re-imports. Wired into the ps1_default shader's
+    /// albedo_tex parameter by _EnterTree.
+    /// </summary>
     private Texture2D? _avatarTexture;
     [Export] public Texture2D? AvatarTexture
     {
