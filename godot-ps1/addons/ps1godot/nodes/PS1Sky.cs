@@ -23,21 +23,22 @@ namespace PS1Godot;
 [Icon("res://addons/ps1godot/icons/ps1_scene.svg")]
 public partial class PS1Sky : Node3D
 {
-    // Sky texture. Must be saved as an asset (resource path required —
-    // in-memory textures fail collection the same way they do for
-    // PS1MeshInstance albedos and PS1UIElement images).
+    /// <summary>
+    /// Sky texture. Must be saved as a .png/.tres asset (in-memory
+    /// textures aren't collected). Drawn full-screen behind 3D geometry.
+    /// </summary>
     [Export] public Texture2D? Texture { get; set; }
 
-    // PSX bit-depth for the sky's VRAM atlas slot. A starry sky needs
-    // very few colors (mostly black + a few star highlights) so 4bpp
-    // is usually enough; richer painted skies want 8bpp. 16bpp burns
-    // an entire 256-wide atlas page on one texture — reserved for
-    // photo-style skies that genuinely need the full 32k palette.
+    /// <summary>
+    /// VRAM bit-depth. Starry sky / few-color → 4bpp (cheapest VRAM).
+    /// Painted sky with gradients → 8bpp. Photo-style → 16bpp (eats a
+    /// full 256-wide atlas page; reserve for cinematics).
+    /// </summary>
     [Export] public PSXBPP BitDepth { get; set; } = PSXBPP.TEX_4BIT;
 
-    // Multiplied with the texture sample at render time. White = no
-    // tint (texture appears as authored). Useful for dimming the sky
-    // without re-authoring the texture (e.g., cloudy night vs clear
-    // night via tint alone).
+    /// <summary>
+    /// Render-time multiplier on the texture. White = untinted. Use to
+    /// dim the sky for night/storm without re-authoring the texture.
+    /// </summary>
     [Export] public Color Tint { get; set; } = new Color(1f, 1f, 1f, 1f);
 }

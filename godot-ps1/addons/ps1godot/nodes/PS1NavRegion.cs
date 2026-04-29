@@ -41,9 +41,11 @@ public partial class PS1NavRegion : Node3D
         new(-1, 0,  1),
     };
 
-    // Verts in local space. X and Z define the polygon outline; Y is the
-    // floor height at that vertex. Give three non-collinear Ys to author a
-    // ramp; give equal Ys for a flat region.
+    /// <summary>
+    /// Convex polygon in local space (CCW from above). X/Z = outline,
+    /// Y = floor height at that vertex. Equal Ys = flat region; three
+    /// non-collinear Ys = ramp. Max 8 verts (runtime's fixed-size struct).
+    /// </summary>
     [Export]
     public Vector3[] Verts
     {
@@ -55,20 +57,26 @@ public partial class PS1NavRegion : Node3D
         }
     }
 
-    // Leave at Flat to let the exporter infer from the fitted plane's
-    // slope. Override when you want the runtime to treat a gentle ramp as
-    // stairs (step-up snap) or vice versa.
+    /// <summary>
+    /// Override the auto-inferred surface type. Flat = floor, Ramp =
+    /// smooth slope, Stairs = step-up snap. Leave at Flat to let the
+    /// exporter pick from the fitted plane's slope.
+    /// </summary>
     [Export] public PS1NavSurfaceType SurfaceType { get; set; } = PS1NavSurfaceType.Flat;
 
-    // 0xFF = exterior / unknown. Set to match your PS1Room index when
-    // authoring interior scenes so the portal rendering system culls the
-    // right rooms. Interior scenes are Phase 2 bullet 12; leaving at 0xFF
-    // is fine until that lands.
+    /// <summary>
+    /// PS1Room index this region belongs to. 0xFF (default) = exterior /
+    /// unknown — fine for outdoor scenes. Interior scenes set this to
+    /// match the PS1Room.RoomIndex so portal culling rejects out-of-room
+    /// regions correctly.
+    /// </summary>
     [Export(PropertyHint.Range, "0,255,1")]
     public int RoomIndex { get; set; } = 0xFF;
 
-    // If true, ALL boundary edges (edges without a stitched portal neighbour)
-    // let the player walk off the region — use for platforms / ledges you
-    // want to fall off. Default is false: walls.
+    /// <summary>
+    /// When true, ALL boundary edges without a stitched portal let the
+    /// player walk off (platforms, ledges, balconies). When false
+    /// (default), boundaries act as walls and clamp the player.
+    /// </summary>
     [Export] public bool Platform { get; set; } = false;
 }

@@ -19,12 +19,12 @@ public partial class PS1TriggerBox : Node3D
     private Vector3 _halfExtents = new Vector3(1, 1, 1);
 
     [ExportGroup("Volume")]
-    // Local half-extents. World AABB is computed at export by baking the
-    // node's GlobalTransform into the 8 corners and taking the axis-aligned
-    // extent — same approach colliders use.
-    //
-    // Setter calls UpdateGizmos so the wireframe in the viewport tracks
-    // inspector changes live.
+    /// <summary>
+    /// Half-extents of the box in local space (so x=2 means 4-unit wide
+    /// box). World AABB is computed at export by baking the node's
+    /// GlobalTransform into the 8 corners. The wireframe gizmo in the
+    /// viewport updates live as you tune the values.
+    /// </summary>
     [Export]
     public Vector3 HalfExtents
     {
@@ -37,9 +37,13 @@ public partial class PS1TriggerBox : Node3D
     }
 
     [ExportGroup("Scripting")]
-    // Trigger-level Lua script. The runtime calls onTriggerEnter(index) /
-    // onTriggerExit(index) as top-level functions in this script (no self,
-    // since trigger boxes aren't GameObjects).
+    /// <summary>
+    /// Lua script that handles enter/exit. Runtime calls
+    /// onTriggerEnter(triggerIndex) and onTriggerExit(triggerIndex) as
+    /// top-level functions (no self — triggers aren't GameObjects). Set
+    /// the same script on multiple triggers and dispatch via the
+    /// triggerIndex argument.
+    /// </summary>
     [Export(PropertyHint.File, "*.lua")]
     public string ScriptFile { get; set; } = "";
 
