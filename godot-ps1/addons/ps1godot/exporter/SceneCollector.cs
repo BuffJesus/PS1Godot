@@ -57,7 +57,13 @@ public static class SceneCollector
         // GameObject).
         var luaCache = new Dictionary<string, int>();
         string sceneLuaPath = (root as PS1Scene)?.SceneLuaFile ?? "";
-        data.SceneLuaFileIndex = ResolveLuaScript(root.Name, sceneLuaPath, data, luaCache);
+        // Auto-generated camera preamble: every Camera3D / PS1Camera in the
+        // scene gets its pose + FOV exported as a Lua table the scene script
+        // can drive via Camera.LoadFromExport(name). This keeps the Godot
+        // inspector as the single source of truth — moving a camera or
+        // changing FOV updates the runtime without any Lua edit.
+        string cameraPreamble = GenerateCameraPreamble(root, data.GteScaling);
+        data.SceneLuaFileIndex = ResolveLuaScript(root.Name, sceneLuaPath, data, luaCache, cameraPreamble);
 
         // Audio clips authored on the PS1Scene get ADPCM-encoded once at
         // export time. Lua resolves them by name via the in-splashpack name
@@ -440,6 +446,15 @@ public static class SceneCollector
         if (n is PS1MeshGroup group && group.Visible)
         {
             EmitMeshGroup(group, data, textureCache, luaCache);
+            return;
+        }
+        // PS1Backdrop: high-detail FBX subtree intended only for the
+        // pre-rendered BG bake. Walk descendants, emit per-mesh world-
+        // AABB colliders (when enabled), but skip render-side export.
+        // Stop walking — descendants are consumed here.
+        if (n is PS1Backdrop backdrop && backdrop.Visible)
+        {
+            EmitBackdrop(backdrop, data);
             return;
         }
         if (n is PS1MeshInstance pmi && pmi.Visible && pmi.Mesh != null)
@@ -1935,11 +1950,9 @@ public static class SceneCollector
 
     private static void CollectAudioClips(PS1Scene scene, SceneData data)
     {
-        GD.Print("[CollectAudioClips] BUILD-TAG-2026-04-26-A enter");  // verify fresh DLL
         if (scene.AudioClips == null) return;
         var seen = new HashSet<string>();
         int xaCount = 0;
-        int iter = -1;
 
         // v28+: pre-scan the scene-wide bank to find clip names referenced
         // by any PS1SampleRegion or PS1DrumKit mapping. The runtime
@@ -1976,8 +1989,6 @@ public static class SceneCollector
         }
         foreach (var clip in scene.AudioClips)
         {
-            iter++;
-            GD.Print($"[CollectAudioClips] iter={iter} stream={(clip?.Stream?.ResourcePath ?? "<null>")}");
             if (clip == null || clip.Stream == null)
             {
                 GD.PushWarning("[PS1Godot] PS1Scene.AudioClips has an empty slot or a clip with no Stream — skipping.");
@@ -2005,9 +2016,7 @@ public static class SceneCollector
                 continue;
             }
 
-            GD.Print($"[CollectAudioClips]   '{name}': reading PCM…");
             short[] pcm = ReadAudioStreamAsMono16(wav);
-            GD.Print($"[CollectAudioClips]   '{name}': PCM ok ({pcm.Length} samples). encoding ADPCM…");
             if (pcm.Length == 0)
             {
                 GD.PushWarning($"[PS1Godot] Audio clip '{name}' has no sample data — skipping.");
@@ -2015,7 +2024,6 @@ public static class SceneCollector
             }
 
             byte[] adpcm = ADPCMEncoder.Encode(pcm, clip.Loop);
-            GD.Print($"[CollectAudioClips]   '{name}': ADPCM ok ({adpcm.Length} B). resolving route…");
             ushort rate = (ushort)Mathf.Clamp(wav.MixRate, 1000, 44100);
             // Bank-referenced clips must stay on SPU (sequencer voice path
             // can't drive disc-streamed XA). Override Auto → SPU silently
@@ -2028,11 +2036,9 @@ public static class SceneCollector
             if (isBankReferenced && effectiveRoute == PS1AudioRoute.Auto)
             {
                 effectiveRoute = PS1AudioRoute.SPU;
-                GD.Print($"[CollectAudioClips]   '{name}': Auto → SPU (referenced by instrument bank).");
             }
             byte resolvedRoute = ResolveAudioRoute(effectiveRoute, adpcm.Length, clip.Loop);
             if (resolvedRoute == 1) xaCount++;
-            GD.Print($"[CollectAudioClips]   '{name}': route={resolvedRoute}");
 
             // v27: when an XA clip is resolved AND psxavenc is available,
             // run the conversion now so the splashpack writer can stamp
@@ -2042,9 +2048,7 @@ public static class SceneCollector
             byte[]? xaPayload = null;
             if (resolvedRoute == 1)
             {
-                GD.Print($"[CollectAudioClips]   '{name}': calling PsxAvEnc.ConvertWavToXa…");
                 xaPayload = PsxAvEnc.ConvertWavToXa(pcm, rate, 1, name);
-                GD.Print($"[CollectAudioClips]   '{name}': ConvertWavToXa returned ({(xaPayload?.Length.ToString() ?? "null")} bytes)");
             }
 
             string routeLabel = resolvedRoute switch
@@ -2996,7 +3000,7 @@ public static class SceneCollector
     // Runtime v20 with the full parser linked accepts raw source text via
     // luaL_loadbuffer — bytecode compilation via luac_psx is an optimization
     // we'll layer on later without changing the splashpack shape.
-    private static int ResolveLuaScript(string nodeLabel, string path, SceneData data, Dictionary<string, int> cache)
+    private static int ResolveLuaScript(string nodeLabel, string path, SceneData data, Dictionary<string, int> cache, string preamble = null)
     {
         if (string.IsNullOrEmpty(path)) return -1;
         if (cache.TryGetValue(path, out int existing)) return existing;
@@ -3014,6 +3018,12 @@ public static class SceneCollector
             return -1;
         }
 
+        // Optional auto-generated preamble (camera table, helpers) prepended
+        // before the user's source. psxlua per-script env isolation means
+        // helpers defined here are visible to this script only — exactly
+        // what we want for a scene-level binding.
+        if (!string.IsNullOrEmpty(preamble)) source = preamble + source;
+
         // Rewrite decimal literals (0.06 → FixedPoint.newFromRaw(246)) so
         // psxlua's integer-only NOPARSER tokenizer accepts the source. No-op
         // on scripts that already use the raw/integer convention.
@@ -3027,8 +3037,96 @@ public static class SceneCollector
         string rewriteNote = deltaBytes != 0
             ? $", decimals rewritten (+{deltaBytes} B)"
             : "";
-        GD.Print($"[PS1Godot] Lua on '{nodeLabel}': {path} ({bytes.Length} bytes, index {idx}{rewriteNote})");
+        string preambleNote = !string.IsNullOrEmpty(preamble)
+            ? $", +preamble {preamble.Length} B"
+            : "";
+        GD.Print($"[PS1Godot] Lua on '{nodeLabel}': {path} ({bytes.Length} bytes, index {idx}{preambleNote}{rewriteNote})");
         return idx;
+    }
+
+    // Walks the scene for top-level Camera3D / PS1Camera nodes and emits
+    // a Lua preamble that defines `_ps1_cameras[name] = { pos, rot, h }`
+    // plus a `Camera.LoadFromExport(name)` helper. The Lua scene script
+    // can then call `Camera.LoadFromExport("FixedCameraA")` and the
+    // runtime camera follows whatever the inspector shows — no manual
+    // pose math, no FOV→H conversion.
+    //
+    // Skips Camera3Ds that are children of PS1Player (those are
+    // third-person rig offsets, not fixed cameras).
+    private static string GenerateCameraPreamble(Node root, float gteScaling)
+    {
+        var cams = new List<Camera3D>();
+        CollectFixedCameras(root, cams);
+        if (cams.Count == 0) return null;
+
+        // ASCII only — psxlua's tokenizer doesn't reliably handle UTF-8
+        // multi-byte chars and our decimal rewriter doesn't either. Em
+        // dashes / degree signs in the comments here have crashed Lua
+        // loads in the past.
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("-- AUTO-GENERATED by PS1Godot exporter -- DO NOT EDIT.");
+        sb.AppendLine("-- Camera pose + FOV resolved from the editor at every export.");
+        sb.AppendLine("-- Move a camera or change FOV in Godot; F5 to apply.");
+        sb.AppendLine("local _ps1_cameras = {");
+        foreach (var cam in cams)
+        {
+            // PSX position: x -> x/scale; y, z -> -y/scale, -z/scale
+            // (Y/Z reflection at the boundary, same as mesh verts).
+            var p = cam.GlobalPosition;
+            float px = p.X / gteScaling;
+            float py = -p.Y / gteScaling;
+            float pz = -p.Z / gteScaling;
+
+            // Godot's GetEuler(YXZ) for a Camera3D pitched DOWN (forward
+            // -Z tilts toward -Y) returns euler.X NEGATIVE -- the .tscn
+            // Transform3D stores rows, not columns, so a top-down camera
+            // ends up with negative euler.X. PSX's psyqo also uses
+            // negative pitch = look down (memory `project_camera_pitch_sign`),
+            // so the angles map straight across with no sign flip.
+            // Yaw/roll have not been test-covered yet but pass through
+            // identically; the demo only needs pitch + a 180-deg yaw.
+            var euler = cam.GlobalTransform.Basis.GetEuler(EulerOrder.Yxz);
+            float pitchPi = euler.X / Mathf.Pi;
+            float yawPi   = euler.Y / Mathf.Pi;
+            float rollPi  = euler.Z / Mathf.Pi;
+
+            // FOV -> GTE H register. Godot's "Keep Height" Camera3D.Fov
+            // is the vertical FOV in degrees. PSX projection uses
+            // screen height 240; H = (240/2) / tan(FOV/2). Default
+            // H=320 is roughly 41 deg.
+            float fovDeg = cam.Fov;
+            float fovRad = fovDeg * Mathf.Pi / 180f;
+            int hReg = Mathf.Clamp(Mathf.RoundToInt(120f / Mathf.Tan(fovRad * 0.5f)), 1, 1024);
+
+            sb.AppendLine(System.Globalization.CultureInfo.InvariantCulture,
+                $"    [\"{cam.Name}\"] = {{ px={px:0.######}, py={py:0.######}, pz={pz:0.######}, " +
+                $"rx={pitchPi:0.######}, ry={yawPi:0.######}, rz={rollPi:0.######}, h={hReg} }}, -- fov={fovDeg:0.##}");
+        }
+        sb.AppendLine("}");
+        sb.AppendLine("function Camera.LoadFromExport(name)");
+        sb.AppendLine("    local c = _ps1_cameras[name]");
+        sb.AppendLine("    if c then");
+        sb.AppendLine("        Camera.SetPosition(Vec3.new(c.px, c.py, c.pz))");
+        sb.AppendLine("        Camera.SetRotation(Vec3.new(c.rx, c.ry, c.rz))");
+        sb.AppendLine("        Camera.SetH(c.h)");
+        sb.AppendLine("    end");
+        sb.AppendLine("end");
+        sb.AppendLine("-- END AUTO-GENERATED");
+        sb.AppendLine();
+        return sb.ToString();
+    }
+
+    private static void CollectFixedCameras(Node n, List<Camera3D> output)
+    {
+        // Skip Camera3Ds nested under PS1Player — those are third-person
+        // rig offsets, not fixed cameras. Skip the PS1Player subtree
+        // entirely so a Camera3D grandchild can't sneak in.
+        if (n is PS1Player) return;
+        if (n is Camera3D cam) output.Add(cam);
+        foreach (var child in n.GetChildren())
+        {
+            if (child is Node childN) CollectFixedCameras(childN, output);
+        }
     }
 
     // Emits whichever of (SPLASHPACKCollider AABB, NavRegion) apply for this
@@ -3087,6 +3185,57 @@ public static class SceneCollector
                 EmitFlatNavRegion(wMin, wMax, data);
             }
         }
+    }
+
+    // PS1Backdrop: walk descendants, emit one world-AABB collider per
+    // visible MeshInstance3D (when EmitCollision is on). Skips render
+    // emission entirely — these meshes appear in the BG bake and
+    // nowhere else.
+    private static void EmitBackdrop(PS1Backdrop backdrop, SceneData data)
+    {
+        int meshCount = 0;
+        WalkBackdrop(backdrop, backdrop, data, ref meshCount);
+        if (meshCount > 0)
+        {
+            GD.Print($"[PS1Godot] PS1Backdrop '{backdrop.Name}': {meshCount} mesh(es) treated as BG-only" +
+                     (backdrop.EmitCollision ? " (with AABB colliders)" : " (no collision)"));
+        }
+    }
+
+    private static void WalkBackdrop(Node n, PS1Backdrop root, SceneData data, ref int meshCount)
+    {
+        if (n is MeshInstance3D mi && mi.Visible && mi.Mesh != null)
+        {
+            meshCount++;
+            if (root.EmitCollision)
+            {
+                var localAabb = mi.Mesh.GetAabb();
+                Vector3 lMin = localAabb.Position;
+                Vector3 lMax = localAabb.Position + localAabb.Size;
+                Transform3D xform = mi.GlobalTransform;
+                Vector3 wMin = new(float.MaxValue, float.MaxValue, float.MaxValue);
+                Vector3 wMax = new(float.MinValue, float.MinValue, float.MinValue);
+                for (int i = 0; i < 8; i++)
+                {
+                    var corner = new Vector3(
+                        (i & 1) != 0 ? lMax.X : lMin.X,
+                        (i & 2) != 0 ? lMax.Y : lMin.Y,
+                        (i & 4) != 0 ? lMax.Z : lMin.Z);
+                    Vector3 world = xform * corner;
+                    wMin = new Vector3(Mathf.Min(wMin.X, world.X), Mathf.Min(wMin.Y, world.Y), Mathf.Min(wMin.Z, world.Z));
+                    wMax = new Vector3(Mathf.Max(wMax.X, world.X), Mathf.Max(wMax.Y, world.Y), Mathf.Max(wMax.Z, world.Z));
+                }
+                data.Colliders.Add(new ColliderRecord
+                {
+                    WorldMin = wMin,
+                    WorldMax = wMax,
+                    CollisionType = 1,
+                    LayerMask = 0xFF,
+                    GameObjectIndex = ushort.MaxValue,
+                });
+            }
+        }
+        foreach (var child in n.GetChildren()) WalkBackdrop(child, root, data, ref meshCount);
     }
 
     // PS1 nav region from a PlaneMesh bounding rect, expressed in PSX fp12.
