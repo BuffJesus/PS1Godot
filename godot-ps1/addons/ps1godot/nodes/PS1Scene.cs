@@ -302,6 +302,39 @@ public partial class PS1Scene : Node3D
             }
         }
 
+        // Structural sanity: a scene with a PS1Player but no PS1NavRegion
+        // will spawn the player in the air with nothing to stand on. The
+        // runtime falls through the world. Flag this once at the scene
+        // root so authors aren't blindsided after F5.
+        bool hasPlayer = ContainsNodeOfType(this, typeof(PS1Player));
+        bool hasNav    = ContainsNodeOfType(this, typeof(PS1NavRegion));
+        if (hasPlayer && !hasNav)
+            warnings.Add("Scene has a PS1Player but no PS1NavRegion. The player will spawn " +
+                         "with no floor and fall through the world at runtime. Add a " +
+                         "PS1NavRegion (or a Static-collision PS1MeshInstance with a flat AABB) " +
+                         "covering the spawn area.");
+
+        // Multiple PS1Scene roots in the same tree is undefined — exporter
+        // walks from the active scene root and only the outermost wins.
+        if (ContainsNodeOfType(this, typeof(PS1Scene), excludeSelf: true))
+            warnings.Add("Found a nested PS1Scene under this one. The exporter only honors the " +
+                         "outermost PS1Scene node; the nested one's settings (budgets, audio, " +
+                         "scripting) are ignored. Demote it to a regular Node3D or move it to " +
+                         "SubScenes.");
+
         return warnings.ToArray();
+    }
+
+    // Recursive scan helper. Skip subtrees rooted at PackedScene refs we
+    // can't introspect; we only care about live in-tree nodes.
+    private static bool ContainsNodeOfType(Node root, System.Type t, bool excludeSelf = false)
+    {
+        if (!excludeSelf && t.IsInstanceOfType(root)) return true;
+        foreach (var c in root.GetChildren())
+        {
+            if (c is Node child && ContainsNodeOfType(child, t, excludeSelf: false))
+                return true;
+        }
+        return false;
     }
 }
