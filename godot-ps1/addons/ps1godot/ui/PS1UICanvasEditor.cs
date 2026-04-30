@@ -139,7 +139,13 @@ public partial class PS1UICanvasEditor : VBoxContainer
 
         // Add-child dropdown — appends the chosen widget type under
         // `_selectedNode` (if it's a container) or under the canvas.
-        _addMenu = new MenuButton { Text = "+ Add" };
+        _addMenu = new MenuButton
+        {
+            Text = "+ Add",
+            TooltipText = "Add a UI element or container under the selected node " +
+                          "(or under the canvas if nothing is selected). Boxes / Spacer participate " +
+                          "in flexbox-style layout; raw Text/Box elements use anchor-based placement.",
+        };
         _addMenu.GetPopup().AddItem("Text Element", (int)AddKind.TextElement);
         _addMenu.GetPopup().AddItem("Box Element", (int)AddKind.BoxElement);
         _addMenu.GetPopup().AddSeparator();
@@ -156,7 +162,11 @@ public partial class PS1UICanvasEditor : VBoxContainer
         var zoomLabel = new Label { Text = "Zoom", VerticalAlignment = VerticalAlignment.Center };
         toolbar.AddChild(zoomLabel);
 
-        _zoomCombo = new OptionButton();
+        _zoomCombo = new OptionButton
+        {
+            TooltipText = "Preview scale. The canvas itself is always 320×240 (PSX framebuffer); " +
+                          "this only affects how big it draws in the editor.",
+        };
         _zoomCombo.AddItem("1×", 1);
         _zoomCombo.AddItem("2×", 2);
         _zoomCombo.AddItem("3×", 3);
@@ -165,7 +175,13 @@ public partial class PS1UICanvasEditor : VBoxContainer
         _zoomCombo.ItemSelected += OnZoomChanged;
         toolbar.AddChild(_zoomCombo);
 
-        _gridToggle = new CheckButton { Text = "Grid", ButtonPressed = _showGrid };
+        _gridToggle = new CheckButton
+        {
+            Text = "Grid",
+            ButtonPressed = _showGrid,
+            TooltipText = "Overlay an 8-pixel grid. PSX text fonts are 8 px tall, so snapping " +
+                          "elements to multiples of 8 keeps them pixel-aligned.",
+        };
         _gridToggle.Toggled += OnGridToggled;
         toolbar.AddChild(_gridToggle);
 

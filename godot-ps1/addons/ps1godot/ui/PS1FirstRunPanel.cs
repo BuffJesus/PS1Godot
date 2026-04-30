@@ -99,6 +99,8 @@ public partial class PS1FirstRunPanel : Window
         var demoBtn = new Button
         {
             Text = "▶  Open demo scene",
+            TooltipText = "Open the bundled demo scene under godot-ps1/demo/, which exercises " +
+                          "every node type so you can press F5 right away and see the export → run loop.",
             CustomMinimumSize = new Vector2(180, 40),
         };
         ApplyAccentStyle(demoBtn);
@@ -120,6 +122,8 @@ public partial class PS1FirstRunPanel : Window
         var skip = new Button
         {
             Text = "Skip — I know what I'm doing",
+            TooltipText = "Dismiss this panel for this project. You can re-open it from the " +
+                          "PS1Godot dock's Setup section's \"Re-check\" button if you need it later.",
             Flat = true,
         };
         skip.AddThemeColorOverride("font_color", new Color(1, 1, 1, 0.6f));
