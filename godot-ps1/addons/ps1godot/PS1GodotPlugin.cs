@@ -58,6 +58,7 @@ public partial class PS1GodotPlugin : EditorPlugin
     private PS1UICanvasEditor? _uiCanvasEditor;
     private EditorSyntaxHighlighter? _luaHighlighter;
     private PS1TexturePreviewInspector? _texturePreviewInspector;
+    private PS1InspectorTooltips? _inspectorTooltips;
     private PS1VRAMViewerDock? _vramViewerDock;
     private LuaHotSwapWatcher? _luaHotSwapWatcher;
     private PS1ViewportOverlay? _viewportOverlay;
@@ -231,6 +232,13 @@ public partial class PS1GodotPlugin : EditorPlugin
         _texturePreviewInspector = new PS1TexturePreviewInspector();
         AddInspectorPlugin(_texturePreviewInspector);
 
+        // XML doc-comment tooltip plugin. Godot 4.7-dev's mono integration
+        // doesn't yet surface /// comments via CSharpScript::get_documentation
+        // (TODO upstream), so we parse PS1Godot.xml ourselves and apply the
+        // tooltips by walking the inspector tree.
+        _inspectorTooltips = new PS1InspectorTooltips();
+        AddInspectorPlugin(_inspectorTooltips);
+
         // VRAM viewer — bottom-panel tab that visualises the packed
         // 1024×512 layout after each export (atlases, textures, CLUTs,
         // reserved framebuffer + font regions).
@@ -384,6 +392,12 @@ public partial class PS1GodotPlugin : EditorPlugin
         {
             RemoveInspectorPlugin(_texturePreviewInspector);
             _texturePreviewInspector = null;
+        }
+
+        if (_inspectorTooltips != null)
+        {
+            RemoveInspectorPlugin(_inspectorTooltips);
+            _inspectorTooltips = null;
         }
 
         if (_vramViewerDock != null)
