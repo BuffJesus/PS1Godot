@@ -3202,10 +3202,23 @@ int LuaAPI::UI_FindElement(lua_State* L) {
 
 int LuaAPI::UI_SetVisible(lua_State* L) {
     psyqo::Lua lua(L);
-    if (!s_uiSystem || !lua.isNumber(1)) return 0;
-    int handle = static_cast<int>(lua.toNumber(1));
+    if (!s_uiSystem) return 0;
     bool visible = lua.toBoolean(2);
-    s_uiSystem->setElementVisible(handle, visible);
+    // Accept either a numeric element handle (the original semantics) OR a
+    // string treated as a canvas name (delegates to SetCanvasVisible).
+    // The asymmetry between SetVisible (number-only) and SetCanvasVisible
+    // (number-or-string) was a silent footgun: passing a string to the old
+    // SetVisible no-op'd without a warning, and authors couldn't tell why
+    // their BG canvas wasn't toggling. Forwarding strings to canvas
+    // semantics matches the only sensible interpretation (element names
+    // are per-canvas and need two args anyway).
+    if (lua.isNumber(1)) {
+        int handle = static_cast<int>(lua.toNumber(1));
+        s_uiSystem->setElementVisible(handle, visible);
+    } else if (lua.isString(1)) {
+        int idx = s_uiSystem->findCanvas(lua.toString(1));
+        s_uiSystem->setCanvasVisible(idx, visible);
+    }
     return 0;
 }
 

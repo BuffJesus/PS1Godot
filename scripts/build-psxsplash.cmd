@@ -24,7 +24,7 @@ set "OUT=%~dp0..\godot-ps1\build"
 if not exist "%OUT%" mkdir "%OUT%"
 
 pushd "%SRC%"
-make all -j PCDRV_SUPPORT=1
+make all -j PCDRV_SUPPORT=1 PERFOVERLAY=1
 if errorlevel 1 (
   popd
   echo [build-psxsplash] Build failed.

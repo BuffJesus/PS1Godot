@@ -33,6 +33,9 @@ class UISystem; // Forward declaration
 #ifdef PSXSPLASH_MEMOVERLAY
 class MemOverlay; // Forward declaration
 #endif
+#ifdef PSXSPLASH_PERFOVERLAY
+class PerfOverlay; // Forward declaration
+#endif
 
 struct FogConfig {
     bool enabled = false;
@@ -94,6 +97,9 @@ class Renderer final {
 #ifdef PSXSPLASH_MEMOVERLAY
     void SetMemOverlay(MemOverlay* overlay) { m_memOverlay = overlay; }
 #endif
+#ifdef PSXSPLASH_PERFOVERLAY
+    void SetPerfOverlay(PerfOverlay* overlay) { m_perfOverlay = overlay; }
+#endif
     psyqo::GPU& getGPU() { return m_gpu; }
 
     void SetSkinData(const SkinAnimSet* sets, const SkinAnimState* states, int count) {
@@ -150,6 +156,9 @@ class Renderer final {
     UISystem* m_uiSystem = nullptr;
 #ifdef PSXSPLASH_MEMOVERLAY
     MemOverlay* m_memOverlay = nullptr;
+#endif
+#ifdef PSXSPLASH_PERFOVERLAY
+    PerfOverlay* m_perfOverlay = nullptr;
 #endif
 
     const SkinAnimSet* m_skinSets = nullptr;

@@ -32,7 +32,7 @@ if not exist "%OUT%" mkdir "%OUT%"
 
 pushd "%SRC%"
 make clean >nul 2>&1
-make all -j LOADER=cdrom
+make all -j LOADER=cdrom PERFOVERLAY=1
 if errorlevel 1 (
   popd
   echo [build-psxsplash-cdrom] Build failed.

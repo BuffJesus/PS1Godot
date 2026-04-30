@@ -15,6 +15,7 @@
 
 #include <psyqo/primitives/misc.hh>
 #include <psyqo/trigonometry.hh>
+#include <psyqo/xprintf.h>
 
 #if defined(LOADER_CDROM)
 #include "cdromhelper.hh"
@@ -400,6 +401,17 @@ void psxsplash::SceneManager::InitializeScene(uint8_t* splashpackData, LoadingSc
         Renderer::GetInstance().SetMemOverlay(&m_memOverlay);
     }
 #endif
+#ifdef PSXSPLASH_PERFOVERLAY
+    if (s_font != nullptr) {
+        m_perfOverlay.init(s_font);
+        Renderer::GetInstance().SetPerfOverlay(&m_perfOverlay);
+    }
+    // Push static-ish per-scene metrics: live game-object count + the
+    // VRAM-sidecar size loaded for this scene. Tris and FPS update each
+    // frame from elsewhere.
+    PerfOverlay::setObjectCount(m_gameObjects.size());
+    PerfOverlay::setVRAMBytes(m_vramSizeLoaded);
+#endif
 
     m_playerPosition = sceneSetup.playerStartPosition;
 
@@ -428,7 +440,11 @@ void psxsplash::SceneManager::InitializeScene(uint8_t* splashpackData, LoadingSc
     m_controls.setMoveSpeed(sceneSetup.moveSpeed);
     m_controls.setSprintSpeed(sceneSetup.sprintSpeed);
     m_playerRadius = (int32_t)sceneSetup.playerRadius.value;
-    if (m_playerRadius == 0) m_playerRadius = PLAYER_RADIUS; 
+    if (m_playerRadius == 0) m_playerRadius = PLAYER_RADIUS;
+    // DIAG-2026-04-30 (collider audit): dump player radius + first 8 colliders.
+    // Remove once prerendered_demo collision feels right.
+    ramsyscall_printf("[ColliderDiag] m_playerRadius=%d (raw fp12; /4096 = PSX units) playerHeight=%d\n",
+                      (int)m_playerRadius, (int)sceneSetup.playerHeight.value);
     m_jumpVelocityRaw = (int32_t)sceneSetup.jumpVelocity.value;
     int32_t gravityRaw = (int32_t)sceneSetup.gravity.value;
     m_gravityPerFrame = gravityRaw / 30;  
@@ -439,11 +455,12 @@ void psxsplash::SceneManager::InitializeScene(uint8_t* splashpackData, LoadingSc
     m_dt12 = 4096;  // Default: 1.0 frame
 
     m_collisionSystem.init();
-    
+
+    ramsyscall_printf("[ColliderDiag] %u colliders loaded:\n", (unsigned)sceneSetup.colliders.size());
     for (size_t i = 0; i < sceneSetup.colliders.size(); i++) {
         SPLASHPACKCollider* collider = sceneSetup.colliders[i];
         if (collider == nullptr) continue;
-        
+
         AABB bounds;
         bounds.min.x.value = collider->minX;
         bounds.min.y.value = collider->minY;
@@ -451,9 +468,18 @@ void psxsplash::SceneManager::InitializeScene(uint8_t* splashpackData, LoadingSc
         bounds.max.x.value = collider->maxX;
         bounds.max.y.value = collider->maxY;
         bounds.max.z.value = collider->maxZ;
-        
+
+        // DIAG-2026-04-30 (collider audit): dump raw fp12 + readable XZ extents
+        // for the first 32 colliders. Player walks XZ — Y is just thickness.
+        if (i < 32) {
+            ramsyscall_printf("  [%u] go=%u type=%d X=[%d..%d] Z=[%d..%d] (fp12; /4096*4=Godot m)\n",
+                              (unsigned)i, (unsigned)collider->gameObjectIndex, (int)collider->collisionType,
+                              (int)collider->minX, (int)collider->maxX,
+                              (int)collider->minZ, (int)collider->maxZ);
+        }
+
         CollisionType type = static_cast<CollisionType>(collider->collisionType);
-        
+
         m_collisionSystem.registerCollider(
             collider->gameObjectIndex,
             bounds,
@@ -651,10 +677,25 @@ void psxsplash::SceneManager::GameTick(psyqo::GPU &gpu) {
     
     psyqo::Vec3 pushBack;
     int collisionCount = m_collisionSystem.detectCollisions(playerAABB, pushBack, *this);
-    
+
     {
         psyqo::FixedPoint<12> zero;
         if (pushBack.x != zero || pushBack.z != zero) {
+            // DIAG-2026-04-30: log every push-back so we can see which collider
+            // is blocking the player. Throttled by a per-second counter so the
+            // log doesn't drown the TTY when continuously pressing into a wall.
+            static int s_diagFrameCounter = 0;
+            if ((s_diagFrameCounter++ & 31) == 0) {
+                const CollisionResult* r = m_collisionSystem.getResults();
+                ramsyscall_printf("[CollideDiag] pushBack=(%d,%d,%d) hits=%d firstObjB=%u pen=%d\n",
+                                  (int)pushBack.x.value, (int)pushBack.y.value, (int)pushBack.z.value,
+                                  collisionCount,
+                                  collisionCount > 0 ? (unsigned)r[0].objectB : 65535u,
+                                  collisionCount > 0 ? (int)r[0].penetration.value : 0);
+                ramsyscall_printf("[CollideDiag]   playerAABB X=[%d..%d] Z=[%d..%d] (fp12)\n",
+                                  (int)playerAABB.min.x.value, (int)playerAABB.max.x.value,
+                                  (int)playerAABB.min.z.value, (int)playerAABB.max.z.value);
+            }
             m_playerPosition.x = m_playerPosition.x + pushBack.x;
             m_playerPosition.z = m_playerPosition.z + pushBack.z;
         }
@@ -734,7 +775,15 @@ void psxsplash::SceneManager::GameTick(psyqo::GPU &gpu) {
     psyqo::Vec3 oldPlayerPosition = m_playerPosition;
 
     if (m_controlsEnabled) {
-        m_controls.HandleControls(m_playerPosition, playerRotationX, playerRotationY, playerRotationZ, freecam, m_dt12);
+        // RE-style fixed-camera scenes need camera-relative input — pushing
+        // up should always mean "into the screen" even after a camera cut to
+        // a 180-rotated angle. For player-following rigs the input stays
+        // player-relative as before.
+        psyqo::Angle moveHeading = playerRotationY;
+        if (m_cameraMode == PlayerCameraMode::FixedPreRendered) {
+            moveHeading.value = m_currentCamera.GetAngleY();
+        }
+        m_controls.HandleControls(m_playerPosition, playerRotationX, playerRotationY, playerRotationZ, freecam, m_dt12, moveHeading);
 
         // Jump input: Cross button triggers jump when grounded
         if (m_isGrounded && m_controls.wasButtonPressed(psyqo::AdvancedPad::Button::Cross)) {
@@ -771,7 +820,35 @@ void psxsplash::SceneManager::GameTick(psyqo::GPU &gpu) {
         int32_t py = m_playerPosition.y.value;
         int32_t pz = m_playerPosition.z.value;
 
-        uint16_t newNavRegion = m_navRegions.findRegionClosest(px,py,pz);
+        // Pre-clamp Y to the current region's floor when grounded. One
+        // frame's gravity (~m_gravityPerFrame fp12) is added above before
+        // findRegionClosest runs — without this clamp, py is always
+        // 300+ fp12 past the floor on the attach call, and the inner
+        // `y-32 > fy` below-floor guard rejects every region. The end-of
+        // -frame floor clamp below would normally fix it, but the
+        // rejection has already cancelled the would-be transition.
+        if (m_isGrounded && m_playerNavRegion != NAV_NO_REGION) {
+            int32_t floorY = m_navRegions.getFloorY(px, pz, m_playerNavRegion);
+            int32_t cameraAtFloor = floorY - m_playerHeight.raw();
+            if (m_playerPosition.y.value > cameraAtFloor) {
+                m_playerPosition.y.value = cameraAtFloor;
+                m_velocityY = 0;
+                py = m_playerPosition.y.value;
+            }
+        }
+
+        // Pass feet-Y, not camera-Y, to findRegionClosest. The function's
+        // NAV_ATTACH_DISTANCE check (and the `y-32 > fy` "below floor" guard)
+        // both assume `y` is at the floor when grounded. Camera-Y is
+        // playerHeight above the floor by design, which exceeded the
+        // 512-fp12 (= 0.125 PSX = 0.5 m Godot) attach threshold for any
+        // PlayerHeight > 0.5 m and silently failed to attach to neighboring
+        // regions when crossing a polygon edge — making the corridor
+        // doorway behave like a wall on all 4 sides of every room.
+        // (PSX Y is down, so feet = camera + height.)
+        int32_t feetY = py + m_playerHeight.raw();
+
+        uint16_t newNavRegion = m_navRegions.findRegionClosest(px,feetY,pz);
 
         bool isPlatform = m_navRegions.isRegionPlatform(m_playerNavRegion);
         uint8_t walkoffMask = m_navRegions.getWalkoffEdgeMask(m_playerNavRegion);
@@ -1109,9 +1186,12 @@ void psxsplash::SceneManager::setPlayerPosition(psyqo::FixedPoint<12> x, psyqo::
     m_playerPosition.y = y;
     m_playerPosition.z = z;
 
-    if (m_navRegions.isLoaded()) 
+    if (m_navRegions.isLoaded())
     {
-        m_playerNavRegion = m_navRegions.findRegionClosest(x.value, y.value, z.value);
+        // Same feet-vs-camera fix as the per-frame call in update(): pass
+        // feet Y, not camera Y, so attach succeeds for any non-trivial
+        // player height.
+        m_playerNavRegion = m_navRegions.findRegionClosest(x.value, y.value + m_playerHeight.raw(), z.value);
     }
 }
 
@@ -1194,6 +1274,9 @@ void psxsplash::SceneManager::loadScene(psyqo::GPU& gpu, int sceneIndex, bool is
         if (vramData) {
             uploadVramData(vramData, vramSize);
             FileLoader::Get().FreeFile(vramData);
+#ifdef PSXSPLASH_PERFOVERLAY
+            m_vramSizeLoaded = (uint32_t)vramSize;
+#endif
         }
     }
 

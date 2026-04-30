@@ -170,10 +170,20 @@ int CollisionSystem::detectCollisions(const AABB& playerAABB, psyqo::Vec3& pushB
     const FP zero(0);
     pushBack = psyqo::Vec3{zero, zero, zero};
 
-    // Rebuild spatial grid with active colliders only
+    // Rebuild spatial grid with active colliders only.
+    // gameObjectIndex == 0xFFFF means anonymous static world geometry
+    // (walls, floors, columns, backdrop AABBs) — no GameObject record,
+    // always present, always solid. Without this short-circuit those
+    // colliders all fall out of the grid and the player walks through
+    // every wall in the scene.
     m_grid.clear();
     for (int i = 0; i < m_colliderCount; i++) {
-        auto* go = scene.getGameObject(m_colliders[i].gameObjectIndex);
+        uint16_t goIdx = m_colliders[i].gameObjectIndex;
+        if (goIdx == 0xFFFF) {
+            m_grid.insert(i, m_colliders[i].bounds);
+            continue;
+        }
+        auto* go = scene.getGameObject(goIdx);
         if (go && go->isActive()) {
             m_grid.insert(i, m_colliders[i].bounds);
         }
@@ -275,28 +285,30 @@ bool CollisionSystem::testAABB(const AABB& a, const AABB& b,
     if (a.max.x < b.min.x || a.min.x > b.max.x) return false;
     if (a.max.y < b.min.y || a.min.y > b.max.y) return false;
     if (a.max.z < b.min.z || a.min.z > b.max.z) return false;
-    
+
     auto overlapX1 = a.max.x - b.min.x;
     auto overlapX2 = b.max.x - a.min.x;
-    auto overlapY1 = a.max.y - b.min.y;
-    auto overlapY2 = b.max.y - a.min.y;
     auto overlapZ1 = a.max.z - b.min.z;
     auto overlapZ2 = b.max.z - a.min.z;
-    
+
     auto minOverlapX = (overlapX1 < overlapX2) ? overlapX1 : overlapX2;
-    auto minOverlapY = (overlapY1 < overlapY2) ? overlapY1 : overlapY2;
     auto minOverlapZ = (overlapZ1 < overlapZ2) ? overlapZ1 : overlapZ2;
-    
+
     const FP zero(0);
     const FP one(1);
     const FP negOne(-1);
-    
-    if (minOverlapX <= minOverlapY && minOverlapX <= minOverlapZ) {
+
+    // Pick push-out axis on the XZ plane only. The Y axis is intentionally
+    // ignored: gravity + nav-region floor handle vertical, and short props
+    // (barrels, brazier, chest, chairs) have a smaller Y overlap with the
+    // player's body AABB than X or Z. If Y could win the SAT comparison,
+    // the player would be ejected vertically out of the prop while still
+    // free to walk through it horizontally. Restricting push-out to XZ
+    // makes ground-based props block movement the way a designer expects,
+    // regardless of prop height.
+    if (minOverlapX <= minOverlapZ) {
         penetration = minOverlapX;
         normal = psyqo::Vec3{(overlapX1 < overlapX2) ? negOne : one, zero, zero};
-    } else if (minOverlapY <= minOverlapZ) {
-        penetration = minOverlapY;
-        normal = psyqo::Vec3{zero, (overlapY1 < overlapY2) ? negOne : one, zero};
     } else {
         penetration = minOverlapZ;
         normal = psyqo::Vec3{zero, zero, (overlapZ1 < overlapZ2) ? negOne : one};

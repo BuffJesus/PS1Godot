@@ -149,7 +149,7 @@ void psxsplash::Controls::UpdateButtonStates() {
 
 void psxsplash::Controls::HandleControls(psyqo::Vec3 &playerPosition, psyqo::Angle &playerRotationX,
                                          psyqo::Angle &playerRotationY, psyqo::Angle &playerRotationZ, bool freecam,
-                                         int32_t dt12) {
+                                         int32_t dt12, psyqo::Angle movementHeading) {
     bool digital = isDigitalPad();
     
     int16_t rightXOffset, rightYOffset, leftXOffset, leftYOffset;
@@ -226,18 +226,20 @@ void psxsplash::Controls::HandleControls(psyqo::Vec3 &playerPosition, psyqo::Ang
         playerRotationX = eastl::clamp(playerRotationX, -0.5_pi, 0.5_pi);
     }
 
-    // Movement (left stick or D-pad)
+    // Movement (left stick or D-pad). `movementHeading` is the player's own
+    // rotationY in third/first-person rigs and the camera's yaw in fixed mode
+    // — see HandleControls header doc for why.
     if (__builtin_abs(leftYOffset) > m_stickDeadzone) {
         psyqo::FixedPoint<12> forward = -(leftYOffset * speed) >> 7;
         forward.value = (int32_t)(((int64_t)forward.value * dt12) >> 12);
-        playerPosition.x += m_trig.sin(playerRotationY) * forward;
-        playerPosition.z += m_trig.cos(playerRotationY) * forward;
+        playerPosition.x += m_trig.sin(movementHeading) * forward;
+        playerPosition.z += m_trig.cos(movementHeading) * forward;
     }
     if (__builtin_abs(leftXOffset) > m_stickDeadzone) {
         psyqo::FixedPoint<12> strafe = -(leftXOffset * speed) >> 7;
         strafe.value = (int32_t)(((int64_t)strafe.value * dt12) >> 12);
-        playerPosition.x -= m_trig.cos(playerRotationY) * strafe;
-        playerPosition.z += m_trig.sin(playerRotationY) * strafe;
+        playerPosition.x -= m_trig.cos(movementHeading) * strafe;
+        playerPosition.z += m_trig.sin(movementHeading) * strafe;
     }
 
     if (freecam) {

@@ -160,13 +160,24 @@ uint16_t NavRegionSystem::findRegion(int32_t x, int32_t z) const {
 
 uint16_t NavRegionSystem::findRegionClosest(int32_t x, int32_t y, int32_t z) const {
     // Prefer the closest surface to y, skipping regions the player is below
-    
+
     uint16_t best = NAV_NO_REGION;
     int32_t shortestDistance = 0x7FFFFFFF;
+    // DIAG-2026-04-30: per-region pass/fail trace, throttled.
+    static int s_diagFrameCounter = 0;
+    bool diag = ((s_diagFrameCounter++ & 31) == 0);
+    if (diag) {
+        ramsyscall_printf("[FRC] x=%d y=%d z=%d  regionCount=%u\n",
+                          (int)x, (int)y, (int)z, (unsigned)m_header.regionCount);
+    }
     for (uint16_t i = 0; i < m_header.regionCount; i++) {
-        if (pointInRegion(x, z, i)) {
-            int32_t fy = getFloorY(x, z, i);
-
+        bool inPoly = pointInRegion(x, z, i);
+        int32_t fy = inPoly ? getFloorY(x, z, i) : 0;
+        if (diag) {
+            ramsyscall_printf("[FRC]   i=%u inPoly=%d fy=%d (y-32 vs fy: %d > %d ? %d)\n",
+                              (unsigned)i, inPoly?1:0, (int)fy, (int)(y-32), (int)fy, (y-32>fy)?1:0);
+        }
+        if (inPoly) {
             // Player below the region so skip
             if(y-32 > fy){
                 continue;
@@ -177,6 +188,10 @@ uint16_t NavRegionSystem::findRegionClosest(int32_t x, int32_t y, int32_t z) con
                 best = i;
             }
         }
+    }
+    if (diag) {
+        ramsyscall_printf("[FRC] best=%u dist=%d (vs ATTACH=%d)\n",
+                          (unsigned)best, (int)shortestDistance, (int)NAV_ATTACH_DISTANCE);
     }
     if(best >= m_header.regionCount || shortestDistance > NAV_ATTACH_DISTANCE)
     {
@@ -227,6 +242,16 @@ void NavRegionSystem::clampToRegion(int32_t& x, int32_t& z, uint16_t regionIndex
             bestX = cx;
             bestZ = cz;
         }
+    }
+
+    // DIAG-2026-04-30 (navclamp audit): log every clamp so we can see when
+    // the polygon edge is pulling the player back. Throttled per ~1 sec @
+    // 30fps. Remove once nav transitions feel right.
+    static int s_diagFrameCounter = 0;
+    if ((s_diagFrameCounter++ & 31) == 0) {
+        ramsyscall_printf("[NavClamp] region=%u in=(%d,%d) out=(%d,%d) delta=(%d,%d) (fp12)\n",
+                          (unsigned)regionIndex, (int)x, (int)z, (int)bestX, (int)bestZ,
+                          (int)(bestX - x), (int)(bestZ - z));
     }
 
     x = bestX;

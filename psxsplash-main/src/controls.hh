@@ -17,8 +17,15 @@ class Controls {
     void forceAnalogMode();
 
     void Init();
+    // `movementHeading` is the yaw used to translate stick/D-pad input into a
+    // world-space move vector. Third/first-person camera rigs pass the player's
+    // own rotationY (input is player-relative). FixedPreRendered (RE-style)
+    // camera passes the *camera's* yaw, so pushing up always means "into the
+    // screen" regardless of player facing — and stays correct across camera
+    // cuts because the next camera's yaw replaces the old one.
     void HandleControls(psyqo::Vec3 &playerPosition, psyqo::Angle &playerRotationX, psyqo::Angle &playerRotationY,
-                        psyqo::Angle &playerRotationZ, bool freecam, int32_t dt12);
+                        psyqo::Angle &playerRotationZ, bool freecam, int32_t dt12,
+                        psyqo::Angle movementHeading);
 
     /// Update button state tracking - call before HandleControls
     void UpdateButtonStates();

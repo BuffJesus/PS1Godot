@@ -31,6 +31,9 @@
 #ifdef PSXSPLASH_MEMOVERLAY
 #include "memoverlay.hh"
 #endif
+#ifdef PSXSPLASH_PERFOVERLAY
+#include "perfoverlay.hh"
+#endif
 
 namespace psxsplash {
 
@@ -301,6 +304,10 @@ class SceneManager {
     UISystem m_uiSystem;
 #ifdef PSXSPLASH_MEMOVERLAY
     MemOverlay m_memOverlay;
+#endif
+#ifdef PSXSPLASH_PERFOVERLAY
+    PerfOverlay m_perfOverlay;
+    uint32_t m_vramSizeLoaded = 0;  // Bytes uploaded from <scene>.vram
 #endif
     
     psxsplash::Controls m_controls;

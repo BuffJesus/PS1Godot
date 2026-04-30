@@ -275,7 +275,8 @@ psyqo::PrimPieces::TPageAttr UISystem::makeTPage(const UIImageData& img) {
 
 void UISystem::renderElement(UIElement& el,
                              psyqo::OrderingTable<Renderer::ORDERING_TABLE_SIZE>& ot,
-                             psyqo::BumpAllocator<Renderer::BUMP_ALLOCATOR_SIZE>& balloc) {
+                             psyqo::BumpAllocator<Renderer::BUMP_ALLOCATOR_SIZE>& balloc,
+                             uint32_t otDepth) {
     int16_t x, y, w, h;
     resolveLayout(el, x, y, w, h);
 
@@ -298,7 +299,7 @@ void UISystem::renderElement(UIElement& el,
             } else {
                 frag.primitive.setOpaque();
             }
-            ot.insert(frag, 0);
+            ot.insert(frag, otDepth);
             // Untextured Rectangle primitives don't carry a tpage — they
             // inherit the GPU drawing-mode state set by the most recent
             // textured primitive. The 3D pass forces abr=FullBackAndFullFront
@@ -309,7 +310,7 @@ void UISystem::renderElement(UIElement& el,
             // (default 0.5*B+0.5*F) before the rect draws.
             if (el.translucent) {
                 auto& tpage = balloc.allocateFragment<psyqo::Prim::TPage>();
-                ot.insert(tpage, 0);
+                ot.insert(tpage, otDepth);
             }
         }
         break;
@@ -322,7 +323,7 @@ void UISystem::renderElement(UIElement& el,
         bgFrag.primitive.position = {.x = x, .y = y};
         bgFrag.primitive.size = {.x = w, .y = h};
         bgFrag.primitive.setOpaque();
-        ot.insert(bgFrag, 1);
+        ot.insert(bgFrag, otDepth + 1);
 
         // Fill: partial width
         int fillW = (int)el.progress.value * w / 100;
@@ -334,7 +335,7 @@ void UISystem::renderElement(UIElement& el,
             fillFrag.primitive.position = {.x = x, .y = y};
             fillFrag.primitive.size = {.x = (int16_t)fillW, .y = h};
             fillFrag.primitive.setOpaque();
-            ot.insert(fillFrag, 0);
+            ot.insert(fillFrag, otDepth);
         }
         break;
     }
@@ -371,7 +372,7 @@ void UISystem::renderElement(UIElement& el,
             tri.primitive.setColorB(tint);
             tri.primitive.setColorC(tint);
             if (semi) tri.primitive.setSemiTrans(); else tri.primitive.setOpaque();
-            ot.insert(tri, 0);
+            ot.insert(tri, otDepth);
         }
         // Triangle 1: top-right, bottom-right, bottom-left
         {
@@ -388,7 +389,7 @@ void UISystem::renderElement(UIElement& el,
             tri.primitive.setColorB(tint);
             tri.primitive.setColorC(tint);
             if (semi) tri.primitive.setSemiTrans(); else tri.primitive.setOpaque();
-            ot.insert(tri, 0);
+            ot.insert(tri, otDepth);
         }
         }  // end pass loop
         break;
@@ -469,10 +470,22 @@ void UISystem::renderOT(psyqo::GPU& gpu,
     for (int i = 0; i < m_canvasCount; i++) {
         UICanvas& cv = m_canvases[i];
         if (!cv.visible) continue;
+        // sortOrder splits canvases into two layers:
+        //   < 128 → HUD (depth 0, drawn LAST = on top of 3D content)
+        //   ≥ 128 → backdrop / pre-rendered BG (depth far back, drawn
+        //           FIRST so 3D content renders over it)
+        // The author-facing convention is "sortOrder 9999 for BG"; the
+        // exporter clamps to uint8_t so 9999 lands at 255, well above
+        // the 128 split. HUD overlays use sortOrder 0–10. Within each
+        // layer, LIFO at the same OT depth still preserves canvas-vs-
+        // canvas ordering.
+        uint32_t otDepth = (cv.sortOrder >= 128)
+                         ? (Renderer::ORDERING_TABLE_SIZE - 4)
+                         : 0;
         for (int j = 0; j < cv.elementCount; j++) {
             UIElement& el = cv.elements[j];
             if (!el.visible) continue;
-            renderElement(el, ot, balloc);
+            renderElement(el, ot, balloc, otDepth);
         }
     }
 }

@@ -19,6 +19,9 @@
 #include "splashpack.hh"
 #include "skinmesh.hh"
 #include "uisystem.hh"
+#ifdef PSXSPLASH_PERFOVERLAY
+#include "perfoverlay.hh"
+#endif
 #ifdef PSXSPLASH_MEMOVERLAY
 #include "memoverlay.hh"
 #endif
@@ -156,6 +159,10 @@ void psxsplash::Renderer::processTriangle(
     psyqo::BumpAllocator<BUMP_ALLOCATOR_SIZE>& balloc,
     int depth,
     bool forceFrontOT) {
+
+#ifdef PSXSPLASH_PERFOVERLAY
+    PerfOverlay::countTri();
+#endif
 
     writeSafe<PseudoRegister::V0>(tri.v0);
     writeSafe<PseudoRegister::V1>(tri.v1);
@@ -379,6 +386,9 @@ void psxsplash::Renderer::Render(eastl::vector<GameObject*>& objects) {
     uint8_t parity = m_gpu.getParity();
     auto& ot = m_ots[parity]; auto& clear = m_clear[parity]; auto& balloc = m_ballocs[parity];
     balloc.reset();
+#ifdef PSXSPLASH_PERFOVERLAY
+    PerfOverlay::resetTriCounter();
+#endif
     auto& ditherCmd = balloc.allocateFragment<psyqo::Prim::TPage>();
     ditherCmd.primitive.attr.setDithering(true);
     ditherCmd.primitive.attr.set(psyqo::Prim::TPageAttr::FullBackAndFullFront);
@@ -405,12 +415,18 @@ void psxsplash::Renderer::Render(eastl::vector<GameObject*>& objects) {
     renderSkinnedObjects(objects, cameraPosition, fogFarSZ, ot, balloc);
     renderUIModels(objects, ot, balloc);
     if (m_uiSystem) m_uiSystem->renderOT(m_gpu, ot, balloc);
+#ifdef PSXSPLASH_PERFOVERLAY
+    if (m_perfOverlay) m_perfOverlay->renderOT(ot, balloc);
+#endif
 #ifdef PSXSPLASH_MEMOVERLAY
     if (m_memOverlay) m_memOverlay->renderOT(ot, balloc);
 #endif
     m_gpu.getNextClear(clear.primitive, m_clearcolor);
     m_gpu.chain(clear); m_gpu.chain(ot);
     if (m_uiSystem) m_uiSystem->renderText(m_gpu);
+#ifdef PSXSPLASH_PERFOVERLAY
+    if (m_perfOverlay) m_perfOverlay->renderText(m_gpu);
+#endif
 #ifdef PSXSPLASH_MEMOVERLAY
     if (m_memOverlay) m_memOverlay->renderText(m_gpu);
 #endif
@@ -425,6 +441,9 @@ void psxsplash::Renderer::RenderWithBVH(eastl::vector<GameObject*>& objects, con
     uint8_t parity = m_gpu.getParity();
     auto& ot = m_ots[parity]; auto& clear = m_clear[parity]; auto& balloc = m_ballocs[parity];
     balloc.reset();
+#ifdef PSXSPLASH_PERFOVERLAY
+    PerfOverlay::resetTriCounter();
+#endif
     auto& ditherCmd2 = balloc.allocateFragment<psyqo::Prim::TPage>();
     ditherCmd2.primitive.attr.setDithering(true);
     ditherCmd2.primitive.attr.set(psyqo::Prim::TPageAttr::FullBackAndFullFront);
@@ -494,12 +513,18 @@ void psxsplash::Renderer::RenderWithBVH(eastl::vector<GameObject*>& objects, con
     renderUIModels(objects, ot, balloc);
 
     if (m_uiSystem) m_uiSystem->renderOT(m_gpu, ot, balloc);
+#ifdef PSXSPLASH_PERFOVERLAY
+    if (m_perfOverlay) m_perfOverlay->renderOT(ot, balloc);
+#endif
 #ifdef PSXSPLASH_MEMOVERLAY
     if (m_memOverlay) m_memOverlay->renderOT(ot, balloc);
 #endif
     m_gpu.getNextClear(clear.primitive, m_clearcolor);
     m_gpu.chain(clear); m_gpu.chain(ot);
     if (m_uiSystem) m_uiSystem->renderText(m_gpu);
+#ifdef PSXSPLASH_PERFOVERLAY
+    if (m_perfOverlay) m_perfOverlay->renderText(m_gpu);
+#endif
 #ifdef PSXSPLASH_MEMOVERLAY
     if (m_memOverlay) m_memOverlay->renderText(m_gpu);
 #endif
@@ -733,6 +758,9 @@ void psxsplash::Renderer::RenderWithRooms(eastl::vector<GameObject*>& objects,
     uint8_t parity = m_gpu.getParity();
     auto& ot = m_ots[parity]; auto& clear = m_clear[parity]; auto& balloc = m_ballocs[parity];
     balloc.reset();
+#ifdef PSXSPLASH_PERFOVERLAY
+    PerfOverlay::resetTriCounter();
+#endif
     auto& ditherCmd3 = balloc.allocateFragment<psyqo::Prim::TPage>();
     ditherCmd3.primitive.attr.setDithering(true);
     ditherCmd3.primitive.attr.set(psyqo::Prim::TPageAttr::FullBackAndFullFront);
@@ -1201,12 +1229,18 @@ void psxsplash::Renderer::RenderWithRooms(eastl::vector<GameObject*>& objects,
     renderUIModels(objects, ot, balloc);
 
     if (m_uiSystem) m_uiSystem->renderOT(m_gpu, ot, balloc);
+#ifdef PSXSPLASH_PERFOVERLAY
+    if (m_perfOverlay) m_perfOverlay->renderOT(ot, balloc);
+#endif
 #ifdef PSXSPLASH_MEMOVERLAY
     if (m_memOverlay) m_memOverlay->renderOT(ot, balloc);
 #endif
     m_gpu.getNextClear(clear.primitive, m_clearcolor);
     m_gpu.chain(clear); m_gpu.chain(ot);
     if (m_uiSystem) m_uiSystem->renderText(m_gpu);
+#ifdef PSXSPLASH_PERFOVERLAY
+    if (m_perfOverlay) m_perfOverlay->renderText(m_gpu);
+#endif
 #ifdef PSXSPLASH_MEMOVERLAY
     if (m_memOverlay) m_memOverlay->renderText(m_gpu);
 #endif

@@ -25,6 +25,7 @@ src/animation.cpp \
 src/uisystem.cpp \
 src/loadingscreen.cpp \
 src/memoverlay.cpp \
+src/perfoverlay.cpp \
 src/musicmanager.cpp \
 src/musicsequencer.cpp \
 src/soundmacro.cpp \
@@ -49,6 +50,12 @@ endif
 # FPSOVERLAY=1  → Enable runtime FPS overlay
 ifeq ($(FPSOVERLAY), 1)
 CPPFLAGS += -DPSXSPLASH_FPSOVERLAY
+endif
+
+# PERFOVERLAY=1  → Enable runtime perf overlay (FPS + frame time + tri
+# count + object count + VRAM size, semi-transparent black plate)
+ifeq ($(PERFOVERLAY),1)
+CPPFLAGS += -DPSXSPLASH_PERFOVERLAY
 endif
 
 # ROOMDEBUG=1  → Enable room topology debug overlay

@@ -11,6 +11,10 @@
 #include "scenemanager.hh"
 #include "fileloader.hh"
 
+#ifdef PSXSPLASH_PERFOVERLAY
+#include "perfoverlay.hh"
+#endif
+
 #if defined(LOADER_CDROM)
 #include "fileloader_cdrom.hh"
 #endif
@@ -133,6 +137,14 @@ void MainScene::frame() {
         m_hotSwapTickAccum = 0;
         m_sceneManager.getLua().TryHotSwap(m_sceneManager);
     }
+
+    #if defined(PSXSPLASH_PERFOVERLAY)
+    // Push metrics BEFORE GameTick so the renderer reads same-frame
+    // values. Set after GameTick instead and the overlay always lags
+    // by one frame — values look frozen when FPS is steady.
+    psxsplash::PerfOverlay::setFps(gpu().getRefreshRate() / deltaTime);
+    psxsplash::PerfOverlay::setFrameTimeRaw(deltaTime);
+    #endif
 
     m_sceneManager.GameTick(gpu());
 
