@@ -322,7 +322,62 @@ public partial class PS1Scene : Node3D
                          "scripting) are ignored. Demote it to a regular Node3D or move it to " +
                          "SubScenes.");
 
+        // Orphan-PNG detection: rendered backgrounds are saved as
+        // res://assets/backgrounds/<scene>_<cam>.png by BackgroundBaker.
+        // Renaming a Camera3D leaves its old PNG behind, taking VRAM and
+        // confusing future authors. List orphans (PNG with no live camera).
+        string scenePath = SceneFilePath;
+        if (!string.IsNullOrEmpty(scenePath))
+        {
+            string sceneStem = System.IO.Path.GetFileNameWithoutExtension(scenePath);
+            var cameraNames = CollectCameraNames(this);
+            var orphans = ScanOrphanBackgrounds(sceneStem, cameraNames);
+            if (orphans.Count > 0)
+            {
+                string list = string.Join(", ", orphans);
+                warnings.Add($"Background PNG(s) under res://assets/backgrounds/ have no " +
+                             $"matching Camera3D in this scene: {list}. Likely renamed or " +
+                             "deleted cameras; delete the orphan PNG(s) or restore the camera " +
+                             "name to clear this warning.");
+            }
+        }
+
         return warnings.ToArray();
+    }
+
+    private static System.Collections.Generic.HashSet<string> CollectCameraNames(Node root)
+    {
+        var names = new System.Collections.Generic.HashSet<string>();
+        Walk(root, names);
+        return names;
+
+        static void Walk(Node n, System.Collections.Generic.HashSet<string> acc)
+        {
+            if (n is Camera3D cam) acc.Add(cam.Name);
+            foreach (var c in n.GetChildren())
+                if (c is Node child) Walk(child, acc);
+        }
+    }
+
+    private static System.Collections.Generic.List<string> ScanOrphanBackgrounds(
+        string sceneStem,
+        System.Collections.Generic.HashSet<string> cameraNames)
+    {
+        var orphans = new System.Collections.Generic.List<string>();
+        const string dir = "res://assets/backgrounds/";
+        using var da = DirAccess.Open(dir);
+        if (da == null) return orphans;
+
+        string prefix = sceneStem + "_";
+        foreach (string fname in da.GetFiles())
+        {
+            if (!fname.EndsWith(".png", System.StringComparison.OrdinalIgnoreCase)) continue;
+            if (!fname.StartsWith(prefix, System.StringComparison.Ordinal)) continue;
+            string camName = fname.Substring(prefix.Length, fname.Length - prefix.Length - ".png".Length);
+            if (!cameraNames.Contains(camName))
+                orphans.Add(fname);
+        }
+        return orphans;
     }
 
     // Recursive scan helper. Skip subtrees rooted at PackedScene refs we
