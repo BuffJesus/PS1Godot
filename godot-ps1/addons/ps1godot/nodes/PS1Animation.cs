@@ -28,21 +28,33 @@ public enum PS1AnimationTrackType
 [Icon("res://addons/ps1godot/icons/ps1_animation.svg")]
 public partial class PS1Animation : Node
 {
+    /// <summary>
+    /// Unique name used by Animation.Play lookups. Falls back to the node's
+    /// name if empty (so Animation.Play("MyAnim") resolves a child Node
+    /// renamed "MyAnim" even with no AnimationName set).
+    /// </summary>
     [ExportGroup("Identity")]
-    // Unique name used by Animation.Play lookups. Falls back to the node's
-    // name if empty.
     [Export] public string AnimationName { get; set; } = "";
 
-    // Must match the Name of a PS1MeshInstance somewhere in the scene —
-    // that's what the runtime's object name table resolves to a GameObject.
+    /// <summary>
+    /// Must match the Name of a PS1MeshInstance somewhere in the scene —
+    /// that's what the runtime's object name table resolves to a GameObject.
+    /// Mismatched / empty name = animation never plays (silent at runtime).
+    /// </summary>
     [Export] public string TargetObjectName { get; set; } = "";
 
+    /// <summary>
+    /// What this animation drives on the target. Position / Rotation move
+    /// the GameObject; Active toggles its visibility on/off via keyframe.
+    /// Camera tracks are cutscene-only — use PS1Cutscene for those.
+    /// </summary>
     [ExportGroup("Timing")]
-    // What this animation drives on the target.
     [Export] public PS1AnimationTrackType TrackType { get; set; } = PS1AnimationTrackType.Position;
 
-    // Total length in 30-fps frames. 60 = 2 seconds. Max 8191 per the
-    // runtime's 13-bit frame field in CutsceneKeyframe (~4.5 minutes).
+    /// <summary>
+    /// Total length in 30-fps frames. 60 = 2 seconds. Max 8191 per the
+    /// runtime's 13-bit frame field in CutsceneKeyframe (~4.5 minutes).
+    /// </summary>
     [Export(PropertyHint.Range, "1,8191,1,suffix:frames")]
     public int TotalFrames { get; set; } = 60;
 }

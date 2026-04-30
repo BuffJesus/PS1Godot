@@ -19,19 +19,25 @@ namespace PS1Godot;
 [Icon("res://addons/ps1godot/icons/ps1_portal_link.svg")]
 public partial class PS1PortalLink : Node3D
 {
+    /// <summary>
+    /// Path to the PS1Room on the "near" side. Must be set, must differ
+    /// from RoomB, and both targets must be PS1Room nodes in the same
+    /// scene — the exporter warns and skips otherwise.
+    /// </summary>
     [ExportGroup("Rooms")]
-    // Path to the PS1Room on the "near" side. Must be set, must differ
-    // from RoomB, and both targets must be PS1Room nodes in the same
-    // scene — the exporter warns and skips otherwise.
     [Export] public NodePath RoomA { get; set; } = new NodePath();
 
-    // Path to the PS1Room on the "far" side.
+    /// <summary>
+    /// Path to the PS1Room on the "far" side.
+    /// </summary>
     [Export] public NodePath RoomB { get; set; } = new NodePath();
 
+    /// <summary>
+    /// Portal opening size in world units (X = width, Y = height). The
+    /// rendered portal quad is centered on the node and spans this size
+    /// along the node's local +X and +Y axes.
+    /// </summary>
     [ExportGroup("Opening")]
-    // Portal opening size in world units (X = width, Y = height). The
-    // rendered portal quad is centered on the node and spans this size
-    // along the node's local +X and +Y axes.
     [Export] public Vector2 PortalSize { get; set; } = new Vector2(1.5f, 2.0f);
 
     public override string[] _GetConfigurationWarnings()

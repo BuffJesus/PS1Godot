@@ -14,23 +14,31 @@ namespace PS1Godot;
 [Icon("res://addons/ps1godot/icons/ps1_audio_event.svg")]
 public partial class PS1AudioEvent : Node
 {
+    /// <summary>
+    /// Cutscene frame to fire on (0-based, capped at the cutscene's
+    /// TotalFrames - 1).
+    /// </summary>
     [ExportGroup("Timing")]
-    // Cutscene frame to fire on (0-based, capped at the cutscene's
-    // TotalFrames - 1).
     [Export(PropertyHint.Range, "0,8191,1,suffix:frames")]
     public int Frame { get; set; } = 0;
 
+    /// <summary>
+    /// Authored clip name — must match an entry in PS1Scene.AudioClips.
+    /// Empty / unresolved names produce a warning at export.
+    /// </summary>
     [ExportGroup("Playback")]
-    // Authored clip name — must match an entry in PS1Scene.AudioClips.
-    // Empty / unresolved names produce a warning at export.
     [Export] public string ClipName { get; set; } = "";
 
-    // 0–127, runtime maps to SPU hardware volume range. 100 ≈ standard
-    // "loud but not max" gain, leaves headroom for SFX overlap.
+    /// <summary>
+    /// 0–127, runtime maps to SPU hardware volume range. 100 ≈ standard
+    /// "loud but not max" gain, leaves headroom for SFX overlap.
+    /// </summary>
     [Export(PropertyHint.Range, "0,127,1")]
     public int Volume { get; set; } = 100;
 
-    // 0 = full left, 64 = centered, 127 = full right.
+    /// <summary>
+    /// 0 = full left, 64 = centered, 127 = full right.
+    /// </summary>
     [Export(PropertyHint.Range, "0,127,1")]
     public int Pan { get; set; } = 64;
 }

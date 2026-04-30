@@ -17,8 +17,10 @@ namespace PS1Godot;
 [Icon("res://addons/ps1godot/icons/ps1_ui_canvas.svg")]
 public partial class PS1UISpacer : Node
 {
+    /// <summary>
+    /// Used only when Flex == 0 (fixed-size spacer mode).
+    /// </summary>
     [ExportGroup("Layout")]
-    // Used only when Flex == 0 (fixed-size spacer mode).
     [Export(PropertyHint.Range, "0,576,1,suffix:px")]
     public int Width { get; set; } = 8;
     [Export(PropertyHint.Range, "0,576,1,suffix:px")]

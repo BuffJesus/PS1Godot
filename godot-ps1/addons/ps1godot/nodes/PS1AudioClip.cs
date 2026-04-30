@@ -55,52 +55,64 @@ public enum PS1AudioClipResidency
 [Icon("res://addons/ps1godot/icons/ps1_audio_clip.svg")]
 public partial class PS1AudioClip : Resource
 {
+    /// <summary>
+    /// Accepts any AudioStream so users can drop in whatever Godot imported,
+    /// but at export time we only decode AudioStreamWav (raw PCM in .Data).
+    /// .mp3 / .ogg imports as AudioStreamMP3 / AudioStreamOggVorbis, which
+    /// don't expose samples synchronously — the exporter reports a clear
+    /// error and asks for WAV conversion. Rationale: PS1 audio pipeline is
+    /// lossy already (ADPCM); going mp3 → wav → adpcm keeps the lossy step
+    /// count the same and avoids pulling in an mp3 decoder dependency.
+    /// </summary>
     [ExportGroup("Source")]
-    // Accepts any AudioStream so users can drop in whatever Godot imported,
-    // but at export time we only decode AudioStreamWav (raw PCM in .Data).
-    // .mp3 / .ogg imports as AudioStreamMP3 / AudioStreamOggVorbis, which
-    // don't expose samples synchronously — the exporter reports a clear
-    // error and asks for WAV conversion. Rationale: PS1 audio pipeline is
-    // lossy already (ADPCM); going mp3 → wav → adpcm keeps the lossy step
-    // count the same and avoids pulling in an mp3 decoder dependency.
     [Export] public AudioStream? Stream { get; set; }
 
-    // Name used by Lua Audio.Play("..."). Falls back to the resource basename
-    // if empty, but authored names are stable across renames of the asset
-    // file.
+    /// <summary>
+    /// Name used by Lua Audio.Play("..."). Falls back to the resource basename
+    /// if empty, but authored names are stable across renames of the asset
+    /// file.
+    /// </summary>
     [Export] public string ClipName { get; set; } = "";
 
+    /// <summary>
+    /// Whether the SPU should repeat this sample. On-hardware this writes the
+    /// sampleRepeatAddr register; loop points are encoded in the ADPCM stream's
+    /// final block flags byte.
+    /// </summary>
     [ExportGroup("Playback")]
-    // Whether the SPU should repeat this sample. On-hardware this writes the
-    // sampleRepeatAddr register; loop points are encoded in the ADPCM stream's
-    // final block flags byte.
     [Export] public bool Loop { get; set; } = false;
 
-    // How aggressively this clip is kept in SPU RAM. Affects only the dock's
-    // SPU budget display for now; streaming / on-demand loading lands with
-    // Phase 2.5. Defaults to Gameplay for backwards compatibility — mark
-    // event-triggered dialog and menu-specific SFX explicitly to reclaim
-    // the budget.
+    /// <summary>
+    /// How aggressively this clip is kept in SPU RAM. Affects only the dock's
+    /// SPU budget display for now; streaming / on-demand loading lands with
+    /// Phase 2.5. Defaults to Gameplay for backwards compatibility — mark
+    /// event-triggered dialog and menu-specific SFX explicitly to reclaim
+    /// the budget.
+    /// </summary>
     [Export] public PS1AudioClipResidency Residency { get; set; } = PS1AudioClipResidency.Gameplay;
 
+    /// <summary>
+    /// Which PS1 audio backend should play this clip. Auto lets the build
+    /// pipeline pick SPU vs XA based on size/loop heuristics; mark a clip
+    /// SPU explicitly when it MUST stay in SPU RAM (latency-sensitive
+    /// SFX), or CDDA for title/credits-grade music. XA is the right pick
+    /// for long ambient loops, dialog, and large stingers — but XA
+    /// playback is still scaffolded; runtime currently logs a warning and
+    /// falls back to SPU residency.
+    /// </summary>
     [ExportGroup("Routing (v25)")]
-    // Which PS1 audio backend should play this clip. Auto lets the build
-    // pipeline pick SPU vs XA based on size/loop heuristics; mark a clip
-    // SPU explicitly when it MUST stay in SPU RAM (latency-sensitive
-    // SFX), or CDDA for title/credits-grade music. XA is the right pick
-    // for long ambient loops, dialog, and large stingers — but XA
-    // playback is still scaffolded; runtime currently logs a warning and
-    // falls back to SPU residency.
     [Export] public PS1AudioRoute Route { get; set; } = PS1AudioRoute.Auto;
 
-    // v26: red-book CD audio track number (1-based, matches mkpsxiso
-    // track ordering). Used by Audio.PlayMusic when Route == CDDA so
-    // the Lua side doesn't have to know which physical track the song
-    // landed on. 0 = unset; with Route == CDDA + track 0 the runtime
-    // logs "no track mapping" instead of playing.
-    //
-    // Track 1 is the data track on a PSX disc, so authored audio
-    // tracks start at 2. Range cap matches the format byte width.
+    /// <summary>
+    /// v26: red-book CD audio track number (1-based, matches mkpsxiso
+    /// track ordering). Used by Audio.PlayMusic when Route == CDDA so
+    /// the Lua side doesn't have to know which physical track the song
+    /// landed on. 0 = unset; with Route == CDDA + track 0 the runtime
+    /// logs "no track mapping" instead of playing.
+    ///
+    /// Track 1 is the data track on a PSX disc, so authored audio
+    /// tracks start at 2. Range cap matches the format byte width.
+    /// </summary>
     [Export(PropertyHint.Range, "0,255,1")]
     public int CddaTrackNumber { get; set; } = 0;
 }

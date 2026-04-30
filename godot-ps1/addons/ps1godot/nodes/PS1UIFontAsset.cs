@@ -28,43 +28,57 @@ namespace PS1Godot;
 [Icon("res://addons/ps1godot/icons/ps1_ui_font_asset.svg")]
 public partial class PS1UIFontAsset : Resource
 {
+    /// <summary>
+    /// Source TTF/OTF (or any Godot FontFile). Required before
+    /// generation.
+    /// </summary>
     [ExportGroup("Source")]
-    // Source TTF/OTF (or any Godot FontFile). Required before
-    // generation.
     [Export] public FontFile? SourceFont { get; set; }
 
-    // Rendering size in pixels. Matches the font's intended PSX
-    // on-screen height. Range mirrors SplashEdit's PSXFontAsset.
+    /// <summary>
+    /// Rendering size in pixels. Matches the font's intended PSX
+    /// on-screen height. Range mirrors SplashEdit's PSXFontAsset.
+    /// </summary>
     [Export(PropertyHint.Range, "6,32,1,suffix:px")]
     public int FontSize { get; set; } = 12;
 
-    // Lua-facing identifier. Defaults to the resource file name
-    // (minus extension) when left blank. Must be unique within a
-    // scene's font set.
+    /// <summary>
+    /// Lua-facing identifier. Defaults to the resource file name
+    /// (minus extension) when left blank. Must be unique within a
+    /// scene's font set.
+    /// </summary>
     [Export] public string FontName { get; set; } = "";
 
-    // Alpha threshold passed to the rasterizer — source TTF pixels
-    // below this alpha count as transparent (PS1 can't reproduce
-    // gradients). 0.3 matches SplashEdit. Lower = chunkier strokes;
-    // higher = thinner / dropped strokes at small sizes.
+    /// <summary>
+    /// Alpha threshold passed to the rasterizer — source TTF pixels
+    /// below this alpha count as transparent (PS1 can't reproduce
+    /// gradients). 0.3 matches SplashEdit. Lower = chunkier strokes;
+    /// higher = thinner / dropped strokes at small sizes.
+    /// </summary>
     [Export(PropertyHint.Range, "0.05,0.95,0.05")]
     public float AlphaThreshold { get; set; } = 0.3f;
 
+    /// <summary>
+    /// Glyph cell dimensions on the atlas. Cell width is auto-picked
+    /// from {4, 8, 16, 32} (must divide 256 evenly for PSX UV wrap).
+    /// </summary>
     [ExportGroup("Generated (do not hand-edit)")]
-    // Glyph cell dimensions on the atlas. Cell width is auto-picked
-    // from {4, 8, 16, 32} (must divide 256 evenly for PSX UV wrap).
     [Export(PropertyHint.Range, "0,32,1,suffix:px")]
     public int GlyphWidth { get; set; } = 0;
     [Export(PropertyHint.Range, "0,32,1,suffix:px")]
     public int GlyphHeight { get; set; } = 0;
 
-    // 256-wide atlas, RGBA8 (will pack to 4bpp + 2-entry CLUT at
-    // export). Null until Generate is run.
+    /// <summary>
+    /// 256-wide atlas, RGBA8 (will pack to 4bpp + 2-entry CLUT at
+    /// export). Null until Generate is run.
+    /// </summary>
     [Export] public Image? Bitmap { get; set; }
 
-    // Per-glyph horizontal advance in pixels for ASCII 0x20..0x7F.
-    // Index = char - 0x20. byte[96] matches the runtime's
-    // UIFontDesc.advanceWidths exactly.
+    /// <summary>
+    /// Per-glyph horizontal advance in pixels for ASCII 0x20..0x7F.
+    /// Index = char - 0x20. byte[96] matches the runtime's
+    /// UIFontDesc.advanceWidths exactly.
+    /// </summary>
     [Export] public byte[] AdvanceWidths { get; set; } = new byte[96];
 
     // True when Bitmap + AdvanceWidths are populated. Exporter

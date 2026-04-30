@@ -42,14 +42,18 @@ public partial class PS1MeshGroup : Node3D
         Dynamic,
     }
 
+    /// <summary>
+    /// Applied to every descendant mesh's textures. Authors typically leave
+    /// this at 8bpp (256-color CLUT) — same default as PS1MeshInstance.
+    /// </summary>
     [ExportGroup("PS1 / Look")]
-    // Applied to every descendant mesh's textures. Authors typically leave
-    // this at 8bpp (256-color CLUT) — same default as PS1MeshInstance.
     [Export] public PSXBPP BitDepth { get; set; } = PSXBPP.TEX_8BIT;
 
-    // Per-vertex tint multiplied into the texture sample at runtime. White
-    // = no tint, which is what you want for a textured FBX. Dim it for a
-    // shadowed "night mode" look without editing textures.
+    /// <summary>
+    /// Per-vertex tint multiplied into the texture sample at runtime. White
+    /// = no tint, which is what you want for a textured FBX. Dim it for a
+    /// shadowed "night mode" look without editing textures.
+    /// </summary>
     [Export] public Color FlatColor { get; set; } = new Color(1f, 1f, 1f, 1f);
 
     [ExportGroup("PS1 / Collision")]
@@ -57,35 +61,47 @@ public partial class PS1MeshGroup : Node3D
     [Export(PropertyHint.Range, "0,255,1")]
     public int LayerMask { get; set; } = 0xFF;
 
+    /// <summary>
+    /// Lua script attached to the exported GameObject. onCreate / onUpdate /
+    /// etc. fire exactly as they would on a PS1MeshInstance.
+    /// </summary>
     [ExportGroup("PS1 / Scripting")]
-    // Lua script attached to the exported GameObject. onCreate / onUpdate /
-    // etc. fire exactly as they would on a PS1MeshInstance.
     [Export(PropertyHint.File, "*.lua")]
     public string ScriptFile { get; set; } = "";
 
-    // Gameplay tag — see PS1MeshInstance.Tag. Used by GameObject.Spawn for
-    // pool lookups.
+    /// <summary>
+    /// Gameplay tag — see PS1MeshInstance.Tag. Used by GameObject.Spawn for
+    /// pool lookups.
+    /// </summary>
     [Export(PropertyHint.Range, "0,65535,1")]
     public int Tag { get; set; } = 0;
 
-    // Export the group but start with flags.isActive = 0 — see
-    // PS1MeshInstance.StartsInactive.
+    /// <summary>
+    /// Export the group but start with flags.isActive = 0 — see
+    /// PS1MeshInstance.StartsInactive.
+    /// </summary>
     [Export] public bool StartsInactive { get; set; } = false;
 
-    // PSX hardware semi-trans + alpha-keyed CLUT[0]=0x0000 — see
-    // PS1MeshInstance.Translucent.
+    /// <summary>
+    /// PSX hardware semi-trans + alpha-keyed CLUT[0]=0x0000 — see
+    /// PS1MeshInstance.Translucent.
+    /// </summary>
     [Export] public bool Translucent { get; set; } = false;
 
-    // Mute the UV out-of-range linter — see PS1MeshInstance.TilingUV.
-    // PSX still doesn't wrap; flag is for authoring intent only. Apply
-    // when the underlying FBX ships with UVs scaled past [0, 1] AND
-    // chaotic rasterisation is acceptable (e.g. small props where the
-    // mistexture isn't visible at PSX resolution).
+    /// <summary>
+    /// Mute the UV out-of-range linter — see PS1MeshInstance.TilingUV.
+    /// PSX still doesn't wrap; flag is for authoring intent only. Apply
+    /// when the underlying FBX ships with UVs scaled past [0, 1] AND
+    /// chaotic rasterisation is acceptable (e.g. small props where the
+    /// mistexture isn't visible at PSX resolution).
+    /// </summary>
     [Export] public bool TilingUV { get; set; } = false;
 
-    // ── Slot C metadata (round-trip with Blender add-on) ────────────
-    // Same vocabulary as PS1MeshInstance — see that node + exporter/
-    // PS1Metadata.cs for the wire-identifier-stability contract.
+    /// <summary>
+    /// ── Slot C metadata (round-trip with Blender add-on) ────────────
+    /// Same vocabulary as PS1MeshInstance — see that node + exporter/
+    /// PS1Metadata.cs for the wire-identifier-stability contract.
+    /// </summary>
     [ExportGroup("PS1 / Metadata")]
     [Export] public MeshRole MeshRole { get; set; } = MeshRole.StaticWorld;
     [Export] public ExportMode ExportMode { get; set; } = ExportMode.MergeStatic;
@@ -101,14 +117,18 @@ public partial class PS1MeshGroup : Node3D
     [Export] public string RegionId { get; set; } = "";
     [Export] public string AreaArchiveId { get; set; } = "";
 
-    // Per-material metadata aggregated across the group's descendant
-    // meshes. Match strategy mirrors PS1MeshInstance — see that node.
+    /// <summary>
+    /// Per-material metadata aggregated across the group's descendant
+    /// meshes. Match strategy mirrors PS1MeshInstance — see that node.
+    /// </summary>
     [Export] public Godot.Collections.Array<PS1MaterialMetadata> Materials { get; set; } = new();
 
+    /// <summary>
+    /// Exported GameObject name. Empty → falls back to the node's own Name,
+    /// which is what most scenes want. Set explicitly only when you need
+    /// Lua / animation tracks to reference a stable name independent of
+    /// the scene-tree label.
+    /// </summary>
     [ExportGroup("PS1 / Naming")]
-    // Exported GameObject name. Empty → falls back to the node's own Name,
-    // which is what most scenes want. Set explicitly only when you need
-    // Lua / animation tracks to reference a stable name independent of
-    // the scene-tree label.
     [Export] public string ObjectName { get; set; } = "";
 }

@@ -29,44 +29,58 @@ namespace PS1Godot;
 [Icon("res://addons/ps1godot/icons/ps1_audio_clip.svg")]
 public partial class PS1DrumKit : Resource
 {
+    /// <summary>
+    /// Stable name for cross-resource references. Defaults to the
+    /// resource basename when blank.
+    /// </summary>
     [ExportGroup("Identity")]
-    // Stable name for cross-resource references. Defaults to the
-    // resource basename when blank.
     [Export] public string KitName { get; set; } = "";
 
+    /// <summary>
+    /// MIDI note number for each drum (36=kick, 38=snare, 42=closedHat,
+    /// 46=openHat, 49=crash, 51=ride, etc. — see General MIDI percussion
+    /// standard).
+    /// </summary>
     [ExportGroup("Mappings")]
-    // MIDI note number for each drum (36=kick, 38=snare, 42=closedHat,
-    // 46=openHat, 49=crash, 51=ride, etc. — see General MIDI percussion
-    // standard).
     [Export]
     public Godot.Collections.Array<int> MidiNotes { get; set; } = new();
 
-    // Parallel array: PS1AudioClip name to play for each MidiNotes
-    // entry. Looked up by ClipName at export time.
+    /// <summary>
+    /// Parallel array: PS1AudioClip name to play for each MidiNotes
+    /// entry. Looked up by ClipName at export time.
+    /// </summary>
     [Export]
     public Godot.Collections.Array<string> AudioClipNames { get; set; } = new();
 
-    // Parallel array: per-drum volume, 0-127. Defaults to 100 if the
-    // array is shorter than MidiNotes.
+    /// <summary>
+    /// Parallel array: per-drum volume, 0-127. Defaults to 100 if the
+    /// array is shorter than MidiNotes.
+    /// </summary>
     [Export]
     public Godot.Collections.Array<int> Volumes { get; set; } = new();
 
-    // Parallel array: per-drum pan, 0=L / 64=center / 127=R. Defaults
-    // to 64 if the array is shorter than MidiNotes.
+    /// <summary>
+    /// Parallel array: per-drum pan, 0=L / 64=center / 127=R. Defaults
+    /// to 64 if the array is shorter than MidiNotes.
+    /// </summary>
     [Export]
     public Godot.Collections.Array<int> Pans { get; set; } = new();
 
-    // Parallel array: choke-group id. Drums in the same non-zero
-    // group cut each other off when triggered — the canonical use is
-    // open hat / closed hat sharing one group so a closed hit
-    // silences a ringing open hat. 0 = no choke.
+    /// <summary>
+    /// Parallel array: choke-group id. Drums in the same non-zero
+    /// group cut each other off when triggered — the canonical use is
+    /// open hat / closed hat sharing one group so a closed hit
+    /// silences a ringing open hat. 0 = no choke.
+    /// </summary>
     [Export]
     public Godot.Collections.Array<int> ChokeGroups { get; set; } = new();
 
-    // Parallel array: voice-stealing priority, 0-255 (higher = more
-    // important). Kicks and snares typically get higher priority
-    // than ride or shaker. Defaults to 64 if the array is shorter
-    // than MidiNotes.
+    /// <summary>
+    /// Parallel array: voice-stealing priority, 0-255 (higher = more
+    /// important). Kicks and snares typically get higher priority
+    /// than ride or shaker. Defaults to 64 if the array is shorter
+    /// than MidiNotes.
+    /// </summary>
     [Export]
     public Godot.Collections.Array<int> Priorities { get; set; } = new();
 

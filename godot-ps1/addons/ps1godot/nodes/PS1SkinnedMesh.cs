@@ -24,21 +24,27 @@ namespace PS1Godot;
 [Icon("res://addons/ps1godot/icons/ps1_skinned_mesh.svg")]
 public partial class PS1SkinnedMesh : PS1MeshInstance
 {
+    /// <summary>
+    /// Path (relative to this node) to the AnimationPlayer whose
+    /// AnimationLibraries contain the clips to bake. If empty, exporter
+    /// walks up to the scene root looking for the first AnimationPlayer.
+    /// </summary>
     [ExportGroup("PS1 / Skinning")]
-    // Path (relative to this node) to the AnimationPlayer whose
-    // AnimationLibraries contain the clips to bake. If empty, exporter
-    // walks up to the scene root looking for the first AnimationPlayer.
     [Export] public NodePath AnimationPlayerPath { get; set; } = new NodePath();
 
-    // Sampling rate for baking bone matrices (frames per second).
-    // Lower values save memory and splashpack size; 15 is usually
-    // sufficient for PS1 character animation.
+    /// <summary>
+    /// Sampling rate for baking bone matrices (frames per second).
+    /// Lower values save memory and splashpack size; 15 is usually
+    /// sufficient for PS1 character animation.
+    /// </summary>
     [Export(PropertyHint.Range, "1,30,1,suffix:fps")]
     public int TargetFps { get; set; } = 15;
 
-    // Which clips to bake. If empty, every animation in the
-    // AnimationPlayer is baked. Authored as clip names so renaming
-    // the AnimationPlayer doesn't silently change the export.
+    /// <summary>
+    /// Which clips to bake. If empty, every animation in the
+    /// AnimationPlayer is baked. Authored as clip names so renaming
+    /// the AnimationPlayer doesn't silently change the export.
+    /// </summary>
     [Export] public string[] ClipNames { get; set; } = System.Array.Empty<string>();
 
     // Skinned characters use a snap-disabled variant of the PS1 shader.

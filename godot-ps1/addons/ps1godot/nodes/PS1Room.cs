@@ -15,19 +15,25 @@ namespace PS1Godot;
 [Icon("res://addons/ps1godot/icons/ps1_room.svg")]
 public partial class PS1Room : Node3D
 {
+    /// <summary>
+    /// Displayed in debug prints; purely cosmetic for now.
+    /// </summary>
     [ExportGroup("Identity")]
-    // Displayed in debug prints; purely cosmetic for now.
     [Export] public string RoomName { get; set; } = "";
 
+    /// <summary>
+    /// Local volume size. Exporter transforms the 8 corners by the node's
+    /// GlobalTransform to get a world AABB, so rotating / scaling the room
+    /// node reshapes the volume (then AABBs it again). Matches the
+    /// SplashEdit convention.
+    /// </summary>
     [ExportGroup("Volume")]
-    // Local volume size. Exporter transforms the 8 corners by the node's
-    // GlobalTransform to get a world AABB, so rotating / scaling the room
-    // node reshapes the volume (then AABBs it again). Matches the
-    // SplashEdit convention.
     [Export] public Vector3 VolumeSize { get; set; } = new Vector3(4, 3, 4);
 
-    // Offset of the volume center in local space — lets you keep the node
-    // pivot at the room's door / anchor while the AABB covers the whole
-    // interior.
+    /// <summary>
+    /// Offset of the volume center in local space — lets you keep the node
+    /// pivot at the room's door / anchor while the AABB covers the whole
+    /// interior.
+    /// </summary>
     [Export] public Vector3 VolumeOffset { get; set; } = Vector3.Zero;
 }

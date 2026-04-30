@@ -138,98 +138,126 @@ public partial class PS1UIElement : Node
     [ExportGroup("Appearance")]
     [Export] public Color Color { get; set; } = new Color(1f, 1f, 1f, 1f);
 
-    // Render this element with PSX hardware semi-transparency.
-    //   - Box: blend mode 0 (0.5*B + 0.5*F) — darkened HUD name plates
-    //     behind text that don't fully block the camera view.
-    //   - Image: enables alpha-keyed transparency for 4/8bpp textures
-    //     whose CLUT[0] = 0x0000. Index-0 pixels disappear; everything
-    //     else renders opaque. Use for hair, foliage, decals, glass
-    //     overlays. The exporter writes CLUT[0]=0 automatically when
-    //     the source PNG has alpha — authors just flag this true.
-    //   - Text: ignored (font rendering uses its own blend path).
-    // Stored as bit 1 of the on-disk eFlags byte (bit 0 = visible), so
-    // no splashpack format bump.
+    /// <summary>
+    /// Render this element with PSX hardware semi-transparency.
+    ///   - Box: blend mode 0 (0.5*B + 0.5*F) — darkened HUD name plates
+    ///     behind text that don't fully block the camera view.
+    ///   - Image: enables alpha-keyed transparency for 4/8bpp textures
+    ///     whose CLUT[0] = 0x0000. Index-0 pixels disappear; everything
+    ///     else renders opaque. Use for hair, foliage, decals, glass
+    ///     overlays. The exporter writes CLUT[0]=0 automatically when
+    ///     the source PNG has alpha — authors just flag this true.
+    ///   - Text: ignored (font rendering uses its own blend path).
+    /// Stored as bit 1 of the on-disk eFlags byte (bit 0 = visible), so
+    /// no splashpack format bump.
+    /// </summary>
     [Export] public bool Translucent { get; set; } = false;
 
-    // When non-Custom AND the owning PS1UICanvas has a Theme assigned,
-    // the exporter uses `theme.<Slot>Color` instead of `Color`. If the
-    // slot has no match (or no theme), falls back to `Color`. Change the
-    // theme → every opted-in element restyles.
+    /// <summary>
+    /// When non-Custom AND the owning PS1UICanvas has a Theme assigned,
+    /// the exporter uses `theme.<Slot>Color` instead of `Color`. If the
+    /// slot has no match (or no theme), falls back to `Color`. Change the
+    /// theme → every opted-in element restyles.
+    /// </summary>
     [Export] public PS1UIThemeSlot ThemeSlot { get; set; } = PS1UIThemeSlot.Custom;
 
+    /// <summary>
+    /// Text body (Type == Text). UTF-8 bytes; runtime buffer is 64 B,
+    /// so authored text should stay under ~60 visible characters. Default
+    /// "Text" so a newly-added element is visible by default; clear it
+    /// and author your own.
+    /// </summary>
     [ExportGroup("Text")]
-    // Text body (Type == Text). UTF-8 bytes; runtime buffer is 64 B,
-    // so authored text should stay under ~60 visible characters. Default
-    // "Text" so a newly-added element is visible by default; clear it
-    // and author your own.
     [Export(PropertyHint.MultilineText)]
     public string Text { get; set; } = "Text";
 
-    // Custom font for Text elements. null → the built-in system font
-    // (fontIndex 0). Assigning a generated PS1UIFontAsset makes this
-    // element use that font at runtime. Ignored for non-Text types.
-    // Max 2 distinct custom fonts per scene (runtime cap); the
-    // exporter errors on a third.
+    /// <summary>
+    /// Custom font for Text elements. null → the built-in system font
+    /// (fontIndex 0). Assigning a generated PS1UIFontAsset makes this
+    /// element use that font at runtime. Ignored for non-Text types.
+    /// Max 2 distinct custom fonts per scene (runtime cap); the
+    /// exporter errors on a third.
+    /// </summary>
     [Export] public PS1UIFontAsset? Font { get; set; }
 
-    // Horizontal alignment of Text content inside the element's
-    // Width box. Runtime shifts each line's starting X by the
-    // measured line width so `\n` and auto-wrap both align correctly.
-    // Ignored for non-Text types.
+    /// <summary>
+    /// Horizontal alignment of Text content inside the element's
+    /// Width box. Runtime shifts each line's starting X by the
+    /// measured line width so `\n` and auto-wrap both align correctly.
+    /// Ignored for non-Text types.
+    /// </summary>
     [Export] public PS1UITextAlign TextAlign { get; set; } = PS1UITextAlign.Left;
 
-    // Vertical alignment of the text stack inside the Height box.
-    // Ignored for non-Text types.
+    /// <summary>
+    /// Vertical alignment of the text stack inside the Height box.
+    /// Ignored for non-Text types.
+    /// </summary>
     [Export] public PS1UITextVAlign TextVAlign { get; set; } = PS1UITextVAlign.Top;
 
+    /// <summary>
+    /// Source texture for Image-type elements. Must have a resource path
+    /// (i.e. saved as an asset, not generated in-memory) so the exporter
+    /// can dedupe across elements + meshes. Ignored for non-Image types.
+    /// </summary>
     [ExportGroup("Image (when Type = Image)")]
-    // Source texture for Image-type elements. Must have a resource path
-    // (i.e. saved as an asset, not generated in-memory) so the exporter
-    // can dedupe across elements + meshes. Ignored for non-Image types.
     [Export] public Texture2D? Texture { get; set; }
 
-    // Sub-region of `Texture` to display, normalized 0..1 with origin
-    // top-left. Default (0,0,1,1) shows the whole texture. Useful for
-    // packing multiple icons into one source PNG and addressing each
-    // by UV. Ignored for non-Image types.
+    /// <summary>
+    /// Sub-region of `Texture` to display, normalized 0..1 with origin
+    /// top-left. Default (0,0,1,1) shows the whole texture. Useful for
+    /// packing multiple icons into one source PNG and addressing each
+    /// by UV. Ignored for non-Image types.
+    /// </summary>
     [Export] public Rect2 UVRect { get; set; } = new Rect2(0f, 0f, 1f, 1f);
 
-    // PSX bit-depth this image gets quantized to: 4bpp = 16-color
-    // palette (cheapest VRAM), 8bpp = 256-color, 16bpp = direct RGB
-    // (no CLUT, ~most VRAM). Match the source asset's color complexity:
-    // CRT bezels and HUD icons usually fit 4bpp comfortably; photo-
-    // realistic textures want 8bpp+. Ignored for non-Image types.
+    /// <summary>
+    /// PSX bit-depth this image gets quantized to: 4bpp = 16-color
+    /// palette (cheapest VRAM), 8bpp = 256-color, 16bpp = direct RGB
+    /// (no CLUT, ~most VRAM). Match the source asset's color complexity:
+    /// CRT bezels and HUD icons usually fit 4bpp comfortably; photo-
+    /// realistic textures want 8bpp+. Ignored for non-Image types.
+    /// </summary>
     [Export] public PSXBPP BitDepth { get; set; } = PSXBPP.TEX_8BIT;
 
+    /// <summary>
+    /// Background color for the unfilled portion of the bar. The
+    /// foreground (fill) color comes from `Color`. Match the visual
+    /// weight you want for the empty track: black for max contrast,
+    /// a darker shade of the fill for a subtler look. Stored as
+    /// typeData[0..2] in the runtime's UIProgressData. Ignored when
+    /// Type != Progress.
+    /// </summary>
     [ExportGroup("Progress (when Type = Progress)")]
-    // Background color for the unfilled portion of the bar. The
-    // foreground (fill) color comes from `Color`. Match the visual
-    // weight you want for the empty track: black for max contrast,
-    // a darker shade of the fill for a subtler look. Stored as
-    // typeData[0..2] in the runtime's UIProgressData. Ignored when
-    // Type != Progress.
     [Export] public Color BgColor { get; set; } = new Color(0.1f, 0.1f, 0.1f, 1f);
 
-    // Initial fill, 0–100. Loading screens typically start at 0;
-    // pre-filled bars are useful for HUD demo shots. The runtime
-    // mutates this value via `setProgress` calls (Lua API or, on
-    // LoadingScreen canvases, the file-loader auto-update). Stored
-    // as typeData[3] in UIProgressData. Ignored when Type != Progress.
+    /// <summary>
+    /// Initial fill, 0–100. Loading screens typically start at 0;
+    /// pre-filled bars are useful for HUD demo shots. The runtime
+    /// mutates this value via `setProgress` calls (Lua API or, on
+    /// LoadingScreen canvases, the file-loader auto-update). Stored
+    /// as typeData[3] in UIProgressData. Ignored when Type != Progress.
+    /// </summary>
     [Export(PropertyHint.Range, "0,100,1")]
     public byte InitialValue { get; set; } = 0;
 
+    /// <summary>
+    /// These fields are read by PS1UIHBox / PS1UIVBox / PS1UISizeBox /
+    /// PS1UIOverlay parents at export time. Ignored when the parent is a
+    /// PS1UICanvas (use Anchor + X/Y in that case).
+    /// </summary>
     [ExportGroup("Slot (when nested inside a container)")]
-    // These fields are read by PS1UIHBox / PS1UIVBox / PS1UISizeBox /
-    // PS1UIOverlay parents at export time. Ignored when the parent is a
-    // PS1UICanvas (use Anchor + X/Y in that case).
     [Export] public PS1UISlotAlign SlotHAlign { get; set; } = PS1UISlotAlign.Inherit;
     [Export] public PS1UISlotAlign SlotVAlign { get; set; } = PS1UISlotAlign.Inherit;
-    // 0 → use Width/Height as-is. >0 → take this proportional share of the
-    // leftover space on the parent's main axis (HBox: horizontal,
-    // VBox: vertical). Three flex-1 children split free space equally.
+    /// <summary>
+    /// 0 → use Width/Height as-is. >0 → take this proportional share of the
+    /// leftover space on the parent's main axis (HBox: horizontal,
+    /// VBox: vertical). Three flex-1 children split free space equally.
+    /// </summary>
     [Export(PropertyHint.Range, "0,16,1")] public int SlotFlex { get; set; } = 0;
-    // Inset margin around this element inside its slot. CSS order:
-    // X=Left, Y=Top, Z=Right, W=Bottom.
+    /// <summary>
+    /// Inset margin around this element inside its slot. CSS order:
+    /// X=Left, Y=Top, Z=Right, W=Bottom.
+    /// </summary>
     [Export] public Vector4I SlotPadding { get; set; } = Vector4I.Zero;
 
     // Type-conditional inspector — hide fields that don't apply to the

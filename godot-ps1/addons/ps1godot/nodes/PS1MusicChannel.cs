@@ -17,74 +17,90 @@ namespace PS1Godot;
 [Icon("res://addons/ps1godot/icons/ps1_music_channel.svg")]
 public partial class PS1MusicChannel : Resource
 {
+    /// <summary>
+    /// 0-15. Matches the channel byte in the source MIDI's note events.
+    /// </summary>
     [ExportGroup("MIDI filter")]
-    // 0-15. Matches the channel byte in the source MIDI's note events.
     [Export(PropertyHint.Range, "0,15,1")]
     public int MidiChannel { get; set; } = 0;
 
-    // Optional track-index filter. -1 = accept notes from any track on
-    // the chosen MidiChannel. Useful for format-1 MIDI files that put
-    // every track on MIDI channel 0 (common with DAW exports) — set
-    // MidiTrackIndex per binding to keep tracks from stomping each other.
+    /// <summary>
+    /// Optional track-index filter. -1 = accept notes from any track on the
+    /// chosen MidiChannel. Useful for format-1 MIDI files that put every
+    /// track on MIDI channel 0 (common with DAW exports) — set per binding
+    /// to keep tracks from stomping each other.
+    /// </summary>
     [Export(PropertyHint.Range, "-1,31,1")]
     public int MidiTrackIndex { get; set; } = -1;
 
-    // Optional note-range filter — only notes with MidiNoteMin <= note
-    // <= MidiNoteMax route to this channel. Defaults to the full range
-    // (0..127). Combined with Percussion=true, this lets you map drum
-    // hits to dedicated samples: one channel for kick (note 36), one
-    // for snare (38), one for hi-hat (42). Set both to the same value
-    // for a single-note pickup.
+    /// <summary>
+    /// Lower bound of the note-range filter. Only notes with MidiNoteMin
+    /// &lt;= note &lt;= MidiNoteMax route to this channel. Combined with
+    /// Percussion=true, this lets you map drum hits to dedicated samples:
+    /// one channel for kick (36), one for snare (38), one for hi-hat (42).
+    /// Set both bounds to the same value for a single-note pickup.
+    /// </summary>
     [Export(PropertyHint.Range, "0,127,1")]
     public int MidiNoteMin { get; set; } = 0;
 
+    /// <summary>
+    /// Upper bound of the note-range filter. See MidiNoteMin.
+    /// </summary>
     [Export(PropertyHint.Range, "0,127,1")]
     public int MidiNoteMax { get; set; } = 127;
 
+    /// <summary>
+    /// Optional reference to a PS1Instrument. When set, AudioClipName /
+    /// BaseNoteMidi / LoopSample below are SILENTLY OVERRIDDEN at export by
+    /// the instrument's first region. Leave null to use the direct fields.
+    /// Multi-region keymap selection is Phase 2 — single-region instruments
+    /// are wire-equivalent to the direct binding today.
+    /// </summary>
     [ExportGroup("Sample")]
-    // Phase 1 instrument data path (see
-    // docs/handoff-true-sequenced-audio-plan.md). Optional reference to a
-    // PS1Instrument; when set, AudioClipName / BaseNoteMidi / LoopSample
-    // are sourced from the instrument's first region instead of the
-    // direct fields below — those direct fields stay around for legacy
-    // bindings and are silently overridden when Instrument != null.
-    // Multi-region keymap selection (per-note Region picking) is
-    // Phase 2 territory and requires a splashpack format bump; for now
-    // a one-region instrument is wire-equivalent to the legacy direct
-    // binding, so this is purely an authoring convenience.
     [Export] public PS1Instrument? Instrument { get; set; }
 
-    // Name of a PS1AudioClip on PS1Scene.AudioClips. Empty entries are
-    // skipped (and warned about) at export. Ignored when Instrument is
-    // set.
+    /// <summary>
+    /// Name of a PS1AudioClip on PS1Scene.AudioClips. Empty = skipped (and
+    /// warned about) at export. Ignored when Instrument is set.
+    /// </summary>
     [Export] public string AudioClipName { get; set; } = "";
 
-    // The MIDI note number that plays the sample at its native pitch.
-    // Middle C = 60. Used to compute (incomingNote - BaseNoteMidi)
-    // semitones of shift, then converted to fp12 SPU pitch at runtime.
-    // Ignored when Instrument is set (resolved from Regions[0].RootKey).
+    /// <summary>
+    /// The MIDI note number that plays the sample at its native pitch.
+    /// Middle C = 60. Used to compute (incomingNote - BaseNoteMidi)
+    /// semitones of shift, then converted to fp12 SPU pitch at runtime.
+    /// Ignored when Instrument is set (resolved from Regions[0].RootKey).
+    /// </summary>
     [Export(PropertyHint.Range, "0,127,1")]
     public int BaseNoteMidi { get; set; } = 60;
 
-    // Loop the sample for the duration of the held note (held drones,
-    // pads). When false, the sample plays once and stops on key-off
-    // or natural end. Ignored when Instrument is set (resolved from
-    // Regions[0].LoopEnabled).
+    /// <summary>
+    /// Loop the sample for the duration of the held note (held drones,
+    /// pads). When false, the sample plays once and stops on key-off or
+    /// natural end. Ignored when Instrument is set (resolved from
+    /// Regions[0].LoopEnabled).
+    /// </summary>
     [Export] public bool LoopSample { get; set; } = false;
 
-    // Percussion mode: ignore note pitch shift, always play the sample
-    // at its native rate. Use this for one-shot drum kits where the
-    // MIDI note picks the drum (kit-mapped via separate channels) and
-    // pitch shifting would just sound wrong.
+    /// <summary>
+    /// Percussion mode: ignore note pitch shift, always play the sample at
+    /// its native rate. Use this for one-shot drum kits where the MIDI note
+    /// picks the drum (kit-mapped via separate channels) and pitch shifting
+    /// would just sound wrong.
+    /// </summary>
     [Export] public bool Percussion { get; set; } = false;
 
+    /// <summary>
+    /// Per-channel volume scaler, 0-127. Combined with note velocity and
+    /// the sequence's master volume at runtime.
+    /// </summary>
     [ExportGroup("Mix")]
-    // Per-channel volume scaler, 0-127. Combined with note velocity
-    // and the sequence's master volume at runtime.
     [Export(PropertyHint.Range, "0,127,1")]
     public int Volume { get; set; } = 100;
 
-    // 0 = full left, 64 = centre, 127 = full right.
+    /// <summary>
+    /// Stereo pan. 0 = full left, 64 = centre, 127 = full right.
+    /// </summary>
     [Export(PropertyHint.Range, "0,127,1")]
     public int Pan { get; set; } = 64;
 }

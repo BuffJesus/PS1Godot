@@ -19,28 +19,37 @@ namespace PS1Godot;
 [Icon("res://addons/ps1godot/icons/ps1_audio_clip.svg")]
 public partial class PS1SoundMacroEvent : Resource
 {
-    // Local frame within the macro. 0 = trigger frame. Macros tick on
-    // the same 30 FPS clock as the rest of the runtime.
+    /// <summary>
+    /// Local frame within the macro. 0 = trigger frame. Macros tick on the
+    /// same 30 FPS clock as the rest of the runtime.
+    /// </summary>
     [Export(PropertyHint.Range, "0,3600,1,suffix:frames")]
     public int Frame { get; set; } = 0;
 
-    // PS1AudioClip name (looked up against the scene's clip table at
-    // runtime). Empty = silent event slot (placeholder during
-    // authoring).
+    /// <summary>
+    /// PS1AudioClip name (looked up against the scene's clip table at
+    /// runtime). Empty = silent event slot (placeholder during authoring).
+    /// </summary>
     [Export] public string AudioClipName { get; set; } = "";
 
-    // 0-128 (128 = full). Stacks with the scene-wide master volume
-    // and the macro's overall volume.
+    /// <summary>
+    /// 0-128 (128 = full). Stacks with the scene-wide master volume and the
+    /// macro's overall volume.
+    /// </summary>
     [Export(PropertyHint.Range, "0,128,1")]
     public int Volume { get; set; } = 128;
 
-    // 0 = full left, 64 = centre, 127 = full right.
+    /// <summary>
+    /// Stereo pan. 0 = full left, 64 = centre, 127 = full right.
+    /// </summary>
     [Export(PropertyHint.Range, "0,127,1")]
     public int Pan { get; set; } = 64;
 
-    // Semitone shift relative to the clip's authored pitch. Common
-    // uses: -3 to +3 for variation, +12 for "child voice" pitch-up,
-    // -12 for sub-bass thump on impacts.
+    /// <summary>
+    /// Semitone shift relative to the clip's authored pitch. Common uses:
+    /// -3 to +3 for variation, +12 for "child voice" pitch-up, -12 for
+    /// sub-bass thump on impacts.
+    /// </summary>
     [Export(PropertyHint.Range, "-24,24,1,suffix:st")]
     public int PitchOffset { get; set; } = 0;
 }

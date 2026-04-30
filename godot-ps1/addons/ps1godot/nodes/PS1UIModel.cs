@@ -31,15 +31,19 @@ namespace PS1Godot;
 [Icon("res://addons/ps1godot/icons/ps1_ui_canvas.svg")]
 public partial class PS1UIModel : Node
 {
+    /// <summary>
+    /// Unique name per canvas. Used by Lua: UI.SetModelVisible("canvas", "slotName", true).
+    /// </summary>
     [ExportGroup("Identity")]
-    // Unique name per canvas. Used by Lua: UI.SetModelVisible("canvas", "slotName", true).
     [Export] public string ModelName { get; set; } = "";
 
     [Export] public bool VisibleOnLoad { get; set; } = true;
 
+    /// <summary>
+    /// NodePath to a PS1MeshInstance / PS1MeshGroup elsewhere in the scene.
+    /// That GameObject's polygons are re-rendered in this widget's rect.
+    /// </summary>
     [ExportGroup("Target")]
-    // NodePath to a PS1MeshInstance / PS1MeshGroup elsewhere in the scene.
-    // That GameObject's polygons are re-rendered in this widget's rect.
     [Export] public NodePath Target { get; set; } = new NodePath();
 
     [ExportGroup("Screen Rect")]
@@ -53,26 +57,34 @@ public partial class PS1UIModel : Node
     [Export(PropertyHint.Range, "0,576,1,suffix:px")]
     public int Height { get; set; } = 128;
 
+    /// <summary>
+    /// Yaw around the model's Y axis. Animate from Lua for a rotating
+    /// preview: UI.SetModelOrbit(canvas, name, newYaw, pitch).
+    /// </summary>
     [ExportGroup("Camera")]
-    // Yaw around the model's Y axis. Animate from Lua for a rotating
-    // preview: UI.SetModelOrbit(canvas, name, newYaw, pitch).
     [Export(PropertyHint.Range, "-360,360,0.5,suffix:°")]
     public float OrbitYawDegrees { get; set; } = 0f;
 
-    // Pitch above/below the model's horizon (negative = look up at it).
+    /// <summary>
+    /// Pitch above/below the model's horizon (negative = look up at it).
+    /// </summary>
     [Export(PropertyHint.Range, "-89,89,0.5,suffix:°")]
     public float OrbitPitchDegrees { get; set; } = 0f;
 
-    // Distance from the model's pivot along the camera's forward axis.
-    // Use the Frame Model tool to compute a good starting value for the
-    // target screen rect.
+    /// <summary>
+    /// Distance from the model's pivot along the camera's forward axis.
+    /// Use the Frame Model tool to compute a good starting value for the
+    /// target screen rect.
+    /// </summary>
     [Export(PropertyHint.Range, "0.1,100,0.1,suffix:m")]
     public float OrbitDistance { get; set; } = 3f;
 
-    // Projection H per-model. Auto-derived at export from Width +
-    // OrbitDistance + target-mesh extent so the model fills the rect;
-    // this value is only used as a fallback when the exporter can't
-    // resolve the target's bounding box.
+    /// <summary>
+    /// Projection H per-model. Auto-derived at export from Width +
+    /// OrbitDistance + target-mesh extent so the model fills the rect;
+    /// this value is only used as a fallback when the exporter can't
+    /// resolve the target's bounding box.
+    /// </summary>
     [Export(PropertyHint.Range, "1,1024,1")]
     public int ProjectionH { get; set; } = 240;
 

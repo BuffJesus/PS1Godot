@@ -24,15 +24,21 @@ public enum PS1InterpMode
 [Icon("res://addons/ps1godot/icons/ps1_animation_keyframe.svg")]
 public partial class PS1AnimationKeyframe : Node
 {
-    // Frame number within the parent animation's timeline. Must be in
-    // [0, TotalFrames). Multiple keyframes may share a frame if you want
-    // stepped behavior, but authors should generally pick distinct frames.
+    /// <summary>
+    /// Frame number within the parent animation's timeline. Must be in
+    /// [0, TotalFrames). Multiple keyframes may share a frame if you want
+    /// stepped behavior, but authors should generally pick distinct frames.
+    /// </summary>
     [Export(PropertyHint.Range, "0,8191,1,suffix:frames")]
     public int Frame { get; set; } = 0;
 
-    // Track-type-dependent triple (see the class comment for units).
+    /// <summary>
+    /// Track-type-dependent triple (see the class comment for units).
+    /// </summary>
     [Export] public Vector3 Value { get; set; } = Vector3.Zero;
 
-    // How to interpolate between this keyframe and the next.
+    /// <summary>
+    /// How to interpolate between this keyframe and the next.
+    /// </summary>
     [Export] public PS1InterpMode Interp { get; set; } = PS1InterpMode.Linear;
 }

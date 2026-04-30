@@ -18,10 +18,17 @@ namespace PS1Godot;
 [Icon("res://addons/ps1godot/icons/ps1_cutscene.svg")]
 public partial class PS1Cutscene : Node
 {
+    /// <summary>
+    /// Lookup name for Cutscene.Play("..."). Must be unique within the
+    /// scene. Empty = the cutscene will never trigger (Cutscene.Play
+    /// silently fails when the name doesn't resolve).
+    /// </summary>
     [Export] public string CutsceneName { get; set; } = "";
 
-    // Total length in 30-fps frames. Tracks longer than this are
-    // truncated by the runtime's MAX_TRACKS / MAX_KEYFRAMES caps.
+    /// <summary>
+    /// Total length in 30-fps frames. Tracks longer than this are truncated
+    /// by the runtime's MAX_TRACKS / MAX_KEYFRAMES caps.
+    /// </summary>
     [Export(PropertyHint.Range, "1,8191,1,suffix:frames")]
     public int TotalFrames { get; set; } = 90;
 }

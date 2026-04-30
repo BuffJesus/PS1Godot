@@ -22,10 +22,14 @@ public partial class PS1UISizeBox : Node
     public int X { get; set; } = 0;
     [Export(PropertyHint.Range, "-256,576,1,suffix:px")]
     public int Y { get; set; } = 0;
-    // -1 = use child's own Width.
+    /// <summary>
+    /// -1 = use child's own Width.
+    /// </summary>
     [Export(PropertyHint.Range, "-1,576,1,suffix:px")]
     public int WidthOverride { get; set; } = -1;
-    // -1 = use child's own Height.
+    /// <summary>
+    /// -1 = use child's own Height.
+    /// </summary>
     [Export(PropertyHint.Range, "-1,576,1,suffix:px")]
     public int HeightOverride { get; set; } = -1;
 

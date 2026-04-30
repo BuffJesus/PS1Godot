@@ -27,10 +27,12 @@ public partial class PS1UIHBox : Node
     [ExportGroup("Identity")]
     [Export] public string ContainerName { get; set; } = "";
 
+    /// <summary>
+    /// Container rect in canvas-relative coords. The exporter places this
+    /// rect at (X, Y) with size (Width, Height) inside the parent canvas;
+    /// children pack inside it after Padding insets.
+    /// </summary>
     [ExportGroup("Layout")]
-    // Container rect in canvas-relative coords. The exporter places this
-    // rect at (X, Y) with size (Width, Height) inside the parent canvas;
-    // children pack inside it after Padding insets.
     [Export(PropertyHint.Range, "-256,576,1,suffix:px")]
     public int X { get; set; } = 0;
     [Export(PropertyHint.Range, "-256,576,1,suffix:px")]
@@ -42,19 +44,27 @@ public partial class PS1UIHBox : Node
 
     [Export] public PS1UIAnchor Anchor { get; set; } = PS1UIAnchor.Custom;
 
-    // Vector4I: X=Left, Y=Top, Z=Right, W=Bottom (CSS order).
+    /// <summary>
+    /// Vector4I: X=Left, Y=Top, Z=Right, W=Bottom (CSS order).
+    /// </summary>
     [Export] public Vector4I Padding { get; set; } = Vector4I.Zero;
 
-    // Pixels between adjacent children.
+    /// <summary>
+    /// Pixels between adjacent children.
+    /// </summary>
     [Export(PropertyHint.Range, "0,64,1,suffix:px")]
     public int Spacing { get; set; } = 4;
 
-    // Defaults for children whose SlotHAlign/VAlign are Inherit.
+    /// <summary>
+    /// Defaults for children whose SlotHAlign/VAlign are Inherit.
+    /// </summary>
     [Export] public PS1UISlotAlign DefaultHAlign { get; set; } = PS1UISlotAlign.Start;
     [Export] public PS1UISlotAlign DefaultVAlign { get; set; } = PS1UISlotAlign.Center;
 
+    /// <summary>
+    /// Used when this HBox is itself a child of another HBox/VBox/SizeBox.
+    /// </summary>
     [ExportGroup("Slot (when nested inside another container)")]
-    // Used when this HBox is itself a child of another HBox/VBox/SizeBox.
     [Export] public PS1UISlotAlign SlotHAlign { get; set; } = PS1UISlotAlign.Inherit;
     [Export] public PS1UISlotAlign SlotVAlign { get; set; } = PS1UISlotAlign.Inherit;
     [Export(PropertyHint.Range, "0,16,1")] public int SlotFlex { get; set; } = 0;
