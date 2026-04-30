@@ -30,6 +30,8 @@ public partial class PS1GodotDock : VBoxContainer
     private BudgetRow? _spuRow;
     private BudgetRow? _texPageRow;
     private Label? _pipelineStatusLabel;
+    private Label? _configWarningsLabel;
+    private VBoxContainer? _configWarningsRows;
     private Label? _lastExportLabel;
     private VBoxContainer? _lastExportRows;   // click-to-focus list
     private VBoxContainer? _setupBox;
@@ -64,7 +66,7 @@ public partial class PS1GodotDock : VBoxContainer
         var run = new Button
         {
             Text = "▶ Run on PSX",
-            TooltipText = "Export splashpack, rebuild runtime if needed, launch PCSX-Redux.",
+            TooltipText = "Export splashpack, rebuild runtime if needed, launch PCSX-Redux.\nShortcut: F5 (Godot Play button is intercepted by the plugin).",
             CustomMinimumSize = new Vector2(0, 40),
         };
         run.AddThemeColorOverride("font_color", Colors.White);
@@ -159,6 +161,24 @@ public partial class PS1GodotDock : VBoxContainer
         };
         _pipelineStatusLabel.AddThemeColorOverride("font_color", new Color(0.65f, 0.85f, 1.0f));
         inner.AddChild(_pipelineStatusLabel);
+
+        // Live configuration-warning aggregator. Walks the scene tree on
+        // every refresh, lists nodes whose _GetConfigurationWarnings is
+        // non-empty. Catches authoring drift between exports — e.g.,
+        // "PS1Player has no NavRegion" surfaces here as soon as you
+        // delete the nav, not after the next F5.
+        _configWarningsLabel = new Label
+        {
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+            Visible = false,
+            MouseFilter = MouseFilterEnum.Pass,
+        };
+        _configWarningsLabel.AddThemeColorOverride("font_color", new Color(0.95f, 0.75f, 0.25f));
+        inner.AddChild(_configWarningsLabel);
+
+        _configWarningsRows = new VBoxContainer { Visible = false };
+        _configWarningsRows.AddThemeConstantOverride("separation", 2);
+        inner.AddChild(_configWarningsRows);
 
         // Last-export summary headline + click-to-focus row list.
         // Headline carries severity-coded one-line state; rows below
@@ -368,6 +388,87 @@ public partial class PS1GodotDock : VBoxContainer
         {
             _texPageRow.ShowLabelOnly($"Tex Pages  {stats.TexturePageEstimate} (no budget set)");
         }
+    }
+
+    /// <summary>
+    /// Walk the active scene tree, collect every node whose
+    /// _GetConfigurationWarnings() returns a non-empty array, and render
+    /// the result as a click-to-focus list. Called from OnSceneChanged and
+    /// after each export. Hidden when there are no warnings.
+    /// </summary>
+    public void RefreshConfigWarnings()
+    {
+        if (_configWarningsLabel == null || _configWarningsRows == null) return;
+
+        var root = EditorInterface.Singleton?.GetEditedSceneRoot();
+        var hits = new System.Collections.Generic.List<(Node Node, string[] Warnings)>();
+        if (root != null) CollectConfigWarnings(root, hits);
+
+        foreach (var child in _configWarningsRows.GetChildren()) child.QueueFree();
+
+        if (hits.Count == 0)
+        {
+            _configWarningsLabel.Visible = false;
+            _configWarningsRows.Visible = false;
+            return;
+        }
+
+        int total = 0;
+        foreach (var (_, w) in hits) total += w.Length;
+        _configWarningsLabel.Text = hits.Count == 1
+            ? $"⚠  1 node needs attention ({total} warning{(total == 1 ? "" : "s")})"
+            : $"⚠  {hits.Count} nodes need attention ({total} warnings)";
+        _configWarningsLabel.Visible = true;
+
+        foreach (var (node, warnings) in hits)
+        {
+            string nodeName = (string)node.Name;
+            foreach (string msg in warnings)
+            {
+                _configWarningsRows.AddChild(BuildConfigWarningRow(nodeName, msg));
+            }
+        }
+        _configWarningsRows.Visible = true;
+    }
+
+    private static void CollectConfigWarnings(Node n, System.Collections.Generic.List<(Node, string[])> acc)
+    {
+        // _get_configuration_warnings is the GDScript snake_case name; the
+        // C# override is _GetConfigurationWarnings. Calling the snake_case
+        // form via Node.Call dispatches into whichever language overrode it.
+        string[] warnings;
+        try
+        {
+            var v = n.Call("_get_configuration_warnings");
+            warnings = v.AsStringArray();
+        }
+        catch
+        {
+            warnings = System.Array.Empty<string>();
+        }
+        if (warnings != null && warnings.Length > 0) acc.Add((n, warnings));
+        foreach (var c in n.GetChildren())
+            if (c is Node child) CollectConfigWarnings(child, acc);
+    }
+
+    private static Control BuildConfigWarningRow(string nodeName, string message)
+    {
+        // Truncate long warnings in the row label; full text in tooltip.
+        const int maxRowChars = 100;
+        string preview = message.Length > maxRowChars
+            ? message.Substring(0, maxRowChars - 1) + "…"
+            : message;
+        var btn = new Button
+        {
+            Text = $"  {nodeName} — {preview}",
+            TooltipText = $"{nodeName}\n\n{message}\n\nClick to focus this node in the scene tree.",
+            Flat = true,
+            Alignment = HorizontalAlignment.Left,
+            ClipText = true,
+        };
+        btn.AddThemeColorOverride("font_color", new Color(0.95f, 0.75f, 0.25f, 0.95f));
+        btn.Pressed += () => FocusNodeByName(nodeName);
+        return btn;
     }
 
     /// <summary>

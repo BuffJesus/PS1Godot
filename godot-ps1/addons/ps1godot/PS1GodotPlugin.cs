@@ -309,6 +309,7 @@ public partial class PS1GodotPlugin : EditorPlugin
     {
         var stats = UI.SceneStats.Compute(sceneRoot);
         _dock?.ApplySceneStats(stats);
+        _dock?.RefreshConfigWarnings();
         _viewportOverlay?.ApplyStats(stats);
     }
 
