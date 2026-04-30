@@ -59,6 +59,7 @@ public partial class PS1GodotPlugin : EditorPlugin
     private EditorSyntaxHighlighter? _luaHighlighter;
     private PS1TexturePreviewInspector? _texturePreviewInspector;
     private PS1InspectorTooltips? _inspectorTooltips;
+    private PS1ClipNameInspector? _clipNameInspector;
     private PS1VRAMViewerDock? _vramViewerDock;
     private LuaHotSwapWatcher? _luaHotSwapWatcher;
     private PS1ViewportOverlay? _viewportOverlay;
@@ -239,6 +240,14 @@ public partial class PS1GodotPlugin : EditorPlugin
         _inspectorTooltips = new PS1InspectorTooltips();
         AddInspectorPlugin(_inspectorTooltips);
 
+        // Clip-name dropdowns. Replaces the LineEdit on
+        // PS1MusicChannel/PS1SampleRegion/PS1SoundMacroEvent.AudioClipName
+        // with an OptionButton populated from the active scene's
+        // PS1Scene.AudioClips. Catches mistyped clip references at edit
+        // time instead of after F5.
+        _clipNameInspector = new PS1ClipNameInspector();
+        AddInspectorPlugin(_clipNameInspector);
+
         // VRAM viewer — bottom-panel tab that visualises the packed
         // 1024×512 layout after each export (atlases, textures, CLUTs,
         // reserved framebuffer + font regions).
@@ -398,6 +407,12 @@ public partial class PS1GodotPlugin : EditorPlugin
         {
             RemoveInspectorPlugin(_inspectorTooltips);
             _inspectorTooltips = null;
+        }
+
+        if (_clipNameInspector != null)
+        {
+            RemoveInspectorPlugin(_clipNameInspector);
+            _clipNameInspector = null;
         }
 
         if (_vramViewerDock != null)
