@@ -433,20 +433,20 @@ public partial class PS1GodotDock : VBoxContainer
 
     private static void CollectConfigWarnings(Node n, System.Collections.Generic.List<(Node, string[])> acc)
     {
-        // _get_configuration_warnings is the GDScript snake_case name; the
-        // C# override is _GetConfigurationWarnings. Calling the snake_case
-        // form via Node.Call dispatches into whichever language overrode it.
-        string[] warnings;
-        try
+        // Native Node.Call("_get_configuration_warnings") raises a hard
+        // engine error on nodes that don't override it (the GDVIRTUAL
+        // dispatch only activates for overrides). Gate with HasMethod so
+        // we don't spam the Output panel for every unrelated MeshInstance3D
+        // / AnimationKeyframe in the tree.
+        if (n.HasMethod("_get_configuration_warnings"))
         {
-            var v = n.Call("_get_configuration_warnings");
-            warnings = v.AsStringArray();
+            try
+            {
+                string[] warnings = n.Call("_get_configuration_warnings").AsStringArray();
+                if (warnings != null && warnings.Length > 0) acc.Add((n, warnings));
+            }
+            catch { /* defensive — broken overrides shouldn't crash the dock */ }
         }
-        catch
-        {
-            warnings = System.Array.Empty<string>();
-        }
-        if (warnings != null && warnings.Length > 0) acc.Add((n, warnings));
         foreach (var c in n.GetChildren())
             if (c is Node child) CollectConfigWarnings(child, acc);
     }
