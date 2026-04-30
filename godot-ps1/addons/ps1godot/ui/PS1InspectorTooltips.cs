@@ -2,9 +2,10 @@
 using Godot;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Text.RegularExpressions;
-using System.Xml;
+using System.Xml.Linq;
 
 namespace PS1Godot.UI;
 
@@ -109,21 +110,21 @@ public partial class PS1InspectorTooltips : EditorInspectorPlugin
 
         try
         {
-            using var reader = XmlReader.Create(xmlPath);
-            string? lastMemberName = null;
-            while (reader.Read())
+            // XDocument tolerates summaries with mixed content (<see cref/>,
+            // <para>, <c>, etc.) — XmlReader.ReadElementContentAsString
+            // throws "Element is an invalid XmlNodeType" on those because
+            // the reader lands on a child element instead of pure text.
+            var doc = XDocument.Load(xmlPath);
+            foreach (var member in doc.Descendants("member"))
             {
-                if (reader.NodeType == XmlNodeType.Element && reader.Name == "member")
-                {
-                    lastMemberName = reader.GetAttribute("name");
-                }
-                else if (reader.NodeType == XmlNodeType.Element && reader.Name == "summary"
-                         && lastMemberName != null)
-                {
-                    string summary = reader.ReadElementContentAsString();
-                    StoreSummary(result, lastMemberName, summary);
-                    lastMemberName = null;
-                }
+                string? name = member.Attribute("name")?.Value;
+                if (name == null) continue;
+                var summary = member.Element("summary");
+                if (summary == null) continue;
+                // .Value flattens mixed content to plain text, dropping
+                // tags (the cref text becomes "MyClass.MyProp" which is
+                // fine for a tooltip).
+                StoreSummary(result, name, summary.Value);
             }
         }
         catch (System.Exception e)
