@@ -29,20 +29,20 @@ public partial class PS1Scene : Node3D
         CutsceneCloseup = 6,
     }
 
-    [ExportGroup("Scene")]
     /// <summary>
     /// Authoring label that drives default budgets + editor overlays.
     /// Exporter collapses to one of two render paths: BVH (outdoor) or
     /// Room/portal (interior). Pick the closest match.
     /// </summary>
+    [ExportGroup("Scene")]
     [Export] public SceneTypeKind SceneType { get; set; } = SceneTypeKind.ExplorationOutdoor;
 
-    [ExportGroup("Budgets (authoring only, no runtime effect)")]
     /// <summary>
     /// Soft cap shown in the dock as a budget bar. Greens at &lt;80%, ambers
     /// 80–95%, reds 95+%. No runtime effect — the export still runs over
     /// budget; the bar nudges you toward optimization.
     /// </summary>
+    [ExportGroup("Budgets (authoring only, no runtime effect)")]
     [Export(PropertyHint.Range, "0,20000,100")]
     public int TargetTriangles { get; set; } = 2000;
     /// <summary>
@@ -65,12 +65,12 @@ public partial class PS1Scene : Node3D
     [Export(PropertyHint.Range, "0,32,1")]
     public int MaxTexturePages { get; set; } = 8;
 
-    [ExportGroup("Player")]
     /// <summary>
     /// Player's eye height in meters. Camera sits at this height above the
     /// nav-region floor in first-person mode; third-person uses the
     /// PS1Player's child Camera3D offset instead.
     /// </summary>
+    [ExportGroup("Player")]
     [Export(PropertyHint.Range, "0.3,3.0,0.05,suffix:m")]
     public float PlayerHeight { get; set; } = 1.7f;
     /// <summary>
@@ -96,11 +96,11 @@ public partial class PS1Scene : Node3D
     [Export(PropertyHint.Range, "0.1,40.0,0.1,suffix:m/s²")]
     public float Gravity { get; set; } = 9.81f;
 
-    [ExportGroup("Fog")]
     /// <summary>
     /// Global fog on/off. When off, FogColor / Density / Near / Far are
     /// ignored and the scene clears to BackgroundColor (or black).
     /// </summary>
+    [ExportGroup("Fog")]
     [Export] public bool FogEnabled { get; set; } = false;
     /// <summary>
     /// Color geometry fades toward at distance. Picks the GPU clear color
@@ -129,13 +129,13 @@ public partial class PS1Scene : Node3D
     [Export(PropertyHint.Range, "0,65535,1")]
     public int FogFar { get; set; } = 0;
 
-    [ExportGroup("Background")]
     /// <summary>
     /// When ON, the GPU clear color comes from BackgroundColor instead of
     /// FogColor. Lets interiors keep pitch-black void behind dim mood-lit
     /// geometry while a separate fog tint still ramps mid-distance haze.
     /// (v32+)
     /// </summary>
+    [ExportGroup("Background")]
     [Export] public bool BackgroundColorEnabled { get; set; } = false;
     /// <summary>
     /// Scene-level backdrop tone (only applies when BackgroundColorEnabled
@@ -144,22 +144,22 @@ public partial class PS1Scene : Node3D
     /// </summary>
     [Export] public Color BackgroundColor { get; set; } = new Color(0f, 0f, 0f);
 
-    [ExportGroup("Scripting")]
     /// <summary>
     /// Lua script attached to this scene's onSceneCreationStart /
     /// onSceneCreationEnd hooks. Use for scene-level setup (camera lock,
     /// initial Music.Play, controls toggling). Per-object scripts go on
     /// PS1MeshInstance.ScriptFile instead.
     /// </summary>
+    [ExportGroup("Scripting")]
     [Export(PropertyHint.File, "*.lua")]
     public string SceneLuaFile { get; set; } = "";
 
-    [ExportGroup("Audio")]
     /// <summary>
     /// Audio clips this scene loads. SPU-routed clips ship in the .spu
     /// sidecar; XA-routed stream from .xa. Each entry is a PS1AudioClip
     /// resource — set route, loop, and source .wav there.
     /// </summary>
+    [ExportGroup("Audio")]
     [Export]
     public Godot.Collections.Array<PS1AudioClip> AudioClips { get; set; } = new();
 
@@ -187,12 +187,12 @@ public partial class PS1Scene : Node3D
     [Export]
     public Godot.Collections.Array<PS1DrumKit> DrumKits { get; set; } = new();
 
-    [ExportGroup("Sound (Phase 5)")]
     /// <summary>
     /// Composite SFX — frame-keyed event lists callable from Lua via
     /// Sound.PlayMacro("name"). Pulls from the SFX voice pool (won't fight
     /// reserved music voices). See PS1SoundMacro for event syntax.
     /// </summary>
+    [ExportGroup("Sound (Phase 5)")]
     [Export]
     public Godot.Collections.Array<PS1SoundMacro> SoundMacros { get; set; } = new();
 
@@ -204,33 +204,33 @@ public partial class PS1Scene : Node3D
     [Export]
     public Godot.Collections.Array<PS1SoundFamily> SoundFamilies { get; set; } = new();
 
-    [ExportGroup("Scene loading")]
     /// <summary>
     /// Additional scenes packaged with the open scene. Open scene exports
     /// as scene_0; SubScenes[0] = scene_1, [1] = scene_2, etc. Lua calls
     /// Scene.Load(N) at runtime to swap. Each PackedScene must have a
     /// PS1Scene root.
     /// </summary>
+    [ExportGroup("Scene loading")]
     [Export]
     public Godot.Collections.Array<PackedScene> SubScenes { get; set; } = new();
 
-    [ExportGroup("Export")]
     /// <summary>
     /// World-to-PSX scale divisor. Godot units / GteScaling = PSX
     /// fixed-point units. Default 4.0 fits room-scale Godot demos. Higher
     /// values shrink the scene (large worlds stay inside int16 fp12);
     /// lower amplifies (1 Godot = 1 PSX unit).
     /// </summary>
+    [ExportGroup("Export")]
     [Export(PropertyHint.Range, "0.1,1000.0,0.1")]
     public float GteScaling { get; set; } = 4.0f;
 
-    [ExportGroup("Round-trip")]
     /// <summary>
     /// Source .blend file this scene was authored in. "Send to Blender"
     /// opens this file and auto-runs the import-metadata operator. Empty
     /// = launch Blender with no file open. res:// or absolute paths both
     /// work.
     /// </summary>
+    [ExportGroup("Round-trip")]
     [Export(PropertyHint.File, "*.blend")]
     public string SourceBlendFile { get; set; } = "";
 

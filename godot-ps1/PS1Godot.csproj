@@ -6,5 +6,16 @@
     <LangVersion>latest</LangVersion>
     <RootNamespace>PS1Godot</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
+    <!-- Emit PS1Godot.xml next to the DLL. Godot reads this sidecar to
+         surface /// doc-comments on [Export] fields as inspector tooltips.
+         Without this flag, hovering over any property shows nothing even
+         though every node has detailed XML docs. -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+
+    <!-- CS1591: missing XML comment on public type/member. We document
+         [Export] fields but not every internal helper, and we don't want
+         the compiler to scream about every unannotated private. -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
 </Project>

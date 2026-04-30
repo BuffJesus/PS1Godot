@@ -30,13 +30,13 @@ public partial class PS1MeshInstance : MeshInstance3D
         MeshVertexColors, // Use the mesh's COLOR channel if present (Phase 2.5)
     }
 
-    [ExportGroup("PS1 / Look")]
     /// <summary>
     /// Texture bit depth at export. 4bpp = 16-color CLUT (best VRAM, harshest
     /// quantize), 8bpp = 256-color CLUT (default; safe middle ground), 16bpp =
     /// direct color (no palette but eats 2× VRAM). Pick 4bpp for decals/sprites,
     /// 8bpp for world geometry, 16bpp only for skies / cinematics.
     /// </summary>
+    [ExportGroup("PS1 / Look")]
     [Export] public PSXBPP BitDepth { get; set; } = PSXBPP.TEX_8BIT;
     /// <summary>
     /// How vertex colors get filled. FlatColor = every vertex gets the same
@@ -50,12 +50,12 @@ public partial class PS1MeshInstance : MeshInstance3D
     /// </summary>
     [Export] public Color FlatColor { get; set; } = new Color(0.5f, 0.5f, 0.5f, 1.0f);
 
-    [ExportGroup("PS1 / Collision")]
     /// <summary>
     /// None = no collision (decals, fog cards). Static = participates in BVH /
     /// world push-back (floors, walls). Dynamic = per-object AABB collider
     /// (moving platforms, doors).
     /// </summary>
+    [ExportGroup("PS1 / Collision")]
     [Export] public CollisionKind Collision { get; set; } = CollisionKind.None;
     /// <summary>
     /// Bitmask deciding which layers this collider participates in. Default
@@ -65,12 +65,12 @@ public partial class PS1MeshInstance : MeshInstance3D
     [Export(PropertyHint.Range, "0,255,1")]
     public int LayerMask { get; set; } = 0xFF;
 
-    [ExportGroup("PS1 / Scripting")]
     /// <summary>
     /// Optional Lua script attached to this object. Runtime calls
     /// onCreate/onUpdate/onCollideWithPlayer/onInteract on it as events fire.
     /// Empty = no script. See lua/templates/ for starter snippets.
     /// </summary>
+    [ExportGroup("PS1 / Scripting")]
     [Export(PropertyHint.File, "*.lua")]
     public string ScriptFile { get; set; } = "";
 
@@ -119,7 +119,6 @@ public partial class PS1MeshInstance : MeshInstance3D
     //
     // Don't rename the enum members — they ARE the wire identifiers
     // (see exporter/PS1Metadata.cs).
-    [ExportGroup("PS1 / Metadata")]
     /// <summary>
     /// Authoring role this mesh plays. Drives Slot D batching + chunk
     /// residency decisions. StaticWorld = walls/floors/props that don't
@@ -127,6 +126,7 @@ public partial class PS1MeshInstance : MeshInstance3D
     /// CollisionOnly = invisible mesh that supplies collision only (e.g.
     /// for fixed-camera scenes — see CollisionOnly in ExportMode below).
     /// </summary>
+    [ExportGroup("PS1 / Metadata")]
     [Export] public MeshRole MeshRole { get; set; } = MeshRole.StaticWorld;
     /// <summary>
     /// How this mesh ships. MergeStatic = batched into static draw lists.
@@ -208,7 +208,6 @@ public partial class PS1MeshInstance : MeshInstance3D
     /// </summary>
     [Export] public Color[] BakedColors { get; set; } = System.Array.Empty<Color>();
 
-    [ExportGroup("PS1 / Baking")]
     /// <summary>
     /// When true, the exporter auto-bakes vertex lighting from scene
     /// DirectionalLight3D / OmniLight3D / SpotLight3D before writing the
@@ -218,6 +217,7 @@ public partial class PS1MeshInstance : MeshInstance3D
     /// BakedColors with a warning). Note: baking mutates BakedColors on
     /// the live scene — if export fails partway, the scene will be dirty.
     /// </summary>
+    [ExportGroup("PS1 / Baking")]
     [Export] public bool AutoBakeVertexLighting { get; set; } = false;
     /// <summary>
     /// When true AND AutoBakeVertexLighting is true, also bake vertex AO
@@ -226,12 +226,12 @@ public partial class PS1MeshInstance : MeshInstance3D
     /// </summary>
     [Export] public bool AutoBakeVertexAO { get; set; } = false;
 
-    [ExportGroup("PS1 / Interactable")]
     /// <summary>
     /// When true, runtime treats this mesh as interactable. Player presses
     /// InteractButton within InteractionRadiusMeters → fires onInteract on
     /// the attached ScriptFile. Most meshes are NOT interactive — opt in.
     /// </summary>
+    [ExportGroup("PS1 / Interactable")]
     [Export] public bool Interactable { get; set; } = false;
     /// <summary>
     /// Distance in meters at which the interact prompt becomes available.

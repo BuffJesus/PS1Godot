@@ -76,10 +76,10 @@ public enum PS1UITextVAlign
 [Icon("res://addons/ps1godot/icons/ps1_ui_element.svg")]
 public partial class PS1UIElement : Node
 {
-    [ExportGroup("Identity")]
     /// <summary>
     /// Lookup name (UI.FindElement uses this). Unique within the canvas.
     /// </summary>
+    [ExportGroup("Identity")]
     [Export] public string ElementName { get; set; } = "";
     /// <summary>
     /// What kind of widget this is. Text = font glyphs, Box = solid
@@ -92,13 +92,13 @@ public partial class PS1UIElement : Node
     /// </summary>
     [Export] public bool VisibleOnLoad { get; set; } = true;
 
-    [ExportGroup("Layout")]
     /// <summary>
     /// Placement mode. Custom = X/Y are absolute top-left corner. Non-Custom
     /// = element snaps to one of nine PSX-screen anchor points; X/Y become
     /// insets (edge anchors) or offsets (center anchors). Use anchors so
     /// you don't hand-compute X = 312 for "right edge minus 8".
     /// </summary>
+    [ExportGroup("Layout")]
     [Export] public PS1UIAnchor Anchor { get; set; } = PS1UIAnchor.Custom;
 
     /// <summary>
@@ -130,12 +130,12 @@ public partial class PS1UIElement : Node
     [Export(PropertyHint.Range, "0,576,1,suffix:px")]
     public int Height { get; set; } = 16;
 
-    [ExportGroup("Appearance")]
     /// <summary>
     /// Tint. Text = foreground color (white default). Box = fill color.
     /// Progress = bar's filled portion. Image = ignored (texture is the
     /// color).
     /// </summary>
+    [ExportGroup("Appearance")]
     [Export] public Color Color { get; set; } = new Color(1f, 1f, 1f, 1f);
 
     // Render this element with PSX hardware semi-transparency.

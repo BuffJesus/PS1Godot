@@ -40,7 +40,6 @@ public enum PS1CameraMode
 [Icon("res://addons/ps1godot/icons/ps1_player.svg")]
 public partial class PS1Player : Node3D
 {
-    [ExportGroup("Camera")]
     /// <summary>
     /// Authoring hint for the camera rig. ThirdPerson = trails behind +
     /// above the player (uses the child Camera3D's offset). FirstPerson =
@@ -49,9 +48,9 @@ public partial class PS1Player : Node3D
     /// player; author drives via Lua Camera.SetMode("fixed") for Resident
     /// Evil / FFVII style scenes.
     /// </summary>
+    [ExportGroup("Camera")]
     [Export] public PS1CameraMode CameraMode { get; set; } = PS1CameraMode.ThirdPerson;
 
-    [ExportGroup("Avatar")]
     /// <summary>
     /// Texture for the auto-wired avatar mesh. Lives here (not on the
     /// nested FBX mesh's material_override) because instanced-scene
@@ -59,6 +58,7 @@ public partial class PS1Player : Node3D
     /// here survives re-imports. Wired into the ps1_default shader's
     /// albedo_tex parameter by _EnterTree.
     /// </summary>
+    [ExportGroup("Avatar")]
     private Texture2D? _avatarTexture;
     [Export] public Texture2D? AvatarTexture
     {

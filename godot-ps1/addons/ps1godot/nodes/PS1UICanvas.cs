@@ -35,11 +35,11 @@ public enum PS1UIResidency
 [Icon("res://addons/ps1godot/icons/ps1_ui_canvas.svg")]
 public partial class PS1UICanvas : Node
 {
-    [ExportGroup("Identity")]
     /// <summary>
     /// Lua-callable name. UI.SetVisible("name", true/false), UI.FindElement,
     /// etc. all match by this string. Must be unique within the scene.
     /// </summary>
+    [ExportGroup("Identity")]
     [Export] public string CanvasName { get; set; } = "";
     /// <summary>
     /// When this canvas's VRAM lives. Gameplay = always resident
@@ -57,17 +57,16 @@ public partial class PS1UICanvas : Node
     /// </summary>
     [Export] public bool VisibleOnLoad { get; set; } = true;
 
-    [ExportGroup("Rendering")]
     /// <summary>
     /// Draw order — LIFO-inverted: LOWEST sortOrder draws LAST (= ON TOP).
     /// HIGHEST sortOrder draws FIRST (= behind). Use 0–10 for full-screen
     /// overlays (title fades, dialog boxes); use 200+ for backdrops
     /// (pre-rendered BG canvas).
     /// </summary>
+    [ExportGroup("Rendering")]
     [Export(PropertyHint.Range, "0,255,1")]
     public int SortOrder { get; set; } = 0;
 
-    [ExportGroup("Theming")]
     /// <summary>
     /// Optional shared palette. When set, child elements with a non-Custom
     /// ThemeSlot read their color from this Theme resource. Leave null to
@@ -75,6 +74,7 @@ public partial class PS1UICanvas : Node
     /// addons/ps1godot/themes/PS1Theme.tres — duplicate + edit to
     /// customize without mutating the plugin copy.
     /// </summary>
+    [ExportGroup("Theming")]
     [Export] public PS1Theme? Theme { get; set; }
 
     public override string[] _GetConfigurationWarnings()
