@@ -19,7 +19,7 @@ namespace PS1Godot;
 // bracket the incoming note. Unmatched notes are silent.
 [Tool]
 [GlobalClass]
-[Icon("res://addons/ps1godot/icons/ps1_music_sequence.svg")]
+[Icon("res://addons/ps1godot/icons/ps1_instrument.svg")]
 public partial class PS1Instrument : Resource
 {
     /// <summary>

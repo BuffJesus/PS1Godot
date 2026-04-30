@@ -26,7 +26,7 @@ namespace PS1Godot;
 // surfaces a length mismatch as GD.PushError.
 [Tool]
 [GlobalClass]
-[Icon("res://addons/ps1godot/icons/ps1_audio_clip.svg")]
+[Icon("res://addons/ps1godot/icons/ps1_drum_kit.svg")]
 public partial class PS1DrumKit : Resource
 {
     /// <summary>

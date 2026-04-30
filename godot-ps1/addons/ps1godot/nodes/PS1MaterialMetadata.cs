@@ -22,6 +22,7 @@ namespace PS1Godot;
 //   exporter/BlenderMetadataWriter.cs       writer serializes these
 [Tool]
 [GlobalClass]
+[Icon("res://addons/ps1godot/icons/ps1_material_metadata.svg")]
 public partial class PS1MaterialMetadata : Resource
 {
     /// <summary>

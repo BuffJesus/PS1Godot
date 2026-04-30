@@ -11,7 +11,7 @@ namespace PS1Godot;
 // SizeBox becomes a pure padding wrapper.
 [Tool]
 [GlobalClass]
-[Icon("res://addons/ps1godot/icons/ps1_ui_canvas.svg")]
+[Icon("res://addons/ps1godot/icons/ps1_ui_sizebox.svg")]
 public partial class PS1UISizeBox : Node
 {
     [ExportGroup("Identity")]

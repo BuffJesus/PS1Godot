@@ -21,7 +21,7 @@ namespace PS1Godot;
 // region pointing at an XA/CDDA-routed clip.
 [Tool]
 [GlobalClass]
-[Icon("res://addons/ps1godot/icons/ps1_audio_clip.svg")]
+[Icon("res://addons/ps1godot/icons/ps1_sample_region.svg")]
 public partial class PS1SampleRegion : Resource
 {
     /// <summary>

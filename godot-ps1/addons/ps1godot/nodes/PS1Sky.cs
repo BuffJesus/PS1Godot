@@ -20,7 +20,7 @@ namespace PS1Godot;
 // it finds and warns about the rest. The format only carries one.
 [Tool]
 [GlobalClass]
-[Icon("res://addons/ps1godot/icons/ps1_scene.svg")]
+[Icon("res://addons/ps1godot/icons/ps1_sky.svg")]
 public partial class PS1Sky : Node3D
 {
     /// <summary>

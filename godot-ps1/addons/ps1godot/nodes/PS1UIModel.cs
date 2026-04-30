@@ -28,7 +28,7 @@ namespace PS1Godot;
 //    or spin them via UI.SetModelOrbit.
 [Tool]
 [GlobalClass]
-[Icon("res://addons/ps1godot/icons/ps1_ui_canvas.svg")]
+[Icon("res://addons/ps1godot/icons/ps1_ui_model.svg")]
 public partial class PS1UIModel : Node
 {
     /// <summary>

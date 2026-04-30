@@ -14,7 +14,7 @@ namespace PS1Godot;
 // for its layout effect on the parent.
 [Tool]
 [GlobalClass]
-[Icon("res://addons/ps1godot/icons/ps1_ui_canvas.svg")]
+[Icon("res://addons/ps1godot/icons/ps1_ui_spacer.svg")]
 public partial class PS1UISpacer : Node
 {
     /// <summary>

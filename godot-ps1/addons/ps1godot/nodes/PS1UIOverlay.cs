@@ -11,7 +11,7 @@ namespace PS1Godot;
 // often what you want for icons.
 [Tool]
 [GlobalClass]
-[Icon("res://addons/ps1godot/icons/ps1_ui_canvas.svg")]
+[Icon("res://addons/ps1godot/icons/ps1_ui_overlay.svg")]
 public partial class PS1UIOverlay : Node
 {
     [ExportGroup("Identity")]

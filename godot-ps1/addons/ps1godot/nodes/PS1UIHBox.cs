@@ -21,7 +21,7 @@ namespace PS1Godot;
 // container is purely an authoring convenience.
 [Tool]
 [GlobalClass]
-[Icon("res://addons/ps1godot/icons/ps1_ui_canvas.svg")]
+[Icon("res://addons/ps1godot/icons/ps1_ui_hbox.svg")]
 public partial class PS1UIHBox : Node
 {
     [ExportGroup("Identity")]

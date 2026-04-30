@@ -17,7 +17,7 @@ namespace PS1Godot;
 // axes swapped.
 [Tool]
 [GlobalClass]
-[Icon("res://addons/ps1godot/icons/ps1_ui_canvas.svg")]
+[Icon("res://addons/ps1godot/icons/ps1_ui_vbox.svg")]
 public partial class PS1UIVBox : Node
 {
     [ExportGroup("Identity")]
