@@ -57,4 +57,48 @@ public partial class PS1Animation : Node
     /// </summary>
     [Export(PropertyHint.Range, "1,8191,1,suffix:frames")]
     public int TotalFrames { get; set; } = 60;
+
+    public override string[] _GetConfigurationWarnings()
+    {
+        var w = new System.Collections.Generic.List<string>();
+
+        // Object tracks need a target. Camera tracks (cutscene-only) don't.
+        bool isObjectTrack = TrackType == PS1AnimationTrackType.Position
+                          || TrackType == PS1AnimationTrackType.Rotation
+                          || TrackType == PS1AnimationTrackType.Active;
+        if (isObjectTrack && string.IsNullOrEmpty(TargetObjectName))
+        {
+            w.Add("TargetObjectName is empty. Object-typed animations need to name " +
+                  "a PS1MeshInstance in the scene; without it, the runtime has no " +
+                  "GameObject to drive and the animation will never play.");
+        }
+        else if (isObjectTrack)
+        {
+            // Verify the target name resolves to a sibling/descendant under
+            // the scene root. Walk up to find the scene root, then search.
+            Node root = this;
+            while (root.GetParent() is Node p) root = p;
+            if (FindMeshByName(root, TargetObjectName) is null)
+            {
+                w.Add($"TargetObjectName '{TargetObjectName}' doesn't match the Name of " +
+                      "any PS1MeshInstance in this scene. The runtime resolves the target " +
+                      "by node name at export — fix the spelling or rename the mesh.");
+            }
+        }
+        return w.ToArray();
+    }
+
+    private static PS1MeshInstance? FindMeshByName(Node n, string name)
+    {
+        if (n is PS1MeshInstance pmi && pmi.Name == name) return pmi;
+        foreach (var c in n.GetChildren())
+        {
+            if (c is Node child)
+            {
+                var hit = FindMeshByName(child, name);
+                if (hit != null) return hit;
+            }
+        }
+        return null;
+    }
 }

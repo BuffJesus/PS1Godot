@@ -264,6 +264,44 @@ public partial class PS1Scene : Node3D
             warnings.Add($"MaxTexturePages ({MaxTexturePages}) is high — PSX VRAM has 16 tpages total; " +
                          "reserving ≤10 for scene textures leaves room for UI, fonts, and skinned characters.");
 
+        // Sound resources are Resource-typed and don't surface their own
+        // configuration warnings in the scene tree. Hoist their identity
+        // checks here so authors see them next to the scene node.
+        for (int i = 0; i < SoundMacros.Count; i++)
+        {
+            var m = SoundMacros[i];
+            if (m == null) continue;
+            if (string.IsNullOrEmpty(m.MacroName))
+                warnings.Add($"SoundMacros[{i}] has an empty MacroName — Sound.PlayMacro " +
+                             "will never resolve this macro at runtime.");
+        }
+        for (int i = 0; i < SoundFamilies.Count; i++)
+        {
+            var f = SoundFamilies[i];
+            if (f == null) continue;
+            if (string.IsNullOrEmpty(f.FamilyName))
+                warnings.Add($"SoundFamilies[{i}] has an empty FamilyName — " +
+                             "Sound.PlayFamily will never resolve this family at runtime.");
+            if (f.AudioClipNames.Count == 0)
+                warnings.Add($"SoundFamily '{f.FamilyName}' has no AudioClipNames. " +
+                             "A family with no clips silently no-ops at runtime.");
+        }
+        for (int i = 0; i < MusicSequences.Count; i++)
+        {
+            var seq = MusicSequences[i];
+            if (seq == null) continue;
+            for (int c = 0; c < seq.Channels.Count; c++)
+            {
+                var ch = seq.Channels[c];
+                if (ch == null) continue;
+                if (ch.Instrument != null && !string.IsNullOrEmpty(ch.AudioClipName))
+                    warnings.Add($"MusicSequences[{i}] channel[{c}] has both Instrument " +
+                                 $"and AudioClipName set; AudioClipName ('{ch.AudioClipName}') " +
+                                 "is silently overridden by the instrument's first region. " +
+                                 "Clear one of them to make the routing explicit.");
+            }
+        }
+
         return warnings.ToArray();
     }
 }

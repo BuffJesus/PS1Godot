@@ -31,4 +31,14 @@ public partial class PS1Cutscene : Node
     /// </summary>
     [Export(PropertyHint.Range, "1,8191,1,suffix:frames")]
     public int TotalFrames { get; set; } = 90;
+
+    public override string[] _GetConfigurationWarnings()
+    {
+        var w = new System.Collections.Generic.List<string>();
+        if (string.IsNullOrEmpty(CutsceneName))
+            w.Add("CutsceneName is empty. Cutscene.Play(\"name\") needs a non-empty " +
+                  "name to find this cutscene at runtime; an empty name will silently " +
+                  "fail to dispatch.");
+        return w.ToArray();
+    }
 }
