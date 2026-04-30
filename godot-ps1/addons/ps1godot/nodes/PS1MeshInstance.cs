@@ -319,4 +319,27 @@ public partial class PS1MeshInstance : MeshInstance3D
             property["usage"] = (long)PropertyUsageFlags.Storage;
         }
     }
+
+    public override string[] _GetConfigurationWarnings()
+    {
+        var w = new System.Collections.Generic.List<string>();
+
+        // AutoBake on but BakedColors empty = first export hasn't run yet,
+        // or someone cleared the bake. Flag so authors know the next F5
+        // will bake (cost: ~1-2s per mesh) — and that scene-tree COLOR
+        // currently shows raw, not baked.
+        if (AutoBakeVertexLighting && (BakedColors == null || BakedColors.Length == 0))
+            w.Add("AutoBakeVertexLighting is ON but BakedColors is empty. The mesh will " +
+                  "render unlit in the editor until the next export bakes lighting. Press " +
+                  "Build/Export from the dock to populate.");
+
+        // Interactable + no script = onInteract callbacks have nowhere to
+        // dispatch. Mirrors the PS1TriggerBox check.
+        if (Interactable && string.IsNullOrEmpty(ScriptFile))
+            w.Add("Interactable is ON but ScriptFile is empty. Pressing the interact button " +
+                  "will fire onInteract on a script that doesn't exist — assign a .lua file " +
+                  "or turn off Interactable.");
+
+        return w.ToArray();
+    }
 }
