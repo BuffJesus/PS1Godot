@@ -28,13 +28,22 @@ public partial class PS1InspectorTooltips : EditorInspectorPlugin
     private static readonly Dictionary<string, Dictionary<string, string>> s_docs
         = LoadDocsFromXml();
 
+    private static bool s_didDiagFirstHandle = false;
+
     public override bool _CanHandle(GodotObject @object)
     {
         if (@object == null) return false;
         var type = @object.GetType();
         // Also handle Resource-typed PS1 things (PS1SoundMacro, PS1Theme,
         // PS1AudioClip, etc.). The leaf class name is the dictionary key.
-        return s_docs.ContainsKey(type.Name);
+        bool ok = s_docs.ContainsKey(type.Name);
+        if (!s_didDiagFirstHandle)
+        {
+            s_didDiagFirstHandle = true;
+            GD.Print($"[PS1Godot] Inspector tooltips: first _CanHandle for type={type.Name} → {ok} " +
+                     $"(docs has {s_docs.Count} known types)");
+        }
+        return ok;
     }
 
     public override void _ParseBegin(GodotObject @object)
@@ -46,16 +55,24 @@ public partial class PS1InspectorTooltips : EditorInspectorPlugin
         Callable.From(() => ApplyTooltipsFor(typeName)).CallDeferred();
     }
 
+    private static int s_diagApplyBudget = 3;
+
     private static void ApplyTooltipsFor(string typeName)
     {
         if (!s_docs.TryGetValue(typeName, out var props)) return;
         var inspector = EditorInterface.Singleton?.GetInspector();
         if (inspector == null) return;
-        ApplyRecursive(inspector, props);
+        int applied = ApplyRecursive(inspector, props);
+        if (s_diagApplyBudget > 0)
+        {
+            s_diagApplyBudget--;
+            GD.Print($"[PS1Godot] Inspector tooltips: applied {applied} of {props.Count} for {typeName}");
+        }
     }
 
-    private static void ApplyRecursive(Node n, Dictionary<string, string> props)
+    private static int ApplyRecursive(Node n, Dictionary<string, string> props)
     {
+        int count = 0;
         if (n is EditorProperty ep)
         {
             string propName = ep.GetEditedProperty();
@@ -68,10 +85,12 @@ public partial class PS1InspectorTooltips : EditorInspectorPlugin
                 {
                     if (c is Control ctl) ctl.TooltipText = tooltip;
                 }
+                count++;
             }
         }
         foreach (var c in n.GetChildren())
-            if (c is Node child) ApplyRecursive(child, props);
+            if (c is Node child) count += ApplyRecursive(child, props);
+        return count;
     }
 
     // ─── XML loader ──────────────────────────────────────────────────────
@@ -79,8 +98,14 @@ public partial class PS1InspectorTooltips : EditorInspectorPlugin
     private static Dictionary<string, Dictionary<string, string>> LoadDocsFromXml()
     {
         var result = new Dictionary<string, Dictionary<string, string>>();
-        string xmlPath = FindXmlSidecar();
-        if (xmlPath == null || !File.Exists(xmlPath)) return result;
+        string? xmlPath = FindXmlSidecar();
+        if (xmlPath == null || !File.Exists(xmlPath))
+        {
+            GD.PushWarning("[PS1Godot] PS1Godot.xml not found for inspector tooltips. " +
+                           $"Searched: {DescribeSearchPaths()}. " +
+                           "Inspector field hover descriptions will be unavailable until the XML is located.");
+            return result;
+        }
 
         try
         {
@@ -104,7 +129,12 @@ public partial class PS1InspectorTooltips : EditorInspectorPlugin
         catch (System.Exception e)
         {
             GD.PushWarning($"[PS1Godot] Failed to parse PS1Godot.xml for inspector tooltips: {e.Message}");
+            return result;
         }
+
+        int totalProps = 0;
+        foreach (var kvp in result) totalProps += kvp.Value.Count;
+        GD.Print($"[PS1Godot] Inspector tooltips loaded: {result.Count} types, {totalProps} properties from {xmlPath}");
         return result;
     }
 
@@ -157,20 +187,47 @@ public partial class PS1InspectorTooltips : EditorInspectorPlugin
         return s;
     }
 
-    private static string? FindXmlSidecar()
+    // Possible locations for PS1Godot.xml. Godot's mono runtime sometimes
+    // returns an empty Assembly.Location (loaded from memory), so fall back
+    // to known build-output paths under res://.godot/mono/temp/bin/<config>.
+    private static string[] CandidateXmlPaths()
     {
-        // The XML sidecar is emitted next to the compiled DLL by the C#
-        // compiler when GenerateDocumentationFile=true. Locate the running
-        // assembly and look for "<assemblyName>.xml" in the same directory.
+        var paths = new System.Collections.Generic.List<string>();
         try
         {
             var asm = Assembly.GetExecutingAssembly();
             string? loc = asm.Location;
-            if (string.IsNullOrEmpty(loc)) return null;
-            string dir = Path.GetDirectoryName(loc) ?? "";
-            string xmlName = Path.GetFileNameWithoutExtension(loc) + ".xml";
-            string full = Path.Combine(dir, xmlName);
-            return File.Exists(full) ? full : null;
+            if (!string.IsNullOrEmpty(loc))
+            {
+                string dir = Path.GetDirectoryName(loc) ?? "";
+                string xmlName = Path.GetFileNameWithoutExtension(loc) + ".xml";
+                paths.Add(Path.Combine(dir, xmlName));
+            }
+        }
+        catch { /* fall through to project-relative paths */ }
+
+        // Project-relative fallbacks. ProjectSettings.GlobalizePath turns
+        // res:// into a real OS path that File.Exists can stat.
+        foreach (string config in new[] { "Debug", "ExportDebug", "Release" })
+        {
+            string p = ProjectSettings.GlobalizePath($"res://.godot/mono/temp/bin/{config}/PS1Godot.xml");
+            if (!paths.Contains(p)) paths.Add(p);
+        }
+        return paths.ToArray();
+    }
+
+    private static string DescribeSearchPaths()
+        => string.Join(", ", CandidateXmlPaths());
+
+    private static string? FindXmlSidecar()
+    {
+        try
+        {
+            foreach (string p in CandidateXmlPaths())
+            {
+                if (File.Exists(p)) return p;
+            }
+            return null;
         }
         catch
         {
