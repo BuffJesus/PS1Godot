@@ -87,6 +87,17 @@ public static class BackgroundBaker
         var saved = SaveBakeShaderState(matDefault, matSkinned);
         ApplyBakeShaderState(matDefault, matSkinned);
 
+        // Per-mesh ShaderMaterial overrides that reference ps1.gdshader /
+        // ps1_skinned.gdshader bypass the singleton mute above — modulate
+        // and quantize default to the shader's uniforms (2.0 / 5 / true),
+        // which would double-apply PSX-look effects into the bake. Walk
+        // the scene and mute every such material individually.
+        var instanceMute = ApplyBakeShaderStateToInstances();
+        if (instanceMute.Count > 0)
+        {
+            GD.Print($"[PS1Godot] BG baker: muted {instanceMute.Count} per-mesh ShaderMaterial(s) so per-instance tints don't render with PSX modulate during the bake.");
+        }
+
         // Auto-bake Vertex Lighting + AO before the render if the scene
         // has any Light3D and any PS1MeshInstance. Lets a one-click
         // "Bake Background" replace the three-step
@@ -119,15 +130,38 @@ public static class BackgroundBaker
             GD.Print($"[PS1Godot] BG baker: applied BakedColors to {meshSwap.Count} mesh(es) for the bake render.");
         }
 
+        // Hide PS1Player + descendants during the bake. Pre-rendered backdrops
+        // are 2D images of the static room — the player avatar is rendered
+        // live by the PSX runtime over the BG every frame. If the avatar
+        // bakes into the PNG, the runtime ends up drawing the live avatar on
+        // top of a frozen copy of itself, producing a "ghost" twin at the
+        // spawn pose forever. Hiding the whole PS1Player subtree (Node3D
+        // visibility is hierarchical) keeps any FBX child mesh out too.
+        var playerHide = HidePlayers();
+        if (playerHide.Count > 0)
+        {
+            GD.Print($"[PS1Godot] BG baker: hid {playerHide.Count} PS1Player subtree(s) so the avatar isn't baked into the backdrop.");
+        }
+
         // Confirmation print — if you don't see this when running the
         // baker, Godot is still on the old C# DLL (memory pin
         // project_godot_dll_hot_reload). Close + reopen the editor.
         GD.Print($"[PS1Godot] BG baker: muting PSX shader during bake (modulate {saved.DefaultModulate} → 1, quantize bits {saved.DefaultBits} → 0, dither {saved.DefaultDither} → false).");
 
+        // FF9-style supersampled bake: render at 4× target resolution with
+        // 8× MSAA, then downsample with Lanczos. Each output pixel ends up
+        // averaging ~16 subpixel samples, so geometry edges stay smooth and
+        // texture detail (wood grain, brick patterns) doesn't fall through
+        // the 256-pixel-wide grid. The PSX runtime samples the resulting
+        // PNG nearest-neighbor, so we want the input to already carry as
+        // much detail as one PSX texel can hold.
+        const int SUPERSAMPLE = 4;
+        int hiW = width  * SUPERSAMPLE;
+        int hiH = height * SUPERSAMPLE;
         var subviewport = new SubViewport
         {
             Name = "PS1GodotBgBaker_Viewport",
-            Size = new Vector2I(width, height),
+            Size = new Vector2I(hiW, hiH),
             // OwnWorld3D = false → SubViewport inherits its parent's
             // World3D once we add it to the editor tree. We then
             // explicitly set World3D to the source camera's so the
@@ -137,10 +171,7 @@ public static class BackgroundBaker
             TransparentBg = false,
             RenderTargetClearMode = SubViewport.ClearMode.Always,
             RenderTargetUpdateMode = SubViewport.UpdateMode.Once,
-            // Anti-alias off: we want the PSX-like crispness; if authors
-            // want smoother BGs they can run the PNG through a downscale
-            // step in their image editor of choice.
-            Msaa3D = Viewport.Msaa.Disabled,
+            Msaa3D = Viewport.Msaa.Msaa8X,
         };
         host.AddChild(subviewport);
         subviewport.World3D = sourceCam.GetWorld3D();
@@ -183,6 +214,8 @@ public static class BackgroundBaker
         // the editor viewport never gets stuck without modulate or with
         // its meshes swapped to the bake-temporary ArrayMesh copies.
         RestoreBakedColorMeshes(meshSwap);
+        RestorePlayers(playerHide);
+        RestoreBakeShaderStateOnInstances(instanceMute);
         RestoreBakeShaderState(matDefault, matSkinned, saved);
 
         if (image == null || image.IsEmpty())
@@ -196,6 +229,16 @@ public static class BackgroundBaker
                 "rule out a stale plugin DLL, then re-run the bake.");
             subviewport.QueueFree();
             return null;
+        }
+
+        // Downsample 4× → target with Lanczos. Each output pixel becomes
+        // a weighted average of 16+ source pixels (×8 MSAA on top), giving
+        // anti-aliased silhouettes and avoiding the chunky stair-step look
+        // of rendering at native 256×240. This is the offline-render trick
+        // FF9 used: render BIG with high quality, downsample to PSX size.
+        if (image.GetWidth() != width || image.GetHeight() != height)
+        {
+            image.Resize(width, height, Image.Interpolation.Lanczos);
         }
 
         // Strip alpha — PSX BGs are opaque. Saves a CLUT slot too once
@@ -362,6 +405,114 @@ public static class BackgroundBaker
             }
         }
         swapped.Clear();
+    }
+
+    // ── Mute per-mesh ShaderMaterial overrides during the bake ────────
+    //
+    // The bake-mute pair above only touches the shared
+    // ps1_default.tres / ps1_skinned.tres singletons. Scenes that author
+    // per-mesh ShaderMaterial sub_resources (e.g. for distinct tint_color
+    // per object) reference the same ps1.gdshader / ps1_skinned.gdshader
+    // but inherit the shader's default uniforms — modulate_scale=2.0,
+    // preview_quantize_bits=5, preview_dither_enabled=true — so they
+    // render the bake with PSX-look already applied, on top of which the
+    // runtime applies its own quantize. Walk every MeshInstance3D in
+    // the scene, identify ShaderMaterials whose Shader is one of ours,
+    // save + override their per-instance uniforms, restore on the way
+    // out.
+    private record struct InstanceMuteEntry(
+        ShaderMaterial Material,
+        Variant Modulate, Variant Bits, Variant Dither);
+
+    private static System.Collections.Generic.List<InstanceMuteEntry> ApplyBakeShaderStateToInstances()
+    {
+        var muted = new System.Collections.Generic.List<InstanceMuteEntry>();
+        var sceneRoot = EditorInterface.Singleton?.GetEditedSceneRoot();
+        if (sceneRoot == null) return muted;
+
+        var seen = new System.Collections.Generic.HashSet<ulong>();
+        WalkAndMuteMaterials(sceneRoot, muted, seen);
+        return muted;
+    }
+
+    private static void WalkAndMuteMaterials(
+        Node n,
+        System.Collections.Generic.List<InstanceMuteEntry> muted,
+        System.Collections.Generic.HashSet<ulong> seen)
+    {
+        if (n is MeshInstance3D mi && mi.MaterialOverride is ShaderMaterial sm
+            && IsPS1Shader(sm.Shader) && seen.Add(sm.GetInstanceId()))
+        {
+            muted.Add(new InstanceMuteEntry(
+                sm,
+                sm.GetShaderParameter("modulate_scale"),
+                sm.GetShaderParameter("preview_quantize_bits"),
+                sm.GetShaderParameter("preview_dither_enabled")));
+            sm.SetShaderParameter("modulate_scale", 1.0f);
+            sm.SetShaderParameter("preview_quantize_bits", 0);
+            sm.SetShaderParameter("preview_dither_enabled", false);
+        }
+        foreach (var child in n.GetChildren()) WalkAndMuteMaterials(child, muted, seen);
+    }
+
+    private static bool IsPS1Shader(Shader? shader)
+    {
+        if (shader == null) return false;
+        string path = shader.ResourcePath ?? string.Empty;
+        return path.EndsWith("/ps1.gdshader") || path.EndsWith("/ps1_skinned.gdshader");
+    }
+
+    private static void RestoreBakeShaderStateOnInstances(
+        System.Collections.Generic.List<InstanceMuteEntry> muted)
+    {
+        foreach (var entry in muted)
+        {
+            if (GodotObject.IsInstanceValid(entry.Material))
+            {
+                entry.Material.SetShaderParameter("modulate_scale", entry.Modulate);
+                entry.Material.SetShaderParameter("preview_quantize_bits", entry.Bits);
+                entry.Material.SetShaderParameter("preview_dither_enabled", entry.Dither);
+            }
+        }
+        muted.Clear();
+    }
+
+    // ── Hide PS1Player subtrees during the bake ───────────────────────
+    private record struct PlayerVisibilityEntry(Node3D Node, bool WasVisible);
+
+    private static System.Collections.Generic.List<PlayerVisibilityEntry> HidePlayers()
+    {
+        var hidden = new System.Collections.Generic.List<PlayerVisibilityEntry>();
+        var sceneRoot = EditorInterface.Singleton?.GetEditedSceneRoot();
+        if (sceneRoot == null) return hidden;
+        WalkAndHidePlayers(sceneRoot, hidden);
+        return hidden;
+    }
+
+    private static void WalkAndHidePlayers(Node n, System.Collections.Generic.List<PlayerVisibilityEntry> hidden)
+    {
+        if (n is PS1Player p)
+        {
+            hidden.Add(new PlayerVisibilityEntry(p, p.Visible));
+            p.Visible = false;
+            // Don't recurse — Node3D visibility is hierarchical, so hiding
+            // the PS1Player already hides every descendant. Bailing here
+            // also avoids touching nested PS1Players (unusual but possible).
+            return;
+        }
+        foreach (var child in n.GetChildren()) WalkAndHidePlayers(child, hidden);
+    }
+
+    private static void RestorePlayers(System.Collections.Generic.List<PlayerVisibilityEntry> hidden)
+    {
+        foreach (var entry in hidden)
+        {
+            if (GodotObject.IsInstanceValid(entry.Node))
+            {
+                entry.Node.Visible = entry.WasVisible;
+            }
+        }
+        hidden.Clear();
     }
 
     private static string ResolveDefaultPath(Camera3D cam)
