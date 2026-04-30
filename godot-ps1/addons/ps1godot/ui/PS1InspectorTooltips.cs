@@ -29,22 +29,12 @@ public partial class PS1InspectorTooltips : EditorInspectorPlugin
     private static readonly Dictionary<string, Dictionary<string, string>> s_docs
         = LoadDocsFromXml();
 
-    private static bool s_didDiagFirstHandle = false;
-
     public override bool _CanHandle(GodotObject @object)
     {
         if (@object == null) return false;
-        var type = @object.GetType();
         // Also handle Resource-typed PS1 things (PS1SoundMacro, PS1Theme,
         // PS1AudioClip, etc.). The leaf class name is the dictionary key.
-        bool ok = s_docs.ContainsKey(type.Name);
-        if (!s_didDiagFirstHandle)
-        {
-            s_didDiagFirstHandle = true;
-            GD.Print($"[PS1Godot] Inspector tooltips: first _CanHandle for type={type.Name} → {ok} " +
-                     $"(docs has {s_docs.Count} known types)");
-        }
-        return ok;
+        return s_docs.ContainsKey(@object.GetType().Name);
     }
 
     public override void _ParseBegin(GodotObject @object)
@@ -56,19 +46,12 @@ public partial class PS1InspectorTooltips : EditorInspectorPlugin
         Callable.From(() => ApplyTooltipsFor(typeName)).CallDeferred();
     }
 
-    private static int s_diagApplyBudget = 3;
-
     private static void ApplyTooltipsFor(string typeName)
     {
         if (!s_docs.TryGetValue(typeName, out var props)) return;
         var inspector = EditorInterface.Singleton?.GetInspector();
         if (inspector == null) return;
-        int applied = ApplyRecursive(inspector, props);
-        if (s_diagApplyBudget > 0)
-        {
-            s_diagApplyBudget--;
-            GD.Print($"[PS1Godot] Inspector tooltips: applied {applied} of {props.Count} for {typeName}");
-        }
+        ApplyRecursive(inspector, props);
     }
 
     private static int ApplyRecursive(Node n, Dictionary<string, string> props)
@@ -133,9 +116,6 @@ public partial class PS1InspectorTooltips : EditorInspectorPlugin
             return result;
         }
 
-        int totalProps = 0;
-        foreach (var kvp in result) totalProps += kvp.Value.Count;
-        GD.Print($"[PS1Godot] Inspector tooltips loaded: {result.Count} types, {totalProps} properties from {xmlPath}");
         return result;
     }
 
