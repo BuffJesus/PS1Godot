@@ -20,6 +20,16 @@ public partial class PS1GodotDock : VBoxContainer
     [Signal] public delegate void AnalyzeTexturesRequestedEventHandler();
     [Signal] public delegate void ExportOnlyRequestedEventHandler();
     [Signal] public delegate void OpenVramViewerRequestedEventHandler();
+    [Signal] public delegate void QuickActionRequestedEventHandler(int kind);
+
+    public enum QuickActionKind
+    {
+        ConvertMeshToPS1   = 0,
+        FrameSelectedModel = 1,
+        BakeVertexLighting = 2,
+        BakeBackground     = 3,
+        CopyCameraAsLua    = 4,
+    }
 
     // PS1 red — the branded accent from docs/ui-ux-plan.md § Visual language.
     private static readonly Color AccentRed = new(0xCE / 255f, 0x21 / 255f, 0x27 / 255f);
@@ -39,6 +49,8 @@ public partial class PS1GodotDock : VBoxContainer
     private Label? _setupSummary;
     private PS1VRAMGrid? _vramThumb;
     private Label? _vramThumbHint;
+    private VBoxContainer? _quickActionsBox;
+    private Label? _quickActionsHint;
 
     public PS1GodotDock()
     {
@@ -200,6 +212,27 @@ public partial class PS1GodotDock : VBoxContainer
         _lastExportRows.AddThemeConstantOverride("separation", 2);
         inner.AddChild(_lastExportRows);
 
+        // ── Quick actions ───────────────────────────────────────────────
+        // Per-selection action surface. Godot 4.7-dev doesn't expose a
+        // clean way to extend the scene-tree right-click menu, so this
+        // section pops up the relevant actions (Convert / Frame / Bake /
+        // Copy as Lua) based on what's currently selected. Hidden when
+        // no actionable node is picked.
+        AddSectionHeader(inner, "Quick Actions");
+        _quickActionsHint = new Label
+        {
+            Text = "Select a MeshInstance3D, PS1Player, Camera3D, or PS1MeshInstance " +
+                   "to see relevant actions here.",
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+        };
+        _quickActionsHint.AddThemeColorOverride("font_color", new Color(1, 1, 1, 0.55f));
+        _quickActionsHint.AddThemeFontSizeOverride("font_size", 11);
+        inner.AddChild(_quickActionsHint);
+
+        _quickActionsBox = new VBoxContainer { Visible = false };
+        _quickActionsBox.AddThemeConstantOverride("separation", 4);
+        inner.AddChild(_quickActionsBox);
+
         // ── VRAM thumbnail ──────────────────────────────────────────────
         // Surfaces the most-recent export's VRAM layout right in the
         // canonical dock instead of behind the bottom-panel "PS1 VRAM"
@@ -268,6 +301,72 @@ public partial class PS1GodotDock : VBoxContainer
         // Spacer pushes everything to the top.
         var spacer = new Control { SizeFlagsVertical = SizeFlags.ExpandFill };
         inner.AddChild(spacer);
+    }
+
+    // Plugin invokes on every EditorSelection.SelectionChanged so the
+    // quick-action strip stays in sync with what the author has picked.
+    public void RefreshQuickActions(Node? selectedNode)
+    {
+        if (_quickActionsBox == null || _quickActionsHint == null) return;
+        foreach (var c in _quickActionsBox.GetChildren()) c.QueueFree();
+
+        if (selectedNode == null)
+        {
+            _quickActionsBox.Visible = false;
+            _quickActionsHint.Visible = true;
+            return;
+        }
+
+        var actions = new System.Collections.Generic.List<(QuickActionKind kind, string label, string tooltip)>();
+
+        // PS1MeshInstance gets the bake actions; raw MeshInstance3D gets
+        // Convert. Both get Frame in Viewport. Camera3D gets Copy as Lua
+        // and the Background bake (which targets the selected camera).
+        bool isPs1Mesh = selectedNode is PS1MeshInstance;
+        bool isMesh = selectedNode is MeshInstance3D;
+        if (isMesh && !isPs1Mesh)
+        {
+            actions.Add((QuickActionKind.ConvertMeshToPS1, "Convert to PS1MeshInstance",
+                "Wraps this MeshInstance3D in a PS1MeshInstance with PS1-friendly defaults " +
+                "(unlit, vertex-colored, snap on)."));
+        }
+        if (isMesh)
+        {
+            actions.Add((QuickActionKind.FrameSelectedModel, "Frame in Viewport",
+                "Pan/zoom the editor camera so this mesh fills the viewport."));
+        }
+        if (isPs1Mesh)
+        {
+            actions.Add((QuickActionKind.BakeVertexLighting, "Bake Vertex Lighting",
+                "Walk the scene's lights and write N·L into BakedColors. Re-run after moving lights."));
+        }
+        if (selectedNode is Camera3D)
+        {
+            actions.Add((QuickActionKind.CopyCameraAsLua, "Copy as Lua",
+                "Copy this camera's pose+FOV → 3-line Lua snippet to the clipboard. " +
+                "Auto-export covers the common case via _ps1_cameras; this is the manual escape hatch."));
+            actions.Add((QuickActionKind.BakeBackground, "Bake Background",
+                "Render this camera's POV to res://assets/backgrounds/<scene>_<cam>.png. " +
+                "For Resident Evil / FFVII fixed-camera scenes."));
+        }
+
+        if (actions.Count == 0)
+        {
+            _quickActionsBox.Visible = false;
+            _quickActionsHint.Visible = true;
+            return;
+        }
+
+        _quickActionsHint.Visible = false;
+        _quickActionsBox.Visible = true;
+        foreach (var (kind, label, tooltip) in actions)
+        {
+            var btn = new Button { Text = label, TooltipText = tooltip };
+            // Capture-by-value to avoid the foreach-variable trap.
+            var k = kind;
+            btn.Pressed += () => EmitSignal(SignalName.QuickActionRequested, (int)k);
+            _quickActionsBox.AddChild(btn);
+        }
     }
 
     public void ApplyVramSnapshot(VramSnapshot snapshot)

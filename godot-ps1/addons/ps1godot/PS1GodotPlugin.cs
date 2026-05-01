@@ -199,6 +199,7 @@ public partial class PS1GodotPlugin : EditorPlugin
         _dock.AnalyzeTexturesRequested += OnAnalyzeTextures;
         _dock.ExportOnlyRequested += OnExportEmptySplashpack;
         _dock.OpenVramViewerRequested += OnOpenVramViewer;
+        _dock.QuickActionRequested += OnQuickAction;
         // AddControlToDock is marked [Obsolete] in Godot 4.7-dev in favor
         // of AddDock(EditorDock), which isn't stable yet. The old API still
         // works; suppressing the warning so warnings-as-errors builds
@@ -339,24 +340,45 @@ public partial class PS1GodotPlugin : EditorPlugin
 
     private void OnEditorSelectionChanged()
     {
+        var selectedNodes = EditorInterface.Singleton.GetSelection().GetSelectedNodes();
+        Node? primary = null;
+        foreach (var n in selectedNodes) { primary = n as Node; break; }
+
+        // Update the dock's quick-action strip every selection change so
+        // the visible buttons match what the author has picked.
+        _dock?.RefreshQuickActions(primary);
+
         if (_uiCanvasEditor == null) return;
         PS1UICanvas? canvas = null;
         Node? selectedUINode = null;
-        foreach (var n in EditorInterface.Singleton.GetSelection().GetSelectedNodes())
+        foreach (var n in selectedNodes)
         {
             if (n is PS1UICanvas c) { canvas = c; selectedUINode = c; break; }
             // Walk up the tree to find an owning PS1UICanvas — works
             // for any PS1UI* descendant (element, HBox, VBox, etc.)
             // now that containers can nest arbitrarily deep.
-            Node? walker = n;
+            Node? walker = n as Node;
             while (walker != null)
             {
                 if (walker is PS1UICanvas parent) { canvas = parent; break; }
                 walker = walker.GetParent();
             }
-            if (canvas != null) { selectedUINode = n; break; }
+            if (canvas != null) { selectedUINode = n as Node; break; }
         }
         _uiCanvasEditor.SetSelection(canvas, selectedUINode);
+    }
+
+    private void OnQuickAction(int kindInt)
+    {
+        var kind = (PS1GodotDock.QuickActionKind)kindInt;
+        switch (kind)
+        {
+            case PS1GodotDock.QuickActionKind.ConvertMeshToPS1:   OnConvertMeshToPS1();   break;
+            case PS1GodotDock.QuickActionKind.FrameSelectedModel: OnFrameSelectedModel(); break;
+            case PS1GodotDock.QuickActionKind.BakeVertexLighting: OnBakeVertexLighting(); break;
+            case PS1GodotDock.QuickActionKind.BakeBackground:     OnBakeBackground();     break;
+            case PS1GodotDock.QuickActionKind.CopyCameraAsLua:    OnCopyCameraAsLua();    break;
+        }
     }
 
     private void OnSceneChanged(Node sceneRoot)
