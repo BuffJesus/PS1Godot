@@ -43,9 +43,14 @@ public sealed class LastExportSummary
 
     // PS1GodotPlugin calls this once per ExportOneScene invocation,
     // accumulating per-scene results into the running totals.
+    // `validatorOffenders` carries (name, reason) pairs collected from
+    // TextureValidationReport / AudioValidationReport / AnimationLinter /
+    // DecalValidationReport — appended as Warning-tier rows so the
+    // dock surfaces them alongside UV-dirty mesh errors.
     public void Add(SceneData data, int textureWarnings, int audioWarnings,
                     int animationWarnings, int uvDirtyMeshes,
-                    IReadOnlyList<string>? uvDirtyMeshNames = null)
+                    IReadOnlyList<string>? uvDirtyMeshNames = null,
+                    IReadOnlyList<(string Name, string Reason)>? validatorOffenders = null)
     {
         ScenesExported++;
         TextureWarnings    += textureWarnings;
@@ -66,6 +71,18 @@ public sealed class LastExportSummary
                     TopOffenderName = n;
                     TopOffenderReason = "UV out-of-range";
                 }
+            }
+        }
+
+        // Warning-tier offenders from the validators. Order is preserved
+        // so the dock displays them in the order each validator emitted
+        // (texture → audio → animation → decal in the plugin pipeline).
+        if (validatorOffenders != null)
+        {
+            foreach (var (name, reason) in validatorOffenders)
+            {
+                if (string.IsNullOrEmpty(name)) continue;
+                _offenders.Add(new Offender(name, reason, SummarySeverity.Warning));
             }
         }
 

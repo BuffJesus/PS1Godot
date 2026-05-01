@@ -1101,18 +1101,24 @@ public partial class PS1GodotPlugin : EditorPlugin
         }
         GD.Print($"[PS1Godot]   Total triangles: {totalTris}");
 
+        // Validators emit (name, reason) entries into a shared sink so
+        // the dock's click-to-focus rows can surface them alongside the
+        // UV-dirty mesh errors — one place for the author to scan after
+        // F5 instead of digging through the Output panel.
+        var validatorOffenders = new System.Collections.Generic.List<(string Name, string Reason)>();
+
         // v25 texture validation: print per-asset row + warn on oversized
         // sources, 16bpp gameplay textures, and small cutouts that should
         // be 4bpp. Print-only; no behavioral change.
-        int textureWarnings = Exporter.TextureValidationReport.EmitForScene(sceneData, sceneIndex);
+        int textureWarnings = Exporter.TextureValidationReport.EmitForScene(sceneData, sceneIndex, validatorOffenders);
 
         // Audio validation: per-clip row + warn on big SPU clips that
         // should route XA, big resident loops, dangling XA payloads.
-        int audioWarnings = Exporter.AudioValidationReport.EmitForScene(sceneData, sceneIndex);
+        int audioWarnings = Exporter.AudioValidationReport.EmitForScene(sceneData, sceneIndex, validatorOffenders);
 
         // Animation validation: per-track + per-skin-clip rows + warn
         // on dead tracks, oversized clips, high fps/bone counts.
-        int animWarnings = Exporter.AnimationLinter.EmitForScene(sceneData, sceneIndex);
+        int animWarnings = Exporter.AnimationLinter.EmitForScene(sceneData, sceneIndex, validatorOffenders);
 
         // UV linter: warn on any vertex UV outside [0, 1]. PSX rasteriser
         // doesn't wrap or clamp — out-of-range UVs sample neighbouring
@@ -1124,7 +1130,7 @@ public partial class PS1GodotPlugin : EditorPlugin
         // fillrate cost (>6 overlapping). Folded into the texture
         // warning bucket since the dock's summary line groups
         // texture-tier validators together.
-        textureWarnings += Exporter.DecalValidationReport.EmitForScene(sceneData, sceneIndex);
+        textureWarnings += Exporter.DecalValidationReport.EmitForScene(sceneData, sceneIndex, validatorOffenders);
 
         // Aggregate this scene's results into the run-wide summary the
         // dock reads after OnExportEmptySplashpack returns. Mesh-dedup
@@ -1134,7 +1140,8 @@ public partial class PS1GodotPlugin : EditorPlugin
         // failing mesh instead of just counting.
         _lastExportSummary?.Add(
             sceneData, textureWarnings, audioWarnings, animWarnings, uvDirty,
-            new System.Collections.Generic.List<string>(Exporter.MeshLinter.LastDirtyMeshNames));
+            new System.Collections.Generic.List<string>(Exporter.MeshLinter.LastDirtyMeshNames),
+            validatorOffenders);
 
         try
         {

@@ -52,7 +52,11 @@ public static class AudioValidationReport
 
     // Returns the number of WARN-level rows emitted (0 if every clip
     // is fine). Plugin sums this into the dock's "Last export" line.
-    public static int EmitForScene(SceneData data, int sceneIndex)
+    // When `offenderSink` is provided, also appends a (clipName, reason)
+    // entry per warning so the dock's click-to-focus rows can surface
+    // them alongside UV-dirty meshes.
+    public static int EmitForScene(SceneData data, int sceneIndex,
+                                    List<(string Name, string Reason)>? offenderSink = null)
     {
         if (data.AudioClips.Count == 0)
         {
@@ -79,7 +83,11 @@ public static class AudioValidationReport
             }
 
             string? warning = ClassifyRisk(c, adpcm, xa);
-            if (warning != null) warnCount++;
+            if (warning != null)
+            {
+                warnCount++;
+                offenderSink?.Add((c.Name, warning));
+            }
 
             rows.Add(new Row(
                 Name: c.Name,

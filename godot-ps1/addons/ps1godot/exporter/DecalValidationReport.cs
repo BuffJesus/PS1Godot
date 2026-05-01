@@ -31,7 +31,8 @@ public static class DecalValidationReport
     // single pre-blended texture.
     private const int StackDepthWarnThreshold = 6;
 
-    public static int EmitForScene(SceneData data, int sceneIndex)
+    public static int EmitForScene(SceneData data, int sceneIndex,
+                                    List<(string Name, string Reason)>? offenderSink = null)
     {
         if (data.UICanvases.Count == 0) return 0;
 
@@ -85,6 +86,8 @@ public static class DecalValidationReport
             {
                 problemCanvases.Add((canvas.Name, stackDepth, worstName));
                 warnCount++;
+                offenderSink?.Add((canvas.Name,
+                    $"translucent stack depth {stackDepth} (worst centre: {worstName}) — bake or thin"));
             }
         }
 

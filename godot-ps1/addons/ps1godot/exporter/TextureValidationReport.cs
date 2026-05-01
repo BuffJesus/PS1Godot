@@ -48,7 +48,11 @@ public static class TextureValidationReport
 
     // Returns the number of WARN-level rows emitted (0 if every texture
     // is fine). Plugin sums this into the dock's "Last export" line.
-    public static int EmitForScene(SceneData data, int sceneIndex)
+    // When `offenderSink` is provided, also appends a (textureName, reason)
+    // entry per warning so the dock's click-to-focus rows can surface
+    // them alongside UV-dirty meshes.
+    public static int EmitForScene(SceneData data, int sceneIndex,
+                                    List<(string Name, string Reason)>? offenderSink = null)
     {
         if (data.Textures.Count == 0)
         {
@@ -91,7 +95,11 @@ public static class TextureValidationReport
             int useCount = useCounts[i];
 
             string? warning = ClassifyRisk(t, vramBytes, hasAlphaKey, useCount);
-            if (warning != null) warnCount++;
+            if (warning != null)
+            {
+                warnCount++;
+                offenderSink?.Add((ShortName(t.SourcePath), warning));
+            }
 
             rows.Add(new Row(
                 Name: ShortName(t.SourcePath),

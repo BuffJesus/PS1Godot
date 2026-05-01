@@ -65,17 +65,19 @@ public static class AnimationLinter
         bool Loop,
         string? Warning);
 
-    public static int EmitForScene(SceneData data, int sceneIndex)
+    public static int EmitForScene(SceneData data, int sceneIndex,
+                                    List<(string Name, string Reason)>? offenderSink = null)
     {
         int warnCount = 0;
 
-        warnCount += EmitSimpleTrackRows(data, sceneIndex);
-        warnCount += EmitSkinClipRows(data, sceneIndex);
+        warnCount += EmitSimpleTrackRows(data, sceneIndex, offenderSink);
+        warnCount += EmitSkinClipRows(data, sceneIndex, offenderSink);
 
         return warnCount;
     }
 
-    private static int EmitSimpleTrackRows(SceneData data, int sceneIndex)
+    private static int EmitSimpleTrackRows(SceneData data, int sceneIndex,
+                                            List<(string Name, string Reason)>? offenderSink)
     {
         if (data.Animations == null || data.Animations.Count == 0)
         {
@@ -90,7 +92,11 @@ public static class AnimationLinter
         {
             int kfCount = anim.Keyframes?.Count ?? 0;
             string? warning = ClassifySimpleTrack(anim, kfCount);
-            if (warning != null) warnCount++;
+            if (warning != null)
+            {
+                warnCount++;
+                offenderSink?.Add(($"{anim.Name} → {anim.TargetObjectName}", warning));
+            }
             rows.Add(new AnimRow(
                 Name: anim.Name,
                 Target: anim.TargetObjectName,
@@ -110,7 +116,8 @@ public static class AnimationLinter
         return warnCount;
     }
 
-    private static int EmitSkinClipRows(SceneData data, int sceneIndex)
+    private static int EmitSkinClipRows(SceneData data, int sceneIndex,
+                                         List<(string Name, string Reason)>? offenderSink)
     {
         if (data.SkinnedMeshes == null || data.SkinnedMeshes.Count == 0) return 0;
 
@@ -136,7 +143,11 @@ public static class AnimationLinter
                 totalBytes += bytes;
                 bool loop = (clip.Flags & 0x01) != 0;
                 string? warning = ClassifySkinClip(sm, clip, bytes, loop);
-                if (warning != null) warnCount++;
+                if (warning != null)
+                {
+                    warnCount++;
+                    offenderSink?.Add(($"{sm.Name}/{clip.Name}", warning));
+                }
                 rows.Add(new SkinRow(
                     MeshName: sm.Name,
                     ClipName: clip.Name,
