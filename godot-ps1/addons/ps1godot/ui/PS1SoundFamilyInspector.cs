@@ -59,6 +59,35 @@ public partial class PS1SoundFamilyVariantList : EditorProperty
         SizeFlagsHorizontal = SizeFlags.ExpandFill;
     }
 
+    // ─── .wav drop target ───────────────────────────────────────────────
+    // Drop a .wav from the FileSystem dock anywhere on the chip widget
+    // to add it as a variant. Auto-creates the PS1AudioClip in the
+    // scene's AudioClips if it isn't already there.
+
+    public override bool _CanDropData(Vector2 atPosition, Variant data)
+        => PS1WavDropHelper.IsWavDrop(data);
+
+    public override void _DropData(Vector2 atPosition, Variant data)
+    {
+        var arr = _fam.AudioClipNames ?? new Godot.Collections.Array<string>();
+        bool changed = false;
+        foreach (var path in PS1WavDropHelper.ExtractWavPaths(data))
+        {
+            string name = PS1WavDropHelper.EnsureClipInScene(path);
+            if (string.IsNullOrEmpty(name)) continue;
+            if (!arr.Contains(name))
+            {
+                arr.Add(name);
+                changed = true;
+            }
+        }
+        if (changed)
+        {
+            _fam.AudioClipNames = arr;
+            EmitFamilyChanged(arr);
+        }
+    }
+
     public override void _Ready()
     {
         _root = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };

@@ -59,6 +59,40 @@ public partial class PS1SoundMacroEventList : EditorProperty
         SizeFlagsHorizontal = SizeFlags.ExpandFill;
     }
 
+    // ─── .wav drop target ───────────────────────────────────────────────
+    // Drop a .wav from the FileSystem dock anywhere on the events widget
+    // to spawn a new event referencing it. Multi-drop creates one event
+    // per file at staggered frames so the timeline doesn't pile up at 0.
+
+    public override bool _CanDropData(Vector2 atPosition, Variant data)
+        => PS1WavDropHelper.IsWavDrop(data);
+
+    public override void _DropData(Vector2 atPosition, Variant data)
+    {
+        var events = _macro.Events ?? new Godot.Collections.Array<PS1SoundMacroEvent>();
+        int nextFrame = 0;
+        foreach (var e in events)
+            if (e != null && e.Frame >= nextFrame) nextFrame = e.Frame + 5;
+
+        bool changed = false;
+        foreach (var path in PS1WavDropHelper.ExtractWavPaths(data))
+        {
+            string name = PS1WavDropHelper.EnsureClipInScene(path);
+            if (string.IsNullOrEmpty(name)) continue;
+            events.Add(new PS1SoundMacroEvent { Frame = nextFrame, AudioClipName = name });
+            nextFrame += 5;
+            changed = true;
+        }
+        if (changed)
+        {
+            _macro.Events = events;
+            _suppressUpdate = true;
+            EmitChanged(GetEditedProperty(), events);
+            _suppressUpdate = false;
+            Rebuild();
+        }
+    }
+
     public override void _Ready()
     {
         _root = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
