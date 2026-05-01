@@ -64,6 +64,12 @@ public partial class PS1UICanvasEditor : VBoxContainer
     private int _zoom = 2;
     private bool _showGrid = true;
 
+    // Currently-subscribed theme reference. Tracked so SetSelection
+    // can disconnect cleanly before re-subscribing on a different
+    // canvas — Resource.Changed leaks the connection if the editor
+    // is destroyed while the theme is still referenced elsewhere.
+    private PS1Theme? _subscribedTheme;
+
     private Label? _headerLabel;
     private OptionButton? _zoomCombo;
     private CheckButton? _gridToggle;
@@ -101,6 +107,21 @@ public partial class PS1UICanvasEditor : VBoxContainer
         BuildUI();
     }
 
+    public override void _Ready()
+    {
+        // Catch the in-place "swap the canvas's Theme reference" case —
+        // the canvas itself doesn't emit a per-property signal, so we
+        // listen for any inspector edit named Theme/theme and re-hook.
+        var inspector = EditorInterface.Singleton?.GetInspector();
+        if (inspector != null) inspector.PropertyEdited += OnInspectorPropertyEdited;
+    }
+
+    private void OnInspectorPropertyEdited(string property)
+    {
+        if (property == "Theme" || property == "theme")
+            RewireThemeSubscription();
+    }
+
     // Called by PS1GodotPlugin whenever the editor selection changes.
     // The plugin passes the owning canvas (derived by walking up from
     // any selected PS1UI* node); `node` is the exact selected node.
@@ -120,11 +141,53 @@ public partial class PS1UICanvasEditor : VBoxContainer
         // (selection didn't change but the scene now has more canvases)
         // as well as the highlight-the-newly-selected-canvas case.
         RebuildThumbnailStrip();
+        // Live theme preview: subscribe to the new canvas's Theme so
+        // colour/font edits repaint without a reselect.
+        RewireThemeSubscription();
+    }
+
+    // ─── Live theme preview ─────────────────────────────────────────
+    // Resource.Changed fires whenever any [Export] property of the
+    // theme is mutated — including from the inspector. We forward it
+    // to the canvas redraw + thumbnail rebuild so swapping a colour
+    // updates everything that's using the theme without requiring the
+    // author to reselect the canvas.
+
+    private void RewireThemeSubscription()
+    {
+        var newTheme = _selectedCanvas?.Theme;
+        if (newTheme == _subscribedTheme) return;
+
+        if (_subscribedTheme != null && IsInstanceValid(_subscribedTheme))
+            _subscribedTheme.Changed -= OnThemeChanged;
+
+        _subscribedTheme = newTheme;
+        if (_subscribedTheme != null)
+            _subscribedTheme.Changed += OnThemeChanged;
+    }
+
+    private void OnThemeChanged()
+    {
+        _canvasArea?.QueueRedraw();
+        // Thumbnails currently render shape-only, not theme-colored,
+        // but a rebuild future-proofs against a richer thumb later.
+        if (_thumbRow != null && _thumbRow.GetChildCount() > 0)
+        {
+            foreach (var c in _thumbRow.GetChildren())
+                if (c is Control ctl) ctl.QueueRedraw();
+        }
     }
 
     public override void _ExitTree()
     {
         ClearModelPreviews();
+        if (_subscribedTheme != null && IsInstanceValid(_subscribedTheme))
+        {
+            _subscribedTheme.Changed -= OnThemeChanged;
+            _subscribedTheme = null;
+        }
+        var inspector = EditorInterface.Singleton?.GetInspector();
+        if (inspector != null) inspector.PropertyEdited -= OnInspectorPropertyEdited;
         base._ExitTree();
     }
 
