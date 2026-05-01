@@ -63,6 +63,7 @@ public partial class PS1UICanvasEditor : VBoxContainer
     private Node? _selectedNode;  // any PS1UI* node (element or container); null = none
     private int _zoom = 2;
     private bool _showGrid = true;
+    private bool _showLayoutDebug = false;
 
     // Currently-subscribed theme reference. Tracked so SetSelection
     // can disconnect cleanly before re-subscribing on a different
@@ -73,6 +74,7 @@ public partial class PS1UICanvasEditor : VBoxContainer
     private Label? _headerLabel;
     private OptionButton? _zoomCombo;
     private CheckButton? _gridToggle;
+    private CheckButton? _layoutDebugToggle;
     private MenuButton? _addMenu;
     private Control? _canvasArea;
     private ScrollContainer? _thumbStrip;
@@ -410,6 +412,22 @@ public partial class PS1UICanvasEditor : VBoxContainer
         _gridToggle.Toggled += OnGridToggled;
         toolbar.AddChild(_gridToggle);
 
+        _layoutDebugToggle = new CheckButton
+        {
+            Text = "Layout",
+            ButtonPressed = _showLayoutDebug,
+            TooltipText = "Highlight every container (HBox/VBox/Overlay/SizeBox) with a brighter " +
+                          "dashed border + a corner label showing its dimensions and flex params " +
+                          "(e.g. 'HBox 240×80 sp=8'). Use when a child isn't where you expected — " +
+                          "the label tells you what the layout resolver is actually using.",
+        };
+        _layoutDebugToggle.Toggled += pressed =>
+        {
+            _showLayoutDebug = pressed;
+            _canvasArea?.QueueRedraw();
+        };
+        toolbar.AddChild(_layoutDebugToggle);
+
         toolbar.AddChild(new Control { CustomMinimumSize = new Vector2(8, 0) });
 
         // ── Thumbnail strip ─────────────────────────────────────────
@@ -533,6 +551,97 @@ public partial class PS1UICanvasEditor : VBoxContainer
         if (_selectedNode != null && _selectedNode != _selectedCanvas)
         {
             DrawSelectionChrome(_selectedNode, z);
+        }
+
+        // 4. Optional layout debug overlay — bright orange container
+        //    annotations on top of everything so they're never hidden.
+        if (_showLayoutDebug)
+        {
+            DrawLayoutDebugOverlay(_selectedCanvas, z);
+        }
+    }
+
+    // Container debug overlay: brighter dashed outline + corner label
+    // with dimensions and any container-specific flex params (Spacing,
+    // Width/HeightOverride). Call after the standard outlines so the
+    // annotation paints on top.
+    private void DrawLayoutDebugOverlay(Node subtreeRoot, int z)
+    {
+        var debugColor = new Color(1.0f, 0.55f, 0.10f, 0.95f);
+        var labelBg    = new Color(0f, 0f, 0f, 0.65f);
+        var font       = ThemeDB.FallbackFont;
+        int fs         = Mathf.Max(9, 9 * z / 2);
+
+        foreach (var child in subtreeRoot.GetChildren())
+        {
+            (int x, int y, int w, int h)? rect = child switch
+            {
+                PS1UIHBox hb    => ResolveContainerRect(hb.Anchor, hb.X, hb.Y, hb.Width, hb.Height),
+                PS1UIVBox vb    => ResolveContainerRect(vb.Anchor, vb.X, vb.Y, vb.Width, vb.Height),
+                PS1UIOverlay ov => ResolveContainerRect(ov.Anchor, ov.X, ov.Y, ov.Width, ov.Height),
+                PS1UISizeBox sb => ResolveContainerRect(sb.Anchor, sb.X, sb.Y,
+                                      sb.WidthOverride  >= 0 ? sb.WidthOverride  : 64,
+                                      sb.HeightOverride >= 0 ? sb.HeightOverride : 32),
+                _ => ((int, int, int, int)?)null,
+            };
+            if (rect is (int rx, int ry, int rw, int rh))
+            {
+                DrawDashedRect(new Rect2(rx * z, ry * z, rw * z, rh * z), debugColor, dash: 4f);
+
+                string label = BuildDebugLabel(child, rw, rh);
+                var textSize = font.GetStringSize(label, HorizontalAlignment.Left, -1, fs);
+                var labelPos = new Vector2(rx * z + 2, ry * z + textSize.Y);
+                _canvasArea!.DrawRect(
+                    new Rect2(labelPos.X - 2, labelPos.Y - textSize.Y, textSize.X + 4, textSize.Y + 2),
+                    labelBg);
+                _canvasArea.DrawString(font, labelPos, label,
+                    HorizontalAlignment.Left, -1, fs, debugColor);
+
+                DrawLayoutDebugOverlay(child, z);
+            }
+        }
+    }
+
+    private static string BuildDebugLabel(Node n, int w, int h) => n switch
+    {
+        PS1UIHBox hb    => $"HBox {w}×{h} sp={hb.Spacing}",
+        PS1UIVBox vb    => $"VBox {w}×{h} sp={vb.Spacing}",
+        PS1UIOverlay    => $"Overlay {w}×{h}",
+        PS1UISizeBox sb => $"SizeBox {w}×{h}" +
+                            (sb.WidthOverride  >= 0 ? $" w={sb.WidthOverride}"  : "") +
+                            (sb.HeightOverride >= 0 ? $" h={sb.HeightOverride}" : ""),
+        _               => $"{n.GetType().Name} {w}×{h}",
+    };
+
+    // Manual dashed rectangle — Godot's DrawRect(filled:false) only does
+    // solid borders. 4-px dash + 2-px gap reads well at all zoom levels.
+    private void DrawDashedRect(Rect2 r, Color color, float dash)
+    {
+        if (_canvasArea == null) return;
+        DrawDashedSegment(new Vector2(r.Position.X,             r.Position.Y),
+                          new Vector2(r.Position.X + r.Size.X,  r.Position.Y),             color, dash);
+        DrawDashedSegment(new Vector2(r.Position.X + r.Size.X,  r.Position.Y),
+                          new Vector2(r.Position.X + r.Size.X,  r.Position.Y + r.Size.Y),  color, dash);
+        DrawDashedSegment(new Vector2(r.Position.X + r.Size.X,  r.Position.Y + r.Size.Y),
+                          new Vector2(r.Position.X,             r.Position.Y + r.Size.Y),  color, dash);
+        DrawDashedSegment(new Vector2(r.Position.X,             r.Position.Y + r.Size.Y),
+                          new Vector2(r.Position.X,             r.Position.Y),             color, dash);
+    }
+
+    private void DrawDashedSegment(Vector2 a, Vector2 b, Color color, float dash)
+    {
+        if (_canvasArea == null) return;
+        var dir = b - a;
+        float len = dir.Length();
+        if (len < 0.5f) return;
+        var unit = dir / len;
+        float gap = dash * 0.5f;
+        float t = 0;
+        while (t < len)
+        {
+            float t2 = Mathf.Min(t + dash, len);
+            _canvasArea.DrawLine(a + unit * t, a + unit * t2, color, width: 1.5f);
+            t = t2 + gap;
         }
     }
 
