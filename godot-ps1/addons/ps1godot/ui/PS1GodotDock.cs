@@ -19,6 +19,7 @@ public partial class PS1GodotDock : VBoxContainer
     [Signal] public delegate void LaunchEmulatorRequestedEventHandler();
     [Signal] public delegate void AnalyzeTexturesRequestedEventHandler();
     [Signal] public delegate void ExportOnlyRequestedEventHandler();
+    [Signal] public delegate void OpenVramViewerRequestedEventHandler();
 
     // PS1 red — the branded accent from docs/ui-ux-plan.md § Visual language.
     private static readonly Color AccentRed = new(0xCE / 255f, 0x21 / 255f, 0x27 / 255f);
@@ -36,6 +37,8 @@ public partial class PS1GodotDock : VBoxContainer
     private VBoxContainer? _lastExportRows;   // click-to-focus list
     private VBoxContainer? _setupBox;
     private Label? _setupSummary;
+    private PS1VRAMGrid? _vramThumb;
+    private Label? _vramThumbHint;
 
     public PS1GodotDock()
     {
@@ -197,6 +200,46 @@ public partial class PS1GodotDock : VBoxContainer
         _lastExportRows.AddThemeConstantOverride("separation", 2);
         inner.AddChild(_lastExportRows);
 
+        // ── VRAM thumbnail ──────────────────────────────────────────────
+        // Surfaces the most-recent export's VRAM layout right in the
+        // canonical dock instead of behind the bottom-panel "PS1 VRAM"
+        // tab. Click → makes the bottom panel visible for the full
+        // viewer (legend, tooltips, multi-scene picker, large grid).
+        AddSectionHeader(inner, "VRAM (last export)");
+
+        _vramThumbHint = new Label
+        {
+            Text = "Run on PSX to see the layout here.",
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+        };
+        _vramThumbHint.AddThemeColorOverride("font_color", new Color(1, 1, 1, 0.55f));
+        _vramThumbHint.AddThemeFontSizeOverride("font_size", 11);
+        inner.AddChild(_vramThumbHint);
+
+        _vramThumb = new PS1VRAMGrid
+        {
+            // Override the grid's default min size — the dock is narrow
+            // and a 512×256 placeholder pushes everything off-screen.
+            // 2:1 ratio matches the underlying VRAM aspect.
+            CustomMinimumSize = new Vector2(0, 100),
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+            Visible = false,
+            // Pass through clicks so we can intercept for "open viewer".
+            MouseFilter = MouseFilterEnum.Stop,
+        };
+        _vramThumb.GuiInput += OnVramThumbGuiInput;
+        _vramThumb.TooltipText = "Click to open the full PS1 VRAM viewer.";
+        inner.AddChild(_vramThumb);
+
+        var openVramBtn = new Button
+        {
+            Text = "Open VRAM Viewer",
+            TooltipText = "Switch to the bottom-panel PS1 VRAM tab — full grid, " +
+                          "legend, hover tooltips, multi-scene picker.",
+        };
+        openVramBtn.Pressed += () => EmitSignal(SignalName.OpenVramViewerRequested);
+        inner.AddChild(openVramBtn);
+
         // ── Setup section ───────────────────────────────────────────────
         AddSectionHeader(inner, "Setup");
 
@@ -225,6 +268,22 @@ public partial class PS1GodotDock : VBoxContainer
         // Spacer pushes everything to the top.
         var spacer = new Control { SizeFlagsVertical = SizeFlags.ExpandFill };
         inner.AddChild(spacer);
+    }
+
+    public void ApplyVramSnapshot(VramSnapshot snapshot)
+    {
+        if (_vramThumb == null) return;
+        _vramThumb.SetSnapshot(snapshot);
+        _vramThumb.Visible = true;
+        if (_vramThumbHint != null) _vramThumbHint.Visible = false;
+    }
+
+    private void OnVramThumbGuiInput(InputEvent ev)
+    {
+        if (ev is InputEventMouseButton mb && mb.Pressed && mb.ButtonIndex == MouseButton.Left)
+        {
+            EmitSignal(SignalName.OpenVramViewerRequested);
+        }
     }
 
     public void RefreshSetupStatus()

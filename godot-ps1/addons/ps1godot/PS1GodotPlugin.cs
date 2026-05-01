@@ -190,6 +190,7 @@ public partial class PS1GodotPlugin : EditorPlugin
         _dock.LaunchEmulatorRequested += OnLaunchEmulator;
         _dock.AnalyzeTexturesRequested += OnAnalyzeTextures;
         _dock.ExportOnlyRequested += OnExportEmptySplashpack;
+        _dock.OpenVramViewerRequested += OnOpenVramViewer;
         // AddControlToDock is marked [Obsolete] in Godot 4.7-dev in favor
         // of AddDock(EditorDock), which isn't stable yet. The old API still
         // works; suppressing the warning so warnings-as-errors builds
@@ -877,6 +878,17 @@ public partial class PS1GodotPlugin : EditorPlugin
     // export is done.
     private LastExportSummary? _lastExportSummary;
 
+    // Dock thumbnail / "Open VRAM Viewer" button → switch the bottom
+    // panel to the PS1 VRAM tab. Use MakeBottomPanelItemVisible since
+    // we own the tab via AddControlToBottomPanel.
+    private void OnOpenVramViewer()
+    {
+        if (_vramViewerDock == null) return;
+#pragma warning disable CS0618 // Obsolete: see AddControlToBottomPanel sites — same migration window.
+        MakeBottomPanelItemVisible(_vramViewerDock);
+#pragma warning restore CS0618
+    }
+
     private void OnExportEmptySplashpack()
     {
         // psxsplash's FileLoader expects "scene_<index>.splashpack" (and .vram, .spu)
@@ -1029,7 +1041,9 @@ public partial class PS1GodotPlugin : EditorPlugin
             // SceneData.Packer is non-null at this point (SplashpackWriter
             // ran the pack pass before serialising), so the snapshot
             // captures the same coords the .vram file holds.
-            _vramViewerDock?.ApplySnapshot(UI.VramSnapshot.Capture(sceneData, sceneIndex));
+            var snap = UI.VramSnapshot.Capture(sceneData, sceneIndex);
+            _vramViewerDock?.ApplySnapshot(snap);
+            _dock?.ApplyVramSnapshot(snap);
 
             // Hand the lua-file map to the hot-swap watcher. Only scene_0
             // (the boot scene) participates — sub-scenes loaded via
