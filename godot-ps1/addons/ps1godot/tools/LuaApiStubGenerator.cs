@@ -29,7 +29,7 @@ namespace PS1Godot.Tools;
 // real semantics even when the inferred type is `any`.
 public static class LuaApiStubGenerator
 {
-    private const string LuaApiRelPath = "psxsplash-main/src/luaapi.hh";
+    internal const string LuaApiRelPath = "psxsplash-main/src/luaapi.hh";
     private const string OutputRelPath = "godot-ps1/demo/scripts/_ps1api.lua";
 
     // Matches `// Namespace.Method(args) [-> retval]`. Namespace + method are
@@ -58,7 +58,10 @@ public static class LuaApiStubGenerator
         GD.Print($"[PS1Godot] Wrote {binds.Count} API stubs to {OutputRelPath}");
     }
 
-    private sealed class Bind
+    // Made internal so PS1LuaApiCheatsheetDock can reuse the same parser
+    // — keeps the cheatsheet exactly in sync with what the stub
+    // generator emits to EmmyLua.
+    internal sealed class Bind
     {
         public string Namespace = "";
         public string Name = "";
@@ -67,7 +70,7 @@ public static class LuaApiStubGenerator
         public List<string> Doc = new();
     }
 
-    private static List<Bind> Parse(string[] lines)
+    internal static List<Bind> Parse(string[] lines)
     {
         // Convention in luaapi.hh: structured signature comment FIRST,
         // then any number of `//` description lines, then the
@@ -341,7 +344,7 @@ public static class LuaApiStubGenerator
         return "any";
     }
 
-    private static string ResolveProjectRoot()
+    internal static string ResolveProjectRoot()
     {
         // User override: PS1GODOT_ROOT env var, for CI / split checkouts.
         string? envRoot = System.Environment.GetEnvironmentVariable("PS1GODOT_ROOT");

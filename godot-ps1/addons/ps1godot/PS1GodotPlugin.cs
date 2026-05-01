@@ -65,6 +65,7 @@ public partial class PS1GodotPlugin : EditorPlugin
     private PS1SoundFamilyInspector? _soundFamilyInspector;
     private PS1VRAMViewerDock? _vramViewerDock;
     private PS1AudioRoutingDock? _audioRoutingDock;
+    private PS1LuaApiCheatsheetDock? _luaApiDock;
     private LuaHotSwapWatcher? _luaHotSwapWatcher;
     private PS1ViewportOverlay? _viewportOverlay;
 
@@ -293,6 +294,14 @@ public partial class PS1GodotPlugin : EditorPlugin
         AddControlToBottomPanel(_audioRoutingDock, "PS1 Audio");
 #pragma warning restore CS0618
 
+        // Lua API cheatsheet — searchable browser sourced from the same
+        // luaapi.hh parser the EmmyLua stub generator uses, so authors
+        // see exactly the API their external editor's completion knows.
+        _luaApiDock = new PS1LuaApiCheatsheetDock();
+#pragma warning disable CS0618 // Obsolete: AddControlToBottomPanel — see AddControlToDock site above.
+        AddControlToBottomPanel(_luaApiDock, "PS1 Lua API");
+#pragma warning restore CS0618
+
         // Lua hot-swap watcher: polls scene_0's exported .lua files and
         // writes res://build/hotswap.luac when one changes. Runtime side
         // (psxsplash-main/src/lua.cpp Lua::TryHotSwap) consumes that file
@@ -497,6 +506,15 @@ public partial class PS1GodotPlugin : EditorPlugin
 #pragma warning restore CS0618
             _audioRoutingDock.QueueFree();
             _audioRoutingDock = null;
+        }
+
+        if (_luaApiDock != null)
+        {
+#pragma warning disable CS0618 // Obsolete — see AddControlToBottomPanel site above.
+            RemoveControlFromBottomPanel(_luaApiDock);
+#pragma warning restore CS0618
+            _luaApiDock.QueueFree();
+            _luaApiDock = null;
         }
 
         if (_luaHotSwapWatcher != null)
