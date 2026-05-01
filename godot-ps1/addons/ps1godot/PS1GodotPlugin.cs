@@ -21,6 +21,7 @@ public partial class PS1GodotPlugin : EditorPlugin
     private const string LaunchEmulatorMenuLabel = "PS1Godot: Launch in PCSX-Redux";
     private const string RunOnPsxMenuLabel = "PS1Godot: Run on PSX (export + build + launch)";
     private const string CopyCameraLuaMenuLabel = "PS1Godot: Copy Selected Camera as Lua";
+    private const string NewSceneWizardMenuLabel = "PS1Godot: New Scene from Template…";
     private const string ConvertMeshToPS1MenuLabel = "PS1Godot: Convert selected MeshInstance3D to PS1MeshInstance";
     private const string AddSkinnedTestMenuLabel = "PS1Godot: Add Skinned Test Mesh (bullet 11 test asset)";
     private const string GenerateFontBitmapMenuLabel = "PS1Godot: Generate bitmap for selected PS1UIFontAsset";
@@ -93,6 +94,12 @@ public partial class PS1GodotPlugin : EditorPlugin
         // emits these for every Camera3D via the _ps1_cameras preamble;
         // this is the manual escape hatch for one-off paste-into-script.
         AddToolMenuItem(CopyCameraLuaMenuLabel, Callable.From(OnCopyCameraAsLua));
+
+        // Top-level wizard: pop a "pick a template + save path"
+        // dialog so new authors get a working scene in two clicks
+        // instead of duplicating templates by hand from the FileSystem
+        // dock + filling in the boilerplate.
+        AddToolMenuItem(NewSceneWizardMenuLabel, Callable.From(OnNewSceneWizard));
 
         // Submenu groupings. Each PopupMenu carries its action items
         // with a stable id; IdPressed dispatches via the BakeMenu /
@@ -404,6 +411,7 @@ public partial class PS1GodotPlugin : EditorPlugin
     {
         RemoveToolMenuItem(RunOnPsxMenuLabel);
         RemoveToolMenuItem(CopyCameraLuaMenuLabel);
+        RemoveToolMenuItem(NewSceneWizardMenuLabel);
         // Submenus: RemoveToolMenuItem with the submenu's display label
         // (Godot's Tools menu indexes both flat items and submenus by
         // their visible text).
@@ -925,6 +933,16 @@ public partial class PS1GodotPlugin : EditorPlugin
     // OnExportEmptySplashpack pass; fed to the dock once the multi-scene
     // export is done.
     private LastExportSummary? _lastExportSummary;
+
+    // Tools → "New Scene from Template…". Pops the wizard dialog so
+    // an author can create a fresh PS1 scene from one of the bundled
+    // templates without manually duplicating in the FileSystem dock.
+    private void OnNewSceneWizard()
+    {
+        var wiz = new PS1NewSceneWizard();
+        EditorInterface.Singleton.GetBaseControl().AddChild(wiz);
+        wiz.PopupCentered();
+    }
 
     // Tools → "Copy Selected Camera as Lua". Resolves the selected
     // Camera3D's pose+FOV into PSX coords + GTE H register and copies
