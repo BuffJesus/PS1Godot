@@ -61,6 +61,7 @@ public partial class PS1GodotPlugin : EditorPlugin
     private PS1InspectorTooltips? _inspectorTooltips;
     private PS1ClipNameInspector? _clipNameInspector;
     private PS1SoundMacroInspector? _soundMacroInspector;
+    private PS1SoundFamilyInspector? _soundFamilyInspector;
     private PS1VRAMViewerDock? _vramViewerDock;
     private LuaHotSwapWatcher? _luaHotSwapWatcher;
     private PS1ViewportOverlay? _viewportOverlay;
@@ -255,6 +256,12 @@ public partial class PS1GodotPlugin : EditorPlugin
         _soundMacroInspector = new PS1SoundMacroInspector();
         AddInspectorPlugin(_soundMacroInspector);
 
+        // PS1SoundFamily multi-pick + jitter visualisation. Replaces the
+        // Array<string> AudioClipNames editor with chip-style multi-pick,
+        // appends a "Jitter Preview" panel showing the three range bars.
+        _soundFamilyInspector = new PS1SoundFamilyInspector();
+        AddInspectorPlugin(_soundFamilyInspector);
+
         // VRAM viewer — bottom-panel tab that visualises the packed
         // 1024×512 layout after each export (atlases, textures, CLUTs,
         // reserved framebuffer + font regions).
@@ -426,6 +433,12 @@ public partial class PS1GodotPlugin : EditorPlugin
         {
             RemoveInspectorPlugin(_soundMacroInspector);
             _soundMacroInspector = null;
+        }
+
+        if (_soundFamilyInspector != null)
+        {
+            RemoveInspectorPlugin(_soundFamilyInspector);
+            _soundFamilyInspector = null;
         }
 
         if (_vramViewerDock != null)
