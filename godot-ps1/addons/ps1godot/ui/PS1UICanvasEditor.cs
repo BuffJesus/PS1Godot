@@ -38,6 +38,11 @@ public partial class PS1UICanvasEditor : VBoxContainer
     public const int PsxWidth = 320;
     public const int PsxHeight = 240;
 
+    // Thumbnail strip — fixed size keeps layout predictable across
+    // scenes with wildly different canvas counts.
+    private const int ThumbWidth  = 96;   // 320 / 96 ≈ 3.33×
+    private const int ThumbHeight = 72;   // 240 / 72 ≈ 3.33×
+
     // Dark PS1-ish checkered background so transparent elements read.
     private static readonly Color BgA = new(0.09f, 0.09f, 0.12f);
     private static readonly Color BgB = new(0.12f, 0.12f, 0.15f);
@@ -64,6 +69,8 @@ public partial class PS1UICanvasEditor : VBoxContainer
     private CheckButton? _gridToggle;
     private MenuButton? _addMenu;
     private Control? _canvasArea;
+    private ScrollContainer? _thumbStrip;
+    private HBoxContainer? _thumbRow;
 
     // Drag state — populated on LMB down over an element, cleared on release.
     private enum DragMode { None, Move, ResizeBR }
@@ -109,12 +116,167 @@ public partial class PS1UICanvasEditor : VBoxContainer
             RefreshHeader();
             _canvasArea?.QueueRedraw();
         }
+        // Always rebuild the strip — covers the canvas-was-added case
+        // (selection didn't change but the scene now has more canvases)
+        // as well as the highlight-the-newly-selected-canvas case.
+        RebuildThumbnailStrip();
     }
 
     public override void _ExitTree()
     {
         ClearModelPreviews();
         base._ExitTree();
+    }
+
+    // ─── Thumbnail strip ────────────────────────────────────────────
+    // Rebuilds the row of canvas miniatures from a fresh scene scan.
+    // Cheap (one Control + a few DrawRect calls per canvas).
+
+    private void RebuildThumbnailStrip()
+    {
+        if (_thumbRow == null) return;
+
+        foreach (var c in _thumbRow.GetChildren()) c.QueueFree();
+
+        var canvases = ScanSceneCanvases();
+        if (canvases.Count == 0)
+        {
+            var hint = new Label
+            {
+                Text = "(no PS1UICanvas in scene)",
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            hint.AddThemeColorOverride("font_color", new Color(0.55f, 0.55f, 0.55f));
+            _thumbRow.AddChild(hint);
+            return;
+        }
+
+        foreach (var c in canvases)
+        {
+            var thumb = new CanvasThumb(c, c == _selectedCanvas);
+            thumb.Pressed += () => SetSelection(c, c);
+            _thumbRow.AddChild(thumb);
+        }
+    }
+
+    private static System.Collections.Generic.List<PS1UICanvas> ScanSceneCanvases()
+    {
+        var result = new System.Collections.Generic.List<PS1UICanvas>();
+        var root = EditorInterface.Singleton?.GetEditedSceneRoot();
+        if (root == null) return result;
+        Walk(root, result);
+        return result;
+
+        static void Walk(Node n, System.Collections.Generic.List<PS1UICanvas> acc)
+        {
+            if (n is PS1UICanvas c) acc.Add(c);
+            foreach (var ch in n.GetChildren())
+                if (ch is Node child) Walk(child, acc);
+        }
+    }
+
+    // Single canvas miniature: 96x72 plate + label below. Custom _Draw
+    // renders child PS1UIElement boxes scaled into the plate so the
+    // author can recognise which canvas is which by layout shape, not
+    // just by name.
+    private sealed partial class CanvasThumb : VBoxContainer
+    {
+        [Signal] public delegate void PressedEventHandler();
+
+        private readonly PS1UICanvas _canvas;
+        private readonly bool _selected;
+        private Control _plate = null!;
+
+        public CanvasThumb(PS1UICanvas canvas, bool selected)
+        {
+            _canvas   = canvas;
+            _selected = selected;
+            CustomMinimumSize = new Vector2(ThumbWidth + 4, 0);
+            MouseFilter = MouseFilterEnum.Pass;
+        }
+
+        public override void _Ready()
+        {
+            _plate = new Control
+            {
+                CustomMinimumSize = new Vector2(ThumbWidth, ThumbHeight),
+                MouseFilter       = MouseFilterEnum.Stop,
+            };
+            _plate.Draw += DrawPlate;
+            _plate.GuiInput += OnPlateInput;
+            AddChild(_plate);
+
+            string name = string.IsNullOrEmpty(_canvas.CanvasName)
+                ? _canvas.Name
+                : _canvas.CanvasName;
+            var label = new Label
+            {
+                Text = name,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                ClipText = true,
+                CustomMinimumSize = new Vector2(ThumbWidth, 0),
+            };
+            label.AddThemeFontSizeOverride("font_size", 10);
+            if (_selected)
+                label.AddThemeColorOverride("font_color", new Color(1f, 0.4f, 0.4f));
+            AddChild(label);
+        }
+
+        private void OnPlateInput(InputEvent ev)
+        {
+            if (ev is InputEventMouseButton mb && mb.Pressed && mb.ButtonIndex == MouseButton.Left)
+            {
+                EmitSignal(SignalName.Pressed);
+                _plate.AcceptEvent();
+            }
+        }
+
+        private void DrawPlate()
+        {
+            var rect = new Rect2(0, 0, ThumbWidth, ThumbHeight);
+
+            // Background — selected canvas gets a subtly red tint so the
+            // current pick reads at a glance even on monochrome themes.
+            _plate.DrawRect(rect, _selected
+                ? new Color(0.18f, 0.10f, 0.10f)
+                : new Color(0.10f, 0.10f, 0.13f));
+
+            // Border — accent-red when selected, neutral otherwise.
+            var borderColor = _selected
+                ? new Color(0.95f, 0.30f, 0.30f, 1f)
+                : new Color(0.40f, 0.40f, 0.45f, 0.8f);
+            _plate.DrawRect(rect, borderColor, filled: false, width: _selected ? 2f : 1f);
+
+            // Element rectangles — walk PS1UIElement children, draw each
+            // at scaled X/Y/W/H. Container hierarchies (HBox/VBox) just
+            // recurse one level since their own X/Y is enough to suggest
+            // layout.
+            float sx = (float)ThumbWidth  / PsxWidth;
+            float sy = (float)ThumbHeight / PsxHeight;
+            DrawElementRecursive(_canvas, sx, sy);
+        }
+
+        private void DrawElementRecursive(Node parent, float sx, float sy)
+        {
+            foreach (var child in parent.GetChildren())
+            {
+                if (child is PS1UIElement el)
+                {
+                    if (el.Width <= 0 || el.Height <= 0) continue;
+                    var r = new Rect2(el.X * sx, el.Y * sy, el.Width * sx, el.Height * sy);
+                    Color fill = el.Type switch
+                    {
+                        PS1UIElementType.Image => new Color(0.30f, 0.55f, 0.85f, 0.7f),
+                        PS1UIElementType.Text  => new Color(0.85f, 0.85f, 0.40f, 0.85f),
+                        PS1UIElementType.Box   => new Color(0.50f, 0.85f, 0.50f, 0.5f),
+                        _                       => new Color(0.7f,  0.7f,  0.7f,  0.5f),
+                    };
+                    _plate.DrawRect(r, fill);
+                    _plate.DrawRect(r, new Color(0f, 0f, 0f, 0.4f), filled: false);
+                }
+                if (child is Node cn) DrawElementRecursive(cn, sx, sy);
+            }
+        }
     }
 
     // Back-compat for the prior one-arg signature used by the plugin.
@@ -186,6 +348,24 @@ public partial class PS1UICanvasEditor : VBoxContainer
         toolbar.AddChild(_gridToggle);
 
         toolbar.AddChild(new Control { CustomMinimumSize = new Vector2(8, 0) });
+
+        // ── Thumbnail strip ─────────────────────────────────────────
+        // One miniature per PS1UICanvas in the active scene. Click a
+        // thumb to swap selection without going through the scene
+        // tree — useful when a scene has 5+ canvases (HUD, menu, fade,
+        // background plates) and the tree is busy.
+        _thumbStrip = new ScrollContainer
+        {
+            HorizontalScrollMode  = ScrollContainer.ScrollMode.Auto,
+            VerticalScrollMode    = ScrollContainer.ScrollMode.Disabled,
+            CustomMinimumSize     = new Vector2(0, ThumbHeight + 28),
+            SizeFlagsHorizontal   = SizeFlags.ExpandFill,
+        };
+        AddChild(_thumbStrip);
+
+        _thumbRow = new HBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        _thumbRow.AddThemeConstantOverride("separation", 6);
+        _thumbStrip.AddChild(_thumbRow);
 
         // ── Scrolling canvas area ───────────────────────────────────
         var scroll = new ScrollContainer
