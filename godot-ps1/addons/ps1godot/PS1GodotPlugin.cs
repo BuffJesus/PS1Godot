@@ -60,6 +60,7 @@ public partial class PS1GodotPlugin : EditorPlugin
     private PS1TexturePreviewInspector? _texturePreviewInspector;
     private PS1InspectorTooltips? _inspectorTooltips;
     private PS1ClipNameInspector? _clipNameInspector;
+    private PS1SoundMacroInspector? _soundMacroInspector;
     private PS1VRAMViewerDock? _vramViewerDock;
     private LuaHotSwapWatcher? _luaHotSwapWatcher;
     private PS1ViewportOverlay? _viewportOverlay;
@@ -248,6 +249,12 @@ public partial class PS1GodotPlugin : EditorPlugin
         _clipNameInspector = new PS1ClipNameInspector();
         AddInspectorPlugin(_clipNameInspector);
 
+        // PS1SoundMacro event timeline. Replaces the default array editor
+        // with a per-event row (frame / clip / vol / pan / pitch / delete)
+        // + audition button that previews via Godot's AudioStreamPlayer.
+        _soundMacroInspector = new PS1SoundMacroInspector();
+        AddInspectorPlugin(_soundMacroInspector);
+
         // VRAM viewer — bottom-panel tab that visualises the packed
         // 1024×512 layout after each export (atlases, textures, CLUTs,
         // reserved framebuffer + font regions).
@@ -413,6 +420,12 @@ public partial class PS1GodotPlugin : EditorPlugin
         {
             RemoveInspectorPlugin(_clipNameInspector);
             _clipNameInspector = null;
+        }
+
+        if (_soundMacroInspector != null)
+        {
+            RemoveInspectorPlugin(_soundMacroInspector);
+            _soundMacroInspector = null;
         }
 
         if (_vramViewerDock != null)
