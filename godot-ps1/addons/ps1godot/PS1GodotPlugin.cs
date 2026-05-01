@@ -63,7 +63,6 @@ public partial class PS1GodotPlugin : EditorPlugin
     private PS1ClipNameInspector? _clipNameInspector;
     private PS1SoundMacroInspector? _soundMacroInspector;
     private PS1SoundFamilyInspector? _soundFamilyInspector;
-    private PS1ExperimentalBadgeInspector? _experimentalBadgeInspector;
     private PS1VRAMViewerDock? _vramViewerDock;
     private PS1AudioRoutingDock? _audioRoutingDock;
     private LuaHotSwapWatcher? _luaHotSwapWatcher;
@@ -273,11 +272,6 @@ public partial class PS1GodotPlugin : EditorPlugin
         _soundFamilyInspector = new PS1SoundFamilyInspector();
         AddInspectorPlugin(_soundFamilyInspector);
 
-        // Top-of-inspector badge for resources where authoring has
-        // shipped but the runtime is still scaffolded (Phase 5 Stage A).
-        _experimentalBadgeInspector = new PS1ExperimentalBadgeInspector();
-        AddInspectorPlugin(_experimentalBadgeInspector);
-
         // VRAM viewer — bottom-panel tab that visualises the packed
         // 1024×512 layout after each export (atlases, textures, CLUTs,
         // reserved framebuffer + font regions).
@@ -485,12 +479,6 @@ public partial class PS1GodotPlugin : EditorPlugin
         {
             RemoveInspectorPlugin(_soundFamilyInspector);
             _soundFamilyInspector = null;
-        }
-
-        if (_experimentalBadgeInspector != null)
-        {
-            RemoveInspectorPlugin(_experimentalBadgeInspector);
-            _experimentalBadgeInspector = null;
         }
 
         if (_vramViewerDock != null)

@@ -15,8 +15,10 @@ namespace PS1Godot;
 // Lua: Sound.PlayMacro("<MacroName>"). Returns a handle that
 // Sound.StopMacro can use to cancel an in-flight macro early.
 //
-// **Phase 5 Stage A:** authoring scaffold. Runtime ignores macros
-// until Stage B ships SoundMacroSequencer.
+// Runtime: SoundMacroSequencer (psxsplash-main/src/soundmacro.cpp)
+// dispatches each authored event through AudioManager::play with the
+// macro's Priority, applies the per-event PitchOffset to the SPU
+// channel post-keyOn, and enforces MaxVoices + CooldownFrames.
 [Tool]
 [GlobalClass]
 [Icon("res://addons/ps1godot/icons/ps1_audio_clip.svg")]

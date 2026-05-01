@@ -12,8 +12,10 @@ namespace PS1Godot;
 // the configured jitter, and dispatches via AudioManager.play with
 // the family's priority.
 //
-// **Phase 5 Stage A:** authoring scaffold. Runtime ignores families
-// until Stage B ships the dispatch path.
+// Runtime: SoundFamily (psxsplash-main/src/soundfamily.cpp) draws a
+// uniform-random pick from the variant pool, samples Volume / Pitch /
+// Pan jitter, applies the post-keyOn pitch shift via
+// MusicSequencer::pitchForOffset, and enforces CooldownFrames.
 [Tool]
 [GlobalClass]
 [Icon("res://addons/ps1godot/icons/ps1_audio_clip.svg")]
