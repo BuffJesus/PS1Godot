@@ -22,6 +22,7 @@ public partial class PS1GodotPlugin : EditorPlugin
     private const string RunOnPsxMenuLabel = "PS1Godot: Run on PSX (export + build + launch)";
     private const string CopyCameraLuaMenuLabel = "PS1Godot: Copy Selected Camera as Lua";
     private const string NewSceneWizardMenuLabel = "PS1Godot: New Scene from Template…";
+    private const string LookupLuaSymbolMenuLabel = "PS1Godot: Look up Lua symbol in cheatsheet";
     private const string ConvertMeshToPS1MenuLabel = "PS1Godot: Convert selected MeshInstance3D to PS1MeshInstance";
     private const string AddSkinnedTestMenuLabel = "PS1Godot: Add Skinned Test Mesh (bullet 11 test asset)";
     private const string GenerateFontBitmapMenuLabel = "PS1Godot: Generate bitmap for selected PS1UIFontAsset";
@@ -100,6 +101,13 @@ public partial class PS1GodotPlugin : EditorPlugin
         // instead of duplicating templates by hand from the FileSystem
         // dock + filling in the boilerplate.
         AddToolMenuItem(NewSceneWizardMenuLabel, Callable.From(OnNewSceneWizard));
+
+        // Contextual cheatsheet lookup — read the script editor's
+        // selection / word at cursor, open the PS1 Lua API tab, and
+        // pre-filter the cheatsheet. Bind to F1 via Editor Settings →
+        // Shortcuts (Godot's editor reserves F1 for built-in class help
+        // so we ship this as a menu item rather than auto-grabbing it).
+        AddToolMenuItem(LookupLuaSymbolMenuLabel, Callable.From(OnLookupLuaSymbol));
 
         // Submenu groupings. Each PopupMenu carries its action items
         // with a stable id; IdPressed dispatches via the BakeMenu /
@@ -412,6 +420,7 @@ public partial class PS1GodotPlugin : EditorPlugin
         RemoveToolMenuItem(RunOnPsxMenuLabel);
         RemoveToolMenuItem(CopyCameraLuaMenuLabel);
         RemoveToolMenuItem(NewSceneWizardMenuLabel);
+        RemoveToolMenuItem(LookupLuaSymbolMenuLabel);
         // Submenus: RemoveToolMenuItem with the submenu's display label
         // (Godot's Tools menu indexes both flat items and submenus by
         // their visible text).
@@ -933,6 +942,51 @@ public partial class PS1GodotPlugin : EditorPlugin
     // OnExportEmptySplashpack pass; fed to the dock once the multi-scene
     // export is done.
     private LastExportSummary? _lastExportSummary;
+
+    // Tools → "Look up Lua symbol in cheatsheet". Reads whatever
+    // word the cursor's currently on (or the active selection) in
+    // the script editor, makes the PS1 Lua API tab visible, and
+    // pre-filters the cheatsheet to that symbol. No-op when no
+    // script editor is open — the dock still opens, unfiltered.
+    private void OnLookupLuaSymbol()
+    {
+        if (_luaApiDock == null) return;
+
+        string filter = "";
+        try
+        {
+            var scriptEditor = EditorInterface.Singleton.GetScriptEditor();
+            var current = scriptEditor?.GetCurrentEditor();
+            // GetBaseEditor() returns the underlying CodeEdit for
+            // ScriptEditor's text-script mode — the only path where a
+            // word-at-cursor lookup makes sense.
+            var baseEditor = current?.GetBaseEditor();
+            if (baseEditor is CodeEdit code)
+            {
+                if (code.HasSelection())
+                {
+                    filter = code.GetSelectedText();
+                }
+                else
+                {
+                    filter = code.GetWordUnderCaret();
+                }
+                filter = (filter ?? "").Trim();
+            }
+        }
+        catch (System.Exception e)
+        {
+            // Defensive — if Godot internals throw on a missing editor,
+            // we still want the dock to open so the menu item isn't
+            // silently dead.
+            GD.PushWarning($"[PS1Godot] Look up Lua symbol: editor introspect failed: {e.Message}");
+        }
+
+#pragma warning disable CS0618 // Obsolete: see AddControlToBottomPanel sites — same migration window.
+        MakeBottomPanelItemVisible(_luaApiDock);
+#pragma warning restore CS0618
+        _luaApiDock.FocusAndFilter(filter);
+    }
 
     // Tools → "New Scene from Template…". Pops the wizard dialog so
     // an author can create a fresh PS1 scene from one of the bundled

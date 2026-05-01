@@ -137,6 +137,23 @@ public partial class PS1LuaApiCheatsheetDock : VBoxContainer
         LoadBinds();
     }
 
+    // Public entry point for the Tools-menu lookup action: prime the
+    // search box with `filter`, refocus it, rebuild the tree. Caller
+    // is responsible for making the bottom-panel tab visible so the
+    // dock is on screen when this fires.
+    public void FocusAndFilter(string filter)
+    {
+        if (_search == null) return;
+        _search.Text = filter ?? "";
+        _search.GrabFocus();
+        if (filter != null && filter.Length > 0)
+        {
+            _search.CaretColumn = filter.Length;
+            _search.SelectAll();
+        }
+        RebuildTree();
+    }
+
     private void LoadBinds()
     {
         try
