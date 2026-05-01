@@ -20,6 +20,7 @@ public partial class PS1GodotPlugin : EditorPlugin
     private const string BuildPsxsplashMenuLabel = "PS1Godot: Build psxsplash runtime";
     private const string LaunchEmulatorMenuLabel = "PS1Godot: Launch in PCSX-Redux";
     private const string RunOnPsxMenuLabel = "PS1Godot: Run on PSX (export + build + launch)";
+    private const string CopyCameraLuaMenuLabel = "PS1Godot: Copy Selected Camera as Lua";
     private const string ConvertMeshToPS1MenuLabel = "PS1Godot: Convert selected MeshInstance3D to PS1MeshInstance";
     private const string AddSkinnedTestMenuLabel = "PS1Godot: Add Skinned Test Mesh (bullet 11 test asset)";
     private const string GenerateFontBitmapMenuLabel = "PS1Godot: Generate bitmap for selected PS1UIFontAsset";
@@ -86,6 +87,12 @@ public partial class PS1GodotPlugin : EditorPlugin
         // Top-level: the primary CTA only. Mirrors the dock's big red
         // Run button — same handler, same tooltip semantics.
         AddToolMenuItem(RunOnPsxMenuLabel, Callable.From(OnRunOnPsx));
+
+        // Top-level utility: copy the selected Camera3D's pose+FOV as
+        // a 3-line Lua snippet to the clipboard. Auto-export already
+        // emits these for every Camera3D via the _ps1_cameras preamble;
+        // this is the manual escape hatch for one-off paste-into-script.
+        AddToolMenuItem(CopyCameraLuaMenuLabel, Callable.From(OnCopyCameraAsLua));
 
         // Submenu groupings. Each PopupMenu carries its action items
         // with a stable id; IdPressed dispatches via the BakeMenu /
@@ -371,6 +378,7 @@ public partial class PS1GodotPlugin : EditorPlugin
     public override void _ExitTree()
     {
         RemoveToolMenuItem(RunOnPsxMenuLabel);
+        RemoveToolMenuItem(CopyCameraLuaMenuLabel);
         // Submenus: RemoveToolMenuItem with the submenu's display label
         // (Godot's Tools menu indexes both flat items and submenus by
         // their visible text).
@@ -889,6 +897,74 @@ public partial class PS1GodotPlugin : EditorPlugin
     // OnExportEmptySplashpack pass; fed to the dock once the multi-scene
     // export is done.
     private LastExportSummary? _lastExportSummary;
+
+    // Tools → "Copy Selected Camera as Lua". Resolves the selected
+    // Camera3D's pose+FOV into PSX coords + GTE H register and copies
+    // a 3-line snippet to the clipboard. Mirrors the auto-export
+    // formula in SceneCollector.GenerateCameraPreamble — keep in sync
+    // if the conversion ever changes.
+    private void OnCopyCameraAsLua()
+    {
+        Camera3D? cam = null;
+        foreach (var n in EditorInterface.Singleton.GetSelection().GetSelectedNodes())
+        {
+            if (n is Camera3D c) { cam = c; break; }
+        }
+        if (cam == null)
+        {
+            GD.PushWarning("[PS1Godot] Copy Camera as Lua: select a Camera3D in the scene tree first.");
+            return;
+        }
+
+        // GteScaling lives on the scene's PS1Scene root (default 4.0
+        // when no PS1Scene is present — falls back to keep the snippet
+        // useful even outside an authored PS1 scene).
+        float gteScaling = 4.0f;
+        var root = EditorInterface.Singleton.GetEditedSceneRoot();
+        if (root != null)
+        {
+            var ps1Scene = FindPS1SceneNode(root);
+            if (ps1Scene != null) gteScaling = ps1Scene.GteScaling;
+        }
+
+        var p = cam.GlobalPosition;
+        float px = p.X / gteScaling;
+        float py = -p.Y / gteScaling;
+        float pz = -p.Z / gteScaling;
+
+        var euler = cam.GlobalTransform.Basis.GetEuler(EulerOrder.Yxz);
+        float pitchPi = euler.X / Mathf.Pi;
+        float yawPi   = euler.Y / Mathf.Pi;
+        float rollPi  = euler.Z / Mathf.Pi;
+
+        float fovDeg = cam.Fov;
+        float fovRad = fovDeg * Mathf.Pi / 180f;
+        int hReg = Mathf.Clamp(Mathf.RoundToInt(120f / Mathf.Tan(fovRad * 0.5f)), 1, 1024);
+
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        string snippet =
+            $"-- {cam.Name} (fov={fovDeg.ToString("0.##", ci)}°, GteScaling={gteScaling.ToString("0.##", ci)})\n" +
+            $"Camera.SetPosition(Vec3.new({px.ToString("0.######", ci)}, " +
+                $"{py.ToString("0.######", ci)}, {pz.ToString("0.######", ci)}))\n" +
+            $"Camera.SetRotation(Vec3.new({pitchPi.ToString("0.######", ci)}, " +
+                $"{yawPi.ToString("0.######", ci)}, {rollPi.ToString("0.######", ci)}))\n" +
+            $"Camera.SetH({hReg})\n";
+
+        DisplayServer.ClipboardSet(snippet);
+        GD.Print($"[PS1Godot] Copied Lua snippet for camera '{cam.Name}' to clipboard ({snippet.Length} chars).");
+    }
+
+    private static PS1Scene? FindPS1SceneNode(Node n)
+    {
+        if (n is PS1Scene s) return s;
+        foreach (var c in n.GetChildren())
+            if (c is Node child)
+            {
+                var found = FindPS1SceneNode(child);
+                if (found != null) return found;
+            }
+        return null;
+    }
 
     // Dock thumbnail / "Open VRAM Viewer" button → switch the bottom
     // panel to the PS1 VRAM tab. Use MakeBottomPanelItemVisible since
