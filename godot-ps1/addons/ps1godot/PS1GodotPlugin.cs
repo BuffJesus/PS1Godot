@@ -63,6 +63,7 @@ public partial class PS1GodotPlugin : EditorPlugin
     private PS1SoundMacroInspector? _soundMacroInspector;
     private PS1SoundFamilyInspector? _soundFamilyInspector;
     private PS1VRAMViewerDock? _vramViewerDock;
+    private PS1AudioRoutingDock? _audioRoutingDock;
     private LuaHotSwapWatcher? _luaHotSwapWatcher;
     private PS1ViewportOverlay? _viewportOverlay;
 
@@ -275,6 +276,14 @@ public partial class PS1GodotPlugin : EditorPlugin
         AddControlToBottomPanel(_vramViewerDock, "PS1 VRAM");
 #pragma warning restore CS0618
 
+        // Audio routing test panel — pick a clip from PS1Scene.AudioClips,
+        // see what route the export pipeline will resolve it to, and
+        // audition the SPU path through Godot's AudioStreamPlayer.
+        _audioRoutingDock = new PS1AudioRoutingDock();
+#pragma warning disable CS0618 // Obsolete: AddControlToBottomPanel — see AddControlToDock site above.
+        AddControlToBottomPanel(_audioRoutingDock, "PS1 Audio");
+#pragma warning restore CS0618
+
         // Lua hot-swap watcher: polls scene_0's exported .lua files and
         // writes res://build/hotswap.luac when one changes. Runtime side
         // (psxsplash-main/src/lua.cpp Lua::TryHotSwap) consumes that file
@@ -448,6 +457,15 @@ public partial class PS1GodotPlugin : EditorPlugin
 #pragma warning restore CS0618
             _vramViewerDock.QueueFree();
             _vramViewerDock = null;
+        }
+
+        if (_audioRoutingDock != null)
+        {
+#pragma warning disable CS0618 // Obsolete — see AddControlToBottomPanel site above.
+            RemoveControlFromBottomPanel(_audioRoutingDock);
+#pragma warning restore CS0618
+            _audioRoutingDock.QueueFree();
+            _audioRoutingDock = null;
         }
 
         if (_luaHotSwapWatcher != null)
