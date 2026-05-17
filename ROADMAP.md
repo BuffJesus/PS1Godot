@@ -1583,10 +1583,21 @@ graph-walker overhead.
         node Kind, sourced from a `NodeKindEntry[]` table so future
         kinds register in one line. Toolbar "+ Print" button retired —
         palette is the canonical "add node" UX.
-      - **Deferred to slice 3** (alongside D1 — first concrete kind):
-        live validation (cycle detection, dangling input); node
-        search / palette filter; undo/redo integration; group / comment
-        nodes; compile-to-Lua pass. Resource fields stay append-only-
+      - **Slice 3 shipped 2026-05-17 (cycle detection + more kinds).**
+        Cycle check in ConnectionRequest: DFS from the proposed target
+        via existing edges; if it can already reach the source, the
+        new edge is refused with a PushWarning naming both nodes.
+        Two more node kinds register in the palette: **Branch (if/else)**
+        — Exec in / Exec out true / right-only Exec out false / Bool
+        in (exercises typed pins across Exec + Bool with a partial-pin
+        row), and **Comment** — pinless decoration with a LineEdit
+        payload (exercises the "no slots" path).
+      - **Deferred to slice 4** (alongside D1 — first concrete kind):
+        dangling-input warnings; node search / palette filter;
+        undo/redo integration; group nodes; compile-to-Lua pass.
+        Compiler shape will probably tighten cycle rejection from
+        "any cycle" to "exec-only" since data cycles can be legal in
+        memo / cache patterns. Resource fields stay append-only-
         friendly so none of these require a schema bump.
 - [ ] **D1. `PS1DialogueGraph`** — *first graph kind.* Nodes: Line,
       Choice, Condition, SetFlag, GiveItem, PlaySound, StartCutscene.

@@ -4,30 +4,33 @@ using PS1Godot.Graph;
 
 namespace PS1Godot.UI;
 
-// PS1Graph editor — slice 2.
+// PS1Graph editor — slice 3.
 //
 // Bottom-panel dock that hosts a Godot GraphEdit widget on top of a
-// PS1GraphResource. Slice-2 additions over slice 1:
-//   - Typed pins. Each node Kind declares its slot layout (pin type per
-//     row, per side); GraphEdit's slot-type compatibility check enforces
-//     "Exec connects to Exec, String connects to String" automatically.
-//     Colours match the PinType enum (Exec white, String yellow, …).
-//   - Right-click palette. Right-clicking empty GraphEdit space opens a
-//     PopupMenu listing every registered node Kind; selection drops a
-//     fresh node at the click position. The slice-1 "+ Print" toolbar
-//     button is gone — the palette is the canonical "add node" UX.
+// PS1GraphResource. Slice-3 additions over slice 2:
+//   - Cycle detection in ConnectionRequest — DFS from the proposed
+//     target back via existing edges; if it can already reach the
+//     source, refuse the new edge with a PushWarning. Prevents
+//     authoring uncompilable loops at connect time.
+//   - Two more node kinds: "Branch (if/else)" — three rows of typed
+//     pins (Exec in / Exec out true; right-only Exec out false; Bool
+//     in) — and "Comment" (pinless decoration with a LineEdit
+//     payload). Together with Print these exercise the typed-pin
+//     model across Exec / String / Bool plus a pinless kind.
 //
 // Author actions:
 //   - New / Load / Save / Save As… in the toolbar.
-//   - Right-click empty GraphEdit → "Print" (etc.) to add a node.
-//   - Drag a pin to another pin → connect (rejected if types differ).
+//   - Right-click empty GraphEdit → palette → spawn a node.
+//   - Drag a pin to another pin → connect (rejected if types differ
+//     OR if the edge would close a cycle).
 //   - Select + Delete → remove node(s) and cascade-prune connections.
 //
-// Slice 2 still omits: compile-to-Lua (no compiler), live validation
-// (cycle detection / dangling-input warnings), node search / palette
-// filter, undo/redo integration, group / comment nodes. Those land in
-// slice 3 alongside D1 (the first concrete graph kind, Dialogue), when
-// real use cases tell us which framework polish actually hurts.
+// Slice 3 still omits: compile-to-Lua (no compiler), dangling-input
+// warnings, node search / palette filter, undo/redo integration,
+// group nodes. Those land alongside D1 (Dialogue) once the compiler
+// shape is decided, since the compiler's needs drive validation
+// granularity (e.g. exec-only cycle rejection vs the current "any
+// cycle is rejected" stance).
 [Tool]
 public partial class PS1GraphEditorDock : VBoxContainer
 {
@@ -63,7 +66,9 @@ public partial class PS1GraphEditorDock : VBoxContainer
     private record NodeKindEntry(string Kind, string DisplayName);
     private static readonly NodeKindEntry[] s_kinds = new[]
     {
-        new NodeKindEntry("print", "Print"),
+        new NodeKindEntry("print",   "Print"),
+        new NodeKindEntry("branch",  "Branch (if/else)"),
+        new NodeKindEntry("comment", "Comment"),
     };
 
     // Slice-2 palette: per-pin-type colours. Picked to match common
@@ -359,6 +364,38 @@ public partial class PS1GraphEditorDock : VBoxContainer
                              true, (int)PinType.String, s_pinColors[PinType.String]);
                 break;
             }
+            case "branch":
+            {
+                // Row 0: Exec in (left) + Exec out true (right).
+                g.AddChild(new Label { Text = "exec / true" });
+                g.SetSlot(0, true,  (int)PinType.Exec, s_pinColors[PinType.Exec],
+                             true,  (int)PinType.Exec, s_pinColors[PinType.Exec]);
+
+                // Row 1: no left pin, Exec out false (right only). The
+                // compiler will branch on the Bool input below; this row
+                // is the false-arm continuation.
+                g.AddChild(new Label { Text = "false" });
+                g.SetSlot(1, false, (int)PinType.Exec, s_pinColors[PinType.Exec],
+                             true,  (int)PinType.Exec, s_pinColors[PinType.Exec]);
+
+                // Row 2: Bool in (left only). The decision input.
+                g.AddChild(new Label { Text = "condition" });
+                g.SetSlot(2, true,  (int)PinType.Bool, s_pinColors[PinType.Bool],
+                             false, (int)PinType.Bool, s_pinColors[PinType.Bool]);
+                break;
+            }
+            case "comment":
+            {
+                // Pinless decoration node. Used to label graph regions
+                // ("// player damage", "TODO rebalance") without
+                // affecting connection topology. The Payload field
+                // holds the text.
+                var commentEdit = new LineEdit { Text = n.Payload, PlaceholderText = "comment…" };
+                commentEdit.TextChanged += text => n.Payload = text;
+                g.AddChild(commentEdit);
+                // No SetSlot — both sides remain disabled, no pin caps drawn.
+                break;
+            }
             default:
             {
                 // Fallback: untyped + Payload as a plain label. Lets
@@ -414,9 +451,23 @@ public partial class PS1GraphEditorDock : VBoxContainer
         int toId   = ExtractIdFromVisualName(toNode);
         if (fromId < 0 || toId < 0) return;
 
-        // Cycle prevention is a slice-2 concern (live validation); for
-        // slice 1 we permit any connection the GraphEdit allows, which
-        // includes the trivial self-loop. The render layer doesn't mind.
+        // Cycle check: would a connection from `fromId` to `toId` close
+        // a directed loop in the connection graph? Walk existing edges
+        // backwards from `fromId` — if we reach `toId`, adding this edge
+        // would let us return to it. Conservative: rejects ALL cycles,
+        // including data-only ones (String→String chains looping back).
+        // Data-cycle false-positives are rare in practice; the slice-4
+        // compiler will tighten this to "exec-only" if we hit a real
+        // case that's blocked unnecessarily.
+        if (WouldFormCycle(fromId, toId))
+        {
+            GD.PushWarning(
+                $"[PS1Godot] PS1Graph: refusing connection from node #{fromId} → node #{toId} — " +
+                $"would form a cycle. Cycles aren't compilable to straight-line Lua; break the " +
+                $"loop with a Branch (if/else) or restructure the flow.");
+            return;
+        }
+
         _resource.Connections.Add(new PS1GraphConnection
         {
             FromNodeId = fromId,
@@ -425,6 +476,35 @@ public partial class PS1GraphEditorDock : VBoxContainer
             ToPort     = (int)toPort,
         });
         _graphEdit.ConnectNode(fromNode, (int)fromPort, toNode, (int)toPort);
+    }
+
+    // DFS over the connection list to determine whether adding
+    // `from → to` would form a cycle. A cycle exists iff `to` can
+    // already reach `from` via existing edges. Visits each node at
+    // most once via the `seen` set; O(edges) per call which is fine
+    // for the graph sizes authors hand-edit (slice-3 hand-authored
+    // graphs are realistically dozens of nodes, not thousands).
+    private bool WouldFormCycle(int from, int to)
+    {
+        if (from == to) return true;  // self-loop is a degenerate cycle.
+
+        var seen = new System.Collections.Generic.HashSet<int>();
+        var stack = new System.Collections.Generic.Stack<int>();
+        stack.Push(to);
+        while (stack.Count > 0)
+        {
+            int cur = stack.Pop();
+            if (!seen.Add(cur)) continue;
+            if (cur == from) return true;
+            foreach (var c in _resource.Connections)
+            {
+                if (c.FromNodeId == cur)
+                {
+                    stack.Push(c.ToNodeId);
+                }
+            }
+        }
+        return false;
     }
 
     private void OnDisconnectionRequest(StringName fromNode, long fromPort, StringName toNode, long toPort)
