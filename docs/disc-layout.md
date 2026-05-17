@@ -1,5 +1,15 @@
 # Disc-layout-aware ISO build — design + patch
 
+**Status (2026-05-17):** Stage 1 (basic mkpsxiso pipeline) shipped
+2026-04-27 as `tools/build_iso/build_iso.py` + dock "Build ISO"
+button. Stages 2–4 (adjacency-aware layout, hot-asset duplication,
+measurement harness) deferred — all gated on PS1Chunk node + chunk
+streaming runtime (`REF-GAP-5`), neither of which has started.
+Once PS1Chunk lands, Stages 2–3 size to ~3–4 commits combined
+(Neighbors/NeighborWeights/HotAssets exports + linearization +
+triplet grouping + dock report). Stage 4 measurement parks as
+its own session.
+
 Closes `REF-GAP-10` from `docs/ps1_large_rpg_optimization_reference.md`:
 
 > 10. **Disc layout is undefined.** The reference's "disc layout
@@ -284,22 +294,20 @@ nothing to lay out. Tracked elsewhere — see ROADMAP § Dynamic
 content creation and the REF-GAP-5 entry in the optimization
 reference.
 
-### Stage 1 — Basic ISO build via mkpsxiso
+### Stage 1 — Basic ISO build via mkpsxiso ✅ shipped 2026-04-27
 
-Independent of chunk streaming. Stand up the ISO build path with
-naive (scene-index-order) file layout. Real-hardware testing
-becomes possible.
-
-- `scripts/build-iso.py` — discovers `build/*.splashpack` + sidecars,
-  emits a minimal mkpsxiso XML, shells out to mkpsxiso.
-- New in-editor button: "Build ISO" alongside "Build psxsplash" /
-  "Launch emulator" in the PS1Godot dock.
-- `SETUP.md` gains a "mkpsxiso install" row (it was already a
-  Phase 3 prereq).
-
-Verifiable: author hits "Build ISO," burns the result, plays the
-game on real hardware (or in Mednafen with no PCdrv). No layout
-optimization yet; just proves the pipeline works.
+Shipped at `tools/build_iso/build_iso.py` (script lives outside
+`scripts/` per repo convention; updated path in the dock wiring).
+Walks `godot-ps1/build/` for `scene_<n>.splashpack` triplets
+(plus optional `.xa` sidecars marked Form-2/`type="xa"` so the SPU
+can decode them in hardware, and optional `.loading` boot art),
+emits an mkpsxiso XML, and shells out to mkpsxiso. The in-editor
+"Build ISO" button is wired in `PS1GodotPlugin.cs` (RunBuildIso);
+it auto-rebuilds psxsplash with `LOADER=cdrom` before invoking the
+script so the CDROM runtime is used instead of the PCdrv binary.
+mkpsxiso resolution checks `MKPSXISO`, then PATH, then the
+Wonderful Toolchain fallback at `C:\tools\mkpsxiso\…`. No layout
+optimization yet — files appear in scene-index order.
 
 ### Stage 2 — Adjacency-aware layout
 
