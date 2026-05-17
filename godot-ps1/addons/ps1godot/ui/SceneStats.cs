@@ -21,6 +21,15 @@ public static class SceneStats
     public const int VramBudgetBytes = 512 * 1024;
     public const int SpuBudgetBytes  = 256 * 1024;
 
+    // PSX fill-rate ceiling. The GPU paints ~28 Mpix/s for textured+
+    // Gouraud — at 30 fps × 320×240 that's ~12× the screen area as a
+    // hard ceiling, dropping to ~6-8× practical after VBlank + UI + clears.
+    // Budget against 8× so authors land in green territory by default.
+    // See docs/fill-rate-budget.md for the math.
+    public const float FillRateBudgetScreenAreas = 8.0f;
+    // Doc's transparency cost factor: semi-trans path runs ~1.5× a flat fill.
+    public const float TranslucentFillCostFactor = 1.5f;
+
     public readonly struct Result
     {
         public readonly bool HasPS1Scene;
@@ -35,11 +44,18 @@ public static class SceneStats
         public readonly int MaxActors;
         public readonly int MaxTexturePages;
         public readonly int TexturePageEstimate;   // Rough page count based on VRAM estimate.
+        // Static fill-rate estimate: sum of (per-mesh screen-area ratio ×
+        // translucency factor). 0 when no Camera3D was found in the tree
+        // (no viewpoint to project against). Reported as a multiple of
+        // viewport area, comparable directly to FillRateBudgetScreenAreas.
+        public readonly float FillRateScreenAreas;
+        public readonly bool  FillRateCameraFound;
 
         public Result(bool hasScene, string? name, int meshes, int tris, int audio,
                       int textures, long vramBytes, long spuBytes,
                       int targetTris, int maxActors, int maxTexPages,
-                      int texPageEstimate)
+                      int texPageEstimate,
+                      float fillRateAreas, bool fillRateCameraFound)
         {
             HasPS1Scene = hasScene;
             SceneName = name;
@@ -53,6 +69,8 @@ public static class SceneStats
             MaxActors = maxActors;
             MaxTexturePages = maxTexPages;
             TexturePageEstimate = texPageEstimate;
+            FillRateScreenAreas = fillRateAreas;
+            FillRateCameraFound = fillRateCameraFound;
         }
     }
 
@@ -62,13 +80,13 @@ public static class SceneStats
     {
         if (root == null)
         {
-            return new Result(false, null, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+            return new Result(false, null, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0f, false);
         }
 
         var scene = FindFirst<PS1Scene>(root);
         if (scene == null)
         {
-            return new Result(false, null, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+            return new Result(false, null, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0f, false);
         }
 
         int meshes = 0;
@@ -87,6 +105,35 @@ public static class SceneStats
         // textures pack into shared atlases, but we'd rather warn early).
         int texPageEstimate = textureKeys.Count;
 
+        // Fill-rate estimate (docs/fill-rate-budget.md Stage 1, AABB
+        // approximation). Walk the same meshes a second time collecting
+        // (worldAabb, translucent); pick the first Camera3D as a viewpoint
+        // and project each AABB's bounding-rect on screen. Sum weighted
+        // by the translucency factor. No camera → no estimate.
+        //
+        // Stage 1 caveats — documented here so future-you knows what's
+        // intentional vs broken:
+        //  - First Camera3D in tree-order wins. Scenes with multiple
+        //    cameras (player rig + cinematic) get whichever the walker
+        //    hits first. Stage 2's FillRateSampleCameras fixes this.
+        //  - UI sprites (PS1UIElement.Image) and sky billboards
+        //    (PS1Sky) skip this walk; they paint real pixels but
+        //    aren't accounted for here. TODO Stage 1.1 — feed both
+        //    into the estimate alongside meshes.
+        var fillMeshes = new List<(Aabb world, bool translucent)>();
+        CollectFillRateMeshes(root, fillMeshes, groupTranslucent: false);
+        var fillCam = FindFirst<Camera3D>(root);
+        float fillRateAreas = 0f;
+        bool camFound = fillCam != null && fillCam.IsInsideTree();
+        if (camFound)
+        {
+            foreach (var (worldAabb, isTrans) in fillMeshes)
+            {
+                float ratio = ProjectedAabbScreenRatio(worldAabb, fillCam!);
+                fillRateAreas += ratio * (isTrans ? TranslucentFillCostFactor : 1.0f);
+            }
+        }
+
         return new Result(
             hasScene: true,
             name: root.Name,
@@ -99,7 +146,92 @@ public static class SceneStats
             targetTris: scene.TargetTriangles,
             maxActors: scene.MaxActors,
             maxTexPages: scene.MaxTexturePages,
-            texPageEstimate: texPageEstimate);
+            texPageEstimate: texPageEstimate,
+            fillRateAreas: fillRateAreas,
+            fillRateCameraFound: camFound);
+    }
+
+    // Second-pass walker: collects per-mesh AABB + translucency for the
+    // fill-rate estimator. Mirrors WalkMeshes/WalkMeshGroupDescendants so
+    // PS1MeshGroup's children inherit the group's Translucent flag.
+    private static void CollectFillRateMeshes(Node n,
+                                              List<(Aabb world, bool translucent)> sink,
+                                              bool groupTranslucent)
+    {
+        if (n is PS1MeshGroup group)
+        {
+            // Walk children with the group's translucency flag inherited.
+            foreach (var child in group.GetChildren())
+            {
+                if (child is Node c) CollectFillRateMeshes(c, sink, group.Translucent);
+            }
+            return;
+        }
+
+        if (n is MeshInstance3D mi && mi.Mesh != null)
+        {
+            // Local AABB → world via GlobalTransform. PS1MeshInstance's
+            // Translucent flag wins over any group inheritance; plain
+            // MeshInstance3D children of a PS1MeshGroup take the group
+            // flag passed in.
+            bool isTrans = groupTranslucent;
+            if (n is PS1MeshInstance pmi) isTrans = pmi.Translucent;
+            Aabb local = mi.Mesh.GetAabb();
+            Aabb world = mi.GlobalTransform * local;
+            sink.Add((world, isTrans));
+        }
+
+        foreach (var child in n.GetChildren())
+        {
+            if (child is Node c) CollectFillRateMeshes(c, sink, groupTranslucent);
+        }
+    }
+
+    // Screen-area ratio for a world-space AABB projected through `cam`.
+    // Returns (projectedRectArea / viewportArea) — a unitless multiple
+    // suitable for summing across meshes. AABBs entirely behind the camera
+    // return 0. Bounding-rect approximation is an upper bound on true
+    // painted pixels; a Stage-2 per-triangle pass tightens this.
+    //
+    // Near-plane underestimate: AABB straddling the camera (1-7 corners
+    // in front, the rest behind) gets the bbox computed from the visible
+    // corners only — under-counts when the projected geometry actually
+    // extends past those corners. The dock label says "AABB upper bound"
+    // but technically isn't an upper bound at near-plane straddles.
+    // Authors who get close enough for this to matter usually already
+    // see the perf hit.
+    private static float ProjectedAabbScreenRatio(Aabb world, Camera3D cam)
+    {
+        var vp = cam.GetViewport();
+        if (vp == null) return 0f;
+        Vector2 vpSize = vp.GetVisibleRect().Size;
+        if (vpSize.X <= 0f || vpSize.Y <= 0f) return 0f;
+
+        float minX = float.MaxValue, minY = float.MaxValue;
+        float maxX = float.MinValue, maxY = float.MinValue;
+        int infront = 0;
+        for (int i = 0; i < 8; i++)
+        {
+            var corner = world.Position + new Vector3(
+                (i & 1) != 0 ? world.Size.X : 0,
+                (i & 2) != 0 ? world.Size.Y : 0,
+                (i & 4) != 0 ? world.Size.Z : 0);
+            if (cam.IsPositionBehind(corner)) continue;
+            infront++;
+            Vector2 s = cam.UnprojectPosition(corner);
+            if (s.X < minX) minX = s.X;
+            if (s.X > maxX) maxX = s.X;
+            if (s.Y < minY) minY = s.Y;
+            if (s.Y > maxY) maxY = s.Y;
+        }
+        if (infront == 0) return 0f;
+        // Clamp to viewport — paint outside the screen costs nothing.
+        if (minX < 0) minX = 0;
+        if (minY < 0) minY = 0;
+        if (maxX > vpSize.X) maxX = vpSize.X;
+        if (maxY > vpSize.Y) maxY = vpSize.Y;
+        if (maxX <= minX || maxY <= minY) return 0f;
+        return ((maxX - minX) * (maxY - minY)) / (vpSize.X * vpSize.Y);
     }
 
     private static void WalkMeshes(Node n, ref int meshes, ref int tris,

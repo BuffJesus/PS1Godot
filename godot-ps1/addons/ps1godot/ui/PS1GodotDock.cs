@@ -40,6 +40,7 @@ public partial class PS1GodotDock : VBoxContainer
     private BudgetRow? _vramRow;
     private BudgetRow? _spuRow;
     private BudgetRow? _texPageRow;
+    private BudgetRow? _fillRateRow;
     private Label? _pipelineStatusLabel;
     private Label? _configWarningsLabel;
     private VBoxContainer? _configWarningsRows;
@@ -166,6 +167,10 @@ public partial class PS1GodotDock : VBoxContainer
         _texPageRow = new BudgetRow("Tex Pages");
         inner.AddChild(_texPageRow.Label);
         inner.AddChild(_texPageRow.Bar);
+
+        _fillRateRow = new BudgetRow("Fill rate");
+        inner.AddChild(_fillRateRow.Label);
+        inner.AddChild(_fillRateRow.Bar);
 
         // Pipeline status line — shows "Exporting…" / "Building…" /
         // "Launching…" during the Run-on-PSX flow. Hidden when idle.
@@ -500,7 +505,7 @@ public partial class PS1GodotDock : VBoxContainer
     {
         if (_sceneNameLabel == null || _sceneStatsLabel == null ||
             _triRow == null || _vramRow == null || _spuRow == null ||
-            _texPageRow == null) return;
+            _texPageRow == null || _fillRateRow == null) return;
 
         if (!stats.HasPS1Scene)
         {
@@ -510,6 +515,7 @@ public partial class PS1GodotDock : VBoxContainer
             _vramRow.Hide();
             _spuRow.Hide();
             _texPageRow.Hide();
+            _fillRateRow.Hide();
             return;
         }
 
@@ -545,6 +551,24 @@ public partial class PS1GodotDock : VBoxContainer
         else
         {
             _texPageRow.ShowLabelOnly($"Tex Pages  {stats.TexturePageEstimate} (no budget set)");
+        }
+
+        // Fill rate: bounding-rect-projected upper bound, in multiples of
+        // viewport area. Needs a Camera3D in the tree as the viewpoint —
+        // without one, show a hint instead of a bar. Scale to integer
+        // tenths-of-a-screen so the BudgetRow ProgressBar gives reasonable
+        // resolution (8.0× budget → 80 of 80).
+        if (stats.FillRateCameraFound)
+        {
+            long usedTenths = (long)System.Math.Round(stats.FillRateScreenAreas * 10f);
+            long budgetTenths = (long)System.Math.Round(SceneStats.FillRateBudgetScreenAreas * 10f);
+            _fillRateRow.Show(
+                $"Fill rate  {stats.FillRateScreenAreas:F1}× / {SceneStats.FillRateBudgetScreenAreas:F0}× screen  (AABB upper bound)",
+                usedTenths, budgetTenths);
+        }
+        else
+        {
+            _fillRateRow.ShowLabelOnly("Fill rate  add a Camera3D to estimate");
         }
     }
 
