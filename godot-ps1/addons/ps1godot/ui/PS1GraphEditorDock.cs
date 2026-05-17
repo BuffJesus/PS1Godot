@@ -89,6 +89,8 @@ public partial class PS1GraphEditorDock : VBoxContainer
         new NodeKindEntry("condition",      "Condition (flag)", GraphKind: "dialogue"),
         new NodeKindEntry("play_sound",     "Play Sound",       GraphKind: "dialogue"),
         new NodeKindEntry("start_cutscene", "Start Cutscene",   GraphKind: "dialogue"),
+        new NodeKindEntry("state",          "State",            GraphKind: "fsm"),
+        new NodeKindEntry("transition",     "Transition",       GraphKind: "fsm"),
     };
 
     // Available graph kinds, surfaced when the author hits New.
@@ -99,6 +101,7 @@ public partial class PS1GraphEditorDock : VBoxContainer
     {
         ("",         "Untyped / Script"),
         ("dialogue", "Dialogue"),
+        ("fsm",      "FSM (state machine)"),
     };
 
     // Slice-2 palette: per-pin-type colours. Picked to match common
@@ -837,6 +840,54 @@ public partial class PS1GraphEditorDock : VBoxContainer
                 }
                 break;
             }
+            case "state":
+            {
+                // FSM State — represents one FSM state. Payloads[0] is
+                // the state name (used as the Lua table key). Exec in
+                // is the entry point; the lowest-Id state with an
+                // unconnected exec-in is the initial state. Exec out
+                // fans out to one or more transition nodes; GraphEdit
+                // allows multiple connections from a single right pin.
+                //
+                // Row 0: Exec in (left) + Exec out (right).
+                // Row 1: state name LineEdit (pinless).
+                g.AddChild(new Label { Text = "exec in / transitions" });
+                g.SetSlot(0, true, (int)PinType.Exec, s_pinColors[PinType.Exec],
+                             true, (int)PinType.Exec, s_pinColors[PinType.Exec]);
+
+                var nameEdit = new LineEdit
+                {
+                    Text = n.GetPayload(0),
+                    PlaceholderText = "state name…",
+                };
+                nameEdit.TextChanged += text => n.SetPayload(0, text);
+                g.AddChild(nameEdit);
+                // No SetSlot — pinless.
+                break;
+            }
+            case "transition":
+            {
+                // FSM Transition — one event-driven edge between two
+                // states. Payloads[0] is the event name. Exec in comes
+                // from the source state's exec out; exec out goes to
+                // the destination state's exec in.
+                //
+                // Row 0: Exec in (left) + Exec out (right).
+                // Row 1: event name LineEdit (pinless).
+                g.AddChild(new Label { Text = "from / to" });
+                g.SetSlot(0, true, (int)PinType.Exec, s_pinColors[PinType.Exec],
+                             true, (int)PinType.Exec, s_pinColors[PinType.Exec]);
+
+                var evEdit = new LineEdit
+                {
+                    Text = n.GetPayload(0),
+                    PlaceholderText = "event name…",
+                };
+                evEdit.TextChanged += text => n.SetPayload(0, text);
+                g.AddChild(evEdit);
+                // No SetSlot — pinless.
+                break;
+            }
             default:
             {
                 // Fallback: untyped + Payload as a plain label. Lets
@@ -965,7 +1016,13 @@ public partial class PS1GraphEditorDock : VBoxContainer
         // Data-cycle false-positives are rare in practice; the slice-4
         // compiler will tighten this to "exec-only" if we hit a real
         // case that's blocked unnecessarily.
-        if (WouldFormCycle(fromId, toId))
+        // FSM graphs MUST allow cycles — every back-edge in a state
+        // machine (state A → transition → state B → transition → state
+        // A) is a legitimate loop. The cycle guard exists for graph
+        // kinds that compile to straight-line control flow (untyped,
+        // dialogue actions chained, etc.); skip it for FSM.
+        bool allowCycles = _resource?.Kind == "fsm";
+        if (!allowCycles && WouldFormCycle(fromId, toId))
         {
             GD.PushWarning(
                 $"[PS1Godot] PS1Graph: refusing connection from node #{fromId} → node #{toId} — " +

@@ -42,9 +42,13 @@ public static class PS1GraphCompiler
         //   "dialogue"   → a _G.dialogue_<basename> table the runtime
         //                  walker (slice D1b) interprets at gameplay
         //                  time, not at scene init.
+        //   "fsm"        → a _G.fsm_<basename> table the author drives
+        //                  manually (slice D3-1 — no runtime helper
+        //                  yet; FSM.new shipping later as slice D3-2).
         return resource.Kind switch
         {
             "dialogue" => CompileDialogue(resource, effectivePath),
+            "fsm"      => CompileFsm(resource, effectivePath),
             _          => CompileUntyped(resource),
         };
     }
@@ -160,6 +164,128 @@ public static class PS1GraphCompiler
         "start_cutscene" => true,
         _                => false,
     };
+
+    private static bool IsFsmKind(string kind) => kind switch
+    {
+        "state"      => true,
+        "transition" => true,
+        _            => false,
+    };
+
+    // FSM compile — emit a Lua table the author drives manually for
+    // slice D3-1; slice D3-2 will add a runtime `FSM.new` helper that
+    // consumes this exact shape. States become a string-array; each
+    // transition node is one entry in the transitions array, addressed
+    // by upstream state name + event + downstream state name.
+    //
+    // Shape:
+    //   _G.fsm_<basename> = {
+    //       initial = "patrol",
+    //       states = { "patrol", "chase", "attack" },
+    //       transitions = {
+    //           { from = "patrol", event = "see_player", to = "chase" },
+    //           ...
+    //       },
+    //   }
+    //
+    // Initial-state selection: the lowest-Id state node is chosen as
+    // initial. Trivial rule for slice 1; later slices may add an
+    // explicit "is initial" checkbox on the state node or a separate
+    // Entry node kind. States with no name (empty Payload[0]) get
+    // skipped at emit time — they'd produce an invalid Lua key.
+    // Transitions with a missing endpoint (no incoming state, no
+    // outgoing state, or unresolvable state ref) are skipped with a
+    // single comment line so the .lua stays valid.
+    private static string CompileFsm(PS1GraphResource resource, string effectivePath)
+    {
+        var sb = new StringBuilder();
+        string pathLabel = string.IsNullOrEmpty(effectivePath) ? "(unsaved)" : effectivePath;
+        string basename = BasenameForGlobal(effectivePath);
+        sb.AppendLine($"-- Compiled from {pathLabel} (fsm)");
+        sb.AppendLine($"-- {resource.Nodes.Count} node(s), {resource.Connections.Count} connection(s)");
+        sb.AppendLine($"-- Author: drive via _G.fsm_{basename}.states / .transitions until FSM.new ships.");
+        sb.AppendLine();
+
+        var byId = new Dictionary<int, PS1GraphNode>();
+        foreach (var n in resource.Nodes) byId[n.Id] = n;
+
+        // States = state nodes with non-empty Payload[0], in Id order
+        // (so the "initial = lowest-Id" rule is deterministic).
+        var stateNodes = new List<PS1GraphNode>();
+        foreach (var n in resource.Nodes)
+        {
+            if (n.Kind != "state") continue;
+            if (string.IsNullOrEmpty(n.GetPayload(0))) continue;
+            stateNodes.Add(n);
+        }
+        stateNodes.Sort((a, b) => a.Id.CompareTo(b.Id));
+
+        string initial = stateNodes.Count > 0 ? stateNodes[0].GetPayload(0) : "";
+
+        sb.AppendLine($"_G.fsm_{basename} = {{");
+        sb.AppendLine($"    initial = {(string.IsNullOrEmpty(initial) ? "nil" : EscapeLuaString(initial))},");
+
+        sb.AppendLine($"    states = {{");
+        foreach (var s in stateNodes)
+        {
+            sb.AppendLine($"        {EscapeLuaString(s.GetPayload(0))},");
+        }
+        sb.AppendLine($"    }},");
+
+        sb.AppendLine($"    transitions = {{");
+        foreach (var n in resource.Nodes)
+        {
+            if (n.Kind != "transition") continue;
+            string ev = n.GetPayload(0);
+            if (string.IsNullOrEmpty(ev))
+            {
+                sb.AppendLine($"        -- skipped transition n{n.Id}: no event name authored.");
+                continue;
+            }
+            // From-state = the state node connected to this transition's
+            // exec-in. To-state = the state node this transition's
+            // exec-out drives.
+            string? fromState = ResolveAdjacentStateName(byId, resource.Connections,
+                                                          predicate: c => c.ToNodeId == n.Id && c.ToPort == 0,
+                                                          isFromSide: true);
+            string? toState   = ResolveAdjacentStateName(byId, resource.Connections,
+                                                          predicate: c => c.FromNodeId == n.Id && c.FromPort == 0,
+                                                          isFromSide: false);
+            if (fromState == null || toState == null)
+            {
+                sb.AppendLine($"        -- skipped transition n{n.Id} ('{ev}'): missing {(fromState == null ? "from-state" : "to-state")} endpoint.");
+                continue;
+            }
+            sb.AppendLine($"        {{ from = {EscapeLuaString(fromState)}, event = {EscapeLuaString(ev)}, to = {EscapeLuaString(toState)} }},");
+        }
+        sb.AppendLine($"    }},");
+
+        sb.AppendLine("}");
+        return sb.ToString();
+    }
+
+    // Find the state-node adjacent to a transition along the given
+    // connection direction, and return its Payload[0] name. Returns
+    // null when there's no such connection or the endpoint isn't a
+    // state with a name. `isFromSide`: true picks `c.FromNodeId`
+    // (looking for the upstream side); false picks `c.ToNodeId`.
+    private static string? ResolveAdjacentStateName(Dictionary<int, PS1GraphNode> byId,
+                                                     Godot.Collections.Array<PS1GraphConnection> conns,
+                                                     System.Func<PS1GraphConnection, bool> predicate,
+                                                     bool isFromSide)
+    {
+        foreach (var c in conns)
+        {
+            if (!predicate(c)) continue;
+            int otherId = isFromSide ? c.FromNodeId : c.ToNodeId;
+            if (!byId.TryGetValue(otherId, out var other)) continue;
+            if (other.Kind != "state") continue;
+            string name = other.GetPayload(0);
+            if (string.IsNullOrEmpty(name)) continue;
+            return name;
+        }
+        return null;
+    }
 
     private static void EmitDialogueNode(StringBuilder sb, Dictionary<int, PS1GraphNode> byId,
                                           Godot.Collections.Array<PS1GraphConnection> conns,
@@ -454,6 +580,8 @@ public static class PS1GraphCompiler
         "condition"      => true,
         "play_sound"     => true,
         "start_cutscene" => true,
+        "state"          => true,
+        "transition"     => true,
         "comment"        => false,
         _                => false,
     };
@@ -476,6 +604,11 @@ public static class PS1GraphCompiler
             "condition"      => port == 0 || (!isInput && port == 1), // row 0 in+out (true), row 1 out (false)
             "play_sound"     => port == 0,
             "start_cutscene" => port == 0,
+            // state, transition: row 0 in+out (exec in left-port 0,
+            // exec out right-port 0). State's exec out can drive many
+            // transitions; transition's exec out drives the next state.
+            "state"          => port == 0,
+            "transition"     => port == 0,
             _                => false,
         };
     }

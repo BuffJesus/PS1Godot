@@ -1737,9 +1737,31 @@ graph-walker overhead.
       edges, branch outcomes (success / fail paths). Compiles to a
       quest state machine with save/load integration
       (`QuestFlag.Set/Has`). `Quest.*` Lua API.
-- [ ] **D3. `PS1FSMGraph`** — states + transitions. Replaces the
+- [🟡] **D3. `PS1FSMGraph`** — states + transitions. Replaces the
       hand-written `StateMachine.new({...})` from Phase 2.5 AI with
       visual authoring. Same Lua output shape, different front end.
+      - **Slice D3-1 shipped 2026-05-17 (graph kind + State + Transition
+        + table compiler).** New `Kind = "fsm"` selects a compile path
+        emitting `_G.fsm_<basename> = { initial=..., states={...}, transitions={...} }`.
+        Two new node kinds: `state` (Payload = state name; exec in/out)
+        and `transition` (Payload = event name; exec in/out). One
+        transition node represents one edge: source state's exec-out
+        → transition's exec-in → destination state's exec-in. The
+        cycle-rejection guard in ConnectionRequest skips for FSM kind
+        — back-edges and self-loops are first-class in state machines.
+        Initial-state rule: lowest-Id named state wins. Author drives
+        the table via a ~10-line Lua walker until D3-2 ships
+        `FSM.new`. See [`docs/ps1graph-fsm-authoring.md`](docs/ps1graph-fsm-authoring.md).
+      - **Slice D3-2 (next)**: `FSM.new(table)` runtime helper —
+        returns an instance with `:Send(event)`, `:Current()`,
+        per-state `onEnter`/`onExit`/`onUpdate` callback dispatch.
+        Either ship as a built-in Lua chunk pcall'd at scene init,
+        or wire into psxsplash like Dialog. Walker is ~30 lines of
+        Lua; psxsplash side is just exposing per-frame ticks.
+      - **Slice D3-3 (later)**: per-state Lua snippets (Payloads[1..N]
+        for enter/update/exit), event vocabulary validation (warn on
+        unreachable transitions / dangling event names), explicit
+        "is initial" checkbox on state node.
 - [ ] **D4. `PS1ScriptGraph`** — general-purpose Blueprint-style
       scripting for trigger logic and event reactions. Last in order
       because the node palette is unbounded and the use cases are
