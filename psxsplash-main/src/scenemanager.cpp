@@ -58,7 +58,7 @@ void psxsplash::SceneManager::InitializeScene(uint8_t* splashpackData, LoadingSc
 #endif
 
     // Register the Lua API
-    m_dialogueRunner.init(&m_controls);
+    m_dialogueRunner.init(&m_controls, &m_uiSystem);
     LuaAPI::RegisterAll(L.getState(), this, &m_cutscenePlayer, &m_animationPlayer, &m_uiSystem, &m_dialogueRunner);
 
 #ifdef PSXSPLASH_PROFILER

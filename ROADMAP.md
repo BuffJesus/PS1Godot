@@ -1665,12 +1665,29 @@ graph-walker overhead.
         console. Slice D1b is the smoke-test variant — proves the
         Lua API binding + table walk + main-loop integration without
         committing to a UI shape.
-      - **Deferred to slice D1c**: drive a `PS1UICanvas` named
-        "dialogue_box" with elements speaker/text/option_1..3 for
-        actual on-screen display. D-pad navigation for choices.
-        Remaining node kinds (Condition / SetFlag / GiveItem /
-        PlaySound / StartCutscene) call into existing runtime
-        systems and land with the canvas UI work.
+      - **Slice D1c shipped 2026-05-17 (canvas-driven UI + D-pad nav).**
+        `DialogueRunner::init` now takes a `UISystem*`; on
+        `startFromStackTop` the walker looks up a `PS1UICanvas` named
+        `"dialogue_box"` and caches handles for elements named
+        `speaker`, `text`, `option_1..3`, `cursor_1..3` (any subset
+        — missing elements are skipped silently). When the canvas
+        exists, `emitCurrentNode` populates the text elements + drives
+        cursor visibility instead of printf'ing; when it doesn't, the
+        slice-D1b printf path stays as the fallback. D-pad Up/Down
+        cycles `m_selectedChoice` within `[0, m_numActiveOptions)`,
+        `refreshCursor` toggles which `cursor_N` element is visible,
+        and `advanceFromCurrent` follows `options[selectedChoice+1].next`
+        when picking from a choice. The entry frame of every new
+        node now returns early from `tick` so a held-from-previous-
+        line X doesn't auto-advance choices before the player sees
+        them. `stop()` hides the canvas + clears all driven text.
+      - **Deferred to slice D1d**: remaining node kinds — Condition
+        (read state), SetFlag (write state), GiveItem (inventory),
+        PlaySound (audio), StartCutscene. Each calls into an
+        existing runtime system; each is a small addition but the
+        set is large. Author-side documentation showing how to
+        construct a `dialogue_box` canvas with the expected element
+        names is also pending.
 - [ ] **D2. `PS1QuestGraph`** — objectives as nodes, prerequisites as
       edges, branch outcomes (success / fail paths). Compiles to a
       quest state machine with save/load integration

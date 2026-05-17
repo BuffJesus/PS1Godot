@@ -24,12 +24,17 @@ static void bounded_strcpy(char* out, const char* src, size_t outSize) {
 //  Lifecycle
 // ─────────────────────────────────────────────────────────────────────
 
-void DialogueRunner::init(Controls* controls) {
+void DialogueRunner::init(Controls* controls, UISystem* ui) {
     m_controls = controls;
+    m_ui = ui;
     m_active = false;
     m_tableRef = -1;
     m_currentNodeId[0] = '\0';
     m_freshNode = false;
+    // Canvas lookups happen on startFromStackTop — the canvas isn't
+    // populated yet at SceneManager construction time.
+    m_canvasIdx = -1;
+    m_useCanvas = false;
 }
 
 void DialogueRunner::startFromStackTop(lua_State* L) {
@@ -66,7 +71,41 @@ void DialogueRunner::startFromStackTop(lua_State* L) {
 
     m_active = true;
     m_freshNode = true;
-    printf("[Dialog] start — entry=%s\n", m_currentNodeId);
+    m_onChoiceNode = false;
+    m_selectedChoice = 0;
+    m_numActiveOptions = 0;
+
+    // Look up the dialogue_box canvas now (after scene + canvases are
+    // loaded). If found, cache element handles + show the canvas; if
+    // not, fall back to printf-only mode (slice D1b behavior).
+    m_canvasIdx = -1;
+    m_speakerHandle = -1;
+    m_textHandle = -1;
+    for (int i = 0; i < kMaxOptions; i++) {
+        m_optionHandles[i] = -1;
+        m_cursorHandles[i] = -1;
+    }
+    m_useCanvas = false;
+    if (m_ui) {
+        m_canvasIdx = m_ui->findCanvas("dialogue_box");
+        if (m_canvasIdx >= 0) {
+            m_useCanvas = true;
+            m_speakerHandle = m_ui->findElement(m_canvasIdx, "speaker");
+            m_textHandle    = m_ui->findElement(m_canvasIdx, "text");
+            // option_1..3 and cursor_1..3 — author can ship any subset.
+            const char* optNames[kMaxOptions]    = { "option_1", "option_2", "option_3" };
+            const char* cursorNames[kMaxOptions] = { "cursor_1", "cursor_2", "cursor_3" };
+            for (int i = 0; i < kMaxOptions; i++) {
+                m_optionHandles[i] = m_ui->findElement(m_canvasIdx, optNames[i]);
+                m_cursorHandles[i] = m_ui->findElement(m_canvasIdx, cursorNames[i]);
+            }
+            m_ui->setCanvasVisible(m_canvasIdx, true);
+            clearCanvasUI();
+        }
+    }
+
+    printf("[Dialog] start — entry=%s (canvas=%s)\n",
+           m_currentNodeId, m_useCanvas ? "dialogue_box" : "none, printf-only");
 }
 
 void DialogueRunner::stop(lua_State* L) {
@@ -74,9 +113,15 @@ void DialogueRunner::stop(lua_State* L) {
         luaL_unref(L, LUA_REGISTRYINDEX, m_tableRef);
         m_tableRef = -1;
     }
+    if (m_useCanvas && m_ui && m_canvasIdx >= 0) {
+        clearCanvasUI();
+        m_ui->setCanvasVisible(m_canvasIdx, false);
+    }
     m_active = false;
     m_currentNodeId[0] = '\0';
     m_freshNode = false;
+    m_onChoiceNode = false;
+    m_useCanvas = false;
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -89,6 +134,26 @@ void DialogueRunner::tick(lua_State* L) {
     if (m_freshNode) {
         emitCurrentNode(L);
         m_freshNode = false;
+        // Defer this frame's input. Without it, the X press that
+        // advanced INTO this node could also be edge-detected for
+        // advancing back OUT — fine for line→line (just feels twitchy)
+        // but immediately auto-picks option 0 on a fresh choice node.
+        return;
+    }
+
+    // Choice navigation: D-pad Up/Down cycles m_selectedChoice within
+    // [0, m_numActiveOptions). Only active when the current node is a
+    // choice with at least one option. Holding the d-pad does NOT
+    // auto-repeat — wasButtonPressed is an edge-trigger.
+    if (m_onChoiceNode && m_numActiveOptions > 0 && m_controls) {
+        if (m_controls->wasButtonPressed(psyqo::AdvancedPad::Button::Up)) {
+            m_selectedChoice = (m_selectedChoice - 1 + m_numActiveOptions) % m_numActiveOptions;
+            refreshCursor();
+        }
+        else if (m_controls->wasButtonPressed(psyqo::AdvancedPad::Button::Down)) {
+            m_selectedChoice = (m_selectedChoice + 1) % m_numActiveOptions;
+            refreshCursor();
+        }
     }
 
     // X / Cross button advances. Per-frame edge so holding the button
@@ -118,32 +183,69 @@ void DialogueRunner::emitCurrentNode(lua_State* L) {
         return;
     }
 
+    // Wipe any leftover canvas state from the previous node before
+    // populating the new one — keeps stale option text from bleeding
+    // through when transitioning line→line, choice→line, etc.
+    if (m_useCanvas) clearCanvasUI();
+
     if (streq(kind, "line")) {
+        m_onChoiceNode = false;
+        m_numActiveOptions = 0;
+        m_selectedChoice = 0;
+
         char speaker[32] = "";
         char text[128] = "";
         readStringField(L, -1, "speaker", speaker, sizeof(speaker));
         readStringField(L, -1, "text",    text,    sizeof(text));
-        printf("[Dialog] %s: %s  (press X to advance)\n",
-               speaker[0] ? speaker : "(none)",
-               text[0]    ? text    : "(empty)");
+
+        if (m_useCanvas && m_ui) {
+            if (m_speakerHandle >= 0) m_ui->setText(m_speakerHandle, speaker);
+            if (m_textHandle    >= 0) m_ui->setText(m_textHandle,    text);
+        } else {
+            printf("[Dialog] %s: %s  (press X to advance)\n",
+                   speaker[0] ? speaker : "(none)",
+                   text[0]    ? text    : "(empty)");
+        }
     }
     else if (streq(kind, "choice")) {
-        printf("[Dialog] choice (press X to pick option 1):\n");
+        m_onChoiceNode = true;
+        m_numActiveOptions = 0;
+        m_selectedChoice = 0;
+
+        if (m_useCanvas && m_ui) {
+            // Show "Choose:" or whatever the author wrote in the
+            // canvas. We don't override speaker/text — author can
+            // pre-populate them as a fixed prompt if they want.
+        } else {
+            printf("[Dialog] choice (D-pad ↑↓ select, X confirm):\n");
+        }
+
         // Walk options array: stack: node-table; push options at -2 then iterate.
         lua_getfield(L, -1, "options");
         if (lua_istable(L, -1)) {
             int n = (int)lua_rawlen(L, -1);
-            for (int i = 1; i <= n; i++) {
+            int written = 0;
+            for (int i = 1; i <= n && written < kMaxOptions; i++) {
                 lua_rawgeti(L, -1, i);  // push options[i]
                 if (lua_istable(L, -1)) {
                     char text[128] = "";
                     readStringField(L, -1, "text", text, sizeof(text));
-                    printf("  %d) %s\n", i, text[0] ? text : "(empty)");
+                    if (m_useCanvas && m_ui) {
+                        if (m_optionHandles[written] >= 0) {
+                            m_ui->setText(m_optionHandles[written], text);
+                        }
+                    } else {
+                        printf("  %d) %s\n", written + 1, text[0] ? text : "(empty)");
+                    }
+                    written++;
                 }
                 lua_pop(L, 1);  // pop options[i]
             }
+            m_numActiveOptions = written;
         }
         lua_pop(L, 1);  // pop options
+
+        refreshCursor();
     }
     else {
         printf("[Dialog] emit: unknown kind '%s' at node '%s'\n", kind, m_currentNodeId);
@@ -173,18 +275,21 @@ void DialogueRunner::advanceFromCurrent(lua_State* L) {
         lua_pop(L, 1);
     }
     else if (streq(kind, "choice")) {
-        // Slice D1b auto-pick: options[1].next  (Lua-1-indexed)
+        // Pick the option the cursor currently sits on (Lua tables are
+        // 1-indexed, so add 1). m_selectedChoice was clamped to the
+        // active option count when entering the node.
+        int pickIdx = m_selectedChoice + 1;
         lua_getfield(L, -1, "options");
         if (lua_istable(L, -1)) {
-            lua_rawgeti(L, -1, 1);  // options[1]
+            lua_rawgeti(L, -1, pickIdx);
             if (lua_istable(L, -1)) {
                 lua_getfield(L, -1, "next");
                 if (lua_isstring(L, -1)) {
                     bounded_strcpy(next, lua_tostring(L, -1), sizeof(next));
                 }
-                lua_pop(L, 1);  // pop options[1].next
+                lua_pop(L, 1);  // pop options[pick].next
             }
-            lua_pop(L, 1);  // pop options[1]
+            lua_pop(L, 1);  // pop options[pick]
         }
         lua_pop(L, 1);  // pop options
     }
@@ -233,6 +338,31 @@ bool DialogueRunner::readStringField(lua_State* L, int tableIndex, const char* k
     }
     lua_pop(L, 1);
     return ok;
+}
+
+// ─────────────────────────────────────────────────────────────────────
+//  Canvas UI helpers (slice D1c)
+// ─────────────────────────────────────────────────────────────────────
+
+void DialogueRunner::refreshCursor() {
+    if (!m_useCanvas || !m_ui) return;
+    for (int i = 0; i < kMaxOptions; i++) {
+        if (m_cursorHandles[i] < 0) continue;
+        bool visible = m_onChoiceNode
+                       && i < m_numActiveOptions
+                       && i == m_selectedChoice;
+        m_ui->setElementVisible(m_cursorHandles[i], visible);
+    }
+}
+
+void DialogueRunner::clearCanvasUI() {
+    if (!m_useCanvas || !m_ui) return;
+    if (m_speakerHandle >= 0) m_ui->setText(m_speakerHandle, "");
+    if (m_textHandle    >= 0) m_ui->setText(m_textHandle,    "");
+    for (int i = 0; i < kMaxOptions; i++) {
+        if (m_optionHandles[i] >= 0) m_ui->setText(m_optionHandles[i], "");
+        if (m_cursorHandles[i] >= 0) m_ui->setElementVisible(m_cursorHandles[i], false);
+    }
 }
 
 } // namespace psxsplash
