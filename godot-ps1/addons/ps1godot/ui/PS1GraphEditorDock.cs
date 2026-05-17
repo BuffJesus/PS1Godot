@@ -535,53 +535,101 @@ public partial class PS1GraphEditorDock : VBoxContainer
         _graphEdit.DisconnectNode(fromNode, (int)fromPort, toNode, (int)toPort);
     }
 
+    // Crash report 2026-05-17: deleting a node took the editor down.
+    // Two suspected interactions with GraphEdit's mid-emit state:
+    //   1. Calling _graphEdit.DisconnectNode(...) inside DeleteNodesRequest
+    //      raced with GraphEdit's own connection-cleanup pass — GraphEdit
+    //      auto-removes any connection touching a freed child GraphNode,
+    //      so the explicit DisconnectNode was redundant AND ran while
+    //      GraphEdit's connection table was being mutated.
+    //   2. QueueFree on a still-selected GraphNode during signal emit
+    //      can use-after-free on the selection model.
+    //
+    // Fix: skip the manual DisconnectNode (GraphEdit handles it), and
+    // defer all visual mutations to a CallDeferred pass so GraphEdit
+    // finishes its current emit cycle before we touch its children.
+    // try/catch around the handler so any future failure prints an
+    // actionable error instead of crashing the editor.
     private void OnDeleteNodesRequest(Godot.Collections.Array<StringName> nodeNames)
     {
         if (_graphEdit == null) return;
 
-        // Collect the Ids we're deleting first; we'll need them to prune
-        // any connection that touched them on either side.
-        var doomedIds = new System.Collections.Generic.HashSet<int>();
-        foreach (var n in nodeNames)
+        try
         {
-            int id = ExtractIdFromVisualName(n.ToString());
-            if (id >= 0) doomedIds.Add(id);
-        }
-        if (doomedIds.Count == 0) return;
-
-        // Prune connections referencing any doomed node (in either
-        // direction). Pull connection lines from GraphEdit too so the
-        // visual stays consistent without a full reload.
-        for (int i = _resource.Connections.Count - 1; i >= 0; i--)
-        {
-            var c = _resource.Connections[i];
-            if (doomedIds.Contains(c.FromNodeId) || doomedIds.Contains(c.ToNodeId))
+            // Snapshot the doomed Ids up front. The actual deletion runs
+            // deferred (next idle frame), but we extract from the signal
+            // payload now in case Godot recycles the Array.
+            var doomedIds = new System.Collections.Generic.HashSet<int>();
+            foreach (var n in nodeNames)
             {
-                if (_idToVisualName.TryGetValue(c.FromNodeId, out var fromName) &&
-                    _idToVisualName.TryGetValue(c.ToNodeId,   out var toName))
+                int id = ExtractIdFromVisualName(n.ToString());
+                if (id >= 0) doomedIds.Add(id);
+            }
+            if (doomedIds.Count == 0) return;
+
+            // Pass through Variant boxing so CallDeferred accepts the
+            // HashSet. Godot.Collections.Array<int> would also work but
+            // copying into a Godot array per delete is wasteful; the
+            // wrapper PerformDeferredDelete unboxes via the field below.
+            _pendingDeleteIds = doomedIds;
+            CallDeferred(MethodName.PerformDeferredDelete);
+        }
+        catch (System.Exception ex)
+        {
+            GD.PushError($"[PS1Godot] PS1Graph: delete-nodes handler threw: {ex}");
+        }
+    }
+
+    // Set by OnDeleteNodesRequest, consumed by PerformDeferredDelete
+    // on the next idle frame. Single-shot; cleared after consumption.
+    private System.Collections.Generic.HashSet<int>? _pendingDeleteIds;
+
+    private void PerformDeferredDelete()
+    {
+        var doomedIds = _pendingDeleteIds;
+        _pendingDeleteIds = null;
+        if (doomedIds == null || doomedIds.Count == 0) return;
+        if (_graphEdit == null) return;
+
+        try
+        {
+            // 1. Drop connections from the resource. GraphEdit will
+            //    auto-remove the visual lines when the GraphNode is
+            //    freed below — no DisconnectNode calls needed.
+            for (int i = _resource.Connections.Count - 1; i >= 0; i--)
+            {
+                var c = _resource.Connections[i];
+                if (doomedIds.Contains(c.FromNodeId) || doomedIds.Contains(c.ToNodeId))
                 {
-                    _graphEdit.DisconnectNode(fromName, c.FromPort, toName, c.ToPort);
+                    _resource.Connections.RemoveAt(i);
                 }
-                _resource.Connections.RemoveAt(i);
             }
-        }
 
-        // Drop the resource nodes + their visuals.
-        for (int i = _resource.Nodes.Count - 1; i >= 0; i--)
-        {
-            if (doomedIds.Contains(_resource.Nodes[i].Id))
+            // 2. Drop resource nodes.
+            for (int i = _resource.Nodes.Count - 1; i >= 0; i--)
             {
-                _resource.Nodes.RemoveAt(i);
+                if (doomedIds.Contains(_resource.Nodes[i].Id))
+                {
+                    _resource.Nodes.RemoveAt(i);
+                }
+            }
+
+            // 3. Free visuals + clean the id→name map. Resolve the
+            //    name BEFORE removing from the map so we still know
+            //    which GraphNode to free.
+            foreach (var id in doomedIds)
+            {
+                if (_idToVisualName.TryGetValue(id, out var name))
+                {
+                    _idToVisualName.Remove(id);
+                    var visual = _graphEdit.GetNodeOrNull<GraphNode>(name);
+                    visual?.QueueFree();
+                }
             }
         }
-        foreach (var id in doomedIds)
+        catch (System.Exception ex)
         {
-            if (_idToVisualName.TryGetValue(id, out var name))
-            {
-                var visual = _graphEdit.GetNodeOrNull<GraphNode>(name);
-                visual?.QueueFree();
-                _idToVisualName.Remove(id);
-            }
+            GD.PushError($"[PS1Godot] PS1Graph: deferred-delete pass threw: {ex}");
         }
     }
 
