@@ -481,7 +481,7 @@ ship the primitive.
 - [ ] `AI.Steering.Seek/Flee/Wander(self, target, params)` — classical
       steering primitives; cheap to implement, huge ergonomic win.
 
-### Lua state modules *(architecture from `docs/ps1_lua_scripting_cross_entity_state_architecture.md`)*
+### Lua state modules *(architecture from `docs/archive/superseded/ps1_lua_scripting_cross_entity_state_architecture.md`)*
 
 Authored Lua today scatters cross-entity state across `_G` and ad-hoc
 helpers. The architecture doc prescribes a small set of named modules
@@ -1688,7 +1688,7 @@ Blocking. Author runs once, sees everything wrong with the project.
       16bpp and used in a Gameplay-residency atlas — convert to 4bpp
       indexed or move the use to a Cutscene canvas").
 
-### Lua API IDL + host-mode tooling *(from `docs/ps1_lua_scripting_cross_entity_state_architecture.md`)*
+### Lua API IDL + host-mode tooling *(from `docs/archive/superseded/ps1_lua_scripting_cross_entity_state_architecture.md`)*
 
 Today the Lua surface is hand-authored in `luaapi.cpp` and the
 exporter regenerates `ApiData.gen.cpp` for in-editor autocomplete.

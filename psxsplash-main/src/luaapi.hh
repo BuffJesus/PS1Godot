@@ -248,7 +248,7 @@ private:
     // "dialogue", "menu", "cutscene", "paused"); chunk is the active
     // scene/area id authors set when transitions land. Both reset to
     // empty on scene load via ResetFrameCount + the scenemanager init
-    // path. See docs/ps1_lua_scripting_cross_entity_state_architecture.md.
+    // path. See docs/archive/superseded/ps1_lua_scripting_cross_entity_state_architecture.md.
     // ========================================================================
 public:
     // Reset GameState (called on scene load alongside frame-counter reset).
