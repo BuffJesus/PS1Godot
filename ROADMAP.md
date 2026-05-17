@@ -1592,13 +1592,27 @@ graph-walker overhead.
         in (exercises typed pins across Exec + Bool with a partial-pin
         row), and **Comment** — pinless decoration with a LineEdit
         payload (exercises the "no slots" path).
-      - **Deferred to slice 4** (alongside D1 — first concrete kind):
-        dangling-input warnings; node search / palette filter;
-        undo/redo integration; group nodes; compile-to-Lua pass.
-        Compiler shape will probably tighten cycle rejection from
-        "any cycle" to "exec-only" since data cycles can be legal in
-        memo / cache patterns. Resource fields stay append-only-
-        friendly so none of these require a schema bump.
+      - **Slice 4a shipped 2026-05-17 (compile-to-Lua, console output).**
+        `addons/ps1godot/graph/PS1GraphCompiler.cs` walks the
+        resource and emits Lua source for the three slice-1..3 kinds.
+        Algorithm: index nodes by Id, compute exec roots (HasExecInput
+        ∧ no incoming exec edge), emit each root as a top-level
+        statement in Id order. Print → `print(<resolved string>)`;
+        Branch → `if <cond> then <true-arm> else <false-arm> end`;
+        Comment → emits nothing. Data resolution walks back through
+        connections (Print's String out passes through its resolved
+        String in) and falls back to the consuming node's Payload
+        literal when unconnected. Bool inputs hardcode `false` until a
+        Bool-producing kind lands. "Compile" toolbar button writes the
+        output to the Godot console via GD.Print.
+      - **Deferred to slice 4b** (alongside D1 — first concrete kind):
+        compile output saved to sibling .lua file, splashpack pipeline
+        integration so compiled graphs ship in the export, dangling-
+        input warnings, node search / palette filter, undo/redo, group
+        nodes. Bool Literal + comparison node kinds will unblock real
+        Branch conditions; D1 Dialogue brings Line / Choice / SetFlag
+        etc. Cycle rejection may tighten from "any cycle" to
+        "exec-only" once the compiler shape is locked in.
 - [ ] **D1. `PS1DialogueGraph`** — *first graph kind.* Nodes: Line,
       Choice, Condition, SetFlag, GiveItem, PlaySound, StartCutscene.
       Compiles to a small Lua table (nodes + edges) walked by a stock

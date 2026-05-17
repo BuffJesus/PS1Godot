@@ -103,6 +103,7 @@ public partial class PS1GraphEditorDock : VBoxContainer
         AddToolbarButton(toolbar, "Load…",     OnLoadPressed);
         AddToolbarButton(toolbar, "Save",      OnSavePressed);
         AddToolbarButton(toolbar, "Save As…",  OnSaveAsPressed);
+        AddToolbarButton(toolbar, "Compile",   OnCompilePressed);
 
         toolbar.AddChild(new VSeparator());
 
@@ -207,6 +208,14 @@ public partial class PS1GraphEditorDock : VBoxContainer
             return;
         }
         GD.Print($"[PS1Godot] PS1Graph: saved '{path}'.");
+    }
+
+    private void OnCompilePressed()
+    {
+        SyncVisualPositionsBackToResource();
+        string lua = PS1GraphCompiler.Compile(_resource);
+        GD.Print("[PS1Godot] PS1Graph: compiled to Lua —");
+        GD.Print(lua);
     }
 
     private void OnSaveAsPressed()
