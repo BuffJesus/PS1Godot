@@ -425,12 +425,16 @@ public partial class PS1GraphEditorDock : VBoxContainer
     {
         if (_graphEdit == null) return;
         _graphEdit.ClearConnections();
-        // Drop every existing visual GraphNode; toolbar lives on us, not
-        // on the GraphEdit, so it's safe to wipe all of GraphEdit's
-        // children here.
+        // Drop visual GraphNode children only. GraphEdit holds an
+        // internal "connection_layer" child that draws all the
+        // connection lines — freeing it puts GraphEdit in a state
+        // where every subsequent frame errors "connections_layer is
+        // missing", and any input that touches connections crashes.
+        // Filter on GraphNode (and GraphElement, which covers frames /
+        // future Godot subclasses) to leave internal layers alone.
         foreach (var child in _graphEdit.GetChildren())
         {
-            child.QueueFree();
+            if (child is GraphElement) child.QueueFree();
         }
         _idToVisualName.Clear();
 
