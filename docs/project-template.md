@@ -1,5 +1,32 @@
 # Project template + first-run experience — design + patch
 
+**Status (2026-05-17):** Mixed — Stage 3 partially shipped, rest
+deferred.
+
+- **Stage 1 — bootstrap.py** ❌ not started. Windows-only
+  `scripts/bootstrap-env.cmd` (env-var setter) exists; no
+  cross-platform Python rewrite, no `--check` mode, no per-OS
+  prerequisite detection.
+- **Stage 2 — project template `.zip`** ❌ not started. No
+  `scripts/build-template.py`, no Godot Project Manager template
+  entry.
+- **Stage 3 — first-run panel** 🟡 partial. `PS1FirstRunPanel.cs`
+  ships the Phase 0.5 minimum (status checklist + "Open demo
+  scene" CTA + skip + ProjectSettings persistence, auto-triggered
+  by `PS1GodotPlugin` when `SetupDetector` finds missing rows).
+  Remaining: per-row `[Install]` buttons with consent-prompted
+  auto-download + extract.
+- **Stage 4 — self-test runner** ❌ not started. No
+  `scripts/run-selftest.py`, no synthetic PCdrv input harness.
+- **Stage 5 — docs reorganization** ❌ not started. `SETUP.md`
+  and `QUICKSTART.md` still in their current shape.
+
+Sized as ~5–7 commits to finish: bootstrap.py (~2), template build
+script + smoke test (~1), `[Install]` buttons for the panel (~1),
+self-test runner (~1–2), docs reorg (~1). Deferred to its own
+session — naturally pairs with `linux-support.md` since both want
+the same cross-platform shell.
+
 Closes the roadmap bullet:
 
 > - [ ] Project template (`PS1 Game`) installable into Godot's
