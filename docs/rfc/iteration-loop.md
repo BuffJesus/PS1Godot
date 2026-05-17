@@ -303,6 +303,16 @@ Wired in PS1GodotPlugin + PS1GodotDock. Default off.
   so the pipeline doesn't feed back into itself.
 - Toggle state lives in-memory only for now (no EditorSettings
   persistence — defer until the toggle proves stable).
+- **Export-error gate (added 2026-05-17).** `OnRunOnPsx` checks
+  `_lastExportSummary.Errors` after the export and halts before
+  build/launch if any hard errors fired (UV-dirty, texture-index
+  bounds, mesh-format roundtrip). PushError names the top offender
+  + reason and the dock status line keeps "✗ Halted: N export
+  error(s)" visible. Prior behaviour: export errors logged but
+  PCSX-Redux launched anyway with a known-broken splashpack —
+  the author had to root-cause from the PSX boot crash. The
+  one-click loop's leading comment already promised this gate;
+  the code just hadn't caught up.
 
 Stages 2 (Lua hot-swap), 3 (scene hot-reload), 4 (UX polish:
 last-reload timing, retry button), and 5 (selective asset

@@ -823,6 +823,30 @@ public partial class PS1GodotPlugin : EditorPlugin
         {
             _dock?.SetPipelineStatus("Exporting splashpack…");
             OnExportEmptySplashpack();
+
+            // Halt the pipeline if the export produced hard errors (UV
+            // out-of-range, texture-index bounds violations, mesh-format
+            // roundtrip failures). Without this gate, PCSX-Redux launches
+            // with a known-broken splashpack and the author has to dig
+            // through the boot crash on PSX to discover the root cause —
+            // exactly the "cascade of errors" the comment above promised
+            // we'd avoid. The validation summary is already on the dock
+            // by the time OnExportEmptySplashpack returns; we just have
+            // to consult it before lighting the runtime fuse.
+            int errCount = _lastExportSummary?.Errors ?? 0;
+            if (errCount > 0)
+            {
+                string topReason = _lastExportSummary != null && !string.IsNullOrEmpty(_lastExportSummary.TopOffenderReason)
+                    ? $" — {_lastExportSummary.TopOffenderReason} on {_lastExportSummary.TopOffenderName}"
+                    : "";
+                GD.PushError(
+                    $"[PS1Godot] Run on PSX HALTED: export reported {errCount} error(s){topReason}. " +
+                    $"Fix the offending mesh(es) and press Run again. " +
+                    $"(Hover the dock 'Last export' line for the full list.)");
+                _dock?.SetPipelineStatus($"✗ Halted: {errCount} export error(s) — fix and rerun.");
+                return;
+            }
+
             string buildDir = System.IO.Path.Combine(RepoRoot(), "godot-ps1", "build");
             if (HasAnyXaSidecar(buildDir))
             {
@@ -837,7 +861,13 @@ public partial class PS1GodotPlugin : EditorPlugin
         }
         finally
         {
-            _dock?.SetPipelineStatus(null);
+            // Don't clobber the "Halted" status message — leave it visible
+            // until the next pipeline run replaces it. Only clear when we
+            // finished a clean launch path.
+            if (_dock != null && (_lastExportSummary?.Errors ?? 0) == 0)
+            {
+                _dock.SetPipelineStatus(null);
+            }
             _pipelineInProgress = false;
         }
     }
