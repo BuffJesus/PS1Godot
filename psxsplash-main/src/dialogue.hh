@@ -87,6 +87,14 @@ private:
     int  m_numActiveOptions = 0;
     bool m_onChoiceNode = false;
 
+    // Stored option text for selection-indicator fallback. When the canvas
+    // has no cursor_1..3 elements, refreshCursor re-writes each option as
+    // "> text" / "  text" so the selection is still visible. When cursors
+    // exist, options keep their raw text and refreshCursor only toggles
+    // cursor visibility.
+    char m_optionTexts[kMaxOptions][96] = {};
+    bool m_hasAnyCursor = false;
+
     // True when this dialogue is driving the canvas this run. False
     // when no canvas was authored — printf-only mode.
     bool m_useCanvas = false;
@@ -118,6 +126,14 @@ private:
     // Clear all dialogue_box text + hide all cursor elements. Called
     // when entering a new node and on stop.
     void clearCanvasUI();
+
+    // Toggle every element on the canvas that ISN'T one of the named
+    // dialogue slots (speaker/text/option_*/cursor_*). Lets authors drop
+    // a background Box, frame, portrait, etc. onto the dialogue_box and
+    // have it auto-appear with the dialogue / disappear when it stops,
+    // without remembering to flip VisibleOnLoad. Called once on start
+    // (visible=true) and once on stop (visible=false).
+    void manageAuxElements(bool visible);
 };
 
 } // namespace psxsplash

@@ -95,17 +95,26 @@ void DialogueRunner::startFromStackTop(lua_State* L) {
             // option_1..3 and cursor_1..3 — author can ship any subset.
             const char* optNames[kMaxOptions]    = { "option_1", "option_2", "option_3" };
             const char* cursorNames[kMaxOptions] = { "cursor_1", "cursor_2", "cursor_3" };
+            m_hasAnyCursor = false;
             for (int i = 0; i < kMaxOptions; i++) {
                 m_optionHandles[i] = m_ui->findElement(m_canvasIdx, optNames[i]);
                 m_cursorHandles[i] = m_ui->findElement(m_canvasIdx, cursorNames[i]);
+                if (m_cursorHandles[i] >= 0) m_hasAnyCursor = true;
             }
             m_ui->setCanvasVisible(m_canvasIdx, true);
             clearCanvasUI();
+            manageAuxElements(true);
         }
     }
 
     printf("[Dialog] start — entry=%s (canvas=%s)\n",
            m_currentNodeId, m_useCanvas ? "dialogue_box" : "none, printf-only");
+    if (m_useCanvas) {
+        printf("[Dialog] handles: speaker=%d text=%d option=[%d,%d,%d] cursor=[%d,%d,%d] (-1 = element not found on canvas)\n",
+               m_speakerHandle, m_textHandle,
+               m_optionHandles[0], m_optionHandles[1], m_optionHandles[2],
+               m_cursorHandles[0], m_cursorHandles[1], m_cursorHandles[2]);
+    }
 }
 
 void DialogueRunner::stop(lua_State* L) {
@@ -114,6 +123,7 @@ void DialogueRunner::stop(lua_State* L) {
         m_tableRef = -1;
     }
     if (m_useCanvas && m_ui && m_canvasIdx >= 0) {
+        manageAuxElements(false);
         clearCanvasUI();
         m_ui->setCanvasVisible(m_canvasIdx, false);
     }
@@ -201,8 +211,23 @@ void DialogueRunner::emitCurrentNode(lua_State* L) {
         readStringField(L, -1, "text",    text,    sizeof(text));
 
         if (m_useCanvas && m_ui) {
-            if (m_speakerHandle >= 0) m_ui->setText(m_speakerHandle, speaker);
-            if (m_textHandle    >= 0) m_ui->setText(m_textHandle,    text);
+            // Populate AND make visible: authors keep VisibleOnLoad=false
+            // on dialogue elements (so they don't flash at scene start)
+            // and the walker manages visibility while it's running.
+            if (m_speakerHandle >= 0) {
+                m_ui->setText(m_speakerHandle, speaker);
+                m_ui->setElementVisible(m_speakerHandle, true);
+            }
+            if (m_textHandle >= 0) {
+                m_ui->setText(m_textHandle, text);
+                m_ui->setElementVisible(m_textHandle, true);
+            }
+            // Mirror to console so we can confirm the line content
+            // even when the canvas is on — useful when the on-screen
+            // text doesn't appear (color/coords/sortOrder issues).
+            printf("[Dialog] line emit: speaker='%s' text='%s' (canvas)\n",
+                   speaker[0] ? speaker : "(none)",
+                   text[0]    ? text    : "(empty)");
         } else {
             printf("[Dialog] %s: %s  (press X to advance)\n",
                    speaker[0] ? speaker : "(none)",
@@ -235,8 +260,11 @@ void DialogueRunner::emitCurrentNode(lua_State* L) {
                     char text[128] = "";
                     readStringField(L, -1, "text", text, sizeof(text));
                     if (m_useCanvas && m_ui) {
+                        // Stash the raw option text so refreshCursor can
+                        // re-render with/without selection prefix.
+                        bounded_strcpy(m_optionTexts[written], text, sizeof(m_optionTexts[written]));
                         if (m_optionHandles[written] >= 0) {
-                            m_ui->setText(m_optionHandles[written], text);
+                            m_ui->setElementVisible(m_optionHandles[written], true);
                         }
                     } else {
                         printf("  %d) %s\n", written + 1, text[0] ? text : "(empty)");
@@ -435,20 +463,84 @@ bool DialogueRunner::readStringField(lua_State* L, int tableIndex, const char* k
 void DialogueRunner::refreshCursor() {
     if (!m_useCanvas || !m_ui) return;
     for (int i = 0; i < kMaxOptions; i++) {
-        if (m_cursorHandles[i] < 0) continue;
-        bool visible = m_onChoiceNode
-                       && i < m_numActiveOptions
-                       && i == m_selectedChoice;
-        m_ui->setElementVisible(m_cursorHandles[i], visible);
+        if (m_cursorHandles[i] >= 0) {
+            bool visible = m_onChoiceNode
+                           && i < m_numActiveOptions
+                           && i == m_selectedChoice;
+            m_ui->setElementVisible(m_cursorHandles[i], visible);
+        }
+    }
+    // No cursor elements on the canvas? Rewrite each option's text with
+    // a "> " / "  " prefix so the selected line is still visually
+    // distinguishable.
+    if (!m_hasAnyCursor && m_onChoiceNode) {
+        for (int i = 0; i < m_numActiveOptions; i++) {
+            if (m_optionHandles[i] < 0) continue;
+            char buf[112];
+            const char* prefix = (i == m_selectedChoice) ? "> " : "  ";
+            int n = 0;
+            while (prefix[n] && n < (int)sizeof(buf) - 1) { buf[n] = prefix[n]; n++; }
+            const char* src = m_optionTexts[i];
+            while (*src && n < (int)sizeof(buf) - 1) { buf[n++] = *src++; }
+            buf[n] = '\0';
+            m_ui->setText(m_optionHandles[i], buf);
+        }
+    } else if (m_onChoiceNode) {
+        // Cursor elements handle the indicator; option text stays raw.
+        // Re-write each frame so toggling between modes works mid-graph
+        // and so the first frame of a choice paints the un-prefixed text.
+        for (int i = 0; i < m_numActiveOptions; i++) {
+            if (m_optionHandles[i] >= 0) {
+                m_ui->setText(m_optionHandles[i], m_optionTexts[i]);
+            }
+        }
+    }
+}
+
+void DialogueRunner::manageAuxElements(bool visible) {
+    if (!m_useCanvas || !m_ui || m_canvasIdx < 0) return;
+    // Walk every element on the canvas. Skip the named dialogue slots
+    // — those have their own visibility lifecycle (per-node fill, hide
+    // between modes). For everything else (background Box, frame
+    // graphics, portraits, decorations, third-party elements an author
+    // dropped on the dialogue canvas), flip visibility en bloc so the
+    // canvas behaves like a single UI panel.
+    int n = m_ui->getCanvasElementCount(m_canvasIdx);
+    for (int i = 0; i < n; i++) {
+        int h = m_ui->getCanvasElementHandle(m_canvasIdx, i);
+        if (h < 0) continue;
+        if (h == m_speakerHandle) continue;
+        if (h == m_textHandle) continue;
+        bool managed = false;
+        for (int j = 0; j < kMaxOptions; j++) {
+            if (h == m_optionHandles[j] || h == m_cursorHandles[j]) {
+                managed = true;
+                break;
+            }
+        }
+        if (managed) continue;
+        m_ui->setElementVisible(h, visible);
     }
 }
 
 void DialogueRunner::clearCanvasUI() {
     if (!m_useCanvas || !m_ui) return;
-    if (m_speakerHandle >= 0) m_ui->setText(m_speakerHandle, "");
-    if (m_textHandle    >= 0) m_ui->setText(m_textHandle,    "");
+    // Hide every dialogue element. Authors keep VisibleOnLoad=false on
+    // speaker/text/option_* so they don't flash before a graph runs; the
+    // walker turns them back on per-node when it has content to show.
+    if (m_speakerHandle >= 0) {
+        m_ui->setText(m_speakerHandle, "");
+        m_ui->setElementVisible(m_speakerHandle, false);
+    }
+    if (m_textHandle >= 0) {
+        m_ui->setText(m_textHandle, "");
+        m_ui->setElementVisible(m_textHandle, false);
+    }
     for (int i = 0; i < kMaxOptions; i++) {
-        if (m_optionHandles[i] >= 0) m_ui->setText(m_optionHandles[i], "");
+        if (m_optionHandles[i] >= 0) {
+            m_ui->setText(m_optionHandles[i], "");
+            m_ui->setElementVisible(m_optionHandles[i], false);
+        }
         if (m_cursorHandles[i] >= 0) m_ui->setElementVisible(m_cursorHandles[i], false);
     }
 }
