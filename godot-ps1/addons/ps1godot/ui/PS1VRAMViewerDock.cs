@@ -237,9 +237,10 @@ public partial class PS1VRAMGrid : Control
         // a sliver before the user has resized; the actual draw scales
         // to whatever size the parent gives us.
         CustomMinimumSize = new Vector2(512, 256);
-        // MouseFilter.Pass keeps gui_input firing for hover tracking
-        // without consuming clicks (we don't have click handlers yet).
-        MouseFilter = MouseFilterEnum.Pass;
+        // MouseFilter.Stop — _GuiInput consumes left-click for click-to-
+        // focus (vram-viewer.md Stage 1). Hover tooltips still work via
+        // _GetTooltip regardless of filter mode.
+        MouseFilter = MouseFilterEnum.Stop;
     }
 
     // Native Godot 4 dynamic tooltip — fires on hover, no manual
@@ -328,6 +329,58 @@ public partial class PS1VRAMGrid : Control
         PSXBPP.TEX_8BIT => t.Width * 2,
         _ => t.Width,
     };
+
+    // Click-to-focus (vram-viewer.md Stage 1 wrap-up). Hit-test the
+    // mouse position against textures/CLUTs in the same priority order
+    // as _GetTooltip and select the matching res:// path in Godot's
+    // FileSystem dock. Atlases / reserved regions aren't author-owned
+    // assets so a click on those is a no-op.
+    public override void _GuiInput(InputEvent @event)
+    {
+        if (@event is not InputEventMouseButton mb) return;
+        if (!mb.Pressed || mb.ButtonIndex != MouseButton.Left) return;
+        if (_snapshot == null) return;
+
+        var avail = Size;
+        if (avail.X <= 0 || avail.Y <= 0) return;
+        float scale = Mathf.Min(avail.X / VramW, avail.Y / VramH);
+        if (scale <= 0) return;
+        var drawSize = new Vector2(VramW * scale, VramH * scale);
+        var origin = (avail - drawSize) * 0.5f;
+
+        float vramX = (mb.Position.X - origin.X) / scale;
+        float vramY = (mb.Position.Y - origin.Y) / scale;
+        if (vramX < 0 || vramX >= VramW || vramY < 0 || vramY >= VramH) return;
+
+        const float ClutHitPadding = 1f;
+        foreach (var c in _snapshot.Cluts)
+        {
+            if (vramX >= c.X && vramX < c.X + c.Length &&
+                vramY >= c.Y - ClutHitPadding && vramY < c.Y + 1 + ClutHitPadding)
+            {
+                FocusFileSystem(c.OwnerSourcePath);
+                return;
+            }
+        }
+        foreach (var t in _snapshot.Textures)
+        {
+            if (vramX >= t.X && vramX < t.X + t.Width &&
+                vramY >= t.Y && vramY < t.Y + t.Height)
+            {
+                FocusFileSystem(t.SourcePath);
+                return;
+            }
+        }
+    }
+
+    private static void FocusFileSystem(string sourcePath)
+    {
+        if (string.IsNullOrEmpty(sourcePath)) return;
+        // SelectFile reveals the entry in the FileSystem dock — same
+        // behavior as right-click → "Show in FileSystem" from other
+        // editor contexts. No-op if the path no longer exists.
+        EditorInterface.Singleton?.SelectFile(sourcePath);
+    }
 
     private static string BppLabel(PSXBPP bpp) => bpp switch
     {

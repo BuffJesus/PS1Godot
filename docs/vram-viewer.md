@@ -183,25 +183,32 @@ dimension surfaced.
 Five stages, each shippable. Stage 1 is the headline visualization;
 later stages add the auditing capabilities.
 
-### Stage 1 — VRAM map tab
+### Stage 1 — VRAM map tab ✅ shipped 2026-05-16
 
-The most-requested view. Build it first; ship without the other
-tabs.
+`PS1VRAMViewerDock` + `PS1VRAMGrid` + `VramSnapshot` ship the
+1024 × 512 visualization with reserved-region coloring, atlas /
+texture / CLUT placement, scene picker dropdown for multi-scene
+projects, hover tooltips with asset name + bit-depth + VRAM
+coords, and (as of 2026-05-16) click-to-focus that navigates
+the FileSystem dock to the source `res://` path via
+`EditorInterface.SelectFile`.
 
-- Add `PS1VramViewerDock` as a sibling to the existing
-  `PS1GodotDock`, or as a tab inside it (preferred — less UI
-  fragmentation).
-- Hook into the existing dock's "rebuild stats" pulse so the
-  view refreshes on scene save / chunk edit.
-- Render the 1024 × 512 grid via `_Draw()` with colored rects
-  per allocation.
-- Hover tooltip via Godot's standard tooltip mechanism (mouse
-  position → rect hit-test → asset lookup → label string).
-- Selection from scene tree → highlight per-chunk subset.
+`VramSnapshot.TextureRect` / `ClutRect` now carry both the
+short display name and the full `SourcePath` so click-to-focus
+has the path to navigate to.
+
+Per-chunk overlay is the remaining Stage 1 sub-bullet —
+deferred because chunks aren't a thing yet (waits on
+`chunk-streaming.md`).
 
 Verifiable: open the demo scene, see the framebuffers, font
 column, atlas, and CLUTs laid out matching the actual VRAM
 the runtime uses.
+
+Stages 2–5 (texture-page grouping, OT pressure, residency
+breakdown, auditor + snapshot export) are deferred as their
+own session — each is a meaningful new tab + classifier and
+together they're another major dock-side feature.
 
 ### Stage 2 — Texture-page grouping tab
 

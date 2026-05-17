@@ -38,8 +38,10 @@ public sealed class VramSnapshot
     public bool IsEmpty => Atlases.Count == 0 && Cluts.Count == 0;
 
     public sealed record AtlasRect(int X, int Y, int Width, int Height, PSXBPP BitDepth);
-    public sealed record TextureRect(int X, int Y, int Width, int Height, PSXBPP BitDepth, string Name);
-    public sealed record ClutRect(int X, int Y, int Length, PSXBPP BitDepth, string OwnerTextureName);
+    // SourcePath is the original res:// path (or "" for un-pathed textures);
+    // the dock uses it for click-to-focus into the FileSystem dock.
+    public sealed record TextureRect(int X, int Y, int Width, int Height, PSXBPP BitDepth, string Name, string SourcePath);
+    public sealed record ClutRect(int X, int Y, int Length, PSXBPP BitDepth, string OwnerTextureName, string OwnerSourcePath);
 
     // Build a snapshot from a SceneData whose Packer has already run
     // (i.e. after SplashpackWriter.Write returns). Returns an empty
@@ -79,7 +81,7 @@ public sealed class VramSnapshot
                 int y = t.TexpageY * 256 + t.PackingY;
                 textures.Add(new TextureRect(
                     x, y, t.QuantizedWidth, t.Height, t.BitDepth,
-                    ShortName(t.SourcePath)));
+                    ShortName(t.SourcePath), t.SourcePath ?? ""));
             }
 
             // CLUTs: one strip per palette-bearing texture. ClutPackingX
@@ -91,7 +93,7 @@ public sealed class VramSnapshot
                 int len = t.ColorPalette.Count;
                 cluts.Add(new ClutRect(
                     t.ClutPackingX * 16, t.ClutPackingY, len, t.BitDepth,
-                    ShortName(t.SourcePath)));
+                    ShortName(t.SourcePath), t.SourcePath ?? ""));
                 usedPixels += len;
             }
         }
@@ -133,7 +135,7 @@ public sealed class VramSnapshot
         return PSXBPP.TEX_16BIT;
     }
 
-    private static string ShortName(string sourcePath)
+    private static string ShortName(string? sourcePath)
     {
         if (string.IsNullOrEmpty(sourcePath)) return "(unnamed)";
         string name = sourcePath.Replace("res://", "");
