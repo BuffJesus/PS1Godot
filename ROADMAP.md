@@ -1297,58 +1297,62 @@ table, Auto rules, and per-clip migration shortlist.
         below); the Blender side validator surfaces "would batch N→M"
         hints which is the same author signal A4 was scoped to deliver.**
 
-### Slot D1 — automatic static-mesh batching *(disabled 2026-04-27, pending rework)*
+### Slot D1 — automatic static-mesh batching *(re-enabled 2026-05-17, awaiting in-editor confirmation)*
 
 `exporter/StaticBatchOptimizer.cs` runs at the end of `SceneCollector.FromRoot`,
 walks `data.Objects`, and merges meshes sharing
 `(DrawPhase, ShadingMode, AlphaMode, AtlasGroup, Translucent,
-first-material texture_page_id)` into single GameObjects with
-anchor-local fp12 vertex baking. Eligibility: `MeshRole == StaticWorld`,
-`ExportMode == MergeStatic`, no Lua / Tag / Interactable / StartsInactive.
-Blender-side validator mirrors the bucket key + reports candidates at
-author time so artists plan around the optimizer.
+first-material texture_page_id, world-AABB-centre cell)` into single
+GameObjects with anchor-local fp12 vertex baking. Eligibility:
+`MeshRole == StaticWorld`, `ExportMode == MergeStatic`, no Lua / Tag /
+Interactable / StartsInactive. Blender-side validator mirrors the bucket
+key + reports candidates at author time so artists plan around the
+optimizer.
 
-**Currently disabled** via a `s_enabled = false` kill-switch at the top
-of `StaticBatchOptimizer.cs`. Three latent bugs surfaced when the demo
-monitor scene started using it:
+**Re-enabled 2026-05-17** by flipping `s_enabled = true` in
+`StaticBatchOptimizer.cs` after fixing the three latent bugs that
+surfaced when the demo monitor scene started using it:
 
   1. *Parentless synthetic batch node.* The optimizer creates a
      `Node3D` outside the scene tree, so Godot's `GlobalPosition` /
      `GlobalBasis` / `GlobalTransform` returns `Transform3D()` (identity)
      and the GO is written at world (0,0,0) instead of the anchor.
-     Fixed in `SplashpackWriter.cs` + `PS1GodotPlugin.cs` with an
+     **Fixed** in `SplashpackWriter.cs` + `PS1GodotPlugin.cs` with an
      `IsInsideTree() ? GlobalTransform : Transform` fallback.
   2. *Bucket key has no spatial component.* All world meshes sharing
      a texture page collapse into one batch regardless of distance,
      overflowing the int16 fp12 vert envelope (~±32 Godot units around
-     the anchor). Fixed by adding a 24 m world-AABB-centre cell to the
-     bucket key + a per-merge safety guard that bails out if the
+     the anchor). **Fixed** by adding a 24 m world-AABB-centre cell to
+     the bucket key + a per-merge safety guard that bails out if the
      combined extent still exceeds the envelope.
-  3. *(Suspected, not fully diagnosed.)* `combinedTexIndices` appends
-     each member's `SurfaceTextureIndices` without remapping — when
-     the merged GameObject's per-tri `TextureIndex` references a
-     surface authored on member B, it still points at the surface slot
-     from member A's range, so the runtime samples a wrong texture
-     and the batch renders as off-camera garbage. With (1) and (2)
-     fixed, the merged mesh's anchor + AABB are correct and the
-     non-batched neighbours render fine, but the batches themselves
-     still don't show — disabling the optimizer brings them all back.
-     Confirmed empirically 2026-04-27; not yet patched.
+  3. *Per-tri `TextureIndex` not remapped across members.*
+     `combinedTexIndices` appended each member's `SurfaceTextureIndices`
+     end-to-end while `tri.TextureIndex` was carried through verbatim,
+     so member B's tris kept pointing at member A's slot range — the
+     batch rendered with wrong textures (often as off-camera garbage).
+     **Fixed 2026-05-17:** `MergeBucket` now tracks a `surfaceOffset`
+     counter and applies it to each tri's `TextureIndex` (the
+     `-1`/untextured case passes through unchanged). Two safety nets
+     guard against regression: an inline per-member bounds check before
+     remap, and a post-merge full-mesh sweep through
+     `MeshFormatRoundTripVerifier.VerifyTextureIndices` that bails the
+     batch out if anything is off-by-one.
 
-**Rework scope** before re-enabling:
-  - Re-think surface merging — the per-member `SurfaceTextureIndices`
-    list needs an offset map so per-tri `TextureIndex` points at the
-    right slot in the combined surface array.
-  - Add a round-trip / texture-correctness check to
-    `MeshFormatRoundTripVerifier` so this regression can't ship silently.
-  - Per-chunk scoping + `VRAMPacker`-aware bucket key (still pending
-    from the original plan — current scene-wide bucketing loses
-    visibility-culling granularity on huge open exteriors anyway).
+**Still on the followup list** (not blockers for re-enabling):
+  - Per-chunk scoping + `VRAMPacker`-aware bucket key — current
+    scene-wide bucketing loses visibility-culling granularity on huge
+    open exteriors. The spatial-cell key from bug 2 mitigates this but
+    isn't a substitute for the chunk-aware design from the original
+    plan.
+  - In-editor end-to-end confirmation on the demo monitor scene (the
+    original repro) before we declare the slot fully closed. Code is
+    in; Godot doesn't hot-reload DLLs so the editor needs a restart
+    after this commit, and an export should render the previously
+    broken batches correctly.
 
-Until the rework lands, every static mesh exports as its own GameObject
-with its own AABB-cell entry. That costs the iteration savings the
-optimizer was meant to deliver but is otherwise indistinguishable
-from pre-Slot-D1 behaviour.
+Once in-editor export is confirmed clean, the slot delivers its original
+iteration savings: every multi-member bucket collapses to a single
+GameObject, paid once at export time.
 
 ### Phase L1 + L2 — Godot-side vertex lighting *(shipped 2026-04-27)*
 
