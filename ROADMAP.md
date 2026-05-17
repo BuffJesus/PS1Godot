@@ -1702,8 +1702,34 @@ graph-walker overhead.
         action/condition mid-chain doesn't blank the dialogue box.
         GiveItem deferred until an Inventory Lua API exists; the
         compile/walker pattern is template-ready for it.
-      - **Still open**: author-side how-to doc for assembling the
-        `dialogue_box` canvas; arbitrary-Lua-expression Condition
+      - **Slice D1e shipped 2026-05-17 (authoring doc + UX polish).**
+        `docs/ps1graph-dialogue-authoring.md` walks an author from
+        New → Save → wire-into-scene → F5. Runtime polish landed
+        alongside: per-element visibility lifecycle (speaker/text/option
+        elements stay hidden between modes so VisibleOnLoad=false on
+        dialogue slots no longer flashes stale text), no-cursor
+        fallback (walker prepends `> ` / `  ` when cursor_* aren't
+        authored), whole-canvas aux-element management (background
+        Box, frame, portrait — anything that isn't a named dialogue
+        slot — auto-shows on dialogue start and hides on Stop).
+      - **Slice D1f shipped 2026-05-17 (graph load/save robustness).**
+        Godot 4.7-dev5's C# binding sometimes returns custom-script
+        Resources without attaching the C# wrapper, throwing
+        InvalidCastException from `ResourceLoader.Load<T>`. Dock now
+        catches and falls back to non-generic load + manual property-
+        copy reconstruction. ReloadGraphView switched to
+        `RemoveChild`+`QueueFree` (deferred QueueFree was causing
+        auto-suffixed names like `n0@2` that broke connect lookups —
+        manifested as "Load doesn't populate"). Kind dropdown syncs
+        to the loaded graph. EditorInterface.UpdateFile nudges both
+        .tres and .lua post-save so the FileSystem dock + resource
+        cache refresh without an editor restart. `PS1GraphCompiler.Compile`
+        gained a `pathOverride` parameter — when the binding quirk
+        drops `_resource.ResourcePath`, the compiler still emits the
+        correct `_G.dialogue_<basename>` global instead of falling
+        back to "unnamed" and silently breaking author scripts.
+        F5 auto-recompile in `SceneCollector` uses the same override.
+      - **Still open**: arbitrary-Lua-expression Condition
         node (current Condition is structured: just a flag name);
         generic "Lua snippet" power-user node; GiveItem once an
         Inventory API ships.
