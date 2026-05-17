@@ -1,5 +1,46 @@
 # PS1 Asset Pipeline Plan
 
+**Status (2026-05-17):** Living policy doc — load-bearing for the
+exporter + Blender add-on; do **not** archive without a migration
+plan. The "Phased work" block (Slots A/B/D) is mostly absorbed
+into `ROADMAP.md`; the rest remains authoritative spec.
+
+**Still load-bearing (sources of truth — keep in sync):**
+- **§ Slot C metadata schema** — mirrored verbatim into
+  `tools/blender-addon/ps1godot_blender/properties.py`
+  (alphabetical-by-display-order on the dropdowns is a contract).
+- **§ Slot C1 EditorOnly/Ignore skip-role markers** —
+  `tools/blender-addon/.../exporters/metadata_exporter.py`
+  enforces the list.
+- **§ Round-trip authoring (Blender ↔ Godot)** — shared schema,
+  storage, and round-trip rules implemented by `BlenderMetadataReader.cs`
+  + `PS1Metadata.cs`.
+- **§ Warning catalogue** — `TextureValidationReport.cs`,
+  `AnimationLinter.cs`, `AudioValidationReport.cs` all cite it as
+  the policy they validate.
+- **§ Atlas dependency ordering tradeoff (a)** — `StaticBatchOptimizer.cs`
+  references it for surface-remap fallback (note: optimiser
+  kill-switched per `project_static_batch_disabled.md`).
+- **§ Authoring defaults** — texture format / animation method /
+  alpha mode / decal+particle ceilings, still the inspector default
+  source.
+
+**Absorbed (track in ROADMAP / closed):**
+- § Phased work Slot A (validators, animation linter, texture
+  preview) — shipped.
+- § Phased work Slot B (Phase 2 closeout dependency) — shipped.
+- § Phased work Slot D (Phase 2.6/2.7 metadata-in-scenes) — shipped.
+- § Phased work Slot C (Blender round-trip) — Phase 1 shipped
+  via `tools/blender-addon/`.
+
+**Open:**
+- § Phased work Slot E (Phase 4+ RPG-scope items) — still future
+  work.
+
+Edits should preserve the load-bearing sections' wire-spelling /
+enum-value contracts; any change there needs a sweep across the
+code references above.
+
 Single roadmap covering meshes, textures, sprites/decals/alpha, VRAM, and
 animation. Replaces four separate strategy docs that overlapped heavily and
 read greenfield. This one is anchored to what PS1Godot already ships, defers
