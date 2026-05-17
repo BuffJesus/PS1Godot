@@ -49,12 +49,20 @@ of marginal cases. We follow the same tradeoff.
   that the runtime uses to compute OT bucket.
 - **NCLIP** — the GTE has a free instruction that returns a
   signed value indicating triangle winding in screen space.
-  Negative = backface. The runtime currently does *not* call
-  NCLIP — every triangle gets drawn regardless of winding.
-  This is the single biggest oversight in the current pipeline.
+  Negative = backface. **Already wired** in `renderer.cpp`
+  `processTriangle` (leaf path, ~line 284) and in the skinned-
+  mesh path (~line 1464). Static-mesh leaves reject backfaces;
+  skinned-mesh path keeps both windings (FBX/GLTF rigs often
+  ship mirrored bones) and only drops zero-area degenerates.
+- **Near/far Z reject** — `processTriangle` already short-
+  circuits when all three SZ values are behind camera (~line
+  180) or beyond the fog wall (~line 182). Skinned-mesh path
+  has the equivalent at ~line 1442.
 
-So: BVH and portal cull are solid at the spatial layer. The
-post-transform rejection passes don't exist yet.
+So: BVH/portal cull, NCLIP backface, and near/far Z are all
+shipped. What remains from this doc is sub-pixel rejection
+(Pass 3) and occluder volumes (Pass 4). Pass 5 (PVS) stays
+deferred until we have >30-room scenes.
 
 ## The five rejection passes
 
@@ -322,12 +330,12 @@ per-triangle frustum check on top would be redundant.
 
 By value/cost ratio. Each independent.
 
-1. **Pass 1 (Backface cull).** Highest value, smallest code
-   change. Ship first.
-2. **Pass 2 (Near/far rejection).** Same code region; ship
-   alongside Pass 1.
-3. **Pass 3 (Sub-pixel rejection).** Slightly more work, smaller
-   savings. Ship after measuring Pass 1+2.
+1. ~~**Pass 1 (Backface cull).**~~ Already shipped (NCLIP in
+   `processTriangle` leaf path).
+2. ~~**Pass 2 (Near/far rejection).**~~ Already shipped (SZ
+   short-circuits in `processTriangle` and skinned path).
+3. **Pass 3 (Sub-pixel rejection).** Next up — small isolated
+   change in `processTriangle` after the existing rejects.
 4. **Pass 4 (Occluders).** New authoring surface + new runtime
    pass. Bigger lift but high payoff for the right scenes.
 5. **Pass 5 (PVS).** Deferred to "if needed."
