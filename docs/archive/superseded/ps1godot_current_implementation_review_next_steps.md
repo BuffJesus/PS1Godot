@@ -1,5 +1,16 @@
 # PS1Godot Current Implementation Review and Next-Step Plan
 
+**Status (2026-05-17):** Archived snapshot. The "current state"
+this doc reviews is months stale. Of the focus areas listed below:
+cheap lighting (vertex colour mode) shipped; fog / sky / background
+separation shipped (splashpack v32 split bg colour + explicit
+fog near/far); third-person camera-rig support shipped; chunk
+states / streaming remain unbuilt and are now tracked by the
+RFC `docs/rfc/chunk-streaming.md`. The §4 fog/bg detail that
+splashpack.cpp:149 cites still matches the doc's recommendation —
+that's the only currency this snapshot retains. Preserved for
+archaeology; do not extend.
+
 **Purpose:**  
 This document reviews the current PS1Godot / psxsplash-facing implementation direction and turns the findings into a practical roadmap for building toward a larger, chunk-based PS1-style RPG.
 

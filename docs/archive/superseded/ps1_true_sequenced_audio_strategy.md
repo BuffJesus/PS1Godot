@@ -1,5 +1,13 @@
 # PS1 True Sequenced Audio Strategy
 
+**Status (2026-05-17):** Superseded. This was the predecessor design
+for what became the shipped sequenced-audio stack (splashpack v22→v29:
+PS2M format, scene-wide instrument banks, sound macros, sound families,
+voice allocator with priority stealing, ADSR envelopes, program changes).
+Active references live in `docs/sequenced-music-format.md` (on-disk
+format) and `psxsplash-main/src/luaapi.cpp` (runtime API). Preserved
+here for archaeology; do not extend.
+
 **Project target:** PS1Godot / psxsplash / PS1-style chunked RPG  
 **Focus:** evolving the current MIDI-to-sample sequencer into a more complete PS1-style sequenced audio system.
 

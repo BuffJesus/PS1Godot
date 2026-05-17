@@ -1,5 +1,10 @@
 # SDK Feature Comparison — PSYQo · PSn00bSDK · psxsplash · SplashEdit · PS1Godot
 
+**Status (2026-05-17):** Archived snapshot. Feature surfaces of all
+five codebases have moved on since the 2026-04-27 capture; treat as
+historical evidence, not current state. Preserved for archaeology;
+do not extend — regenerate a fresh comparison if needed.
+
 **Generated 2026-04-27.** Compares the feature surfaces of the five
 PS1-related codebases vendored at the project root.
 

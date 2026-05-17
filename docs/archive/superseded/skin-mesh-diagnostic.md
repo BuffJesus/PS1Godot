@@ -1,5 +1,11 @@
 # Skin mesh / fragmented-grey-patches diagnostic
 
+**Status (2026-05-17):** Archived post-mortem. Resolved 2026-04-26;
+fix shipped (`addons/ps1godot/shaders/ps1_skinned.tres` auto-applied
+by `PS1SkinnedMesh._EnterTree`). The lesson is preserved as memory
+`project_ps1_skinned_snap_collapse.md`. Preserved here for the full
+suspect-list write-up; do not extend.
+
 > **Resolved 2026-04-26 — root cause was suspect #1 (vertex snap).**
 > Permanent fix landed: `addons/ps1godot/shaders/ps1_skinned.tres`
 > (snap_enabled=false variant) is now auto-applied by `PS1SkinnedMesh`

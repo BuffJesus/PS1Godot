@@ -1,5 +1,15 @@
 # PS1 Lua Scripting, Cross-Entity State, and Runtime Architecture Plan
 
+**Status (2026-05-17):** Archived planning doc. The shipped Lua
+surface (Entity/Scene/Audio/Camera/Sound/UI/Persist modules,
+per-script env isolation, event hooks) covers the foundational
+pieces; the higher-level abstractions described in §7–§11
+(GameState / Quest / Blackboard / Dialogue / Inventory modules)
+remain unbuilt and aspirational. ROADMAP § "Lua state modules"
+and § "Lua API IDL + host-mode tooling" still treat this as the
+architecture source. Preserved for that purpose; do not extend
+in place — write follow-up RFCs against the current code instead.
+
 **Project target:** PS1Godot / psxsplash / PS1-style chunked action RPG  
 **Focus:** Lua scripting architecture, cross-entity variables, state ownership, performance, tool support, and how this should fit with PS1-style runtime constraints.
 

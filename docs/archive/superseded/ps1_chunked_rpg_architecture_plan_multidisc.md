@@ -1,5 +1,14 @@
 # PS1 Chunked RPG Architecture Plan
 
+**Status (2026-05-17):** Archived seed doc. The active design for
+the chunk-streaming primitive now lives at
+`docs/rfc/chunk-streaming.md` (closes REF-GAP-5 with a concrete
+runtime + writer + Lua-API spec). The PS1Chunk node and
+Scene.LoadChunk/UnloadChunk runtime described in §3–§5 here are
+still unbuilt; this doc is the architectural seed and remains
+useful as background motivation. Preserved for archaeology; do
+not extend.
+
 **Working target:** a somewhat open-world, PS1-style action/RPG built around authored chunks, controlled visibility, strict budgets, and reusable content.
 
 This document is intended to guide future PS1Godot / psxsplash development after the current jam project. It assumes a real PS1-style target where SPU RAM, main RAM, VRAM, GPU ordering, and CD access patterns all matter.

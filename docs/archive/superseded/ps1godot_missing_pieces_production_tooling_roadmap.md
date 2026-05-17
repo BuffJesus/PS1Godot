@@ -1,5 +1,51 @@
 # PS1Godot Missing Pieces and Production Tooling Roadmap
 
+**Status (2026-05-17):** Distilled and archived. 22 production-tooling
+sections, partially absorbed; the broader roadmap shape now lives in
+`ROADMAP.md` and the per-feature RFCs under `docs/rfc/`.
+
+**Absorbed (shipped — see current location):**
+- §2 "PS1 Doctor" unified validator → split into `PS1GodotDock`
+  budget bars + configuration warnings on PS1MeshInstance/Scene/UI
+  nodes + per-export `TextureValidationReport` /
+  `AudioValidationReport` / `AnimationLinter`, with severity tiers
+  + click-to-focus rows.
+- §3 Asset Registry / Stable IDs → Blender add-on Phase 1
+  (`tools/blender-addon/ps1godot_blender/utils/ids.py` +
+  `BlenderMetadataReader.cs`).
+- §7 Disc/archive planner Stage 1 → `tools/build_iso/build_iso.py`
+  + dock "Build ISO" button.
+- §8 Texture page / CLUT visualizer → VRAM viewer dock tab
+  (Stage 1 finish 2026-05-16).
+- §16 Dependency manager / first-run setup →
+  `PS1FirstRunPanel.cs` (Phase 0.5 minimum; see
+  `docs/rfc/project-template.md` for the rest).
+- §17.1–17.2 Project templates → "New Scene from Template…" wizard
+  (`PS1NewSceneWizard.cs`).
+
+**Active RFCs (designs filed, partial-or-no impl):**
+- §9 Render packet / OT pressure → `docs/rfc/fill-rate-budget.md`
+  Stage 1 shipped, 2–4 deferred.
+- §11 Camera preview / frustum viz → open camera-rig polish.
+- §13 Host-mode validator → `docs/rfc/host-mode-testing.md`.
+- §15 Hot reload / partial reload → `docs/rfc/iteration-loop.md`
+  Stage 1 shipped, Tiers 1–2 deferred.
+
+**Unbuilt (no RFC yet):**
+- §4 Dialogue / localization pipeline.
+- §5 Item / Quest / NPC / Shop / Encounter definition editors.
+- §6 Save system + migration.
+- §10.2/10.3 advanced collision/navigation validators (basic
+  PS1Collider + nav gizmo shipped; auto-gen from floor geo open).
+- §12 Runtime screenshot / capture-comparison harness.
+- §14 Versioned splashpack schema system (we manually bump format
+  versions; no schema definition or compat validator).
+- §18 Runtime feature matrix.
+- §19 Vertical slice RPG sample.
+
+Do not extend this doc in place; write follow-up RFCs against
+shipped code instead.
+
 **Project target:** PS1Godot / psxsplash / chunk-based PS1-style RPG authoring pipeline  
 **Focus:** what is still missing to turn PS1Godot from a strong exporter/toolkit into a full production environment.
 

@@ -1,5 +1,47 @@
 # PS1 RPG Performance, Lighting, Sky, and Camera Strategy
 
+**Status (2026-05-17):** Distilled and archived. Partially absorbed
+into shipped code; remainder feeds the active RFC backlog. Doc
+preserved for archaeology + as design source where ROADMAP still
+points at it.
+
+**Absorbed (shipped — see current location):**
+- §3.2 Tier 0 (unlit textured) + Tier 1 (vertex-colour baked) →
+  `PS1MeshInstance.VertexColorMode` + the lighting baker.
+- §4 Sky / fog / clear-colour separation → `PS1Sky` node +
+  splashpack v32 (separated bg colour + explicit `FogNear`/`FogFar`
+  in GTE-Z space).
+- §5 Third-person right-stick camera → camera-rig system
+  (third-person rig + camera fields landed v21 splashpack onward).
+- §6 OT discipline + §12 editor budgets → `PS1GodotDock` scene
+  budget bars (mesh / tri / VRAM / fill-rate / SPU rows) +
+  per-export validators with click-to-focus.
+- §7 GTE basics → `rtpt` (3-vertex) on the static-mesh hot path,
+  per-vertex `rtps` on skinned. §6.5 (sub-pixel triangle rejection)
+  → `psxsplash-main/src/triclip.hh::isSubpixel`.
+- §8.2 disc-layout planner Stage 1 → `tools/build_iso/build_iso.py`
+  + dock "Build ISO" button.
+- §10.1 visual/collision split → `PS1Collider` node.
+
+**Still open (active RFCs or unbuilt):**
+- §3.2 Tiers 2–5 (baked texture lighting, palette mood,
+  runtime directional, fake local lights) — no active RFC yet;
+  closest is `ROADMAP.md` § "Lighting, fog, sky".
+- §5.4 / §10.2 camera collision — open camera-rig polish.
+- §6.2 static-render-packet merge → `StaticBatchOptimizer.cs`
+  shipped slot D1 but is kill-switched (see
+  `project_static_batch_disabled.md` memory).
+- §8.1 area-archive / §8.2 adjacency disc layout →
+  `docs/rfc/chunk-streaming.md` + `docs/rfc/disc-layout.md`
+  Stages 2–4.
+- §9.2 symbolic offscreen sim → `docs/rfc/tiered-simulation.md`.
+- §9.3 Lua profiler / §9.4 host-mode validator →
+  `docs/rfc/profiling.md` + `docs/rfc/host-mode-testing.md`.
+- §11 LOD → `docs/rfc/lod-design.md`.
+
+Do not extend this doc in place; write follow-up RFCs against
+shipped code instead.
+
 **Working target:** a large-feeling, chunk-based PS1-style action/RPG built around strict runtime budgets, controlled visibility, reusable content, and editor-enforced constraints.
 
 This document extends the existing chunked RPG architecture notes with practical strategies for:
