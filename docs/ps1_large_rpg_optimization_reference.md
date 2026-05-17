@@ -117,6 +117,10 @@ Practical advice:
 - limit tiny decorative objects unless they are extremely cheap
 - treat particles and billboards as budgeted resources, not free polish
 
+For calibration, ChenThread/fromage ships a **128-entry** OT and a
+**~96 KB** primitive packet buffer on real hardware — see the
+"External engine: ChenThread/fromage" appendix.
+
 For an RPG:
 - static environment should dominate the scene
 - dynamic props and effects should be limited and intentional
@@ -224,6 +228,13 @@ Each chunk should have its own:
 - script set
 - audio profile
 - effect budget
+
+Above the chunk, keep a **coarse visibility bitmap** — one bit per
+super-cell answering "anything potentially visible in here?" — and
+reject whole super-cells before doing per-chunk work. fromage uses a
+4×4×4-voxel grid for this; the analog for room-based worlds is a
+bitmap over 2×2 or 4×4 room clusters. See the "External engine:
+ChenThread/fromage" appendix.
 
 ## Combine data into larger streaming blocks
 Historic training material strongly recommends combining data into larger reads rather than many small files.
@@ -680,6 +691,103 @@ objects").
 
 ---
 
+## External engine: ChenThread/fromage
+
+[ChenThread/fromage](https://github.com/ChenThread/fromage) is an open-source PS1
+voxel engine (C, MIT-licensed, last release 0.94 / June 2023). It targets the
+same hardware we do but starts from a Minecraft-style world model, so it has
+already paid the design cost on several culling and budgeting questions that
+generalize beyond voxels. The numbers below are quoted from its `src/` headers
+and `world.c` — concrete shipping data points to calibrate our own budgets and
+roadmap items against.
+
+### Concrete data points (calibration values)
+
+| Constant | Value | Where |
+|---|---|---|
+| `DMA_ORDER_MAX` (ordering-table depth) | **128 entries** | `src/common.h` |
+| `DMA_BUFFER_SIZE` (primitive packet buffer) | **256 × 384 = 96 KB** | `src/common.h` |
+| `LEVEL_LX × LEVEL_LY × LEVEL_LZ` (world volume) | **96 × 64 × 96 voxels** | `src/config.h` |
+| Hierarchical cull grid stride | **4³ voxels per visibility bit** | `level_has_vis_blocks[cy>>2][cz>>2][cx>>2]` in `src/world.c` |
+| `FM_PI` (fixed-point angle convention) | **0x8000** (full turn = 0x10000, angles fit in uint16) | `src/common.h` |
+| Water/lava animation | **16-frame loop** via texcoord offset, no VRAM re-upload | `WATER_ANIMATION_*`, `LAVA_ANIMATION_*` in `src/config.h` |
+| Refresh-rate split | **50/60 Hz** branched at compile time via `TV_PAL` | `src/config.h` |
+
+### Techniques worth lifting
+
+1. **Hierarchical visibility bitmap above the chunk level.**
+   fromage maintains `level_has_vis_blocks[cy>>2][cz>>2][cx>>2]` — a single bit
+   per 4×4×4 block group answering "any potentially-visible voxel in this cell?".
+   The renderer rejects whole 64-voxel cells before doing any per-block work.
+   The pattern generalizes: any chunked world (rooms, navmesh cells, exterior
+   tiles) benefits from a coarse "anything alive here?" bitmap one level above
+   its primary spatial index. Cross-references this doc's "Build the world as
+   chunks" — add a coarse-cull layer above the chunk, not just at it.
+
+2. **Per-column opaque-height cache.**
+   `level_opaque_height[cz][cx]` records the y of the topmost opaque block at
+   each (x,z) column. Visibility/lighting checks short-circuit on this 2D table
+   instead of walking full vertical stacks. RPG analog: per ground-tile, cache
+   the height of the tallest occluding wall/roof so far-plane queries are O(1).
+   Useful for outdoor scenes where the horizon is dominated by terrain
+   silhouette.
+
+3. **Precomputed per-block face mask.**
+   `level_faces[cy][cz][cx]` stores a 6-bit "which faces of this block face an
+   air or translucent neighbor?" mask, regenerated only on edit. The renderer
+   emits faces straight from the mask — no per-frame neighbor lookups. We
+   already approximate this with static batching at export (slot D1); the
+   fromage pattern is the formal version: bake the visible-face set at export
+   time, store the mask alongside the geometry, never recompute at runtime.
+
+4. **Angle-as-uint16 with PI = 0x8000.**
+   Already idiomatic in psyqo, but worth pinning as a project convention: angles
+   live in `int16_t` / `uint16_t`, a full rotation is 0x10000, sin/cos tables are
+   indexed by the top bits. Anywhere Godot-side authoring emits a float radian,
+   the exporter should normalize to this representation.
+
+5. **Animated textures via texcoord scroll into an atlas frame strip.**
+   Water and lava in fromage are a 16-frame strip in the atlas; the renderer
+   bumps the U (or V) offset per tick. No VRAM upload. This is the right shape
+   for any flow/cycle animation in our scenes (waterfalls, torches, banners) and
+   avoids the SPU/CDDA-style "stream a texture" overhead.
+
+6. **LZ4 for save data.**
+   `contrib/lz4` is in-tree; saves are LZ4-compressed. LZ4's decode footprint is
+   small enough for the PS1, and the ratio is fine for the structured data
+   typical of save files. If/when we add saves, prefer LZ4 over zlib or ad-hoc
+   RLE — it's the path fromage already validated.
+
+7. **Region-coded save magic.**
+   fromage uses `BICHEN` / `BACHEN` / `BECHEN` prefixes per region (J/U/E).
+   Trivial but worth copying — Sony's memory-card BIOS does region-tag the save
+   block, and a mismatched magic surfaces the error early.
+
+### Techniques deliberately not lifted
+
+- **Voxel-specific data structures** (the 3D array `fsys_level[cy][cz][cx]`,
+  Perlin worldgen, block-update ring buffer). Our world is authored, not
+  generated; the scene tree is the source of truth. These are documented above
+  only to make clear the *culling* patterns generalize even though the *storage*
+  doesn't.
+- **candyk-psx as the SDK.** fromage builds on candyk-psx, not psyqo. We've
+  committed to psyqo (via psxsplash). Listed in Reference URLs as a comparison
+  point only.
+
+### Mapping onto open roadmap items
+
+- The hierarchical visibility bitmap (point 1) gives a concrete shape for the
+  outstanding portal/region culling work — coarse bitmap → fine portal graph,
+  rather than portals all the way down.
+- The precomputed face mask (point 3) is the formal version of slot D1 static
+  batching (`feedback_static_batch_disabled`). When we revisit D1, treat the
+  face mask as the exporter's output, not a runtime optimization.
+- The animated-texcoord pattern (point 5) is a candidate Phase 3 authoring
+  affordance: a `PS1AnimatedTexture` resource that the exporter packs as a
+  frame strip and the runtime advances by tick.
+
+---
+
 ## Source Notes
 
 These are the main references behind this summary:
@@ -699,6 +807,11 @@ These are the main references behind this summary:
 5. **Copetti PlayStation architecture article**
    - Helpful modern companion for readability and mental models.
 
+6. **ChenThread/fromage (open-source PS1 voxel engine, C, MIT)**
+   - Concrete shipping numbers and culling patterns from a working PS1 codebase.
+   - See the "External engine: ChenThread/fromage" appendix below for the
+     techniques extracted and where they map onto this reference.
+
 ---
 
 ## Reference URLs
@@ -709,6 +822,8 @@ These are the main references behind this summary:
 - Fall '96 CD-ROM training PDF: https://psx.arthus.net/sdk/Psy-Q/DOCS/TRAINING/FALL96/cdrom.pdf
 - Sony-era run-time library overview: https://psx.arthus.net/sdk/Psy-Q/DOCS/LibOver47.pdf
 - Copetti PlayStation article: https://www.copetti.org/writings/consoles/playstation/
+- ChenThread/fromage (PS1 voxel engine, MIT): https://github.com/ChenThread/fromage
+- candyk-psx (alternative PS1 SDK used by fromage): https://github.com/iridescence-technologies/candyk-psx
 
 ---
 
