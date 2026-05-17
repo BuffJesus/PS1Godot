@@ -208,27 +208,33 @@ doc — not patch).
 
 Four stages.
 
-### Stage 1 — Static fill rate estimate
+### Stage 1 — Static fill rate estimate ✅ shipped 2026-05-16
 
-PS1Godot side, exporter time. No runtime work.
+Shipped as a live-tick estimate in `SceneStats`/`PS1GodotDock`
+instead of an export-time pass — gives authors immediate dock
+feedback. AABB-bounding-rect approximation (per-triangle pass
+deferred); first `Camera3D` in tree-order as the viewpoint
+(per-camera sampling = Stage 2); UI sprites + sky billboards
+not yet included.
 
-- Walk each scene's triangles in `SceneCollector`.
-- Project at the main camera position, compute screen-space
-  area.
-- Multiply by transparency factor.
-- Output total + per-object contributors in `SceneData`.
-- Dock row showing the result.
+- `FillRateBudgetScreenAreas = 8.0` + `TranslucentFillCostFactor = 1.5`
+  in `SceneStats`.
+- New "Fill rate" row in `PS1GodotDock` shows `X× / 8× screen`
+  with the existing budget-bar coloring.
+- "AABB upper bound" suffix on the dock label so the
+  approximation is honest.
 
-Verifiable: open the demo scene, see fill rate ~3× (low, lots
-of free budget). Add 50 transparent particles, see it jump.
+Verifiable: open the demo scene with a Camera3D placed, see
+the dock row populate. Flip a few `PS1MeshInstance.Translucent`
+flags on big meshes, watch the bar move.
 
-### Stage 2 — Multi-camera sampling
+### Stage 2 — Multi-camera sampling (deferred)
 
 - `FillRateSampleCameras` property on `PS1Scene`.
 - Exporter runs estimate at each sample camera.
 - Dock shows worst-case + average.
 
-### Stage 3 — Runtime measurement
+### Stage 3 — Runtime measurement (blocked on profiling.md)
 
 psxsplash side. `[runtime]` ask.
 
@@ -236,12 +242,16 @@ psxsplash side. `[runtime]` ask.
 - New field in `FrameProfile` (`paintedPixelsThisFrame`).
 - Reported via PCdrv to the profiler dock.
 
-### Stage 4 — Authoring guidance integration
+### Stage 4 — Authoring guidance integration (blocked on Pass-4 occluders)
 
 - "Top fill-rate contributors" list in the dock.
 - Click-to-focus on source object.
 - Auto-suggestion: "consider marking these large meshes as
   occluders" — feeds into `visibility-culling.md` Pass 4.
+
+Stages 2–4 are scoped as a follow-up session — Stage 2 is
+small but pairs naturally with Stages 3 + 4 once profiling
+and occluders land.
 
 ## Open questions / tradeoffs
 
