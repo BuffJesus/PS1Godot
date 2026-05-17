@@ -1,5 +1,15 @@
 # Host-mode testing — design + patch
 
+**Status (2026-05-16):** No implementation yet. Sized as ~5 commits
+across psxsplash Makefile (HOST_BUILD=1 target), stub layer for
+seven psyqo modules (GPU/SPU/GTE/TaskQueue/Kernel/PCdrv/CDROM),
+test framework setup, initial test cases (splashpack parser, BVH
+determinism, collision math, animation interp, music sequencer,
+scene transitions), and a GitHub Actions CI job. Deferred to its
+own session — pairs naturally with the debugging.md and
+profiling.md follow-up sessions since all three reshape the
+runtime's seam between hardware and logic.
+
 Closes the design gap behind:
 
 > ### 3. Host-mode / test build
