@@ -141,9 +141,13 @@ public static class PS1GraphCompiler
 
     private static bool IsDialogueKind(string kind) => kind switch
     {
-        "line"   => true,
-        "choice" => true,
-        _        => false,
+        "line"           => true,
+        "choice"         => true,
+        "set_flag"       => true,
+        "condition"      => true,
+        "play_sound"     => true,
+        "start_cutscene" => true,
+        _                => false,
     };
 
     private static void EmitDialogueNode(StringBuilder sb, Dictionary<int, PS1GraphNode> byId,
@@ -163,6 +167,51 @@ public static class PS1GraphCompiler
                 string speaker = EscapeLuaString(n.GetPayload(1));
                 string next    = FindNextKey(conns, n.Id, fromPort: 0);
                 sb.AppendLine($"        n{n.Id} = {{ kind = \"line\", speaker = {speaker}, text = {text}, next = {next} }},");
+                break;
+            }
+            case "set_flag":
+            {
+                // Compiles to a generic action node: a Lua snippet the
+                // walker runs on entry, then follows .next. Flag name +
+                // value are baked into the snippet at compile time.
+                string flag  = EscapeLuaString(n.GetPayload(0));
+                string value = string.Equals(n.GetPayload(1), "true",
+                                              System.StringComparison.OrdinalIgnoreCase)
+                                ? "true" : "false";
+                string lua   = $"Persist.Set({flag}, {value})";
+                string next  = FindNextKey(conns, n.Id, fromPort: 0);
+                sb.AppendLine($"        n{n.Id} = {{ kind = \"action\", lua = {EscapeLuaString(lua)}, next = {next} }},");
+                break;
+            }
+            case "play_sound":
+            {
+                string clip = EscapeLuaString(n.GetPayload(0));
+                string lua  = $"Audio.PlaySfx({clip})";
+                string next = FindNextKey(conns, n.Id, fromPort: 0);
+                sb.AppendLine($"        n{n.Id} = {{ kind = \"action\", lua = {EscapeLuaString(lua)}, next = {next} }},");
+                break;
+            }
+            case "start_cutscene":
+            {
+                string id   = EscapeLuaString(n.GetPayload(0));
+                string lua  = $"Cutscene.Play({id})";
+                string next = FindNextKey(conns, n.Id, fromPort: 0);
+                sb.AppendLine($"        n{n.Id} = {{ kind = \"action\", lua = {EscapeLuaString(lua)}, next = {next} }},");
+                break;
+            }
+            case "condition":
+            {
+                // Condition: { kind="condition", lua="return ...", next_true=..., next_false=... }
+                // Walker runs the Lua snippet, branches on the boolean
+                // result. Slice D1d's structured form reads a single
+                // flag; future polish slice could open this up to
+                // arbitrary expressions via a dedicated "Lua Condition"
+                // node kind.
+                string flag      = EscapeLuaString(n.GetPayload(0));
+                string lua       = $"return Persist.Get({flag}) == true";
+                string nextTrue  = FindNextKey(conns, n.Id, fromPort: 0);
+                string nextFalse = FindNextKey(conns, n.Id, fromPort: 1);
+                sb.AppendLine($"        n{n.Id} = {{ kind = \"condition\", lua = {EscapeLuaString(lua)}, next_true = {nextTrue}, next_false = {nextFalse} }},");
                 break;
             }
             case "choice":
@@ -379,12 +428,16 @@ public static class PS1GraphCompiler
 
     private static bool HasExecInput(string kind) => kind switch
     {
-        "print"   => true,
-        "branch"  => true,
-        "line"    => true,
-        "choice"  => true,
-        "comment" => false,
-        _         => false,
+        "print"          => true,
+        "branch"         => true,
+        "line"           => true,
+        "choice"         => true,
+        "set_flag"       => true,
+        "condition"      => true,
+        "play_sound"     => true,
+        "start_cutscene" => true,
+        "comment"        => false,
+        _                => false,
     };
 
     // Is the given port on a node an Exec pin? Used to build the
@@ -395,13 +448,17 @@ public static class PS1GraphCompiler
         if (!byId.TryGetValue(nodeId, out var n)) return false;
         return n.Kind switch
         {
-            "print"  => port == 0,                            // row 0 in+out
-            "branch" => port == 0 || (!isInput && port == 1), // row 0 in+out, row 1 out-only
-            "line"   => port == 0,                            // row 0 in+out
+            "print"          => port == 0,                            // row 0 in+out
+            "branch"         => port == 0 || (!isInput && port == 1), // row 0 in+out, row 1 out-only
+            "line"           => port == 0,                            // row 0 in+out
             // choice: row 0 = exec in (input side only),
             //         rows 1..3 = exec out (output side only).
-            "choice" => (isInput && port == 0) || (!isInput && port >= 1 && port <= 3),
-            _        => false,
+            "choice"         => (isInput && port == 0) || (!isInput && port >= 1 && port <= 3),
+            "set_flag"       => port == 0,                            // row 0 in+out
+            "condition"      => port == 0 || (!isInput && port == 1), // row 0 in+out (true), row 1 out (false)
+            "play_sound"     => port == 0,
+            "start_cutscene" => port == 0,
+            _                => false,
         };
     }
 

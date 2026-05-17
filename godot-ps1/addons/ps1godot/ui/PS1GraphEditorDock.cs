@@ -79,12 +79,16 @@ public partial class PS1GraphEditorDock : VBoxContainer
     private record NodeKindEntry(string Kind, string DisplayName, string GraphKind = "", bool AvailableInAll = false);
     private static readonly NodeKindEntry[] s_kinds = new[]
     {
-        new NodeKindEntry("print",        "Print",            GraphKind: ""),
-        new NodeKindEntry("branch",       "Branch (if/else)", GraphKind: ""),
-        new NodeKindEntry("bool_literal", "Bool Literal",     GraphKind: ""),
-        new NodeKindEntry("comment",      "Comment",          AvailableInAll: true),
-        new NodeKindEntry("line",         "Line",             GraphKind: "dialogue"),
-        new NodeKindEntry("choice",       "Choice",           GraphKind: "dialogue"),
+        new NodeKindEntry("print",          "Print",            GraphKind: ""),
+        new NodeKindEntry("branch",         "Branch (if/else)", GraphKind: ""),
+        new NodeKindEntry("bool_literal",   "Bool Literal",     GraphKind: ""),
+        new NodeKindEntry("comment",        "Comment",          AvailableInAll: true),
+        new NodeKindEntry("line",           "Line",             GraphKind: "dialogue"),
+        new NodeKindEntry("choice",         "Choice",           GraphKind: "dialogue"),
+        new NodeKindEntry("set_flag",       "Set Flag",         GraphKind: "dialogue"),
+        new NodeKindEntry("condition",      "Condition (flag)", GraphKind: "dialogue"),
+        new NodeKindEntry("play_sound",     "Play Sound",       GraphKind: "dialogue"),
+        new NodeKindEntry("start_cutscene", "Start Cutscene",   GraphKind: "dialogue"),
     };
 
     // Available graph kinds, surfaced when the author hits New.
@@ -406,6 +410,7 @@ public partial class PS1GraphEditorDock : VBoxContainer
         "print"        => "Hello PSX",
         "branch"       => "true",   // Branch's literal-condition default — see BuildVisualBody row 3.
         "bool_literal" => "true",   // Same default for the literal Bool source.
+        "set_flag"     => "true",   // Default flag value (Payloads[1]); Payloads[0] is name.
         _              => "",
     };
 
@@ -600,6 +605,96 @@ public partial class PS1GraphEditorDock : VBoxContainer
                 };
                 textEdit.TextChanged += text => n.SetPayload(0, text);
                 g.AddChild(textEdit);
+                // No SetSlot — pinless.
+                break;
+            }
+            case "set_flag":
+            {
+                // Persist.Set("<name>", <bool>) — sets a save-state flag.
+                // Row 0: Exec in/out. Row 1: flag-name LineEdit (Payloads[0]).
+                // Row 2: value CheckBox (Payloads[1] as "true"/"false").
+                g.AddChild(new Label { Text = "exec / next" });
+                g.SetSlot(0, true, (int)PinType.Exec, s_pinColors[PinType.Exec],
+                             true, (int)PinType.Exec, s_pinColors[PinType.Exec]);
+
+                var nameEdit = new LineEdit
+                {
+                    Text = n.GetPayload(0),
+                    PlaceholderText = "flag name…",
+                };
+                nameEdit.TextChanged += text => n.SetPayload(0, text);
+                g.AddChild(nameEdit);
+                // No SetSlot — pinless.
+
+                var valueCheck = new CheckBox
+                {
+                    Text = "value",
+                    ButtonPressed = ParseBoolPayload(n.GetPayload(1)),
+                };
+                valueCheck.Toggled += pressed => n.SetPayload(1, pressed ? "true" : "false");
+                g.AddChild(valueCheck);
+                // No SetSlot — pinless.
+                break;
+            }
+            case "condition":
+            {
+                // Branches on Persist.Get("<flag>") == true.
+                // Row 0: Exec in (left) + Exec out true (right).
+                // Row 1: Exec out false (right only).
+                // Row 2: flag-name LineEdit (Payloads[0], pinless).
+                g.AddChild(new Label { Text = "exec / true" });
+                g.SetSlot(0, true,  (int)PinType.Exec, s_pinColors[PinType.Exec],
+                             true,  (int)PinType.Exec, s_pinColors[PinType.Exec]);
+
+                g.AddChild(new Label { Text = "false" });
+                g.SetSlot(1, false, (int)PinType.Exec, s_pinColors[PinType.Exec],
+                             true,  (int)PinType.Exec, s_pinColors[PinType.Exec]);
+
+                var flagEdit = new LineEdit
+                {
+                    Text = n.GetPayload(0),
+                    PlaceholderText = "flag name…",
+                };
+                flagEdit.TextChanged += text => n.SetPayload(0, text);
+                g.AddChild(flagEdit);
+                // No SetSlot — pinless.
+                break;
+            }
+            case "play_sound":
+            {
+                // Audio.PlaySfx("<clip>") — fires an SFX and advances.
+                // Row 0: Exec in/out. Row 1: clip-name LineEdit (Payloads[0]).
+                g.AddChild(new Label { Text = "exec / next" });
+                g.SetSlot(0, true, (int)PinType.Exec, s_pinColors[PinType.Exec],
+                             true, (int)PinType.Exec, s_pinColors[PinType.Exec]);
+
+                var clipEdit = new LineEdit
+                {
+                    Text = n.GetPayload(0),
+                    PlaceholderText = "audio clip name…",
+                };
+                clipEdit.TextChanged += text => n.SetPayload(0, text);
+                g.AddChild(clipEdit);
+                // No SetSlot — pinless.
+                break;
+            }
+            case "start_cutscene":
+            {
+                // Cutscene.Play("<id>") — kicks a cutscene and advances.
+                // The dialogue keeps running concurrently; if the author
+                // wants the dialogue to wait, they should put this node
+                // at the END of the line/choice chain (next = nil).
+                g.AddChild(new Label { Text = "exec / next" });
+                g.SetSlot(0, true, (int)PinType.Exec, s_pinColors[PinType.Exec],
+                             true, (int)PinType.Exec, s_pinColors[PinType.Exec]);
+
+                var idEdit = new LineEdit
+                {
+                    Text = n.GetPayload(0),
+                    PlaceholderText = "cutscene id…",
+                };
+                idEdit.TextChanged += text => n.SetPayload(0, text);
+                g.AddChild(idEdit);
                 // No SetSlot — pinless.
                 break;
             }

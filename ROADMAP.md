@@ -1681,13 +1681,27 @@ graph-walker overhead.
         node now returns early from `tick` so a held-from-previous-
         line X doesn't auto-advance choices before the player sees
         them. `stop()` hides the canvas + clears all driven text.
-      - **Deferred to slice D1d**: remaining node kinds — Condition
-        (read state), SetFlag (write state), GiveItem (inventory),
-        PlaySound (audio), StartCutscene. Each calls into an
-        existing runtime system; each is a small addition but the
-        set is large. Author-side documentation showing how to
-        construct a `dialogue_box` canvas with the expected element
-        names is also pending.
+      - **Slice D1d shipped 2026-05-17 (action + condition kinds).**
+        Four new dialogue-graph node kinds plus a generic walker:
+        **Set Flag** (`Persist.Set(name, bool)`), **Condition (flag)**
+        (`Persist.Get(name) == true` with `true`/`false` exec outs),
+        **Play Sound** (`Audio.PlaySfx(clip)`), **Start Cutscene**
+        (`Cutscene.Play(id)`). All four compile down to a single
+        runtime kind `"action"` carrying a baked Lua snippet; the
+        walker `luaL_loadstring`+`lua_pcall`s the snippet then
+        auto-advances via `next`. Condition compiles to `"condition"`
+        — same load+pcall but with one return value, branches to
+        `next_true` / `next_false` via `lua_toboolean`. Chain of
+        actions runs at one node per frame (~16ms each), imperceptible.
+        Canvas `clearCanvasUI` moved inside line/choice cases so an
+        action/condition mid-chain doesn't blank the dialogue box.
+        GiveItem deferred until an Inventory Lua API exists; the
+        compile/walker pattern is template-ready for it.
+      - **Still open**: author-side how-to doc for assembling the
+        `dialogue_box` canvas; arbitrary-Lua-expression Condition
+        node (current Condition is structured: just a flag name);
+        generic "Lua snippet" power-user node; GiveItem once an
+        Inventory API ships.
 - [ ] **D2. `PS1QuestGraph`** — objectives as nodes, prerequisites as
       edges, branch outcomes (success / fail paths). Compiles to a
       quest state machine with save/load integration

@@ -132,8 +132,10 @@ void DialogueRunner::tick(lua_State* L) {
     if (!m_active) return;
 
     if (m_freshNode) {
-        emitCurrentNode(L);
+        // Clear FIRST so emitCurrentNode can re-set it when an
+        // action/condition node auto-advances to a fresh successor.
         m_freshNode = false;
+        emitCurrentNode(L);
         // Defer this frame's input. Without it, the X press that
         // advanced INTO this node could also be edge-detected for
         // advancing back OUT — fine for line→line (just feels twitchy)
@@ -183,12 +185,12 @@ void DialogueRunner::emitCurrentNode(lua_State* L) {
         return;
     }
 
-    // Wipe any leftover canvas state from the previous node before
-    // populating the new one — keeps stale option text from bleeding
-    // through when transitioning line→line, choice→line, etc.
-    if (m_useCanvas) clearCanvasUI();
-
     if (streq(kind, "line")) {
+        // Wipe leftover canvas state from the previous node so stale
+        // option text doesn't bleed through on a choice→line transition.
+        // Skipped for action/condition (those don't render display).
+        if (m_useCanvas) clearCanvasUI();
+
         m_onChoiceNode = false;
         m_numActiveOptions = 0;
         m_selectedChoice = 0;
@@ -208,6 +210,8 @@ void DialogueRunner::emitCurrentNode(lua_State* L) {
         }
     }
     else if (streq(kind, "choice")) {
+        if (m_useCanvas) clearCanvasUI();
+
         m_onChoiceNode = true;
         m_numActiveOptions = 0;
         m_selectedChoice = 0;
@@ -246,6 +250,90 @@ void DialogueRunner::emitCurrentNode(lua_State* L) {
         lua_pop(L, 1);  // pop options
 
         refreshCursor();
+    }
+    else if (streq(kind, "action")) {
+        // Generic side-effect node: Persist.Set, Audio.PlaySfx,
+        // Cutscene.Play, etc. The compiler bakes the Lua snippet from
+        // the per-kind authoring fields (set_flag, play_sound,
+        // start_cutscene). Snapshot fields off the node-table, pop
+        // it, then run the snippet on a clean stack — `pcall` is
+        // tolerant of leftover stack entries but cleaner this way.
+        char snippet[256] = "";
+        char next[16] = "";
+        readStringField(L, -1, "lua",  snippet, sizeof(snippet));
+        readStringField(L, -1, "next", next,    sizeof(next));
+        lua_pop(L, 1);  // pop node-table (own our pop, early-return below)
+
+        if (snippet[0]) {
+            if (luaL_loadstring(L, snippet) == LUA_OK) {
+                if (lua_pcall(L, 0, 0, 0) != LUA_OK) {
+                    printf("[Dialog] action error at '%s': %s\n",
+                           m_currentNodeId, lua_tostring(L, -1));
+                    lua_pop(L, 1);
+                }
+            } else {
+                printf("[Dialog] action load error at '%s': %s\n",
+                       m_currentNodeId, lua_tostring(L, -1));
+                lua_pop(L, 1);
+            }
+        }
+
+        // Auto-advance. m_freshNode=true tells next tick to emit the
+        // successor. Chain of action nodes runs at one node per frame
+        // (~16ms) which is imperceptible.
+        if (next[0]) {
+            printf("[Dialog] %s → %s\n", m_currentNodeId, next);
+            bounded_strcpy(m_currentNodeId, next, sizeof(m_currentNodeId));
+            m_freshNode = true;
+        } else {
+            printf("[Dialog] end (action '%s' has no next)\n", m_currentNodeId);
+            stop(L);
+        }
+        return;  // skip trailing lua_pop — we already popped node-table.
+    }
+    else if (streq(kind, "condition")) {
+        // Branch on a Lua expression. The compiler bakes the snippet
+        // as `return <expr>`; we pcall with 1 return slot and read
+        // the boolean via lua_toboolean (Lua semantics: only nil and
+        // false are falsy, everything else is truthy).
+        char snippet[256] = "";
+        char nextTrue[16] = "";
+        char nextFalse[16] = "";
+        readStringField(L, -1, "lua",        snippet,   sizeof(snippet));
+        readStringField(L, -1, "next_true",  nextTrue,  sizeof(nextTrue));
+        readStringField(L, -1, "next_false", nextFalse, sizeof(nextFalse));
+        lua_pop(L, 1);  // pop node-table
+
+        bool result = false;
+        if (snippet[0]) {
+            if (luaL_loadstring(L, snippet) == LUA_OK) {
+                if (lua_pcall(L, 0, 1, 0) == LUA_OK) {
+                    result = lua_toboolean(L, -1) != 0;
+                    lua_pop(L, 1);
+                } else {
+                    printf("[Dialog] condition error at '%s': %s\n",
+                           m_currentNodeId, lua_tostring(L, -1));
+                    lua_pop(L, 1);
+                }
+            } else {
+                printf("[Dialog] condition load error at '%s': %s\n",
+                       m_currentNodeId, lua_tostring(L, -1));
+                lua_pop(L, 1);
+            }
+        }
+
+        const char* picked = result ? nextTrue : nextFalse;
+        if (picked[0]) {
+            printf("[Dialog] %s (%s) → %s\n",
+                   m_currentNodeId, result ? "true" : "false", picked);
+            bounded_strcpy(m_currentNodeId, picked, sizeof(m_currentNodeId));
+            m_freshNode = true;
+        } else {
+            printf("[Dialog] end (condition '%s' branch=%s has no next)\n",
+                   m_currentNodeId, result ? "true" : "false");
+            stop(L);
+        }
+        return;  // skip trailing lua_pop.
     }
     else {
         printf("[Dialog] emit: unknown kind '%s' at node '%s'\n", kind, m_currentNodeId);
