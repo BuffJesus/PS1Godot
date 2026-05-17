@@ -186,8 +186,60 @@ public static class SceneCollector
 
         ReportMeshDedupSummary(data);
         VerifyMeshFormatRoundTrip(data);
+        VerifyTextureIndexBounds(data);
 
         return data;
+    }
+
+    // Sanity-check that every static-mesh Tri.TextureIndex addresses
+    // a valid slot in its SceneObject's SurfaceTextureIndices (or is
+    // -1 for untextured). Originally added 2026-05-17 as a backstop
+    // for the Slot D1 surface-remap regression; runs over EVERY
+    // SceneObject (not just batches) so any future code path that
+    // rebuilds SurfaceTextureIndices gets covered.
+    //
+    // A failure here would mean the GameObject ships with tris pointing
+    // at the wrong texture entry — visible as wrong-texture or
+    // off-camera-garbage geometry at runtime. The PS1 has no way to
+    // tell us at runtime, so catching it here is the only defense.
+    private static void VerifyTextureIndexBounds(SceneData data)
+    {
+        if (data.Objects == null || data.Objects.Count == 0) return;
+
+        var skinnedIndices = new System.Collections.Generic.HashSet<int>();
+        foreach (var sm in data.SkinnedMeshes) skinnedIndices.Add(sm.GameObjectIndex);
+
+        int checkedCount = 0;
+        int failureCount = 0;
+        for (int i = 0; i < data.Objects.Count; i++)
+        {
+            if (skinnedIndices.Contains(i)) continue;
+            var obj = data.Objects[i];
+            if (obj?.Mesh?.Triangles == null) continue;
+            if (obj.Mesh.Triangles.Count == 0) continue;
+            checkedCount++;
+
+            var diff = MeshFormatRoundTripVerifier.VerifyTextureIndices(obj.Mesh, obj.SurfaceTextureIndices);
+            if (diff == null) continue;
+
+            failureCount++;
+            string objName = (obj.Node != null && !string.IsNullOrEmpty(obj.Node.Name))
+                ? (string)obj.Node.Name
+                : "<unnamed>";
+            GD.PushError(
+                $"[PS1Godot] Texture-index bounds FAIL: '{objName}' tri #{diff.TriIndex} → " +
+                $"TextureIndex {diff.TextureIndex} but SurfaceTextureIndices has {diff.SurfaceCount} slot(s). " +
+                $"This GameObject will render with wrong textures on PSX.");
+        }
+
+        if (failureCount == 0)
+        {
+            GD.Print($"[PS1Godot] Texture-index bounds: {checkedCount}/{checkedCount} static meshes verified.");
+        }
+        else
+        {
+            GD.PushError($"[PS1Godot] Texture-index bounds: {failureCount}/{checkedCount} static meshes FAILED — see errors above.");
+        }
     }
 
     // Run the v31 vertex-pool format roundtrip check on every static
