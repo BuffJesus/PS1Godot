@@ -1605,14 +1605,33 @@ graph-walker overhead.
         literal when unconnected. Bool inputs hardcode `false` until a
         Bool-producing kind lands. "Compile" toolbar button writes the
         output to the Godot console via GD.Print.
-      - **Deferred to slice 4b** (alongside D1 — first concrete kind):
-        compile output saved to sibling .lua file, splashpack pipeline
-        integration so compiled graphs ship in the export, dangling-
-        input warnings, node search / palette filter, undo/redo, group
-        nodes. Bool Literal + comparison node kinds will unblock real
-        Branch conditions; D1 Dialogue brings Line / Choice / SetFlag
-        etc. Cycle rejection may tighten from "any cycle" to
-        "exec-only" once the compiler shape is locked in.
+      - **Slice 4b shipped 2026-05-17 (Bool Literal kind).**
+        Single-row pure-data source with a CheckBox writing "true"/
+        "false" to Payload. ResolveBoolInput now walks back via a
+        new ProduceBool (mirroring ProduceString); connecting a Bool
+        Literal to Branch's row-2 condition overrides Branch's own
+        literal CheckBox fallback.
+      - **Slice 4c shipped 2026-05-17 (sibling .lua on Save).**
+        Each Save / Save As writes a sibling `<basename>.lua` next to
+        the .tres holding the compile output (FileAccess for proper
+        res:// resolution). Authors attach the .lua to a node or the
+        new PS1Scene.UserScripts list via existing plumbing — no
+        graph-aware code in the exporter or runtime.
+      - **Slice 4d shipped 2026-05-17 (runtime hook via PS1Scene.UserScripts).**
+        Discovered the runtime hook needed *zero* psxsplash changes:
+        psxsplash's `LoadLuaFile` already pcalls each chunk's top-
+        level statements after loading (`lua.cpp:392`). The author-side
+        plumbing is a new `PS1Scene.UserScripts: Array<String>` list
+        of res:// .lua paths; `SceneCollector` resolves each into
+        `data.LuaFiles`, the existing runtime loop walks them. Compiled
+        PS1Graph .lua files are the primary user — Save the graph →
+        drop the sibling .lua into `UserScripts` → F5 → runs on PSX.
+      - **Deferred** (alongside D1 — first concrete kind):
+        dangling-input warnings, node search / palette filter,
+        undo/redo, group nodes; D1 Dialogue brings Line / Choice /
+        SetFlag etc. with a graph-kind selector. Cycle rejection may
+        tighten from "any cycle" to "exec-only" once the compiler
+        shape is locked in.
 - [ ] **D1. `PS1DialogueGraph`** — *first graph kind.* Nodes: Line,
       Choice, Condition, SetFlag, GiveItem, PlaySound, StartCutscene.
       Compiles to a small Lua table (nodes + edges) walked by a stock

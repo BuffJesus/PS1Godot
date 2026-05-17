@@ -65,6 +65,31 @@ public static class SceneCollector
         string cameraPreamble = GenerateCameraPreamble(root, data.GteScaling);
         data.SceneLuaFileIndex = ResolveLuaScript(root.Name, sceneLuaPath, data, luaCache, cameraPreamble);
 
+        // PS1Scene.UserScripts: extra Lua files that ride along in the
+        // splashpack but aren't bound to a node's lifecycle. Resolve
+        // each into data.LuaFiles. We discard the returned index — the
+        // runtime walks every entry in m_luaFiles and pcalls each
+        // chunk's top-level statements automatically (scenemanager.cpp
+        // around the LoadLuaFile loop), so just being in the list is
+        // enough to make the script run once at scene init.
+        //
+        // Compiled PS1Graph .lua files are the primary user of this
+        // path — author saves a graph, drops the sibling .lua into
+        // UserScripts, hits F5, the compiled chunk runs on PSX.
+        if (root is PS1Scene sceneWithUserScripts && sceneWithUserScripts.UserScripts != null)
+        {
+            for (int i = 0; i < sceneWithUserScripts.UserScripts.Count; i++)
+            {
+                string p = sceneWithUserScripts.UserScripts[i];
+                if (string.IsNullOrEmpty(p)) continue;
+                // Use a synthetic label so the log line distinguishes
+                // these from node-bound scripts. No camera preamble —
+                // user scripts can call Camera.LoadFromExport themselves
+                // if they want that data; SceneLuaFile gets it implicit.
+                ResolveLuaScript($"PS1Scene.UserScripts[{i}]", p, data, luaCache);
+            }
+        }
+
         // Audio clips authored on the PS1Scene get ADPCM-encoded once at
         // export time. Lua resolves them by name via the in-splashpack name
         // table.

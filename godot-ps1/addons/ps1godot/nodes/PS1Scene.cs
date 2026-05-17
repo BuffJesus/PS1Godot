@@ -155,6 +155,23 @@ public partial class PS1Scene : Node3D
     public string SceneLuaFile { get; set; } = "";
 
     /// <summary>
+    /// Extra Lua scripts that ship with the splashpack but aren't bound
+    /// to any node's lifecycle. Each script's top-level statements run
+    /// once at scene-init time (psxsplash's LoadLuaFile pcalls the chunk
+    /// after loading it, in the script's isolated env). Use for compiled
+    /// PS1Graph output, autoload libraries, debug commands, and any
+    /// "just run this when the scene starts" code that doesn't need
+    /// onCreate / onUpdate hooks.
+    /// <para>
+    /// Per-script env isolation still applies — a top-level
+    /// <c>foo = 1</c> in one user script is NOT visible in another. Use
+    /// <c>_G.foo = 1</c> for explicit cross-script sharing.
+    /// </para>
+    /// </summary>
+    [Export(PropertyHint.ArrayType, "String/FILE:*.lua")]
+    public Godot.Collections.Array<string> UserScripts { get; set; } = new();
+
+    /// <summary>
     /// Audio clips this scene loads. SPU-routed clips ship in the .spu
     /// sidecar; XA-routed stream from .xa. Each entry is a PS1AudioClip
     /// resource — set route, loop, and source .wav there.
