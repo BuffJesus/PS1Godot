@@ -1,5 +1,12 @@
 # Profiling environment — design + patch
 
+**Status (2026-05-16):** No implementation yet. Sized as ~3–5 commits
+spanning psxsplash + C# plugin (FrameProfile struct, RAII Profiler::Section,
+ring buffer, PCdrv write, dock Profile tab); deferred to its own session
+rather than crammed into the 18-doc patch series. The existing
+4-slot `Profiler` + PerfOverlay already covers the bare on-screen
+surface; this doc designs the upgrade.
+
 Closes the design gap behind:
 
 > ### 5. Lua observability / per-frame profiler
