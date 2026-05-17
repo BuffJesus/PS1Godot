@@ -90,6 +90,27 @@ The cursor elements can be `PS1UIImage`, `PS1UIBox`, or even another
 property to match the currently-selected option; only one is visible
 at a time.
 
+**Any other element on the dialogue_box** (a background `Box`, a
+frame, a portrait, decorative graphics) is auto-shown when the
+dialogue starts and auto-hidden when it stops. You don't need to
+flip `VisibleOnLoad` on those — the walker manages the whole canvas
+as a unit. Only the named slots above get per-node lifecycle
+management.
+
+**If you don't add cursor elements**, the walker re-renders each
+option's text with a `> ` (selected) / `  ` (unselected) prefix every
+frame, so you still get a visible selection indicator without
+authoring three cursor elements. Add real cursor elements when you
+want fancier styling.
+
+### Themes don't auto-apply
+
+`PS1UICanvas.Theme` only paints elements whose `ThemeSlot` is
+non-`Custom`. If your dialogue text comes out the wrong color, open
+each `PS1UIElement` and set **Appearance → ThemeSlot** to `Text`
+(or `Accent` for the speaker, etc.). With `Custom` (the default),
+the element uses its raw `Color` field and ignores the canvas theme.
+
 A reasonable starting layout:
 
 - `dialogue_box` canvas, `sortOrder` high enough to draw over gameplay.
@@ -165,7 +186,8 @@ This means choices are stable from the moment they appear.
 | Nothing happens after `Dialog.RunGraph` call | Wrong global name. Compare your `_G.dialogue_<basename>` against the first line of the compiled `.lua`. |
 | Walker logs in debug console but no on-screen text | No `dialogue_box` canvas in the scene — the walker falls back to printf. |
 | Some lines appear but speaker is blank | The `speaker` element isn't named exactly `speaker`, or doesn't exist on the canvas. Walker silently skips missing elements. |
-| Choices don't navigate | Either no `cursor_*` elements (cursor invisible) or fewer than 2 active options. |
+| Choices don't navigate | Fewer than 2 active options on the node, or D-pad Up/Down not reaching the runner. Cursor element is not required — the walker prefixes the selected option with `> ` automatically if cursors aren't authored. |
+| Dialogue text comes out wrong color | Each element's `ThemeSlot` defaults to `Custom` and uses its raw `Color` field, ignoring the canvas theme. Set `ThemeSlot = Text` (or another slot) per element. |
 | Branch always takes the false arm | The flag isn't set yet. `Persist.Set("name", true)` somewhere upstream, or check the flag name matches between Set Flag and Condition nodes. |
 | Compiled .lua exists but isn't running on PSX | Not in `PS1Scene.UserScripts`, or the export didn't include it. Look for `[PS1Godot] Lua on 'PS1Scene.UserScripts[N]': res://…` in the editor Output after export. |
 | Editor crashes on graph operations | Restart Godot — C# DLLs don't hot-reload, stale plugin code persists across project builds. |
