@@ -1,5 +1,31 @@
 # Vertex sharing & mesh format — design + patch
 
+**Status (2026-05-17):** Stages 1 + 2 shipped as splashpack v31
+(commits `06abec9` + `dc899d1`, host-side roundtrip verifier
+`77999d2`). The shipped design differs from this doc in two ways
+worth knowing before reading further:
+
+1. **Option B, not Option A.** Vertices carry `pos + uv + color`
+   (12 B) and faces are 3 × u16 indices + per-face normal/tpage/
+   CLUT (20 B). UV+color sharing is included — triangles that
+   differ in UV or color at a shared position get distinct vertex
+   entries. See `psxsplash-main/src/mesh.hh` (`Vertex`, `Face`,
+   `MeshBlob`, `expandTri`).
+2. **Hard cut, not coexistence flag.** v31 is the cutover; the
+   splashpack loader hard-asserts `version >= 32` and there is no
+   format-flag fallback to triangle-soup. The legacy `Tri[]`
+   layout is retained only for skinned meshes (per-tri-vertex bone
+   indices block dedup).
+
+Stage 0's "rtpst audit" concern is moot — the static-mesh hot path
+in `renderer.cpp:1059` already uses `Kernels::rtpt()` (3-vertex
+GTE transform); only the skinned-mesh path uses per-vertex `rtps`
+because each bone needs a distinct matrix.
+
+Stage 3 (pre-transform vertex cache in scratchpad) deferred —
+overlaps with `scratchpad-cache.md`'s allocation-map work; revisit
+once profiling.md lands and the cost is measurable.
+
 The hidden 3× win nobody's used. The current mesh format is
 triangle-soup: each `Tri` carries its own three vertices, even
 when adjacent triangles share corners. A cube authored as 12
