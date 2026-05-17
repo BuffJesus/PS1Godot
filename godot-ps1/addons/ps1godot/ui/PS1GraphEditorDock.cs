@@ -40,7 +40,11 @@ public partial class PS1GraphEditorDock : VBoxContainer
     private EditorFileDialog? _openDialog;
     private EditorFileDialog? _saveDialog;
     private PopupMenu? _palettePopup;
-    private PopupMenu? _newGraphKindPopup;
+
+    // Always-visible kind dropdown in the toolbar so the workflow is
+    // discoverable at a glance — earlier popup-on-mouse positioning
+    // sometimes opened off-screen depending on dock layout.
+    private OptionButton? _kindDropdown;
 
     // Stashed at right-click time so the menu's IdPressed handler knows
     // where to drop the spawned node. GraphEdit hands PopupRequest a
@@ -121,6 +125,25 @@ public partial class PS1GraphEditorDock : VBoxContainer
         toolbar.AddThemeConstantOverride("separation", 6);
         AddChild(toolbar);
 
+        // Kind dropdown comes first so the workflow reads left-to-right:
+        // pick a kind → hit New (or Load existing). Tooltip explains
+        // what each kind compiles to.
+        toolbar.AddChild(new Label
+        {
+            Text = "Kind:",
+            VerticalAlignment = VerticalAlignment.Center,
+        });
+        _kindDropdown = new OptionButton();
+        for (int i = 0; i < s_graphKinds.Length; i++)
+        {
+            _kindDropdown.AddItem(s_graphKinds[i].DisplayName, i);
+        }
+        _kindDropdown.TooltipText =
+            "Graph kind for new graphs. Untyped → flat Lua statements; " +
+            "Dialogue → table assigned to _G.dialogue_<basename> for a " +
+            "runtime walker.";
+        toolbar.AddChild(_kindDropdown);
+
         AddToolbarButton(toolbar, "New",       OnNewPressed);
         AddToolbarButton(toolbar, "Load…",     OnLoadPressed);
         AddToolbarButton(toolbar, "Save",      OnSavePressed);
@@ -158,16 +181,6 @@ public partial class PS1GraphEditorDock : VBoxContainer
         _palettePopup = new PopupMenu { Name = "PS1GraphPalette" };
         _palettePopup.IdPressed += OnPaletteItemPressed;
         AddChild(_palettePopup);
-
-        // Graph-kind picker for New. Mirrors s_graphKinds entries;
-        // selection seeds a fresh resource with the chosen Kind.
-        _newGraphKindPopup = new PopupMenu { Name = "PS1GraphNewKindPicker" };
-        for (int i = 0; i < s_graphKinds.Length; i++)
-        {
-            _newGraphKindPopup.AddItem(s_graphKinds[i].DisplayName, i);
-        }
-        _newGraphKindPopup.IdPressed += OnNewGraphKindChosen;
-        AddChild(_newGraphKindPopup);
     }
 
     private static void AddToolbarButton(HBoxContainer parent, string label, System.Action handler)
@@ -181,28 +194,24 @@ public partial class PS1GraphEditorDock : VBoxContainer
 
     private void OnNewPressed()
     {
-        // Pop the graph-kind picker positioned just below the toolbar
-        // so the cursor's already over the menu after the click.
-        if (_newGraphKindPopup == null) return;
-        var screenPos = GetGlobalMousePosition();
-        // GetGlobalMousePosition is viewport-local in editor context;
-        // use the screen position via window transform.
-        var windowPos = GetWindow()?.Position ?? new Vector2I(0, 0);
-        _newGraphKindPopup.Position = new Vector2I(
-            (int)(screenPos.X + windowPos.X),
-            (int)(screenPos.Y + windowPos.Y));
-        _newGraphKindPopup.Popup();
-    }
+        try
+        {
+            // Read the toolbar dropdown for the kind to seed. Defaults to
+            // index 0 ("Untyped / Script") if no selection has been made.
+            int idx = _kindDropdown?.Selected ?? 0;
+            if (idx < 0 || idx >= s_graphKinds.Length) idx = 0;
+            var (kind, displayName) = s_graphKinds[idx];
 
-    private void OnNewGraphKindChosen(long id)
-    {
-        int idx = (int)id;
-        if (idx < 0 || idx >= s_graphKinds.Length) return;
-
-        _resource = new PS1GraphResource { Kind = s_graphKinds[idx].Kind };
-        ReloadGraphView();
-        UpdatePathLabel();
-        GD.Print($"[PS1Godot] PS1Graph: new {s_graphKinds[idx].DisplayName} graph (unsaved).");
+            _resource = new PS1GraphResource { Kind = kind };
+            ReloadGraphView();
+            UpdatePathLabel();
+            GD.Print($"[PS1Godot] PS1Graph: new {displayName} graph (unsaved). " +
+                     $"Right-click in the canvas to add nodes; the palette filters by kind.");
+        }
+        catch (System.Exception ex)
+        {
+            GD.PushError($"[PS1Godot] PS1Graph: New threw: {ex}");
+        }
     }
 
     private void OnLoadPressed()
@@ -326,42 +335,56 @@ public partial class PS1GraphEditorDock : VBoxContainer
 
     private void OnGraphPopupRequest(Vector2 atPosition)
     {
-        if (_graphEdit == null || _palettePopup == null) return;
-
-        // PopupRequest's at_position is GraphEdit-local (already in
-        // widget coordinates, not screen). Convert to graph-canvas
-        // coordinates for the spawn site so the node lands under the
-        // cursor regardless of pan/zoom: canvas = (local + scroll) / zoom.
-        _paletteSpawnCanvasPos = (atPosition + _graphEdit.ScrollOffset) / _graphEdit.Zoom;
-
-        // Rebuild palette items filtered by the current graph's Kind.
-        // Item id = index into s_kinds (so spawn matches the chosen kind),
-        // not a contiguous menu index — using AddItem(..., id) keeps that
-        // mapping stable even with hidden entries. AvailableInAll = true
-        // is the wildcard escape hatch (Comment); everything else gates
-        // on GraphKind == resource.Kind.
-        _palettePopup.Clear();
-        string currentGraphKind = _resource?.Kind ?? "";
-        for (int i = 0; i < s_kinds.Length; i++)
+        try
         {
-            var k = s_kinds[i];
-            if (!k.AvailableInAll && k.GraphKind != currentGraphKind) continue;
-            _palettePopup.AddItem(k.DisplayName, i);
-        }
+            if (_graphEdit == null || _palettePopup == null) return;
 
-        // Popup at the global screen position so the menu appears under
-        // the cursor — GetScreenPosition() gives GraphEdit's screen
-        // origin; add the local click position to land at the cursor.
-        Vector2 screenPos = _graphEdit.GetScreenPosition() + atPosition;
-        _palettePopup.Position = new Vector2I((int)screenPos.X, (int)screenPos.Y);
-        _palettePopup.Popup();
+            // PopupRequest's at_position is GraphEdit-local (already in
+            // widget coordinates, not screen). Convert to graph-canvas
+            // coordinates for the spawn site so the node lands under the
+            // cursor regardless of pan/zoom: canvas = (local + scroll) / zoom.
+            _paletteSpawnCanvasPos = (atPosition + _graphEdit.ScrollOffset) / _graphEdit.Zoom;
+
+            // Rebuild palette items filtered by the current graph's Kind.
+            // Item id = index into s_kinds (so spawn matches the chosen kind),
+            // not a contiguous menu index — using AddItem(..., id) keeps that
+            // mapping stable even with hidden entries. AvailableInAll = true
+            // is the wildcard escape hatch (Comment); everything else gates
+            // on GraphKind == resource.Kind.
+            _palettePopup.Clear();
+            string currentGraphKind = _resource?.Kind ?? "";
+            for (int i = 0; i < s_kinds.Length; i++)
+            {
+                var k = s_kinds[i];
+                if (!k.AvailableInAll && k.GraphKind != currentGraphKind) continue;
+                _palettePopup.AddItem(k.DisplayName, i);
+            }
+
+            // Popup at the global screen position so the menu appears under
+            // the cursor — GetScreenPosition() gives GraphEdit's screen
+            // origin; add the local click position to land at the cursor.
+            Vector2 screenPos = _graphEdit.GetScreenPosition() + atPosition;
+            _palettePopup.Position = new Vector2I((int)screenPos.X, (int)screenPos.Y);
+            _palettePopup.Popup();
+        }
+        catch (System.Exception ex)
+        {
+            GD.PushError($"[PS1Godot] PS1Graph: right-click palette threw: {ex}");
+        }
     }
 
     private void OnPaletteItemPressed(long id)
     {
-        int idx = (int)id;
-        if (idx < 0 || idx >= s_kinds.Length) return;
-        SpawnNode(s_kinds[idx].Kind, _paletteSpawnCanvasPos);
+        try
+        {
+            int idx = (int)id;
+            if (idx < 0 || idx >= s_kinds.Length) return;
+            SpawnNode(s_kinds[idx].Kind, _paletteSpawnCanvasPos);
+        }
+        catch (System.Exception ex)
+        {
+            GD.PushError($"[PS1Godot] PS1Graph: spawn node threw: {ex}");
+        }
     }
 
     private void SpawnNode(string kind, Vector2 canvasPosition)
