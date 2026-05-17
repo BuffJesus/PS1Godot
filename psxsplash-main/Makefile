@@ -32,6 +32,7 @@ src/soundmacro.cpp \
 src/soundfamily.cpp \
 src/skinmesh.cpp \
 src/xaaudio.cpp \
+src/dialogue.cpp \
 src/loadbuffer_patch.cpp
 
 # LOADER=cdrom  → CD-ROM backend (for ISO builds on real hardware)

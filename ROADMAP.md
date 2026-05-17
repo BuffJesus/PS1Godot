@@ -1650,12 +1650,27 @@ graph-walker overhead.
         legacy single-string Payload still loads via a GetPayload(i)
         accessor with fallback. Choice has 3 fixed option slots — chain
         Choices for wider fanout, full variable-pin support is later.
-      - **Deferred to slice D1b**: `Dialog.RunGraph(table)` runtime
-        walker in psxsplash luaapi (read .entry, dispatch on .kind,
-        wait for player advance / choice). Remaining node kinds
-        (Condition, SetFlag, GiveItem, PlaySound, StartCutscene) land
-        with the walker since they call into existing runtime systems
-        (flags, inventory, audio, cutscenes).
+      - **Slice D1b shipped 2026-05-17 (runtime walker smoke test).**
+        `psxsplash-main/src/dialogue.{hh,cpp}` ships `DialogueRunner`:
+        Lua-table-driven state machine ticked once per frame from
+        `SceneManager::GameTick` (right after `m_controls.UpdateButtonStates()`).
+        `Dialog.RunGraph(table) / Dialog.Stop() / Dialog.IsActive()`
+        registered in `luaapi.cpp` alongside Entity / Audio / etc.
+        Author kicks a dialogue from their own Lua (e.g.
+        `function onSceneCreationEnd() Dialog.RunGraph(_G.dialogue_intro) end`)
+        — the walker stashes the table in `LUA_REGISTRYINDEX`, walks
+        line→line via the `next` field on X-button press, choice
+        auto-picks option 1 (no D-pad navigation yet), prints each
+        node via `printf` to the PSX BIOS putchar / PCSX-Redux debug
+        console. Slice D1b is the smoke-test variant — proves the
+        Lua API binding + table walk + main-loop integration without
+        committing to a UI shape.
+      - **Deferred to slice D1c**: drive a `PS1UICanvas` named
+        "dialogue_box" with elements speaker/text/option_1..3 for
+        actual on-screen display. D-pad navigation for choices.
+        Remaining node kinds (Condition / SetFlag / GiveItem /
+        PlaySound / StartCutscene) call into existing runtime
+        systems and land with the canvas UI work.
 - [ ] **D2. `PS1QuestGraph`** — objectives as nodes, prerequisites as
       edges, branch outcomes (success / fail paths). Compiles to a
       quest state machine with save/load integration

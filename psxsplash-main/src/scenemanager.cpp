@@ -58,7 +58,8 @@ void psxsplash::SceneManager::InitializeScene(uint8_t* splashpackData, LoadingSc
 #endif
 
     // Register the Lua API
-    LuaAPI::RegisterAll(L.getState(), this, &m_cutscenePlayer, &m_animationPlayer, &m_uiSystem);
+    m_dialogueRunner.init(&m_controls);
+    LuaAPI::RegisterAll(L.getState(), this, &m_cutscenePlayer, &m_animationPlayer, &m_uiSystem, &m_dialogueRunner);
 
 #ifdef PSXSPLASH_PROFILER
     debug::Profiler::getInstance().initialize();
@@ -588,6 +589,13 @@ void psxsplash::SceneManager::GameTick(psyqo::GPU &gpu) {
     // below the pause short-circuit — we update the state, we just don't
     // wake scripts.
     m_controls.UpdateButtonStates();
+
+    // PS1Graph dialogue tick (slice D1b). Runs every frame including
+    // during pause — dialogue should advance even when gameplay is
+    // frozen for a hit-stop, and is a no-op when no dialogue is
+    // active. Must come AFTER UpdateButtonStates so wasButtonPressed
+    // sees the freshest edge.
+    m_dialogueRunner.tick(L.getState().getState());
 
     // Camera shake advances every frame (even during pause) so the impact
     // freeze still rattles the screen. Offset is read-only; applied as a

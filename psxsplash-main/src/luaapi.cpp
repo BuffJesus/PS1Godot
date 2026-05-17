@@ -8,6 +8,7 @@
 #include "skinmesh.hh"
 #include "streq.hh"
 #include "uisystem.hh"
+#include "dialogue.hh"
 
 #include <psyqo/soft-math.hh>
 #include <psyqo/xprintf.h>
@@ -23,6 +24,7 @@ SceneManager* LuaAPI::s_sceneManager = nullptr;
 CutscenePlayer* LuaAPI::s_cutscenePlayer = nullptr;
 AnimationPlayer* LuaAPI::s_animationPlayer = nullptr;
 UISystem* LuaAPI::s_uiSystem = nullptr;
+DialogueRunner* LuaAPI::s_dialogueRunner = nullptr;
 
 // Scale factor: FixedPoint<12> stores 1.0 as raw 4096.
 // Lua scripts work in world-space units (1 = one unit), so we convert.
@@ -45,11 +47,12 @@ static psyqo::Trig<> s_trig;
 // REGISTRATION
 // ============================================================================
 
-void LuaAPI::RegisterAll(psyqo::Lua& L, SceneManager* scene, CutscenePlayer* cutscenePlayer, AnimationPlayer* animationPlayer, UISystem* uiSystem) {
+void LuaAPI::RegisterAll(psyqo::Lua& L, SceneManager* scene, CutscenePlayer* cutscenePlayer, AnimationPlayer* animationPlayer, UISystem* uiSystem, DialogueRunner* dialogueRunner) {
     s_sceneManager = scene;
     s_cutscenePlayer = cutscenePlayer;
     s_animationPlayer = animationPlayer;
     s_uiSystem = uiSystem;
+    s_dialogueRunner = dialogueRunner;
     
     // ========================================================================
     // ENTITY API
@@ -682,6 +685,54 @@ void LuaAPI::RegisterAll(psyqo::Lua& L, SceneManager* scene, CutscenePlayer* cut
     L.setField(-2, "GetRotation");
 
     L.setGlobal("Player");
+
+    // ========================================================================
+    // DIALOG API (PS1Graph dialogue walker — slice D1b)
+    // ========================================================================
+    L.newTable();
+
+    L.push(Dialog_RunGraph);
+    L.setField(-2, "RunGraph");
+
+    L.push(Dialog_Stop);
+    L.setField(-2, "Stop");
+
+    L.push(Dialog_IsActive);
+    L.setField(-2, "IsActive");
+
+    L.setGlobal("Dialog");
+}
+
+// ============================================================================
+// DIALOG API IMPLEMENTATION
+// ============================================================================
+
+int LuaAPI::Dialog_RunGraph(lua_State* L) {
+    if (!s_dialogueRunner) {
+        printf("[Dialog] RunGraph: no runner registered\n");
+        return 0;
+    }
+    if (!lua_istable(L, 1)) {
+        printf("[Dialog] RunGraph: arg 1 must be a table\n");
+        return 0;
+    }
+    // Push a copy of the table at the top of the stack — startFromStackTop
+    // calls luaL_ref which pops what it stores, and we want the original
+    // arg-1 to remain so Lua's argument handling stays consistent.
+    lua_pushvalue(L, 1);
+    s_dialogueRunner->startFromStackTop(L);
+    return 0;
+}
+
+int LuaAPI::Dialog_Stop(lua_State* L) {
+    if (s_dialogueRunner) s_dialogueRunner->stop(L);
+    return 0;
+}
+
+int LuaAPI::Dialog_IsActive(lua_State* L) {
+    bool active = s_dialogueRunner && s_dialogueRunner->isActive();
+    lua_pushboolean(L, active ? 1 : 0);
+    return 1;
 }
 
 // ============================================================================

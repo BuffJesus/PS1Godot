@@ -26,26 +26,47 @@ class UISystem;  // Forward declaration
 class LuaAPI {
 public:
     // Initialize all API modules
-    static void RegisterAll(psyqo::Lua& L, SceneManager* scene, CutscenePlayer* cutscenePlayer = nullptr, AnimationPlayer* animationPlayer = nullptr, UISystem* uiSystem = nullptr);
-    
+    static void RegisterAll(psyqo::Lua& L, SceneManager* scene, CutscenePlayer* cutscenePlayer = nullptr, AnimationPlayer* animationPlayer = nullptr, UISystem* uiSystem = nullptr, class DialogueRunner* dialogueRunner = nullptr);
+
     // Called once per frame to advance the Lua frame counter
     static void IncrementFrameCount();
-    
+
     // Reset frame counter (called on scene load)
     static void ResetFrameCount();
-    
+
 private:
     // Store scene manager for API access
     static SceneManager* s_sceneManager;
-    
+
     // Cutscene player pointer (set during RegisterAll)
     static CutscenePlayer* s_cutscenePlayer;
 
     // Animation player pointer (set during RegisterAll)
     static AnimationPlayer* s_animationPlayer;
-    
+
     // UI system pointer (set during RegisterAll)
     static UISystem* s_uiSystem;
+
+    // PS1Graph dialogue walker — drives Dialog.RunGraph state across
+    // frames. Owned by SceneManager; LuaAPI just holds the pointer for
+    // the Lua entry-point function. Slice D1b walker.
+    static class DialogueRunner* s_dialogueRunner;
+
+    // ========================================================================
+    // DIALOG API (PS1Graph dialogue walker)
+    // ========================================================================
+
+    // Dialog.RunGraph(table) — start interpreting a compiled PS1Graph
+    // dialogue table. Table shape is { entry = "n0", nodes = { ... } }
+    // as emitted by PS1GraphCompiler.CompileDialogue.
+    static int Dialog_RunGraph(lua_State* L);
+
+    // Dialog.Stop() — abort any in-progress dialogue. Cheap no-op when
+    // nothing is running.
+    static int Dialog_Stop(lua_State* L);
+
+    // Dialog.IsActive() -> boolean
+    static int Dialog_IsActive(lua_State* L);
     
     // ========================================================================
     // ENTITY API

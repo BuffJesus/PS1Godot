@@ -28,6 +28,7 @@
 #include "animation.hh"
 #include "skinmesh.hh"
 #include "uisystem.hh"
+#include "dialogue.hh"
 #ifdef PSXSPLASH_MEMOVERLAY
 #include "memoverlay.hh"
 #endif
@@ -277,6 +278,10 @@ class SceneManager {
     XaAudioBackend m_xa;
     SoundMacroSequencer m_soundMacros;
     SoundFamily m_soundFamilies;
+
+    // PS1Graph dialogue walker (slice D1b). Ticks each frame in
+    // GameTick; no-op when no dialogue is active.
+    DialogueRunner m_dialogueRunner;
     
     // Cutscene playback
     Cutscene m_cutscenes[MAX_CUTSCENES];
