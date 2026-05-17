@@ -4,25 +4,30 @@ using PS1Godot.Graph;
 
 namespace PS1Godot.UI;
 
-// PS1Graph editor — walking skeleton (slice 1).
+// PS1Graph editor — slice 2.
 //
 // Bottom-panel dock that hosts a Godot GraphEdit widget on top of a
-// PS1GraphResource. Lets the author:
-//   - New     → start a fresh in-memory graph (path unset until save).
-//   - Load    → pick a .tres via EditorFileDialog, materialise it.
-//   - Save    → ResourceSaver.Save to the resource's existing path, or
-//               prompt for a path on first save.
-//   - Add Print → drop one "print" node at the GraphEdit viewport
-//               centre. (Slice 2 will add a right-click palette with
-//               more node kinds; this button is the minimum to exercise
-//               the round-trip.)
-//   - Drag / connect / disconnect / delete via stock GraphEdit input.
+// PS1GraphResource. Slice-2 additions over slice 1:
+//   - Typed pins. Each node Kind declares its slot layout (pin type per
+//     row, per side); GraphEdit's slot-type compatibility check enforces
+//     "Exec connects to Exec, String connects to String" automatically.
+//     Colours match the PinType enum (Exec white, String yellow, …).
+//   - Right-click palette. Right-clicking empty GraphEdit space opens a
+//     PopupMenu listing every registered node Kind; selection drops a
+//     fresh node at the click position. The slice-1 "+ Print" toolbar
+//     button is gone — the palette is the canonical "add node" UX.
 //
-// Slice 1 deliberately omits: typed-pin colouring (all pins are slot 0,
-// "any" type), compile-to-Lua (no compiler), live validation (cycle
-// detection / dangling-input warnings), node search / palette filter,
-// undo/redo integration, multi-selection move. Those land alongside D1
-// (the first concrete graph kind) once the framework is anchored.
+// Author actions:
+//   - New / Load / Save / Save As… in the toolbar.
+//   - Right-click empty GraphEdit → "Print" (etc.) to add a node.
+//   - Drag a pin to another pin → connect (rejected if types differ).
+//   - Select + Delete → remove node(s) and cascade-prune connections.
+//
+// Slice 2 still omits: compile-to-Lua (no compiler), live validation
+// (cycle detection / dangling-input warnings), node search / palette
+// filter, undo/redo integration, group / comment nodes. Those land in
+// slice 3 alongside D1 (the first concrete graph kind, Dialogue), when
+// real use cases tell us which framework polish actually hurts.
 [Tool]
 public partial class PS1GraphEditorDock : VBoxContainer
 {
@@ -31,11 +36,49 @@ public partial class PS1GraphEditorDock : VBoxContainer
     private Label? _pathLabel;
     private EditorFileDialog? _openDialog;
     private EditorFileDialog? _saveDialog;
+    private PopupMenu? _palettePopup;
+
+    // Stashed at right-click time so the menu's IdPressed handler knows
+    // where to drop the spawned node. GraphEdit hands PopupRequest a
+    // position in screen-local coordinates; we convert to graph-canvas
+    // coordinates (ScrollOffset + position / zoom) at spawn time.
+    private Vector2 _paletteSpawnCanvasPos = Vector2.Zero;
 
     // Map resource node Id → visual GraphNode child name. Names are
     // "n{Id}" so the connection signals (which give us node names) can
     // round-trip back to Ids cheaply. Cleared on every reload.
     private readonly System.Collections.Generic.Dictionary<int, string> _idToVisualName = new();
+
+    // ── Node-kind registry ───────────────────────────────────────────
+    //
+    // Each entry describes how to render + edit one node Kind. Adding
+    // a new kind = appending one record + handling its kind string in
+    // BuildVisualBody / future compiler dispatch. The palette popup
+    // iterates this list, so registration order = display order.
+    //
+    // Slot definitions are baked into the visual at materialise time,
+    // not stored in the resource — changing a kind's pin layout in
+    // future doesn't invalidate saved graphs (existing connections to
+    // removed pins are dropped silently at load by the cascade-prune).
+    private record NodeKindEntry(string Kind, string DisplayName);
+    private static readonly NodeKindEntry[] s_kinds = new[]
+    {
+        new NodeKindEntry("print", "Print"),
+    };
+
+    // Slice-2 palette: per-pin-type colours. Picked to match common
+    // node-graph conventions (Blueprint / Houdini / ShaderForge):
+    // exec=white, strings=yellow, numbers=green, bools=red, vectors=blue,
+    // entity-refs=purple. Drawn on the GraphNode pin caps via SetSlot.
+    private static readonly System.Collections.Generic.Dictionary<PinType, Color> s_pinColors = new()
+    {
+        { PinType.Exec,      new Color(1.00f, 1.00f, 1.00f) },
+        { PinType.String,    new Color(1.00f, 0.82f, 0.18f) },
+        { PinType.Number,    new Color(0.36f, 0.85f, 0.41f) },
+        { PinType.Bool,      new Color(0.91f, 0.30f, 0.30f) },
+        { PinType.Vec3,      new Color(0.34f, 0.55f, 0.95f) },
+        { PinType.EntityRef, new Color(0.69f, 0.40f, 0.92f) },
+    };
 
     public PS1GraphEditorDock()
     {
@@ -58,10 +101,6 @@ public partial class PS1GraphEditorDock : VBoxContainer
 
         toolbar.AddChild(new VSeparator());
 
-        AddToolbarButton(toolbar, "+ Print", OnAddPrintPressed);
-
-        toolbar.AddChild(new VSeparator());
-
         _pathLabel = new Label
         {
             Text = "(unsaved)",
@@ -74,13 +113,25 @@ public partial class PS1GraphEditorDock : VBoxContainer
         {
             SizeFlagsVertical = SizeFlags.ExpandFill,
             SizeFlagsHorizontal = SizeFlags.ExpandFill,
-            // Right-click pan / scroll-wheel zoom come for free; we only
-            // care about wiring the connect/disconnect hooks for slice 1.
+            // Right-click pan / scroll-wheel zoom come for free; we wire
+            // PopupRequest to open the palette and connection hooks for
+            // round-trip into the resource.
         };
         _graphEdit.ConnectionRequest    += OnConnectionRequest;
         _graphEdit.DisconnectionRequest += OnDisconnectionRequest;
         _graphEdit.DeleteNodesRequest   += OnDeleteNodesRequest;
+        _graphEdit.PopupRequest         += OnGraphPopupRequest;
         AddChild(_graphEdit);
+
+        // Right-click palette. Built once + reused; entries match
+        // s_kinds 1:1 so adding a node Kind = one line in the registry.
+        _palettePopup = new PopupMenu { Name = "PS1GraphPalette" };
+        for (int i = 0; i < s_kinds.Length; i++)
+        {
+            _palettePopup.AddItem(s_kinds[i].DisplayName, i);
+        }
+        _palettePopup.IdPressed += OnPaletteItemPressed;
+        AddChild(_palettePopup);
     }
 
     private static void AddToolbarButton(HBoxContainer parent, string label, System.Action handler)
@@ -184,19 +235,52 @@ public partial class PS1GraphEditorDock : VBoxContainer
         GD.Print($"[PS1Godot] PS1Graph: saved '{path}'.");
     }
 
-    private void OnAddPrintPressed()
+    // ── Palette ──────────────────────────────────────────────────────
+
+    private void OnGraphPopupRequest(Vector2 atPosition)
+    {
+        if (_graphEdit == null || _palettePopup == null) return;
+
+        // PopupRequest's at_position is GraphEdit-local (already in
+        // widget coordinates, not screen). Convert to graph-canvas
+        // coordinates for the spawn site so the node lands under the
+        // cursor regardless of pan/zoom: canvas = (local + scroll) / zoom.
+        _paletteSpawnCanvasPos = (atPosition + _graphEdit.ScrollOffset) / _graphEdit.Zoom;
+
+        // Popup at the global screen position so the menu appears under
+        // the cursor — GetScreenPosition() gives GraphEdit's screen
+        // origin; add the local click position to land at the cursor.
+        Vector2 screenPos = _graphEdit.GetScreenPosition() + atPosition;
+        _palettePopup.Position = new Vector2I((int)screenPos.X, (int)screenPos.Y);
+        _palettePopup.Popup();
+    }
+
+    private void OnPaletteItemPressed(long id)
+    {
+        int idx = (int)id;
+        if (idx < 0 || idx >= s_kinds.Length) return;
+        SpawnNode(s_kinds[idx].Kind, _paletteSpawnCanvasPos);
+    }
+
+    private void SpawnNode(string kind, Vector2 canvasPosition)
     {
         int id = _resource.AllocateId();
         var node = new PS1GraphNode
         {
             Id = id,
-            Kind = "print",
-            Position = GetSpawnPosition(),
-            Payload = "Hello PSX",
+            Kind = kind,
+            Position = canvasPosition,
+            Payload = DefaultPayloadFor(kind),
         };
         _resource.Nodes.Add(node);
         AddVisualForNode(node);
     }
+
+    private static string DefaultPayloadFor(string kind) => kind switch
+    {
+        "print" => "Hello PSX",
+        _       => "",
+    };
 
     // ── Graph view (re)build ─────────────────────────────────────────
 
@@ -238,32 +322,58 @@ public partial class PS1GraphEditorDock : VBoxContainer
             Resizable = false,
         };
 
-        // Slice-1 pin model: one slot per node carrying both an input
-        // pin (left) and an output pin (right). Type 0 = "any" — the
-        // typed-pin system in the next slice will widen this.
-        var payloadEdit = new LineEdit { Text = n.Payload, PlaceholderText = "payload…" };
-        payloadEdit.TextChanged += text => n.Payload = text;
-        g.AddChild(payloadEdit);
-        g.SetSlot(0, true, 0, Colors.White, true, 0, Colors.White);
+        BuildVisualBody(g, n);
 
         _graphEdit.AddChild(g);
         _idToVisualName[n.Id] = visualName;
     }
 
+    // Per-kind body + slot layout. Each branch must AddChild one
+    // Control per row (in row order) AND call SetSlot for each row that
+    // carries pins. Slot index = row index = port index in the
+    // PS1GraphConnection FromPort/ToPort fields, so order is part of
+    // the contract — append new rows at the bottom of existing kinds
+    // rather than reordering.
+    private static void BuildVisualBody(GraphNode g, PS1GraphNode n)
+    {
+        switch (n.Kind)
+        {
+            case "print":
+            {
+                // Row 0: Exec in (left) + Exec out (right). Top of the
+                // node so the control-flow line reads naturally.
+                g.AddChild(new Label { Text = "exec" });
+                g.SetSlot(0, true, (int)PinType.Exec, s_pinColors[PinType.Exec],
+                             true, (int)PinType.Exec, s_pinColors[PinType.Exec]);
+
+                // Row 1: String in (left) + String out (right). The
+                // LineEdit holds the literal value used when the String
+                // input is disconnected. The String output passes the
+                // same value through so a chain of Prints can share a
+                // message — convenient for slice 2; the compiler in a
+                // later slice may revisit the semantics.
+                var payloadEdit = new LineEdit { Text = n.Payload, PlaceholderText = "message…" };
+                payloadEdit.TextChanged += text => n.Payload = text;
+                g.AddChild(payloadEdit);
+                g.SetSlot(1, true, (int)PinType.String, s_pinColors[PinType.String],
+                             true, (int)PinType.String, s_pinColors[PinType.String]);
+                break;
+            }
+            default:
+            {
+                // Fallback: untyped + Payload as a plain label. Lets
+                // saved graphs survive a kind being renamed / removed
+                // — connections to gone-pins drop, but the node still
+                // appears so the author can manually re-route or delete.
+                g.AddChild(new Label { Text = $"(unknown kind '{n.Kind}')" });
+                g.AddChild(new Label { Text = n.Payload });
+                break;
+            }
+        }
+    }
+
     private static string TitleFor(PS1GraphNode n) =>
         string.IsNullOrEmpty(n.Kind) ? $"node #{n.Id}" : $"{n.Kind} #{n.Id}";
-
-    // Drop new nodes at a position that's visible regardless of pan/zoom:
-    // top-left of the visible area plus a small offset, then a per-node
-    // stagger so successive presses don't pile up.
-    private Vector2 GetSpawnPosition()
-    {
-        if (_graphEdit == null) return Vector2.Zero;
-        var scroll = _graphEdit.ScrollOffset;
-        var basePos = scroll + new Vector2(40, 40);
-        int n = _resource.Nodes.Count;
-        return basePos + new Vector2(n * 20, n * 20);
-    }
 
     // ── Visual → resource sync ───────────────────────────────────────
 

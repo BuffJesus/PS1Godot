@@ -1573,13 +1573,21 @@ graph-walker overhead.
         save; connection add via GraphEdit drag; disconnection +
         multi-select delete; cascade-prune of connections referencing
         deleted nodes.
-      - **Deferred to slice 2** (alongside D1 — first concrete kind):
-        typed-pin system (currently all pins are slot 0 / "any"
-        colour); right-click palette beyond the single toolbar
-        button; live validation (cycle detection, dangling input);
-        node search/filter; undo/redo integration; group/comment
-        nodes. Resource fields are already append-only-friendly so
-        none of these require a schema bump.
+      - **Slice 2 shipped 2026-05-17 (typed pins + palette).**
+        `PinType` enum (Exec / String / Number / Bool / Vec3 / EntityRef)
+        + per-type colour map; GraphEdit's slot-type compatibility
+        check enforces "Exec connects to Exec only" automatically. Print
+        node redrawn with two rows (Exec pins on row 0, String pins on
+        row 1 with the LineEdit literal still present). Right-click on
+        empty GraphEdit space opens a PopupMenu listing every registered
+        node Kind, sourced from a `NodeKindEntry[]` table so future
+        kinds register in one line. Toolbar "+ Print" button retired —
+        palette is the canonical "add node" UX.
+      - **Deferred to slice 3** (alongside D1 — first concrete kind):
+        live validation (cycle detection, dangling input); node
+        search / palette filter; undo/redo integration; group / comment
+        nodes; compile-to-Lua pass. Resource fields stay append-only-
+        friendly so none of these require a schema bump.
 - [ ] **D1. `PS1DialogueGraph`** — *first graph kind.* Nodes: Line,
       Choice, Condition, SetFlag, GiveItem, PlaySound, StartCutscene.
       Compiles to a small Lua table (nodes + edges) walked by a stock
