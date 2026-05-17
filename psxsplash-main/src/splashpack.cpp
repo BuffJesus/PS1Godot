@@ -146,7 +146,7 @@ struct SPLASHPACKFileHeader {
     uint32_t familyClipIndexTableOffset;
     // v32+: separated background color from fog tone, and explicit
     // near/far for the fog ramp. See
-    // docs/ps1godot_current_implementation_review_next_steps.md §4.
+    // docs/archive/superseded/ps1godot_current_implementation_review_next_steps.md §4.
     //
     // bgEnabled = 0  → renderer's clear color stays at fogColor (the
     //                  legacy "fog wall is the backdrop" behavior).

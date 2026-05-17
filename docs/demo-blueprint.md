@@ -4,7 +4,7 @@
 > audio + skinned mesh) shipped. The richer demo described below is a
 > Phase 3+ aspiration; sections that match Phase 3 roadmap bullets are
 > implementable today, others wait on engine work. See
-> `docs/ps1godot_current_implementation_review_next_steps.md` for the
+> `docs/archive/superseded/ps1godot_current_implementation_review_next_steps.md` for the
 > near-term roadmap.
 
 A long-term target for what the shipped demo grows into — not a plan to build

@@ -376,7 +376,7 @@ bullets, pickups, particles, enemy waves, and voxel-style worlds.
       skinned actors / colliders) lives in
       [`docs/archive/superseded/ps1_chunked_rpg_architecture_plan_multidisc.md`](docs/archive/superseded/ps1_chunked_rpg_architecture_plan_multidisc.md)
       and
-      [`docs/ps1godot_current_implementation_review_next_steps.md`](docs/ps1godot_current_implementation_review_next_steps.md).
+      [`docs/archive/superseded/ps1godot_current_implementation_review_next_steps.md`](docs/archive/superseded/ps1godot_current_implementation_review_next_steps.md).
       Chunk states (Active / Nearby / LoadedInactive / Unloaded /
       SymbolicOnly) drive simulation tier and SPU/VRAM residency.
 - [ ] **Multi-disc metadata scaffold** — `DiscId`, `DiscCount`,
@@ -754,7 +754,7 @@ authored alongside chunk metadata.
       and two new Fog fields (`FogNear` / `FogFar` in PSX GTE-Z space;
       0 = legacy density-derived). Renderer's clear color now decouples
       from fog tone. Doc:
-      `ps1godot_current_implementation_review_next_steps.md` §4.
+      `docs/archive/superseded/ps1godot_current_implementation_review_next_steps.md` §4.
 - [ ] **`PS1ChunkLightingProfile.tres`** — `AmbientColor`, `KeyLight`
       (direction + color), `CharacterLightMode`, `PaletteMood`. Per-chunk
       override; falls back to scene default. The fog/background slice
