@@ -215,6 +215,13 @@ public partial class PS1GodotPlugin : EditorPlugin
         _dock.ExportOnlyRequested += OnExportEmptySplashpack;
         _dock.OpenVramViewerRequested += OnOpenVramViewer;
         _dock.QuickActionRequested += OnQuickAction;
+        _dock.AutoRunOnSaveChanged += OnAutoRunOnSaveToggled;
+
+        // iteration-loop Stage 1: hook the editor's resource-reimport
+        // signal so a non-Lua save can auto-fire Run-on-PSX. Off by
+        // default; toggled via the dock's "Auto-run on save" checkbox.
+        var fs = EditorInterface.Singleton.GetResourceFilesystem();
+        fs.ResourcesReimported += OnResourcesReimported;
         // AddControlToDock is marked [Obsolete] in Godot 4.7-dev in favor
         // of AddDock(EditorDock), which isn't stable yet. The old API still
         // works; suppressing the warning so warnings-as-errors builds
@@ -442,6 +449,9 @@ public partial class PS1GodotPlugin : EditorPlugin
 
         SceneChanged -= OnSceneChanged;
         EditorInterface.Singleton.GetSelection().SelectionChanged -= OnEditorSelectionChanged;
+
+        var fs = EditorInterface.Singleton.GetResourceFilesystem();
+        if (fs != null) fs.ResourcesReimported -= OnResourcesReimported;
 
         if (_luaHighlighter != null)
         {
@@ -802,20 +812,71 @@ public partial class PS1GodotPlugin : EditorPlugin
         //   - CD-ROM ISO: any scene_*.xa exists. XA-ADPCM streaming
         //     needs the disc bus, so we build a CDROM-loader runtime,
         //     run mkpsxiso, and boot via -iso. PCdrv won't see XA.
-        _dock?.SetPipelineStatus("Exporting splashpack…");
-        OnExportEmptySplashpack();
-        string buildDir = System.IO.Path.Combine(RepoRoot(), "godot-ps1", "build");
-        if (HasAnyXaSidecar(buildDir))
+        //
+        // Re-entrancy guard for iteration-loop Stage 1: auto-run-on-save
+        // fires this from a Godot filesystem signal. If a second save
+        // arrives mid-export, drop it on the floor — _autoRunOnSave will
+        // re-trigger on the next reimport batch after we return.
+        if (_pipelineInProgress) return;
+        _pipelineInProgress = true;
+        try
         {
-            _dock?.SetPipelineStatus("Building CD-ROM ISO…");
-            RunIsoMode(buildDir);
+            _dock?.SetPipelineStatus("Exporting splashpack…");
+            OnExportEmptySplashpack();
+            string buildDir = System.IO.Path.Combine(RepoRoot(), "godot-ps1", "build");
+            if (HasAnyXaSidecar(buildDir))
+            {
+                _dock?.SetPipelineStatus("Building CD-ROM ISO…");
+                RunIsoMode(buildDir);
+            }
+            else
+            {
+                _dock?.SetPipelineStatus("Launching PCSX-Redux…");
+                RunPcdrvMode(buildDir);
+            }
         }
-        else
+        finally
         {
-            _dock?.SetPipelineStatus("Launching PCSX-Redux…");
-            RunPcdrvMode(buildDir);
+            _dock?.SetPipelineStatus(null);
+            _pipelineInProgress = false;
         }
-        _dock?.SetPipelineStatus(null);
+    }
+
+    // iteration-loop Stage 1 — auto-run-on-save toggle state. False until
+    // the dock checkbox flips it; persists for the editor session only
+    // (no EditorSettings store yet).
+    private bool _autoRunOnSave = false;
+    private bool _pipelineInProgress = false;
+
+    private void OnAutoRunOnSaveToggled(bool enabled)
+    {
+        _autoRunOnSave = enabled;
+        GD.Print($"[PS1Godot] Auto-run on save: {(enabled ? "ON" : "OFF")}");
+    }
+
+    private void OnResourcesReimported(string[] paths)
+    {
+        if (!_autoRunOnSave) return;
+        if (_pipelineInProgress) return;
+        // Filter: don't react to plugin-side .uid / .import housekeeping
+        // or files inside our own build/ output (which the export
+        // pipeline writes to, and would otherwise feed back into itself).
+        // Lua saves currently go through the same full-reload path —
+        // Tier 1 hot-swap (~200 ms via PCdrv sentinel files) lands in
+        // iteration-loop.md Stage 2.
+        bool anyAuthorable = false;
+        foreach (var p in paths)
+        {
+            if (string.IsNullOrEmpty(p)) continue;
+            if (p.EndsWith(".uid")) continue;
+            if (p.EndsWith(".import")) continue;
+            if (p.Contains("/build/")) continue;
+            anyAuthorable = true;
+            break;
+        }
+        if (!anyAuthorable) return;
+        GD.Print($"[PS1Godot] Auto-run triggered by {paths.Length} reimport(s).");
+        OnRunOnPsx();
     }
 
     private static bool HasAnyXaSidecar(string buildDir)

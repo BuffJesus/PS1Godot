@@ -21,6 +21,7 @@ public partial class PS1GodotDock : VBoxContainer
     [Signal] public delegate void ExportOnlyRequestedEventHandler();
     [Signal] public delegate void OpenVramViewerRequestedEventHandler();
     [Signal] public delegate void QuickActionRequestedEventHandler(int kind);
+    [Signal] public delegate void AutoRunOnSaveChangedEventHandler(bool enabled);
 
     public enum QuickActionKind
     {
@@ -41,6 +42,7 @@ public partial class PS1GodotDock : VBoxContainer
     private BudgetRow? _spuRow;
     private BudgetRow? _texPageRow;
     private BudgetRow? _fillRateRow;
+    private CheckBox? _autoRunCheck;
     private Label? _pipelineStatusLabel;
     private Label? _configWarningsLabel;
     private VBoxContainer? _configWarningsRows;
@@ -112,6 +114,23 @@ public partial class PS1GodotDock : VBoxContainer
         var analyze = MakeSecondary("Analyze", "Scan res:// textures and report PS1 compliance (bit depth, VRAM cost).");
         analyze.Pressed += () => EmitSignal(SignalName.AnalyzeTexturesRequested);
         actions.AddChild(analyze);
+
+        // Auto-run-on-save toggle (iteration-loop Stage 1). Default off — when
+        // on, any project resource reimport re-fires the full Run-on-PSX
+        // pipeline. Saves the manual click for tight edit-test loops; Stages
+        // 2+ replace the relaunch with cheaper hot-reload tiers.
+        _autoRunCheck = new CheckBox
+        {
+            Text = "Auto-run on save",
+            TooltipText =
+                "When ON, any resource reimport triggers a full Run-on-PSX " +
+                "(export + build-if-needed + launch). Off by default. " +
+                "Tier 1 / 2 hot-reload land in later stages of " +
+                "docs/iteration-loop.md.",
+        };
+        _autoRunCheck.Toggled += (bool pressed) =>
+            EmitSignal(SignalName.AutoRunOnSaveChanged, pressed);
+        inner.AddChild(_autoRunCheck);
 
         // ── Preview toggle ──────────────────────────────────────────────
         // Flips the shared ps1.gdshader's quantize+dither uniforms so

@@ -289,18 +289,25 @@ Document this as the SetUp.md "no PCdrv available" caveat.
 
 Five stages — each shippable, each measurable.
 
-### Stage 1 — Auto-export on save (existing path)
+### Stage 1 — Auto-export on save (existing path) ✅ shipped 2026-05-16
 
-The smallest win that pays back immediately. No new runtime
-work; just wire the file watcher to the existing export pipeline.
+Wired in PS1GodotPlugin + PS1GodotDock. Default off.
 
-- File watcher subscription in `PS1GodotPlugin`.
-- "Auto-export on save" toggle in dock (default off initially).
-- When a non-Lua resource changes and the toggle is on, run the
-  full export + emulator relaunch automatically.
+- `EditorFileSystem.ResourcesReimported` subscription in
+  `PS1GodotPlugin._EnterTree`.
+- "Auto-run on save" CheckBox in the dock; signal flips the
+  plugin's `_autoRunOnSave` field.
+- Re-entrancy guard (`_pipelineInProgress`) prevents a second
+  save firing while an export is in flight.
+- Filter skips `.uid`, `.import`, and anything under `build/`
+  so the pipeline doesn't feed back into itself.
+- Toggle state lives in-memory only for now (no EditorSettings
+  persistence — defer until the toggle proves stable).
 
-Time savings: ~5–10s per iteration (skip the manual button click,
-plus parallel export-and-watch).
+Stages 2 (Lua hot-swap), 3 (scene hot-reload), 4 (UX polish:
+last-reload timing, retry button), and 5 (selective asset
+diff) are deferred — each touches the runtime and is its own
+session.
 
 ### Stage 2 — Lua hot-swap
 
