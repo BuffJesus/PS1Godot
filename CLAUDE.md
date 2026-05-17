@@ -29,7 +29,7 @@ project with our plugin at `godot-ps1/addons/ps1godot/`.
 ```
 
 The **splashpack binary format** is the integration contract. Current version is
-**v31** (bumped through v22–v31 between 2026-04-20 and 2026-04-27 for sequenced
+**v32** (bumped through v22–v32 between 2026-04-20 and 2026-04-27 for sequenced
 music, UI 3D-model HUD widgets, audio routing, XA sidecar table, scene-wide
 instrument bank, sound macros + sound families, v30's quaternion-encoded
 skin-animation poses, v31's static-mesh vertex-pool format, and v32's
@@ -94,7 +94,8 @@ A human-readable extract of the format lives in `docs/splashpack-format.md`.
 - **Emulator for iteration:** PCSX-Redux with PCdrv backend (`PCDRV_SUPPORT=1`)
   so the game reads files from the host filesystem without an ISO.
 - **ISO / real hardware:** `mkpsxiso` + `LOADER=cdrom` build of psxsplash.
-  Defer to Phase 3+.
+  Shipped 2026-04-27 via `tools/build_iso/build_iso.py`; Run-on-PSX
+  auto-switches to ISO mode when the export emits XA sidecars.
 
 ## Conventions for working in this repo
 
@@ -117,8 +118,10 @@ A human-readable extract of the format lives in `docs/splashpack-format.md`.
 - Windows 11, bash shell (Git Bash style). Use forward slashes and Unix redirects
   (`/dev/null`, not `NUL`).
 - IDE is JetBrains Rider (fits the C# choice).
-- Godot editor launches standalone; there is no Unity-style Control Panel yet —
-  that's a Phase 2 deliverable.
+- Godot editor launches standalone. The PS1Godot dock (`PS1GodotDock`)
+  fills the Control Panel role: scene-budget bars, Run-on-PSX button,
+  validator summary, quick-action strip. Opens via the right-hand
+  panel slot when the plugin is enabled.
 
 ## Where to look for what
 
@@ -141,13 +144,25 @@ floor geometry deferred), 8–12 ✅ (rooms/portals shipped 2026-04-22).
 Phase 2.5 + 2.6 audio shipped end-to-end: SPU + CDDA + XA all play via
 `Audio.PlayMusic`, sequenced music via PS2M with scene-wide instrument
 banks, sound macros + sound families wired through runtime dispatch,
-voice allocator with priority stealing. Format at **v31** (skin animation
-storage shrunk ~42% via quaternion-encoded BakedBonePose; static-mesh
-storage shrunk ~50% via vertex-pool MeshBlob/Vertex/Face). Phase 3 has
-landed a dockable plugin panel with live scene-budget bars + dependency
-detection + texture/UV/budget validators at every export; most other
-Phase 3 items (WYSIWYG UI editor, F5 to play, VRAM viewer dock) still
-pending. ISO build pipeline (`tools/build_iso/build_iso.py`) produces
-BIOS-bootable discs as of 2026-04-27. See `ROADMAP.md` for the full
-plan, `docs/ui-ux-plan.md` for the editor-experience vision, and
-`SETUP.md` for env setup.
+voice allocator with priority stealing. Format at **v32** (skin animation
+storage shrunk ~42% via quaternion-encoded BakedBonePose at v30;
+static-mesh storage shrunk ~50% via vertex-pool MeshBlob/Vertex/Face
+at v31; v32 split background tone from fog and put fog near/far in
+GTE-Z space). Phase 3 has landed a dockable plugin panel with live
+scene-budget bars + dependency detection + texture/UV/budget validators
+at every export, plus the three biggest in-editor wins:
+**F5/Run-on-PSX one-click** (export → build psxsplash → launch
+PCSX-Redux via PCdrv or ISO, with an export-error gate as of
+2026-05-17), **VRAM viewer dock** (`PS1VRAMViewerDock` — atlases,
+CLUTs, framebuffer / font reserves, per-scene picker), and **WYSIWYG
+UI canvas editor** (`PS1UICanvasEditor` — drag/resize/add against a
+320×240 frame with theme-live preview). Slot D1 static-mesh batching
+**re-enabled 2026-05-17** after the surface-remap fix; in-editor
+confirmation on the demo monitor scene still pending. Open Phase 3
+items: graph authoring (PS1Graph), music authoring experience,
+unified "PS1 Doctor" validator, Lua API IDL + host-mode tooling,
+Blender add-on integration, and project-template expansion. ISO build
+pipeline (`tools/build_iso/build_iso.py`) produces BIOS-bootable discs
+as of 2026-04-27. See `ROADMAP.md` for the full plan,
+`docs/ui-ux-plan.md` for the editor-experience vision, and `SETUP.md`
+for env setup.
