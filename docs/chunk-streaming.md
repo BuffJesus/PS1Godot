@@ -1,5 +1,20 @@
 # Chunk streaming — design + patch
 
+**Status (2026-05-17):** No implementation yet. No `PS1Chunk`
+node, no `Scene.LoadChunk` / `UnloadChunk` Lua API, no chunk
+archive writer, no runtime additive-load path. The "v25
+splashpack" format slot named in the doc is moot — we're at v32,
+real implementation just appends to v33+. Largest of the bundle-4
+patch docs — sized as ~6–8 commits across PS1Chunk node + chunk
+writer + VRAM slot reservation, runtime additive load + BVH
+composition + scene-state stack, Lua API, dock chunk-budget
+readout, and demo wiring. Sits as a hard prerequisite under
+disc-layout Stages 2–3 (adjacency-aware layout consumes
+`Neighbors`/`NeighborWeights`), tiered-simulation Tier 3
+("symbolic = in unloaded chunk"), and the demo-blueprint's
+procedural-dungeon section. Deferred to its own session — likely
+the foundational item for the next big-architecture push.
+
 Closes `REF-GAP-5` in
 `docs/ps1_large_rpg_optimization_reference.md`:
 
