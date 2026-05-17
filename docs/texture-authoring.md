@@ -330,14 +330,22 @@ The headline addition.
 Verifiable: drop a PNG into the project, see a `.ps1tex` import
 file appear, inspector previews the quantized result.
 
-### Stage 2 — Inspector preview UI
+### Stage 2 — Inspector preview UI 🟡 partially shipped
 
-- Side-by-side original / quantized preview.
-- Stats display (VRAM cost, atlas page, CLUT size).
+`PS1TexturePreviewInspector` already attached to `PS1Sky` and
+`PS1UIElement(Image)` from an earlier session. As of 2026-05-16
+it shows source + PSX-quantized panels side-by-side with a
+VRAM-cost stats line that matches the dock's budget bar math
+(see `SceneStats.EstimateTextureVramBytes`).
+
+Remaining for Stage 2:
+- Atlas-page / CLUT-size context lines.
 - Zoom slider.
-- Import-option editing surface.
-
-The "I can actually see what I'm doing" stage.
+- Import-option editing surface (waits on Stage 1's
+  `EditorImportPlugin`).
+- Extend coverage to `PS1MeshInstance` (currently skipped
+  because mesh textures flow through material chains, not a
+  direct field).
 
 ### Stage 3 — Warnings + auto-fixes
 
