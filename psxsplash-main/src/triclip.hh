@@ -12,6 +12,26 @@ static constexpr int16_t SAFE_MAX_X =  672;
 static constexpr int16_t SAFE_MIN_Y = -135;
 static constexpr int16_t SAFE_MAX_Y =  376;
 
+// Sub-pixel reject: triangle screen-space span fits within `threshold`
+// pixels on both axes. Triangle would contribute at most one pixel
+// (rasterizer's center-of-pixel rule) for the cost of a full GPU
+// setup + OT insert. Cheap to detect (4 min/max + 2 subtractions)
+// vs the ~50 GPU cycles a tiny tri otherwise burns. See
+// docs/visibility-culling.md Pass 3 — threshold 1 is the conservative
+// default (only reject tris within a single pixel span).
+inline bool isSubpixel(const psyqo::Vertex& v0,
+                       const psyqo::Vertex& v1,
+                       const psyqo::Vertex& v2,
+                       int16_t threshold = 1) {
+    int16_t x0 = v0.x, x1 = v1.x, x2 = v2.x;
+    int16_t y0 = v0.y, y1 = v1.y, y2 = v2.y;
+    int16_t minX = x0 < x1 ? (x0 < x2 ? x0 : x2) : (x1 < x2 ? x1 : x2);
+    int16_t maxX = x0 > x1 ? (x0 > x2 ? x0 : x2) : (x1 > x2 ? x1 : x2);
+    int16_t minY = y0 < y1 ? (y0 < y2 ? y0 : y2) : (y1 < y2 ? y1 : y2);
+    int16_t maxY = y0 > y1 ? (y0 > y2 ? y0 : y2) : (y1 > y2 ? y1 : y2);
+    return (maxX - minX) <= threshold && (maxY - minY) <= threshold;
+}
+
 // Early-reject: all 3 vertices past the same screen edge.
 inline bool isCompletelyOutside(const psyqo::Vertex& v0,
                                 const psyqo::Vertex& v1,

@@ -277,7 +277,9 @@ void psxsplash::Renderer::processTriangle(
         return;
     }
 
-    // Leaf path: off-screen reject + backface cull (skipped for near-plane leaves).
+    // Leaf path: off-screen reject + backface cull + sub-pixel reject
+    // (all skipped for near-plane leaves — close geometry is large in
+    // screen space, none of these cheap rejects pay off).
     if (!hasNearPlane) {
         if (isCompletelyOutside(projected[0], projected[1], projected[2])) return;
 
@@ -285,6 +287,8 @@ void psxsplash::Renderer::processTriangle(
         int32_t mac0 = 0;
         read<Register::MAC0>(reinterpret_cast<uint32_t*>(&mac0));
         if (mac0 <= 0) return;
+
+        if (isSubpixel(projected[0], projected[1], projected[2])) return;
     }
 
     // Clamp to safe rasterizer range (1023×511 max delta).
@@ -1465,6 +1469,11 @@ void psxsplash::Renderer::renderSkinnedObjects(
             int32_t mac0 = 0;
             read<Register::MAC0>(reinterpret_cast<uint32_t*>(&mac0));
             if (mac0 == 0) continue;
+
+            // Sub-pixel reject — distant skinned characters can produce
+            // hundreds of one-pixel tris per frame; cheaper to drop them
+            // here than to pay full GPU setup.
+            if (isSubpixel(projected0, projected1, projected2)) continue;
 
             clampForRasterizer(projected0);
             clampForRasterizer(projected1);
