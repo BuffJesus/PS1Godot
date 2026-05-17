@@ -54,50 +54,6 @@ public static class MeshFormatRoundTripVerifier
         public required int ActualLen { get; init; }
     }
 
-    public sealed class IndexDiff
-    {
-        public required int TriIndex { get; init; }
-        public required int TextureIndex { get; init; }
-        public required int SurfaceCount { get; init; }
-    }
-
-    /// <summary>
-    /// Sanity-check that every Tri.TextureIndex in <paramref name="mesh"/>
-    /// names a valid slot in <paramref name="surfaceTextureIndices"/>
-    /// (or is -1 for untextured). Returns null if all indices are in
-    /// range; otherwise returns the first violation.
-    /// <para>
-    /// Specifically catches the regression behind Slot D1 being disabled
-    /// (2026-04-27): the static-batch optimizer used to concat'enate
-    /// per-member SurfaceTextureIndices without remapping tri indices,
-    /// so member B's tris kept pointing into member A's slot range.
-    /// Post-merge, every TextureIndex must address the COMBINED surface
-    /// array. Calling this on the merged SceneObject right before commit
-    /// makes the regression impossible to ship silently — at worst a
-    /// future change reintroducing it will bail the batch out at export.
-    /// </para>
-    /// </summary>
-    public static IndexDiff? VerifyTextureIndices(PSXMesh mesh, int[] surfaceTextureIndices)
-    {
-        if (mesh?.Triangles == null) return null;
-        int surfaceCount = surfaceTextureIndices?.Length ?? 0;
-        for (int i = 0; i < mesh.Triangles.Count; i++)
-        {
-            int idx = mesh.Triangles[i].TextureIndex;
-            if (idx == -1) continue;
-            if (idx < 0 || idx >= surfaceCount)
-            {
-                return new IndexDiff
-                {
-                    TriIndex = i,
-                    TextureIndex = idx,
-                    SurfaceCount = surfaceCount,
-                };
-            }
-        }
-        return null;
-    }
-
     public static Diff? Verify(PSXMesh mesh, SceneData scene)
     {
         if (mesh?.Triangles == null || mesh.Triangles.Count == 0) return null;

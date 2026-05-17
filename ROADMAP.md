@@ -1325,18 +1325,23 @@ surfaced when the demo monitor scene started using it:
      the anchor). **Fixed** by adding a 24 m world-AABB-centre cell to
      the bucket key + a per-merge safety guard that bails out if the
      combined extent still exceeds the envelope.
-  3. *Per-tri `TextureIndex` not remapped across members.*
-     `combinedTexIndices` appended each member's `SurfaceTextureIndices`
-     end-to-end while `tri.TextureIndex` was carried through verbatim,
-     so member B's tris kept pointing at member A's slot range — the
-     batch rendered with wrong textures (often as off-camera garbage).
-     **Fixed 2026-05-17:** `MergeBucket` now tracks a `surfaceOffset`
-     counter and applies it to each tri's `TextureIndex` (the
-     `-1`/untextured case passes through unchanged). Two safety nets
-     guard against regression: an inline per-member bounds check before
-     remap, and a post-merge full-mesh sweep through
-     `MeshFormatRoundTripVerifier.VerifyTextureIndices` that bails the
-     batch out if anything is off-by-one.
+  3. *Per-tri `TextureIndex` not remapped across members* —
+     **suspected but NOT real** (corrected 2026-05-17 after testing).
+     `PSXMesh.cs:97` sets `Tri.TextureIndex = surfaceTextureIndices[s]`
+     when building each tri, so by the time `MergeBucket` runs the
+     value is ALREADY a resolved `SceneData.Textures` index, not a
+     per-mesh surface slot. Concatenation across members is safe with
+     no offset. The "surfaceOffset" remap and the
+     `VerifyTextureIndexBounds` / `VerifyTextureIndices` safety nets
+     I added 2026-05-17 were based on a misread of the convention;
+     they were reverted same-day after a user-side export run showed
+     89 false-positive errors on a working scene (the verifier was
+     checking `tri.TextureIndex < SurfaceTextureIndices.Count` but
+     the actual invariant is `tri.TextureIndex < SceneData.Textures.Count`,
+     which the writer never violates because the resolution already
+     happened upstream). The other Slot D1 fixes (#1 parentless
+     Transform, #2 spatial cell bucket, vertex Y/Z flip, int16 envelope
+     guard) were real and stay.
 
 **Still on the followup list** (not blockers for re-enabling):
   - Per-chunk scoping + `VRAMPacker`-aware bucket key — current

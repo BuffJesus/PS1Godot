@@ -25,13 +25,13 @@ namespace PS1Godot.Exporter;
 //     subtract anchor → anchor-local, re-encode to fp12. Normals
 //     rotate-only (anchor basis is identity).
 //   - Concatenate Triangles + SurfaceTextureIndices across members.
-//   - Per-Tri TextureIndex is REMAPPED by the running surface offset
-//     of the member it came from, so each tri continues to index the
-//     same texture-page slot it did pre-merge — just at a shifted
-//     position in the combined SurfaceTextureIndices array. Untextured
-//     tris (TextureIndex == -1) pass through unchanged.
-//     The bucket's members can use different specific texture entries
-//     as long as they share the same texture_page_id (the bucket key).
+//   - Per-Tri TextureIndex is preserved verbatim: it's set by
+//     PSXMesh.cs to surfaceTextureIndices[surface] at build time, so
+//     by the time we see it here it's already a resolved
+//     SceneData.Textures index — concatenation is safe with no
+//     offset. The bucket's members can use different specific texture
+//     entries as long as they share the same texture_page_id (the
+//     bucket key).
 //
 // What the bucket key intentionally does NOT include:
 //   - per-mesh node names (we lose them)
@@ -296,15 +296,16 @@ public static class StaticBatchOptimizer
         var combinedTexIndices = new List<int>();
         Vector3 minLocal = new(float.MaxValue, float.MaxValue, float.MaxValue);
         Vector3 maxLocal = new(float.MinValue, float.MinValue, float.MinValue);
-        // Surface-slot offset for the current member. Each member's tris
-        // index its own SurfaceTextureIndices[0..N); after concat'ing into
-        // combinedTexIndices the member's slots live at offsets
-        // [surfaceOffset, surfaceOffset + N). Per-tri TextureIndex must
-        // shift by surfaceOffset so it still names the same texture slot.
-        // -1 (untextured) passes through. Without this remap, member B's
-        // tris index member A's slots and render with wrong textures —
-        // the suspected bug behind Slot D1 being disabled (2026-04-27).
-        int surfaceOffset = 0;
+        // Tri.TextureIndex is set by PSXMesh.cs:97 to
+        // `surfaceTextureIndices[surface]` — i.e. it's already a resolved
+        // SceneData.Textures index, NOT an index into the per-mesh
+        // SurfaceTextureIndices array. Concatenation across members is
+        // therefore safe with NO offset remap. The "surface remap" I
+        // briefly added here in 2026-05-17 was based on a misread of
+        // the convention and is reverted. SurfaceTextureIndices still
+        // gets concatenated so the writer has the full per-surface
+        // table for the batched object, but per-tri TextureIndex
+        // values pass through verbatim.
 
         foreach (var member in members)
         {
@@ -314,43 +315,19 @@ public static class StaticBatchOptimizer
             // anchor's basis is identity, this is straight subtraction.
             // Local rotation is the member's basis (no anchor rotation).
 
-            int memberSurfaceCount = member.SurfaceTextureIndices?.Length ?? 0;
             foreach (var tri in member.Mesh.Triangles)
             {
-                int remappedTexIdx;
-                if (tri.TextureIndex < 0)
-                {
-                    remappedTexIdx = -1;
-                }
-                else if (tri.TextureIndex >= memberSurfaceCount)
-                {
-                    // Member's own indices already out of bounds — shouldn't
-                    // happen, but if it did pre-merge it would silently
-                    // alias into the next member's slots post-merge. Bail
-                    // out of the whole batch rather than ship garbage.
-                    GD.PushWarning(
-                        $"[PS1Godot] Static batch '{keyForName}': member '{member.Node?.Name}' has " +
-                        $"tri.TextureIndex={tri.TextureIndex} but only {memberSurfaceCount} surface(s). " +
-                        $"Passing {members.Count} member(s) through unmerged to avoid texture corruption.");
-                    return null;
-                }
-                else
-                {
-                    remappedTexIdx = tri.TextureIndex + surfaceOffset;
-                }
-
                 combinedTris.Add(new Tri
                 {
                     v0 = TransformVertex(tri.v0, memberWorld, memberRot, anchor, data.GteScaling),
                     v1 = TransformVertex(tri.v1, memberWorld, memberRot, anchor, data.GteScaling),
                     v2 = TransformVertex(tri.v2, memberWorld, memberRot, anchor, data.GteScaling),
-                    TextureIndex = remappedTexIdx,
+                    TextureIndex = tri.TextureIndex,
                 });
             }
             if (member.SurfaceTextureIndices != null)
             {
                 combinedTexIndices.AddRange(member.SurfaceTextureIndices);
-                surfaceOffset += memberSurfaceCount;
             }
 
             // Track combined-AABB in anchor-local Godot units. Used for
@@ -378,23 +355,7 @@ public static class StaticBatchOptimizer
         var batchedMesh = new PSXMesh();
         batchedMesh.Triangles.AddRange(combinedTris);
 
-        // Safety net for the remap math above. If anything is off-by-one
-        // or a member arrives with out-of-range indices that slip past
-        // the per-member check, this catches it before the merged
-        // SceneObject lands in data.Objects. Re-introducing the original
-        // Slot D1 regression (concat without remap) would trip this on
-        // the first multi-member bucket where members have different
-        // surface counts.
         int[] combinedSurfaces = combinedTexIndices.ToArray();
-        var indexDiff = MeshFormatRoundTripVerifier.VerifyTextureIndices(batchedMesh, combinedSurfaces);
-        if (indexDiff != null)
-        {
-            GD.PushWarning(
-                $"[PS1Godot] Static batch '{keyForName}': post-merge index check failed " +
-                $"(tri #{indexDiff.TriIndex} → texIdx {indexDiff.TextureIndex} vs combined surfaces {indexDiff.SurfaceCount}). " +
-                $"Passing {members.Count} member(s) through unmerged.");
-            return null;
-        }
 
         // Synthetic Node3D as the SceneObject host. Parentless, so
         // GlobalPosition == Position. Free'd by GC when SceneData is
