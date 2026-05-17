@@ -22,9 +22,20 @@ namespace PS1Godot.Graph;
 // `false` — a Bool Literal + comparison nodes are slice-5 work.
 public static class PS1GraphCompiler
 {
-    public static string Compile(PS1GraphResource resource)
+    public static string Compile(PS1GraphResource resource, string? pathOverride = null)
     {
         if (resource?.Nodes == null) return "";
+
+        // pathOverride lets callers thread the file path through even
+        // when `resource.ResourcePath` is unreliable — happens with
+        // Godot 4.7-dev5's flaky C# binding for custom-script Resources
+        // where a freshly-constructed PS1GraphResource won't accept a
+        // ResourcePath assignment through the C++ getter. Without this,
+        // a dock-save of a reconstructed graph compiles as `_G.dialogue_unnamed`
+        // even though the .tres is saved at a real path.
+        string effectivePath = !string.IsNullOrEmpty(pathOverride)
+            ? pathOverride
+            : (resource.ResourcePath ?? "");
 
         // Dispatch on graph Kind. Kinds compile to different Lua shapes:
         //   "" (untyped) → flat statement sequence (slice 4 model).
@@ -33,7 +44,7 @@ public static class PS1GraphCompiler
         //                  time, not at scene init.
         return resource.Kind switch
         {
-            "dialogue" => CompileDialogue(resource),
+            "dialogue" => CompileDialogue(resource, effectivePath),
             _          => CompileUntyped(resource),
         };
     }
@@ -91,11 +102,11 @@ public static class PS1GraphCompiler
     // is a single assignment, so loading the .lua just installs the
     // table without running anything. That matches the player-driven
     // semantics dialogue needs (no auto-advance).
-    private static string CompileDialogue(PS1GraphResource resource)
+    private static string CompileDialogue(PS1GraphResource resource, string effectivePath)
     {
         var sb = new StringBuilder();
-        string pathLabel = string.IsNullOrEmpty(resource.ResourcePath) ? "(unsaved)" : resource.ResourcePath;
-        string basename = BasenameForGlobal(resource.ResourcePath);
+        string pathLabel = string.IsNullOrEmpty(effectivePath) ? "(unsaved)" : effectivePath;
+        string basename = BasenameForGlobal(effectivePath);
         sb.AppendLine($"-- Compiled from {pathLabel} (dialogue)");
         sb.AppendLine($"-- {resource.Nodes.Count} node(s), {resource.Connections.Count} connection(s)");
         sb.AppendLine($"-- Walker: Dialog.RunGraph(_G.dialogue_{basename})");
@@ -220,13 +231,20 @@ public static class PS1GraphCompiler
                 // Each option = one row. Slice D1a fixes 3 option
                 // slots; empty option texts get pruned at emit so the
                 // runtime doesn't show blank choices.
+                //
+                // Connection port indices are per-side. The choice node
+                // has its exec-in on the left (one left pin) and three
+                // exec-outs on the right — Godot indexes right pins
+                // 0..2 in slot order, so option N's outgoing edge is
+                // FromPort=N, NOT FromPort=N+1. Getting this wrong
+                // ships off-by-one branches that picked "A" but ran B.
                 sb.AppendLine($"        n{n.Id} = {{ kind = \"choice\", options = {{");
                 for (int opt = 0; opt < 3; opt++)
                 {
                     string optText = n.GetPayload(opt);
                     if (string.IsNullOrEmpty(optText)) continue;
                     string text = EscapeLuaString(optText);
-                    string next = FindNextKey(conns, n.Id, fromPort: opt + 1);
+                    string next = FindNextKey(conns, n.Id, fromPort: opt);
                     sb.AppendLine($"            {{ text = {text}, next = {next} }},");
                 }
                 sb.AppendLine("        } },");
@@ -451,9 +469,9 @@ public static class PS1GraphCompiler
             "print"          => port == 0,                            // row 0 in+out
             "branch"         => port == 0 || (!isInput && port == 1), // row 0 in+out, row 1 out-only
             "line"           => port == 0,                            // row 0 in+out
-            // choice: row 0 = exec in (input side only),
-            //         rows 1..3 = exec out (output side only).
-            "choice"         => (isInput && port == 0) || (!isInput && port >= 1 && port <= 3),
+            // choice: row 0 = exec in (left-port 0),
+            //         rows 1..3 = exec outs (right-ports 0..2).
+            "choice"         => (isInput && port == 0) || (!isInput && port >= 0 && port <= 2),
             "set_flag"       => port == 0,                            // row 0 in+out
             "condition"      => port == 0 || (!isInput && port == 1), // row 0 in+out (true), row 1 out (false)
             "play_sound"     => port == 0,

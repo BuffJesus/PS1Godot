@@ -236,17 +236,62 @@ public partial class PS1GraphEditorDock : VBoxContainer
 
     private void OnLoadPathChosen(string path)
     {
-        var loaded = ResourceLoader.Load<PS1GraphResource>(path);
+        // Godot 4.7-dev5 sometimes returns custom-script Resources from
+        // ResourceLoader.Load without attaching the C# wrapper class —
+        // the runtime type comes back as plain Godot.Resource and the
+        // generic Load<T> wrapper throws InvalidCastException at its
+        // internal `(T)resource` cast. We catch and fall back to a non-
+        // generic load + manual property copy. Slower path, but it
+        // robustly produces a wired-up PS1GraphResource regardless of
+        // whether Godot binds the script.
+        PS1GraphResource? loaded = null;
+        try
+        {
+            loaded = ResourceLoader.Load<PS1GraphResource>(path);
+        }
+        catch (System.InvalidCastException)
+        {
+            // Expected when the C# binding didn't attach. Fall through.
+        }
         if (loaded == null)
         {
-            GD.PushError($"[PS1Godot] PS1Graph: failed to load '{path}' as PS1GraphResource.");
-            return;
+            var raw = ResourceLoader.Load(path);
+            if (raw == null)
+            {
+                GD.PushError($"[PS1Godot] PS1Graph: failed to load '{path}'.");
+                return;
+            }
+            loaded = ReconstructGraphFromBareResource(raw);
+            if (loaded == null)
+            {
+                GD.PushError($"[PS1Godot] PS1Graph: '{path}' doesn't look like a PS1GraphResource (Godot returned a bare Resource and the script-binding workaround failed).");
+                return;
+            }
+            loaded.ResourcePath = path;
+            GD.Print($"[PS1Godot] PS1Graph: script binding wasn't attached on load — reconstructed via property copy.");
         }
         _resource = loaded;
+
+        // Sync the toolbar Kind dropdown to whatever the loaded graph
+        // says. Otherwise the right-click palette filters against the
+        // *previous* selection (e.g. "Untyped") and dialogue-kind nodes
+        // won't appear in the palette after loading a dialogue graph.
+        if (_kindDropdown != null)
+        {
+            for (int i = 0; i < s_graphKinds.Length; i++)
+            {
+                if (s_graphKinds[i].Kind == _resource.Kind)
+                {
+                    _kindDropdown.Selected = i;
+                    break;
+                }
+            }
+        }
+
         ReloadGraphView();
         UpdatePathLabel();
         GD.Print($"[PS1Godot] PS1Graph: loaded '{path}' " +
-                 $"({_resource.Nodes.Count} node(s), {_resource.Connections.Count} connection(s)).");
+                 $"(kind='{_resource.Kind}', {_resource.Nodes.Count} node(s), {_resource.Connections.Count} connection(s)).");
     }
 
     private void OnSavePressed()
@@ -268,6 +313,7 @@ public partial class PS1GraphEditorDock : VBoxContainer
             GD.PushError($"[PS1Godot] PS1Graph: save failed ({err}) at '{path}'.");
             return;
         }
+        NudgeFileSystem(path);
         GD.Print($"[PS1Godot] PS1Graph: saved '{path}'.");
         WriteCompiledLuaSibling(path);
     }
@@ -307,9 +353,28 @@ public partial class PS1GraphEditorDock : VBoxContainer
             GD.PushError($"[PS1Godot] PS1Graph: save failed ({err}) at '{path}'.");
             return;
         }
+        NudgeFileSystem(path);
         UpdatePathLabel();
         GD.Print($"[PS1Godot] PS1Graph: saved '{path}'.");
         WriteCompiledLuaSibling(path);
+    }
+
+    // Tell the editor's FileSystem dock + resource cache that this path
+    // just changed on disk. Without it, the file is silently up-to-date
+    // but the dock + ResourceLoader return the prior cached version
+    // until the editor restarts — looks like "Save didn't work" to the
+    // author. Mirrors the same nudge used after the sibling .lua write.
+    private static void NudgeFileSystem(string path)
+    {
+        try
+        {
+            EditorInterface.Singleton.GetResourceFilesystem().UpdateFile(path);
+        }
+        catch (System.Exception ex)
+        {
+            GD.PushWarning($"[PS1Godot] PS1Graph: UpdateFile('{path}') failed: {ex.Message}. " +
+                           "File is saved on disk; FileSystem dock may not refresh until next focus.");
+        }
     }
 
     // Each Save also writes a sibling .lua holding the compiled output.
@@ -322,7 +387,12 @@ public partial class PS1GraphEditorDock : VBoxContainer
     {
         if (string.IsNullOrEmpty(tresPath)) return;
         string luaPath = System.IO.Path.ChangeExtension(tresPath, ".lua");
-        string content = PS1GraphCompiler.Compile(_resource);
+        // Pass tresPath as pathOverride: Godot 4.7-dev5 sometimes drops
+        // a reconstructed PS1GraphResource's ResourcePath, which would
+        // otherwise make the compiler emit `_G.dialogue_unnamed` from
+        // basename "unnamed" — silently breaking every author script
+        // that calls `Dialog.RunGraph(_G.dialogue_<correct_name>)`.
+        string content = PS1GraphCompiler.Compile(_resource, tresPath);
 
         using (var f = Godot.FileAccess.Open(luaPath, Godot.FileAccess.ModeFlags.Write))
         {
@@ -451,16 +521,29 @@ public partial class PS1GraphEditorDock : VBoxContainer
     {
         if (_graphEdit == null) return;
         _graphEdit.ClearConnections();
-        // Drop visual GraphNode children only. GraphEdit holds an
+        // Drop visual GraphElement children only. GraphEdit holds an
         // internal "connection_layer" child that draws all the
         // connection lines — freeing it puts GraphEdit in a state
         // where every subsequent frame errors "connections_layer is
         // missing", and any input that touches connections crashes.
-        // Filter on GraphNode (and GraphElement, which covers frames /
-        // future Godot subclasses) to leave internal layers alone.
+        //
+        // Use RemoveChild + QueueFree (not just QueueFree) so the names
+        // free up immediately. Plain QueueFree defers disposal to the
+        // next idle frame; if we then AddChild new GraphNodes with the
+        // same names (n0, n1, ...) in this same call, Godot auto-
+        // suffixes them ("n0@2") because the originals are still in the
+        // tree. The auto-suffixed names break the ConnectNode lookup
+        // below, leaving a populated tree with zero rendered nodes —
+        // which looks like "load did nothing" to the author.
+        var toRemove = new System.Collections.Generic.List<Node>();
         foreach (var child in _graphEdit.GetChildren())
         {
-            if (child is GraphElement) child.QueueFree();
+            if (child is GraphElement) toRemove.Add(child);
+        }
+        foreach (var child in toRemove)
+        {
+            _graphEdit.RemoveChild(child);
+            child.QueueFree();
         }
         _idToVisualName.Clear();
 
@@ -798,6 +881,71 @@ public partial class PS1GraphEditorDock : VBoxContainer
         if (string.IsNullOrEmpty(name)) return -1;
         if (name.Length < 2 || name[0] != 'n') return -1;
         return int.TryParse(name.Substring(1), out var id) ? id : -1;
+    }
+
+    // Rebuild a typed PS1GraphResource from a bare Godot.Resource when
+    // Godot 4.7-dev5 fails to attach the C# script binding on load.
+    // Reads exported properties via Resource.Get; tolerates Nodes /
+    // Connections subresources that also lost their bindings by doing
+    // the same property-copy on each entry.
+    private static PS1GraphResource? ReconstructGraphFromBareResource(Resource raw)
+    {
+        var graph = new PS1GraphResource
+        {
+            Kind = raw.Get("Kind").AsString() ?? "",
+            NextNodeId = raw.Get("NextNodeId").AsInt32(),
+        };
+
+        var rawNodes = raw.Get("Nodes").AsGodotArray();
+        if (rawNodes != null)
+        {
+            foreach (var item in rawNodes)
+            {
+                if (item.AsGodotObject() is not Resource rn) continue;
+                if (rn is PS1GraphNode boundNode)
+                {
+                    graph.Nodes.Add(boundNode);
+                    continue;
+                }
+                // Sub-resource also lost its binding — rebuild manually.
+                var node = new PS1GraphNode
+                {
+                    Id = rn.Get("Id").AsInt32(),
+                    Kind = rn.Get("Kind").AsString() ?? "",
+                    Position = rn.Get("Position").AsVector2(),
+                    Payload = rn.Get("Payload").AsString() ?? "",
+                };
+                var rawPayloads = rn.Get("Payloads").AsGodotArray<string>();
+                if (rawPayloads != null)
+                {
+                    foreach (var s in rawPayloads) node.Payloads.Add(s ?? "");
+                }
+                graph.Nodes.Add(node);
+            }
+        }
+
+        var rawConns = raw.Get("Connections").AsGodotArray();
+        if (rawConns != null)
+        {
+            foreach (var item in rawConns)
+            {
+                if (item.AsGodotObject() is not Resource rc) continue;
+                if (rc is PS1GraphConnection boundConn)
+                {
+                    graph.Connections.Add(boundConn);
+                    continue;
+                }
+                graph.Connections.Add(new PS1GraphConnection
+                {
+                    FromNodeId = rc.Get("FromNodeId").AsInt32(),
+                    FromPort   = rc.Get("FromPort").AsInt32(),
+                    ToNodeId   = rc.Get("ToNodeId").AsInt32(),
+                    ToPort     = rc.Get("ToPort").AsInt32(),
+                });
+            }
+        }
+
+        return graph;
     }
 
     // ── GraphEdit signal handlers ────────────────────────────────────

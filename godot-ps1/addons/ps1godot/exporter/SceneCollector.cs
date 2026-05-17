@@ -82,6 +82,13 @@ public static class SceneCollector
             {
                 string p = sceneWithUserScripts.UserScripts[i];
                 if (string.IsNullOrEmpty(p)) continue;
+                // Auto-recompile PS1Graph sibling .tres → .lua. Without
+                // this, the .lua only gets refreshed when the author hits
+                // Save in the graph dock, so any edits made since the
+                // last Save (or any compiler-side fix the author pulled
+                // before re-saving) ship stale to PSX. Doing this at
+                // export time means F5 is always a fresh graph compile.
+                RecompileSiblingGraphIfPresent(p);
                 // Use a synthetic label so the log line distinguishes
                 // these from node-bound scripts. No camera preamble —
                 // user scripts can call Camera.LoadFromExport themselves
@@ -4176,5 +4183,39 @@ public static class SceneCollector
         {
             CollectAutoBakeTargets(child, lighting, ao);
         }
+    }
+
+    // Look for a PS1GraphResource sibling next to the given UserScript
+    // .lua path (same basename, .tres extension). If one exists and
+    // loads, run the compiler and overwrite the .lua on disk. No-op if
+    // the script isn't a graph-compiled .lua, so it's cheap to call
+    // unconditionally for every UserScripts entry.
+    //
+    // Without this, the sibling .lua only refreshes when the author
+    // explicitly saves the graph in the PS1Graph dock — meaning compiler
+    // fixes, hot-reloaded edits, or graph-Resource changes made via the
+    // FileSystem dock all ship stale until the next manual Save.
+    private static void RecompileSiblingGraphIfPresent(string luaPath)
+    {
+        if (string.IsNullOrEmpty(luaPath)) return;
+        if (!luaPath.EndsWith(".lua", StringComparison.OrdinalIgnoreCase)) return;
+        string tresPath = luaPath.Substring(0, luaPath.Length - 4) + ".tres";
+        if (!Godot.FileAccess.FileExists(tresPath)) return;
+        var res = Godot.ResourceLoader.Load(tresPath);
+        if (res is not PS1Godot.Graph.PS1GraphResource graph) return;
+
+        // Pass tresPath explicitly — same Godot binding quirk that
+        // affects the dock save can leave `graph.ResourcePath` empty,
+        // emitting `_G.dialogue_unnamed` instead of the correct global.
+        string compiled = PS1Godot.Graph.PS1GraphCompiler.Compile(graph, tresPath);
+        using var f = Godot.FileAccess.Open(luaPath, Godot.FileAccess.ModeFlags.Write);
+        if (f == null)
+        {
+            var openErr = Godot.FileAccess.GetOpenError();
+            GD.PushWarning($"[PS1Godot] Auto-recompile: could not write '{luaPath}' ({openErr}); shipping stale .lua.");
+            return;
+        }
+        f.StoreString(compiled);
+        GD.Print($"[PS1Godot] Auto-recompiled PS1Graph: '{tresPath}' → '{luaPath}'.");
     }
 }
