@@ -17,7 +17,7 @@ static constexpr int16_t SAFE_MAX_Y =  376;
 // (rasterizer's center-of-pixel rule) for the cost of a full GPU
 // setup + OT insert. Cheap to detect (4 min/max + 2 subtractions)
 // vs the ~50 GPU cycles a tiny tri otherwise burns. See
-// docs/visibility-culling.md Pass 3 — threshold 1 is the conservative
+// docs/rfc/visibility-culling.md Pass 3 — threshold 1 is the conservative
 // default (only reject tris within a single pixel span).
 inline bool isSubpixel(const psyqo::Vertex& v0,
                        const psyqo::Vertex& v1,

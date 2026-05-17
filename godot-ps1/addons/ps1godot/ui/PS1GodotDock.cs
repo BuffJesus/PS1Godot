@@ -126,7 +126,7 @@ public partial class PS1GodotDock : VBoxContainer
                 "When ON, any resource reimport triggers a full Run-on-PSX " +
                 "(export + build-if-needed + launch). Off by default. " +
                 "Tier 1 / 2 hot-reload land in later stages of " +
-                "docs/iteration-loop.md.",
+                "docs/rfc/iteration-loop.md.",
         };
         _autoRunCheck.Toggled += (bool pressed) =>
             EmitSignal(SignalName.AutoRunOnSaveChanged, pressed);

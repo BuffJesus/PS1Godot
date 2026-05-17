@@ -25,7 +25,7 @@ public static class SceneStats
     // Gouraud — at 30 fps × 320×240 that's ~12× the screen area as a
     // hard ceiling, dropping to ~6-8× practical after VBlank + UI + clears.
     // Budget against 8× so authors land in green territory by default.
-    // See docs/fill-rate-budget.md for the math.
+    // See docs/rfc/fill-rate-budget.md for the math.
     public const float FillRateBudgetScreenAreas = 8.0f;
     // Doc's transparency cost factor: semi-trans path runs ~1.5× a flat fill.
     public const float TranslucentFillCostFactor = 1.5f;
@@ -105,7 +105,7 @@ public static class SceneStats
         // textures pack into shared atlases, but we'd rather warn early).
         int texPageEstimate = textureKeys.Count;
 
-        // Fill-rate estimate (docs/fill-rate-budget.md Stage 1, AABB
+        // Fill-rate estimate (docs/rfc/fill-rate-budget.md Stage 1, AABB
         // approximation). Walk the same meshes a second time collecting
         // (worldAabb, translucent); pick the first Camera3D as a viewpoint
         // and project each AABB's bounding-rect on screen. Sum weighted

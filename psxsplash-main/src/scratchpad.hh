@@ -8,7 +8,7 @@
 // This header defines the address layout and typed accessors. Consumers
 // migrate in later stages — Stage 1 (this file) is plumbing only, with
 // static_asserts guarding the allocation map. See
-// docs/scratchpad-cache.md for the design and per-region win estimates.
+// docs/rfc/scratchpad-cache.md for the design and per-region win estimates.
 //
 // Allocation map (1 KB total):
 //
