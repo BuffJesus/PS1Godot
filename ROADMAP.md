@@ -698,7 +698,7 @@ runtime so first-person / orbit actually take effect.
       open-area chunks, `MaxDistance` exceeding the chunk bound, and
       authored `MaxPitch` that would clip the camera into the floor.
       See
-      [`docs/ps1_rpg_performance_lighting_sky_camera_strategy.md`](docs/ps1_rpg_performance_lighting_sky_camera_strategy.md)
+      [`docs/archive/superseded/ps1_rpg_performance_lighting_sky_camera_strategy.md`](docs/archive/superseded/ps1_rpg_performance_lighting_sky_camera_strategy.md)
       § Camera. **[runtime]**
 - [ ] **Camera-collision via simplified layer** — author tags meshes
       `CameraBlocker` (typically simplified low-poly walls + ceilings,
@@ -729,7 +729,7 @@ mechanisms cover most cases — UV-shifting and atlas-region cycling.
 - [ ] Demo addition: animated water plane (UV scroll) + a face mesh on
       an NPC with mouth-flap atlas frames (frame swap).
 
-### Lighting, fog, sky *(architecture from `docs/ps1_rpg_performance_lighting_sky_camera_strategy.md`)*
+### Lighting, fog, sky *(architecture from `docs/archive/superseded/ps1_rpg_performance_lighting_sky_camera_strategy.md`)*
 
 Authentic PS1 visual feel relies on baked vertex-color lighting +
 distance fog + cheap painted sky cards, not real-time lighting. The
