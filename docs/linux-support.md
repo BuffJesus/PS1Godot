@@ -1,5 +1,20 @@
 # Linux + macOS support — design + patch
 
+**Status (2026-05-17):** No implementation yet. All five
+Windows-only items the audit identifies still apply verbatim:
+`scripts/*.cmd` are still pure cmd.exe, `PS1GodotPlugin.cs`
+hardcodes `cmd.exe` at three call sites (`735`, `801`, `951`),
+`ps1lua.gdextension` only declares `windows.debug.x86_64` /
+`windows.release.x86_64` library paths, `build-release.py` only
+zips the Windows DLL, and `SETUP.md`/`QUICKSTART.md` still assume
+the Windows install paths. Sized as ~4–5 commits — Python
+launcher dispatcher (`scripts/run.py` + `.sh` shims) (~1–2),
+platform-aware `RunScript` in the plugin (~1), Linux + macOS
+gdextension library build + CI matrix (~1–2), docs cross-platform
+section (~1). Deferred to its own session — naturally pairs with
+`project-template.md` since both build the same cross-platform
+shell.
+
 Closes the "Windows-only launch scripts" + "GDExtension only ships
 Windows x86_64" items currently filed under "Known limitations" in
 `docs/release-notes-20260420.md`, and the matching cleanup item in
