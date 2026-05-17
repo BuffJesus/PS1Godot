@@ -301,7 +301,7 @@ migration cost.
       resources of the same kind; warns on unreferenced IDs (likely
       orphaned definition).
 - [ ] Source docs:
-      [`docs/ps1godot_missing_pieces_production_tooling_roadmap.md`](docs/ps1godot_missing_pieces_production_tooling_roadmap.md)
+      [`docs/archive/superseded/ps1godot_missing_pieces_production_tooling_roadmap.md`](docs/archive/superseded/ps1godot_missing_pieces_production_tooling_roadmap.md)
       § Asset Registry,
       [`docs/ps1_asset_pipeline_plan.md`](docs/ps1_asset_pipeline_plan.md)
       § C7 Stable IDs.
@@ -1666,7 +1666,7 @@ Tiered by effort vs. user reach:
 working sequence resource that plays a recognizable rendition of the
 source on PSX with no manual binding work.
 
-### PS1 Doctor — unified validator *(from `docs/ps1godot_missing_pieces_production_tooling_roadmap.md`)*
+### PS1 Doctor — unified validator *(from `docs/archive/superseded/ps1godot_missing_pieces_production_tooling_roadmap.md`)*
 
 The dockable plugin panel + per-export validators are growing
 piecemeal (texture / UV / budget). The production-tooling doc
@@ -1839,7 +1839,7 @@ Only after Phases 0–3 land.
   save/load, and a multi-disc skeleton. Doubles as the
   *Chunked RPG Mini-Slice* template (Phase 3) and as the
   end-to-end smoke test for every subsystem. Source:
-  [`docs/ps1godot_missing_pieces_production_tooling_roadmap.md`](docs/ps1godot_missing_pieces_production_tooling_roadmap.md).
+  [`docs/archive/superseded/ps1godot_missing_pieces_production_tooling_roadmap.md`](docs/archive/superseded/ps1godot_missing_pieces_production_tooling_roadmap.md).
 - **GDExtension hot path** for heavy inner loops (texture quantization, BVH
   build, VRAM pack) if iteration time hurts.
 - **Cel shading via PSn00bSDK technique** — runtime per-mesh feature
