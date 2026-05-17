@@ -54,6 +54,7 @@ public partial class PS1TexturePreviewControl : VBoxContainer
     private const int MinPreviewPx = 96;
 
     private readonly GodotObject _target;
+    private TextureRect _source = null!;
     private TextureRect _preview = null!;
     private Label _meta = null!;
 
@@ -79,16 +80,22 @@ public partial class PS1TexturePreviewControl : VBoxContainer
         header.AddThemeColorOverride("font_color", new Color(0.7f, 0.85f, 1f));
         AddChild(header);
 
-        _preview = new TextureRect
+        // Side-by-side: source on the left, PSX-quantized on the right.
+        // Two equally-weighted columns under a single HBox so authors
+        // can A/B at a glance instead of mentally diffing against the
+        // FileSystem preview thumbnail. Headers above each panel keep
+        // the framing obvious even at small sizes.
+        var grid = new HBoxContainer
         {
-            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
-            StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
-            CustomMinimumSize = new Vector2(MinPreviewPx, MinPreviewPx),
-            // Nearest-neighbor so the 5-bit posterization stays crisp
-            // — KeepAspectCentered + bilinear would smear the dither.
-            TextureFilter = CanvasItem.TextureFilterEnum.Nearest,
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
         };
-        AddChild(_preview);
+        grid.AddThemeConstantOverride("separation", 8);
+        AddChild(grid);
+
+        var srcCol = MakePanelColumn("Source", out _source);
+        var dstCol = MakePanelColumn("PSX (quantized)", out _preview);
+        grid.AddChild(srcCol);
+        grid.AddChild(dstCol);
 
         _meta = new Label { Text = "" };
         _meta.AddThemeFontSizeOverride("font_size", 11);
@@ -137,6 +144,7 @@ public partial class PS1TexturePreviewControl : VBoxContainer
 
         if (tex == null)
         {
+            _source.Texture = null;
             _preview.Texture = null;
             _meta.Text = "(no texture assigned)";
             return;
@@ -145,6 +153,7 @@ public partial class PS1TexturePreviewControl : VBoxContainer
         var srcImage = tex.GetImage();
         if (srcImage == null)
         {
+            _source.Texture = null;
             _preview.Texture = null;
             _meta.Text = "(texture has no image data)";
             return;
@@ -153,14 +162,16 @@ public partial class PS1TexturePreviewControl : VBoxContainer
         var quantized = PS1TexturePreview.Build(srcImage, bpp);
         if (quantized == null)
         {
+            _source.Texture = null;
             _preview.Texture = null;
             _meta.Text = "(zero-sized texture)";
             return;
         }
 
-        // Cap the preview Control's size to MaxPreviewPx along the
-        // larger axis — the TextureRect's KeepAspectCentered handles
-        // letterboxing if the source isn't square.
+        // Cap each panel at MaxPreviewPx on the larger axis so a 4K
+        // source doesn't push the inspector to absurd widths. Both
+        // panels get the same size so vertical/horizontal extents
+        // match across the A/B comparison.
         int w = quantized.GetWidth();
         int h = quantized.GetHeight();
         int displayW = w;
@@ -177,6 +188,9 @@ public partial class PS1TexturePreviewControl : VBoxContainer
             displayH = System.Math.Max(MinPreviewPx, displayH);
         }
 
+        _source.Texture = tex;
+        _source.CustomMinimumSize = new Vector2(displayW, displayH);
+
         _preview.Texture = ImageTexture.CreateFromImage(quantized);
         _preview.CustomMinimumSize = new Vector2(displayW, displayH);
 
@@ -187,7 +201,8 @@ public partial class PS1TexturePreviewControl : VBoxContainer
             PSXBPP.TEX_16BIT => "16bpp (direct, 2× VRAM)",
             _ => bpp.ToString(),
         };
-        _meta.Text = $"{w}×{h} → {bppLabel}";
+        long vramBytes = EstimateVramBytes(w, h, bpp);
+        _meta.Text = $"{w}×{h} → {bppLabel}  ·  {FormatBytes(vramBytes)} VRAM";
     }
 
     private static (Texture2D? tex, PSXBPP bpp) ReadTextureAndBpp(GodotObject obj)
@@ -199,5 +214,64 @@ public partial class PS1TexturePreviewControl : VBoxContainer
             _ => (null, PSXBPP.TEX_8BIT),
         };
     }
+
+    private static VBoxContainer MakePanelColumn(string label, out TextureRect rect)
+    {
+        var col = new VBoxContainer
+        {
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+        };
+        col.AddThemeConstantOverride("separation", 2);
+        var h = new Label
+        {
+            Text = label,
+            HorizontalAlignment = HorizontalAlignment.Center,
+        };
+        h.AddThemeFontSizeOverride("font_size", 10);
+        h.AddThemeColorOverride("font_color", new Color(0.65f, 0.65f, 0.7f));
+        col.AddChild(h);
+
+        rect = new TextureRect
+        {
+            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+            StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+            CustomMinimumSize = new Vector2(MinPreviewPx, MinPreviewPx),
+            // Nearest-neighbor on both panels so the source's pixel art
+            // and the quantized output read the same way; bilinear would
+            // hide the dither pattern entirely.
+            TextureFilter = CanvasItem.TextureFilterEnum.Nearest,
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+        };
+        col.AddChild(rect);
+        return col;
+    }
+
+    // VRAM cost estimate matching SceneStats.EstimateTextureVramBytes:
+    // packed pixel data + one CLUT (0 for 16bpp). The exporter caps
+    // texture dimensions at 256×256 (PSX VRAM page max); mirror that
+    // here so the inspector reports the same number the dock will.
+    private static long EstimateVramBytes(int width, int height, PSXBPP bpp)
+    {
+        int w = System.Math.Min(width, 256);
+        int h = System.Math.Min(height, 256);
+        long pixels = (long)w * h;
+        long textureBytes = bpp switch
+        {
+            PSXBPP.TEX_4BIT => pixels / 2,
+            PSXBPP.TEX_8BIT => pixels,
+            PSXBPP.TEX_16BIT => pixels * 2,
+            _ => pixels,
+        };
+        long clutBytes = bpp switch
+        {
+            PSXBPP.TEX_4BIT => 16 * 2,
+            PSXBPP.TEX_8BIT => 256 * 2,
+            _ => 0,
+        };
+        return textureBytes + clutBytes;
+    }
+
+    private static string FormatBytes(long b) =>
+        b < 1024 ? $"{b} B" : $"{b / 1024.0:F1} KB";
 }
 #endif
