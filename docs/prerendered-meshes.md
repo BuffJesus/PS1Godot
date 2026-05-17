@@ -1,5 +1,17 @@
 # Pre-rendered meshes — design + patch
 
+**Status (2026-05-17):** No implementation yet. Strict consumer of
+two unstarted ROADMAP items — `PS1Sprite` (single-quad billboard
+node, line 791) and `ObjectFrameSwap` track type (atlas-region UV
+flip, line 720) — so even Stage 1's bake pipeline has nothing to
+emit against until those land. Once Stage 0 ships, Stage 1 sizes
+to ~4–6 commits (PS1PrerenderedMesh node, PrerenderedMeshBaker
+with SubViewport render + cache, SceneCollector wiring, demo coin)
+plus the prefab library (Stage 2) and over-budget warnings
+(Stage 3). Deferred to its own session — best slotted after the
+session that takes on PS1Sprite + bob extension, since both share
+the same per-frame update path.
+
 Bake a 3D mesh down to a sprite-sheet billboard, then play it back
 as a flip-book on a single quad. Classic PS1 / SNES technique —
 Crash Bandicoot's Wumpa fruits, Donkey Kong Country's everything,
