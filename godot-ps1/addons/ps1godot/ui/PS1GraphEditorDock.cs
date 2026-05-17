@@ -40,6 +40,7 @@ public partial class PS1GraphEditorDock : VBoxContainer
     private EditorFileDialog? _openDialog;
     private EditorFileDialog? _saveDialog;
     private PopupMenu? _palettePopup;
+    private PopupMenu? _newGraphKindPopup;
 
     // Stashed at right-click time so the menu's IdPressed handler knows
     // where to drop the spawned node. GraphEdit hands PopupRequest a
@@ -63,13 +64,30 @@ public partial class PS1GraphEditorDock : VBoxContainer
     // not stored in the resource — changing a kind's pin layout in
     // future doesn't invalidate saved graphs (existing connections to
     // removed pins are dropped silently at load by the cascade-prune).
-    private record NodeKindEntry(string Kind, string DisplayName);
+    // GraphKind = "" means "available in every graph kind" — the
+    // generic / untyped nodes (Print, Branch, Bool Literal, Comment)
+    // are useful in any graph. Dialogue-specific nodes restrict to
+    // graphs whose resource.Kind == "dialogue". The palette filters
+    // by current resource.Kind ∪ "" on popup.
+    private record NodeKindEntry(string Kind, string DisplayName, string GraphKind = "");
     private static readonly NodeKindEntry[] s_kinds = new[]
     {
         new NodeKindEntry("print",        "Print"),
         new NodeKindEntry("branch",       "Branch (if/else)"),
         new NodeKindEntry("bool_literal", "Bool Literal"),
         new NodeKindEntry("comment",      "Comment"),
+        new NodeKindEntry("line",         "Line",     GraphKind: "dialogue"),
+        new NodeKindEntry("choice",       "Choice",   GraphKind: "dialogue"),
+    };
+
+    // Available graph kinds, surfaced when the author hits New.
+    // Empty Kind = "Untyped / Script" (the generic statement-compile
+    // model used through slice 4); "dialogue" = table-compile to a
+    // _G.dialogue_<name> table for a runtime walker (D1b).
+    private static readonly (string Kind, string DisplayName)[] s_graphKinds = new[]
+    {
+        ("",         "Untyped / Script"),
+        ("dialogue", "Dialogue"),
     };
 
     // Slice-2 palette: per-pin-type colours. Picked to match common
@@ -130,15 +148,23 @@ public partial class PS1GraphEditorDock : VBoxContainer
         _graphEdit.PopupRequest         += OnGraphPopupRequest;
         AddChild(_graphEdit);
 
-        // Right-click palette. Built once + reused; entries match
-        // s_kinds 1:1 so adding a node Kind = one line in the registry.
+        // Right-click palette. Items rebuilt on each popup based on
+        // the current graph's Kind — kinds with GraphKind == "" are
+        // always shown; kinds with GraphKind == resource.Kind are
+        // shown only for matching graph kinds.
         _palettePopup = new PopupMenu { Name = "PS1GraphPalette" };
-        for (int i = 0; i < s_kinds.Length; i++)
-        {
-            _palettePopup.AddItem(s_kinds[i].DisplayName, i);
-        }
         _palettePopup.IdPressed += OnPaletteItemPressed;
         AddChild(_palettePopup);
+
+        // Graph-kind picker for New. Mirrors s_graphKinds entries;
+        // selection seeds a fresh resource with the chosen Kind.
+        _newGraphKindPopup = new PopupMenu { Name = "PS1GraphNewKindPicker" };
+        for (int i = 0; i < s_graphKinds.Length; i++)
+        {
+            _newGraphKindPopup.AddItem(s_graphKinds[i].DisplayName, i);
+        }
+        _newGraphKindPopup.IdPressed += OnNewGraphKindChosen;
+        AddChild(_newGraphKindPopup);
     }
 
     private static void AddToolbarButton(HBoxContainer parent, string label, System.Action handler)
@@ -152,10 +178,28 @@ public partial class PS1GraphEditorDock : VBoxContainer
 
     private void OnNewPressed()
     {
-        _resource = new PS1GraphResource();
+        // Pop the graph-kind picker positioned just below the toolbar
+        // so the cursor's already over the menu after the click.
+        if (_newGraphKindPopup == null) return;
+        var screenPos = GetGlobalMousePosition();
+        // GetGlobalMousePosition is viewport-local in editor context;
+        // use the screen position via window transform.
+        var windowPos = GetWindow()?.Position ?? new Vector2I(0, 0);
+        _newGraphKindPopup.Position = new Vector2I(
+            (int)(screenPos.X + windowPos.X),
+            (int)(screenPos.Y + windowPos.Y));
+        _newGraphKindPopup.Popup();
+    }
+
+    private void OnNewGraphKindChosen(long id)
+    {
+        int idx = (int)id;
+        if (idx < 0 || idx >= s_graphKinds.Length) return;
+
+        _resource = new PS1GraphResource { Kind = s_graphKinds[idx].Kind };
         ReloadGraphView();
         UpdatePathLabel();
-        GD.Print("[PS1Godot] PS1Graph: new graph (unsaved).");
+        GD.Print($"[PS1Godot] PS1Graph: new {s_graphKinds[idx].DisplayName} graph (unsaved).");
     }
 
     private void OnLoadPressed()
@@ -286,6 +330,19 @@ public partial class PS1GraphEditorDock : VBoxContainer
         // coordinates for the spawn site so the node lands under the
         // cursor regardless of pan/zoom: canvas = (local + scroll) / zoom.
         _paletteSpawnCanvasPos = (atPosition + _graphEdit.ScrollOffset) / _graphEdit.Zoom;
+
+        // Rebuild palette items filtered by the current graph's Kind.
+        // Item id = index into s_kinds (so spawn matches the chosen kind),
+        // not a contiguous menu index — using AddItem(..., id) keeps that
+        // mapping stable even with hidden entries.
+        _palettePopup.Clear();
+        string currentGraphKind = _resource?.Kind ?? "";
+        for (int i = 0; i < s_kinds.Length; i++)
+        {
+            var k = s_kinds[i];
+            if (k.GraphKind != "" && k.GraphKind != currentGraphKind) continue;
+            _palettePopup.AddItem(k.DisplayName, i);
+        }
 
         // Popup at the global screen position so the menu appears under
         // the cursor — GetScreenPosition() gives GraphEdit's screen
@@ -476,6 +533,77 @@ public partial class PS1GraphEditorDock : VBoxContainer
                 commentEdit.TextChanged += text => n.Payload = text;
                 g.AddChild(commentEdit);
                 // No SetSlot — both sides remain disabled, no pin caps drawn.
+                break;
+            }
+            case "line":
+            {
+                // Dialogue Line — speaker + text, single exec out (the
+                // "next line" link). Compiles to a Lua table entry of
+                // shape { kind="line", speaker=..., text=..., next=... }.
+                //
+                // Row 0: Exec in (left) + Exec out (right). Standard
+                // dialogue advance.
+                g.AddChild(new Label { Text = "exec / next" });
+                g.SetSlot(0, true, (int)PinType.Exec, s_pinColors[PinType.Exec],
+                             true, (int)PinType.Exec, s_pinColors[PinType.Exec]);
+
+                // Row 1: speaker LineEdit. Pinless — slice D1a stores
+                // the literal directly. Future slice can promote to a
+                // typed String input if upstream Speaker sources become
+                // useful.
+                var speakerEdit = new LineEdit
+                {
+                    Text = n.GetPayload(1),
+                    PlaceholderText = "speaker…",
+                };
+                speakerEdit.TextChanged += text => n.SetPayload(1, text);
+                g.AddChild(speakerEdit);
+                // No SetSlot — pinless.
+
+                // Row 2: text LineEdit. Same story — pinless literal.
+                var textEdit = new LineEdit
+                {
+                    Text = n.GetPayload(0),
+                    PlaceholderText = "text…",
+                };
+                textEdit.TextChanged += text => n.SetPayload(0, text);
+                g.AddChild(textEdit);
+                // No SetSlot — pinless.
+                break;
+            }
+            case "choice":
+            {
+                // Dialogue Choice — N option rows, each with an option
+                // text LineEdit + an Exec out for that option's
+                // continuation. Compiles to a Lua table entry of shape
+                // { kind="choice", options = { {text=..., next=...}, … } }.
+                //
+                // Slice D1a fixes the option count at 3 (covers most
+                // dialogue branches; chain Choices for trees that need
+                // wider fanout). Variable-pin support is a future
+                // polish slice — Godot's GraphNode SetSlot model
+                // doesn't grow rows dynamically.
+                //
+                // Row 0: Exec in (left only). No exec out at the top
+                // — each option row carries its own.
+                g.AddChild(new Label { Text = "exec in" });
+                g.SetSlot(0, true,  (int)PinType.Exec, s_pinColors[PinType.Exec],
+                             false, (int)PinType.Exec, s_pinColors[PinType.Exec]);
+
+                for (int opt = 0; opt < 3; opt++)
+                {
+                    int payloadIdx = opt; // option texts live in Payloads[0..2]
+                    var optEdit = new LineEdit
+                    {
+                        Text = n.GetPayload(payloadIdx),
+                        PlaceholderText = $"option {opt + 1}…",
+                    };
+                    optEdit.TextChanged += text => n.SetPayload(payloadIdx, text);
+                    g.AddChild(optEdit);
+                    // Row (opt+1): right pin only — Exec out for this option.
+                    g.SetSlot(opt + 1, false, (int)PinType.Exec, s_pinColors[PinType.Exec],
+                                       true,  (int)PinType.Exec, s_pinColors[PinType.Exec]);
+                }
                 break;
             }
             default:
@@ -709,9 +837,15 @@ public partial class PS1GraphEditorDock : VBoxContainer
     private void UpdatePathLabel()
     {
         if (_pathLabel == null) return;
-        _pathLabel.Text = string.IsNullOrEmpty(_resource.ResourcePath)
-            ? "(unsaved)"
-            : _resource.ResourcePath;
+        string kindTag = "";
+        foreach (var (k, display) in s_graphKinds)
+        {
+            if (k == (_resource?.Kind ?? "")) { kindTag = $"  [{display}]"; break; }
+        }
+        string path = _resource?.ResourcePath ?? "";
+        _pathLabel.Text = string.IsNullOrEmpty(path)
+            ? $"(unsaved){kindTag}"
+            : $"{path}{kindTag}";
     }
 }
 #endif

@@ -29,9 +29,42 @@ public partial class PS1GraphNode : Resource
     [Export] public Vector2 Position { get; set; } = Vector2.Zero;
 
     // Free-form payload. Slice 1 stores the Print node's message here.
-    // Subsequent slices will replace this with per-Kind structured data
-    // (dialogue text + speaker, quest objective ID, etc.), but the
-    // single-string fallback is a useful safety hatch for prototyping
-    // new kinds without bumping the resource schema each time.
+    // Slice D1 added Payloads[] below for multi-string kinds (Line,
+    // Choice). Payload stays as the single-string fallback for kinds
+    // that only need one (Print message, Branch "true"/"false", Bool
+    // Literal "true"/"false", Comment text).
     [Export] public string Payload { get; set; } = "";
+
+    // Multi-string payload — appended at slice D1a for kinds that
+    // need more than one literal value. Line uses
+    // [0]=text, [1]=speaker. Choice uses [0..n-1]=option texts.
+    // Append-only: existing graphs with Payloads = [] still load
+    // and resolve their single-string Payload via the same kind-
+    // specific accessor that reads Payloads first, then falls back
+    // to Payload when Payloads is empty.
+    [Export] public Godot.Collections.Array<string> Payloads { get; set; } = new();
+
+    // Read the i-th payload string, falling back to the legacy single
+    // Payload field for index 0 when Payloads is empty. Use this from
+    // BuildVisualBody / compiler instead of indexing Payloads directly
+    // so legacy .tres files keep loading correctly.
+    public string GetPayload(int i)
+    {
+        if (Payloads != null && i < Payloads.Count) return Payloads[i] ?? "";
+        if (i == 0) return Payload ?? "";
+        return "";
+    }
+
+    // Write the i-th payload, growing Payloads as needed. Index 0
+    // mirrors to the legacy Payload field too so the resource keeps
+    // round-tripping cleanly even for single-string kinds — useful
+    // because Godot's resource inspector still shows the Payload
+    // field independently.
+    public void SetPayload(int i, string value)
+    {
+        if (Payloads == null) Payloads = new Godot.Collections.Array<string>();
+        while (Payloads.Count <= i) Payloads.Add("");
+        Payloads[i] = value ?? "";
+        if (i == 0) Payload = value ?? "";
+    }
 }

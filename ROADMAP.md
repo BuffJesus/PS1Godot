@@ -1632,11 +1632,30 @@ graph-walker overhead.
         SetFlag etc. with a graph-kind selector. Cycle rejection may
         tighten from "any cycle" to "exec-only" once the compiler
         shape is locked in.
-- [ ] **D1. `PS1DialogueGraph`** — *first graph kind.* Nodes: Line,
+- [🟡] **D1. `PS1DialogueGraph`** — *first graph kind.* Nodes: Line,
       Choice, Condition, SetFlag, GiveItem, PlaySound, StartCutscene.
       Compiles to a small Lua table (nodes + edges) walked by a stock
       `Dialog.RunGraph(name)` helper. Replaces the Phase 3 "Dialog
       tree editor" bullet above — same feature, unified framework.
+      - **Slice D1a shipped 2026-05-17 (graph kind + Line + Choice +
+        table compiler).** PS1GraphResource.Kind selects compile mode:
+        "" (untyped) keeps the slice-4 statement compile; "dialogue"
+        emits `_G.dialogue_<basename> = { entry = ..., nodes = { ... } }`
+        with one entry per Line / Choice node. The dock's New button
+        opens a graph-kind picker (Untyped / Dialogue); the right-click
+        palette filters node kinds by `s_kinds[i].GraphKind ∪ ""` so
+        dialogue-only kinds don't pollute untyped graphs. `PS1GraphNode`
+        gains `Payloads: Array<string>` for multi-string kinds (Line
+        stores text + speaker; Choice stores up to 3 option texts);
+        legacy single-string Payload still loads via a GetPayload(i)
+        accessor with fallback. Choice has 3 fixed option slots — chain
+        Choices for wider fanout, full variable-pin support is later.
+      - **Deferred to slice D1b**: `Dialog.RunGraph(table)` runtime
+        walker in psxsplash luaapi (read .entry, dispatch on .kind,
+        wait for player advance / choice). Remaining node kinds
+        (Condition, SetFlag, GiveItem, PlaySound, StartCutscene) land
+        with the walker since they call into existing runtime systems
+        (flags, inventory, audio, cutscenes).
 - [ ] **D2. `PS1QuestGraph`** — objectives as nodes, prerequisites as
       edges, branch outcomes (success / fail paths). Compiles to a
       quest state machine with save/load integration

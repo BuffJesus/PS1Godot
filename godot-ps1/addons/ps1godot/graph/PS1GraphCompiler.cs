@@ -26,6 +26,20 @@ public static class PS1GraphCompiler
     {
         if (resource?.Nodes == null) return "";
 
+        // Dispatch on graph Kind. Kinds compile to different Lua shapes:
+        //   "" (untyped) → flat statement sequence (slice 4 model).
+        //   "dialogue"   → a _G.dialogue_<basename> table the runtime
+        //                  walker (slice D1b) interprets at gameplay
+        //                  time, not at scene init.
+        return resource.Kind switch
+        {
+            "dialogue" => CompileDialogue(resource),
+            _          => CompileUntyped(resource),
+        };
+    }
+
+    private static string CompileUntyped(PS1GraphResource resource)
+    {
         var sb = new StringBuilder();
         string pathLabel = string.IsNullOrEmpty(resource.ResourcePath) ? "(unsaved)" : resource.ResourcePath;
         sb.AppendLine($"-- Compiled from {pathLabel}");
@@ -65,6 +79,146 @@ public static class PS1GraphCompiler
         }
 
         return sb.ToString();
+    }
+
+    // Dialogue compile: emit `_G.dialogue_<basename> = { entry=..., nodes={...} }`.
+    // The runtime walker (slice D1b — `Dialog.RunGraph(table)` in luaapi)
+    // will read .entry, look up nodes[entry], dispatch on .kind, and
+    // follow .next / .options[].next for navigation. Authors invoke
+    // the walker from their own Lua via the predictable global name.
+    //
+    // No statements compile to ambient effect — the chunk's top-level
+    // is a single assignment, so loading the .lua just installs the
+    // table without running anything. That matches the player-driven
+    // semantics dialogue needs (no auto-advance).
+    private static string CompileDialogue(PS1GraphResource resource)
+    {
+        var sb = new StringBuilder();
+        string pathLabel = string.IsNullOrEmpty(resource.ResourcePath) ? "(unsaved)" : resource.ResourcePath;
+        string basename = BasenameForGlobal(resource.ResourcePath);
+        sb.AppendLine($"-- Compiled from {pathLabel} (dialogue)");
+        sb.AppendLine($"-- {resource.Nodes.Count} node(s), {resource.Connections.Count} connection(s)");
+        sb.AppendLine($"-- Walker: Dialog.RunGraph(_G.dialogue_{basename})");
+        sb.AppendLine();
+
+        var byId = new Dictionary<int, PS1GraphNode>();
+        foreach (var n in resource.Nodes) byId[n.Id] = n;
+
+        // Entry = the first dialogue node with no incoming exec edge,
+        // in Id order. If there's no dialogue-kind node at all, entry
+        // is `nil` and the table is essentially empty.
+        var hasIncomingExec = new HashSet<int>();
+        foreach (var c in resource.Connections)
+        {
+            if (IsExecPort(byId, c.ToNodeId, c.ToPort, isInput: true))
+            {
+                hasIncomingExec.Add(c.ToNodeId);
+            }
+        }
+        int entryId = -1;
+        foreach (var n in resource.Nodes)
+        {
+            if (!IsDialogueKind(n.Kind)) continue;
+            if (hasIncomingExec.Contains(n.Id)) continue;
+            if (entryId < 0 || n.Id < entryId) entryId = n.Id;
+        }
+
+        sb.AppendLine($"_G.dialogue_{basename} = {{");
+        sb.AppendLine($"    entry = {(entryId < 0 ? "nil" : "\"n" + entryId + "\"")},");
+        sb.AppendLine($"    nodes = {{");
+
+        foreach (var n in resource.Nodes)
+        {
+            if (!IsDialogueKind(n.Kind)) continue;
+            EmitDialogueNode(sb, byId, resource.Connections, n);
+        }
+
+        sb.AppendLine("    },");
+        sb.AppendLine("}");
+
+        return sb.ToString();
+    }
+
+    private static bool IsDialogueKind(string kind) => kind switch
+    {
+        "line"   => true,
+        "choice" => true,
+        _        => false,
+    };
+
+    private static void EmitDialogueNode(StringBuilder sb, Dictionary<int, PS1GraphNode> byId,
+                                          Godot.Collections.Array<PS1GraphConnection> conns,
+                                          PS1GraphNode n)
+    {
+        switch (n.Kind)
+        {
+            case "line":
+            {
+                // Line: { kind="line", speaker=..., text=..., next=... }
+                // text → Payloads[0]; speaker → Payloads[1]; next →
+                // follow exec out (slot 0 right) to the receiver's node
+                // (encoded as "n{id}" key, matching the keys we emit
+                // for every node in the nodes table).
+                string text    = EscapeLuaString(n.GetPayload(0));
+                string speaker = EscapeLuaString(n.GetPayload(1));
+                string next    = FindNextKey(conns, n.Id, fromPort: 0);
+                sb.AppendLine($"        n{n.Id} = {{ kind = \"line\", speaker = {speaker}, text = {text}, next = {next} }},");
+                break;
+            }
+            case "choice":
+            {
+                // Choice: { kind="choice", options = { { text=..., next=... }, … } }
+                // Each option = one row. Slice D1a fixes 3 option
+                // slots; empty option texts get pruned at emit so the
+                // runtime doesn't show blank choices.
+                sb.AppendLine($"        n{n.Id} = {{ kind = \"choice\", options = {{");
+                for (int opt = 0; opt < 3; opt++)
+                {
+                    string optText = n.GetPayload(opt);
+                    if (string.IsNullOrEmpty(optText)) continue;
+                    string text = EscapeLuaString(optText);
+                    string next = FindNextKey(conns, n.Id, fromPort: opt + 1);
+                    sb.AppendLine($"            {{ text = {text}, next = {next} }},");
+                }
+                sb.AppendLine("        } },");
+                break;
+            }
+        }
+    }
+
+    // Lua key for the node connected to (srcId, fromPort), or `nil`
+    // when the exec out is dangling. Returns a quoted string like "n3"
+    // so callers can drop it straight into Lua source.
+    private static string FindNextKey(Godot.Collections.Array<PS1GraphConnection> conns,
+                                       int srcId, int fromPort)
+    {
+        foreach (var c in conns)
+        {
+            if (c.FromNodeId == srcId && c.FromPort == fromPort)
+            {
+                return $"\"n{c.ToNodeId}\"";
+            }
+        }
+        return "nil";
+    }
+
+    // Derive a Lua-safe identifier from the resource's .tres path.
+    // Strips directory + extension, lowercases, replaces anything
+    // non-alphanumeric with underscore. Unsaved graphs get "unnamed".
+    private static string BasenameForGlobal(string path)
+    {
+        if (string.IsNullOrEmpty(path)) return "unnamed";
+        string raw = System.IO.Path.GetFileNameWithoutExtension(path);
+        if (string.IsNullOrEmpty(raw)) return "unnamed";
+        var sb = new StringBuilder(raw.Length);
+        foreach (char c in raw.ToLowerInvariant())
+        {
+            sb.Append(char.IsLetterOrDigit(c) || c == '_' ? c : '_');
+        }
+        string result = sb.ToString();
+        // Lua identifiers can't start with a digit; prefix if needed.
+        if (result.Length > 0 && char.IsDigit(result[0])) result = "_" + result;
+        return string.IsNullOrEmpty(result) ? "unnamed" : result;
     }
 
     // ── Emission ────────────────────────────────────────────────────
@@ -227,6 +381,8 @@ public static class PS1GraphCompiler
     {
         "print"   => true,
         "branch"  => true,
+        "line"    => true,
+        "choice"  => true,
         "comment" => false,
         _         => false,
     };
@@ -241,6 +397,10 @@ public static class PS1GraphCompiler
         {
             "print"  => port == 0,                            // row 0 in+out
             "branch" => port == 0 || (!isInput && port == 1), // row 0 in+out, row 1 out-only
+            "line"   => port == 0,                            // row 0 in+out
+            // choice: row 0 = exec in (input side only),
+            //         rows 1..3 = exec out (output side only).
+            "choice" => (isInput && port == 0) || (!isInput && port >= 1 && port <= 3),
             _        => false,
         };
     }
