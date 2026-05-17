@@ -171,15 +171,13 @@ public static class PS1GraphCompiler
         return "\"\"";
     }
 
-    // Bool input: no Bool-producing kinds exist yet (no upstream walk
-    // path), but the consuming node may carry a literal-value fallback
-    // in Payload. For Branch (the only Bool-consumer in slice 4), the
-    // Row-3 "default condition" CheckBox stores "true"/"false". Parse
-    // and emit. Empty/missing payload → "true" (matches the
+    // Bool input: walk back through any incoming connection (handled
+    // by ProduceBool — Bool Literal kind delivers a literal value).
+    // When no connection drives this pin, fall back to the consuming
+    // node's own Payload literal. For Branch (the only Bool-consumer
+    // in slice 4b), the row-3 "default condition" CheckBox stores
+    // "true"/"false". Empty/missing payload → "true" (matches the
     // DefaultPayloadFor seed used when new Branches are spawned).
-    // Future Bool-producing kinds (Bool Literal / comparison nodes)
-    // will plug in via a ProduceBool walk that takes precedence over
-    // this literal fallback, mirroring the String pathway.
     private static string ResolveBoolInput(Dictionary<int, PS1GraphNode> byId,
                                             Godot.Collections.Array<PS1GraphConnection> conns,
                                             int nodeId, int slot)
@@ -188,9 +186,7 @@ public static class PS1GraphCompiler
         {
             if (c.ToNodeId == nodeId && c.ToPort == slot)
             {
-                // Upstream connection — no Bool source kinds yet, so
-                // unreachable in practice. Reserved for slice 5.
-                break;
+                return ProduceBool(byId, conns, c.FromNodeId, c.FromPort);
             }
         }
         if (byId.TryGetValue(nodeId, out var n))
@@ -198,6 +194,29 @@ public static class PS1GraphCompiler
             if (string.IsNullOrEmpty(n.Payload)) return "true";
             return string.Equals(n.Payload, "true", System.StringComparison.OrdinalIgnoreCase)
                 ? "true" : "false";
+        }
+        return "false";
+    }
+
+    // Produce a bool value FROM a source node's output port. Mirrors
+    // ProduceString. Each Bool-producing kind declares its output
+    // semantics here.
+    private static string ProduceBool(Dictionary<int, PS1GraphNode> byId,
+                                       Godot.Collections.Array<PS1GraphConnection> conns,
+                                       int srcId, int srcPort)
+    {
+        if (!byId.TryGetValue(srcId, out var n)) return "false";
+        switch (n.Kind)
+        {
+            case "bool_literal":
+                // Slot 0 right = Bool out — emit the Payload literal.
+                if (srcPort == 0)
+                {
+                    if (string.IsNullOrEmpty(n.Payload)) return "true";
+                    return string.Equals(n.Payload, "true", System.StringComparison.OrdinalIgnoreCase)
+                        ? "true" : "false";
+                }
+                break;
         }
         return "false";
     }

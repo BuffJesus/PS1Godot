@@ -66,9 +66,10 @@ public partial class PS1GraphEditorDock : VBoxContainer
     private record NodeKindEntry(string Kind, string DisplayName);
     private static readonly NodeKindEntry[] s_kinds = new[]
     {
-        new NodeKindEntry("print",   "Print"),
-        new NodeKindEntry("branch",  "Branch (if/else)"),
-        new NodeKindEntry("comment", "Comment"),
+        new NodeKindEntry("print",        "Print"),
+        new NodeKindEntry("branch",       "Branch (if/else)"),
+        new NodeKindEntry("bool_literal", "Bool Literal"),
+        new NodeKindEntry("comment",      "Comment"),
     };
 
     // Slice-2 palette: per-pin-type colours. Picked to match common
@@ -292,9 +293,10 @@ public partial class PS1GraphEditorDock : VBoxContainer
 
     private static string DefaultPayloadFor(string kind) => kind switch
     {
-        "print"  => "Hello PSX",
-        "branch" => "true",   // Branch's literal-condition default — see BuildVisualBody row 3.
-        _        => "",
+        "print"        => "Hello PSX",
+        "branch"       => "true",   // Branch's literal-condition default — see BuildVisualBody row 3.
+        "bool_literal" => "true",   // Same default for the literal Bool source.
+        _              => "",
     };
 
     // Parse Branch's Payload back to a bool. Tolerant of legacy "" /
@@ -418,6 +420,25 @@ public partial class PS1GraphEditorDock : VBoxContainer
                 defaultCheck.Toggled += pressed => n.Payload = pressed ? "true" : "false";
                 g.AddChild(defaultCheck);
                 // No SetSlot for row 3 — pinless row.
+                break;
+            }
+            case "bool_literal":
+            {
+                // Single-row pure-data source. No left pin; one right
+                // pin (Bool out). CheckBox writes "true"/"false" to
+                // Payload so the compiler can read the literal on emit.
+                // Connecting this node's output to Branch's row-2 Bool
+                // input drives Branch's condition with a connection,
+                // overriding Branch's own CheckBox-literal fallback.
+                var valueCheck = new CheckBox
+                {
+                    Text = "value",
+                    ButtonPressed = ParseBoolPayload(n.Payload),
+                };
+                valueCheck.Toggled += pressed => n.Payload = pressed ? "true" : "false";
+                g.AddChild(valueCheck);
+                g.SetSlot(0, false, (int)PinType.Bool, s_pinColors[PinType.Bool],
+                             true,  (int)PinType.Bool, s_pinColors[PinType.Bool]);
                 break;
             }
             case "comment":
