@@ -1560,10 +1560,26 @@ Unreal's Blueprint machinery (`FKismetCompilerContext` → backend swap),
 but compiles to Lua at **export time** — runtime carries zero VM or
 graph-walker overhead.
 
-- [ ] **D0. PS1Graph framework.** `PS1GraphResource` (.tres) +
+- [🟡] **D0. PS1Graph framework.** `PS1GraphResource` (.tres) +
       `PS1GraphNode` + `PS1GraphConnection` base classes; editor dock
       built on Godot's `GraphEdit`. Typed pin system (exec + data),
       context-menu palette, live validation, search.
+      - **Slice 1 shipped 2026-05-17 (walking skeleton).**
+        `addons/ps1godot/graph/PS1Graph{Resource,Node,Connection}.cs` +
+        `addons/ps1godot/ui/PS1GraphEditorDock.cs` (bottom-panel tab
+        "PS1 Graph"). Round-trip works: New / Load / Save / Save As…
+        through EditorFileDialog; one placeholder node kind ("print")
+        with an editable string Payload; drag-position persistence on
+        save; connection add via GraphEdit drag; disconnection +
+        multi-select delete; cascade-prune of connections referencing
+        deleted nodes.
+      - **Deferred to slice 2** (alongside D1 — first concrete kind):
+        typed-pin system (currently all pins are slot 0 / "any"
+        colour); right-click palette beyond the single toolbar
+        button; live validation (cycle detection, dangling input);
+        node search/filter; undo/redo integration; group/comment
+        nodes. Resource fields are already append-only-friendly so
+        none of these require a schema bump.
 - [ ] **D1. `PS1DialogueGraph`** — *first graph kind.* Nodes: Line,
       Choice, Condition, SetFlag, GiveItem, PlaySound, StartCutscene.
       Compiles to a small Lua table (nodes + edges) walked by a stock

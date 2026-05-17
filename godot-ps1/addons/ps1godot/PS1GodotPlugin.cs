@@ -68,6 +68,7 @@ public partial class PS1GodotPlugin : EditorPlugin
     private PS1VRAMViewerDock? _vramViewerDock;
     private PS1AudioRoutingDock? _audioRoutingDock;
     private PS1LuaApiCheatsheetDock? _luaApiDock;
+    private PS1GraphEditorDock? _graphEditorDock;
     private LuaHotSwapWatcher? _luaHotSwapWatcher;
     private PS1ViewportOverlay? _viewportOverlay;
 
@@ -324,6 +325,15 @@ public partial class PS1GodotPlugin : EditorPlugin
         AddControlToBottomPanel(_luaApiDock, "PS1 Lua API");
 #pragma warning restore CS0618
 
+        // PS1Graph editor — walking-skeleton node graph dock. Slice 1
+        // ships only the framework (resource + dock + one placeholder
+        // node kind); concrete graph kinds (Dialogue/Quest/FSM/Script)
+        // and the compile-to-Lua pass land in subsequent slices.
+        _graphEditorDock = new PS1GraphEditorDock();
+#pragma warning disable CS0618 // Obsolete: AddControlToBottomPanel — see AddControlToDock site above.
+        AddControlToBottomPanel(_graphEditorDock, "PS1 Graph");
+#pragma warning restore CS0618
+
         // Lua hot-swap watcher: polls scene_0's exported .lua files and
         // writes res://build/hotswap.luac when one changes. Runtime side
         // (psxsplash-main/src/lua.cpp Lua::TryHotSwap) consumes that file
@@ -542,6 +552,15 @@ public partial class PS1GodotPlugin : EditorPlugin
 #pragma warning restore CS0618
             _luaApiDock.QueueFree();
             _luaApiDock = null;
+        }
+
+        if (_graphEditorDock != null)
+        {
+#pragma warning disable CS0618 // Obsolete — see AddControlToBottomPanel site above.
+            RemoveControlFromBottomPanel(_graphEditorDock);
+#pragma warning restore CS0618
+            _graphEditorDock.QueueFree();
+            _graphEditorDock = null;
         }
 
         if (_luaHotSwapWatcher != null)
