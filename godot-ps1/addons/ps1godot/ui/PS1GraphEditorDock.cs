@@ -324,14 +324,35 @@ public partial class PS1GraphEditorDock : VBoxContainer
         string luaPath = System.IO.Path.ChangeExtension(tresPath, ".lua");
         string content = PS1GraphCompiler.Compile(_resource);
 
-        using var f = Godot.FileAccess.Open(luaPath, Godot.FileAccess.ModeFlags.Write);
-        if (f == null)
+        using (var f = Godot.FileAccess.Open(luaPath, Godot.FileAccess.ModeFlags.Write))
         {
-            var openErr = Godot.FileAccess.GetOpenError();
-            GD.PushError($"[PS1Godot] PS1Graph: failed to open '{luaPath}' for write ({openErr}).");
-            return;
+            if (f == null)
+            {
+                var openErr = Godot.FileAccess.GetOpenError();
+                GD.PushError($"[PS1Godot] PS1Graph: failed to open '{luaPath}' for write ({openErr}).");
+                return;
+            }
+            f.StoreString(content);
         }
-        f.StoreString(content);
+
+        // Nudge the editor's filesystem dock to pick up the new file
+        // immediately. Without this, FileAccess writes to res:// don't
+        // surface in the dock until the next manual rescan / editor
+        // restart — the file is on disk, just invisible. UpdateFile on
+        // a single path is much cheaper than a full Scan().
+        if (luaPath.StartsWith("res://"))
+        {
+            try
+            {
+                EditorInterface.Singleton.GetResourceFilesystem().UpdateFile(luaPath);
+            }
+            catch (System.Exception ex)
+            {
+                GD.PushWarning($"[PS1Godot] PS1Graph: UpdateFile('{luaPath}') failed: {ex.Message}. " +
+                               "File is written; manually refresh the FileSystem dock to see it.");
+            }
+        }
+
         GD.Print($"[PS1Godot] PS1Graph: wrote compiled Lua to '{luaPath}'.");
     }
 
