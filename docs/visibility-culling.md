@@ -334,10 +334,14 @@ By value/cost ratio. Each independent.
    `processTriangle` leaf path).
 2. ~~**Pass 2 (Near/far rejection).**~~ Already shipped (SZ
    short-circuits in `processTriangle` and skinned path).
-3. **Pass 3 (Sub-pixel rejection).** Next up — small isolated
-   change in `processTriangle` after the existing rejects.
-4. **Pass 4 (Occluders).** New authoring surface + new runtime
-   pass. Bigger lift but high payoff for the right scenes.
+3. ~~**Pass 3 (Sub-pixel rejection).**~~ Shipped 2026-05-16 via
+   `isSubpixel()` in `triclip.hh` and call sites in
+   `processTriangle` leaf branch + `renderSkinnedObjects`.
+   Hardcoded threshold = 1; per-scene authoring deferred.
+4. **Pass 4 (Occluders).** Deferred to its own session — needs
+   `PS1Occluder` node, exporter wiring, splashpack format bump
+   (v33), and runtime AABB-to-screen projection + per-object
+   containment test. Estimated 3–4 commits as its own bundle.
 5. **Pass 5 (PVS).** Deferred to "if needed."
 
 ## Open questions / tradeoffs
