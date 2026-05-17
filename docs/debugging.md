@@ -1,5 +1,13 @@
 # Debugging environment — design + patch
 
+**Status (2026-05-16):** No implementation yet. Sized as ~4–6 commits
+spanning psxsplash Lua dispatcher (`xpcall` + traceback handler),
+C++ exception handler hook, PCdrv error file pipeline, and a new
+dock "Errors" tab + watch values. Deferred to its own session
+rather than crammed into the 18-doc patch series. `Debug.Log` and
+`psyqo::Kernel::assert` remain the baseline surface until Stage 1
+lands.
+
 When something breaks on PSX today, the author sees: a black
 screen, a crashed emulator, or worse — silent misbehavior with
 no signal. The runtime's error path is "assert and freeze" which
