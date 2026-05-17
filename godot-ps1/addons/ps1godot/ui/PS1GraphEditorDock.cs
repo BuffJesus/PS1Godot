@@ -64,20 +64,23 @@ public partial class PS1GraphEditorDock : VBoxContainer
     // not stored in the resource — changing a kind's pin layout in
     // future doesn't invalidate saved graphs (existing connections to
     // removed pins are dropped silently at load by the cascade-prune).
-    // GraphKind = "" means "available in every graph kind" — the
-    // generic / untyped nodes (Print, Branch, Bool Literal, Comment)
-    // are useful in any graph. Dialogue-specific nodes restrict to
-    // graphs whose resource.Kind == "dialogue". The palette filters
-    // by current resource.Kind ∪ "" on popup.
-    private record NodeKindEntry(string Kind, string DisplayName, string GraphKind = "");
+    // Each node kind belongs to ONE graph kind unless flagged AvailableInAll.
+    // GraphKind matches resource.Kind: "" = untyped/script, "dialogue" =
+    // PS1DialogueGraph, future kinds same pattern. Comment is the only
+    // wildcard — labels are useful in every graph kind. Print/Branch/
+    // BoolLit live in untyped because they compile to top-level
+    // statements, which the dialogue compile path silently drops;
+    // hiding them in dialogue mode avoids the "I authored this and it
+    // didn't compile, why?" confusion.
+    private record NodeKindEntry(string Kind, string DisplayName, string GraphKind = "", bool AvailableInAll = false);
     private static readonly NodeKindEntry[] s_kinds = new[]
     {
-        new NodeKindEntry("print",        "Print"),
-        new NodeKindEntry("branch",       "Branch (if/else)"),
-        new NodeKindEntry("bool_literal", "Bool Literal"),
-        new NodeKindEntry("comment",      "Comment"),
-        new NodeKindEntry("line",         "Line",     GraphKind: "dialogue"),
-        new NodeKindEntry("choice",       "Choice",   GraphKind: "dialogue"),
+        new NodeKindEntry("print",        "Print",            GraphKind: ""),
+        new NodeKindEntry("branch",       "Branch (if/else)", GraphKind: ""),
+        new NodeKindEntry("bool_literal", "Bool Literal",     GraphKind: ""),
+        new NodeKindEntry("comment",      "Comment",          AvailableInAll: true),
+        new NodeKindEntry("line",         "Line",             GraphKind: "dialogue"),
+        new NodeKindEntry("choice",       "Choice",           GraphKind: "dialogue"),
     };
 
     // Available graph kinds, surfaced when the author hits New.
@@ -334,13 +337,15 @@ public partial class PS1GraphEditorDock : VBoxContainer
         // Rebuild palette items filtered by the current graph's Kind.
         // Item id = index into s_kinds (so spawn matches the chosen kind),
         // not a contiguous menu index — using AddItem(..., id) keeps that
-        // mapping stable even with hidden entries.
+        // mapping stable even with hidden entries. AvailableInAll = true
+        // is the wildcard escape hatch (Comment); everything else gates
+        // on GraphKind == resource.Kind.
         _palettePopup.Clear();
         string currentGraphKind = _resource?.Kind ?? "";
         for (int i = 0; i < s_kinds.Length; i++)
         {
             var k = s_kinds[i];
-            if (k.GraphKind != "" && k.GraphKind != currentGraphKind) continue;
+            if (!k.AvailableInAll && k.GraphKind != currentGraphKind) continue;
             _palettePopup.AddItem(k.DisplayName, i);
         }
 
