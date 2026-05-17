@@ -21,7 +21,7 @@ If version is omitted, uses a date-stamp: YYYYMMDD.
 import os, shutil, sys, zipfile
 from datetime import date
 
-REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 DIST_DIR = os.path.join(REPO_ROOT, 'dist')
 
 # Files/paths to EXCLUDE when packaging the plugin. Patterns are
