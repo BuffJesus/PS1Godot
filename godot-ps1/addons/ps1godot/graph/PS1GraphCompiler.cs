@@ -171,15 +171,34 @@ public static class PS1GraphCompiler
         return "\"\"";
     }
 
-    // Bool input: no Bool-producing kinds exist in slice 4a, so any
-    // connection here is currently impossible (GraphEdit's type check
-    // would reject it — there's no Bool output to drag from). Default
-    // to literal `false`. Slice 5 will add Bool Literal + comparison
-    // kinds and switch this to walk-back semantics.
+    // Bool input: no Bool-producing kinds exist yet (no upstream walk
+    // path), but the consuming node may carry a literal-value fallback
+    // in Payload. For Branch (the only Bool-consumer in slice 4), the
+    // Row-3 "default condition" CheckBox stores "true"/"false". Parse
+    // and emit. Empty/missing payload → "true" (matches the
+    // DefaultPayloadFor seed used when new Branches are spawned).
+    // Future Bool-producing kinds (Bool Literal / comparison nodes)
+    // will plug in via a ProduceBool walk that takes precedence over
+    // this literal fallback, mirroring the String pathway.
     private static string ResolveBoolInput(Dictionary<int, PS1GraphNode> byId,
                                             Godot.Collections.Array<PS1GraphConnection> conns,
                                             int nodeId, int slot)
     {
+        foreach (var c in conns)
+        {
+            if (c.ToNodeId == nodeId && c.ToPort == slot)
+            {
+                // Upstream connection — no Bool source kinds yet, so
+                // unreachable in practice. Reserved for slice 5.
+                break;
+            }
+        }
+        if (byId.TryGetValue(nodeId, out var n))
+        {
+            if (string.IsNullOrEmpty(n.Payload)) return "true";
+            return string.Equals(n.Payload, "true", System.StringComparison.OrdinalIgnoreCase)
+                ? "true" : "false";
+        }
         return "false";
     }
 

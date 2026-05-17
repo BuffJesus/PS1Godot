@@ -292,9 +292,20 @@ public partial class PS1GraphEditorDock : VBoxContainer
 
     private static string DefaultPayloadFor(string kind) => kind switch
     {
-        "print" => "Hello PSX",
-        _       => "",
+        "print"  => "Hello PSX",
+        "branch" => "true",   // Branch's literal-condition default — see BuildVisualBody row 3.
+        _        => "",
     };
+
+    // Parse Branch's Payload back to a bool. Tolerant of legacy "" /
+    // unset payloads → defaults to true (matches DefaultPayloadFor),
+    // so existing graphs saved before this checkbox landed will read
+    // as condition=true on next load rather than silently flipping.
+    private static bool ParseBoolPayload(string payload)
+    {
+        if (string.IsNullOrEmpty(payload)) return true;
+        return string.Equals(payload, "true", System.StringComparison.OrdinalIgnoreCase);
+    }
 
     // ── Graph view (re)build ─────────────────────────────────────────
 
@@ -391,6 +402,22 @@ public partial class PS1GraphEditorDock : VBoxContainer
                 g.AddChild(new Label { Text = "condition" });
                 g.SetSlot(2, true,  (int)PinType.Bool, s_pinColors[PinType.Bool],
                              false, (int)PinType.Bool, s_pinColors[PinType.Bool]);
+
+                // Row 3: literal-value fallback. Pinless — used when
+                // the Bool input on row 2 is disconnected (which is
+                // every Branch in slice 4a, since no Bool-producing
+                // kind exists yet). Stored in Payload as "true"/"false"
+                // strings; the compiler parses on emit. New Branches
+                // default to "true" so the obvious wiring (Hello to
+                // the true-exec-out) actually prints Hello at runtime.
+                var defaultCheck = new CheckBox
+                {
+                    Text = "default condition",
+                    ButtonPressed = ParseBoolPayload(n.Payload),
+                };
+                defaultCheck.Toggled += pressed => n.Payload = pressed ? "true" : "false";
+                g.AddChild(defaultCheck);
+                // No SetSlot for row 3 — pinless row.
                 break;
             }
             case "comment":
