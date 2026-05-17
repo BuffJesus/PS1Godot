@@ -1,5 +1,16 @@
 # LOD meshes — design + patch
 
+**Status (2026-05-17):** No implementation yet. PS1MeshInstance /
+PS1MeshGroup have no Lod1Mesh/Lod2Mesh exports, splashpack has
+no LodEntry/LodTable section, runtime has no `IsLodEnabled` flag /
+`SelectLODs` / `LodRuntimeState`. The doc names "v24 splashpack"
+as the target bump — that version slot is long gone (we're at
+v32); a real implementation just appends to v33+. Sized as
+~3 commits: Stage 1 (exporter + writer + format bump), Stage 2
+(runtime LOD selection + BVH skip), Stage 3 (dock LOD coverage
+readout + per-mesh tri-count badges). Deferred to its own
+session — pairs naturally with a "large-scene perf" focus.
+
 Design doc for the LOD bullet in `ROADMAP.md` § Rendering options:
 
 > **LOD meshes per `PS1MeshInstance`.** `LODs` = ordered
