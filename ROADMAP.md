@@ -374,7 +374,7 @@ bullets, pickups, particles, enemy waves, and voxel-style worlds.
       CameraProfile, plus per-chunk budgets for triangles / objects /
       VRAM / SPU / texture pages / CLUTs / alpha quads / particles /
       skinned actors / colliders) lives in
-      [`docs/ps1_chunked_rpg_architecture_plan_multidisc.md`](docs/ps1_chunked_rpg_architecture_plan_multidisc.md)
+      [`docs/archive/superseded/ps1_chunked_rpg_architecture_plan_multidisc.md`](docs/archive/superseded/ps1_chunked_rpg_architecture_plan_multidisc.md)
       and
       [`docs/ps1godot_current_implementation_review_next_steps.md`](docs/ps1godot_current_implementation_review_next_steps.md).
       Chunk states (Active / Nearby / LoadedInactive / Unloaded /
@@ -387,7 +387,7 @@ bullets, pickups, particles, enemy waves, and voxel-style worlds.
       disc requirement, swap UI, disc-accurate test mode) deferred
       to Phase 3 / 4. Adding the metadata now prevents a later
       migration. See
-      [`docs/ps1_chunked_rpg_architecture_plan_multidisc.md`](docs/ps1_chunked_rpg_architecture_plan_multidisc.md).
+      [`docs/archive/superseded/ps1_chunked_rpg_architecture_plan_multidisc.md`](docs/archive/superseded/ps1_chunked_rpg_architecture_plan_multidisc.md).
 
 ### Performance / culling / scheduling
 
