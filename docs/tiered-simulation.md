@@ -1,5 +1,18 @@
 # Tiered NPC simulation — design + patch
 
+**Status (2026-05-17):** No implementation yet. GameObject has no
+`tier`/`IsTiered`, SceneManager has no `UpdateTiers`, no
+`Entity.GetTier`/`SetTier`/`onTierChanged` Lua bindings, no
+`PS1Scene.Tier{0,1,2}DistanceMeters` exports. The "v25 splashpack"
+format slot named in the doc is moot — we're at v32, real
+implementation just appends to v33+. Sized as ~3 commits (runtime
+tier evaluator + dispatcher gate + Lua bindings; exporter +
+inspector; schedule tick + symbolic sim). Strict consumer of the
+still-unshipped `StateMachine` primitive for full leverage, and
+naturally pairs with chunk-streaming (Tier 3 = "in an unloaded
+chunk") and lod-design (both keyed on player distance with
+hysteresis). Deferred to its own session.
+
 Closes the design gap behind the Phase 2.5 AI section in
 `ROADMAP.md` and the optimization reference's explicit
 recommendation:
