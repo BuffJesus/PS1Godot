@@ -1,5 +1,17 @@
 # Object scale animation — design + patch
 
+**Status (2026-05-17):** No implementation yet. GameObject has no
+`scaleFp12` field, `setupObjectTransform` has no scale branch,
+no `Entity.SetScale`/`GetScale`/`AnimateScale` Lua bindings,
+`PS1MeshInstance` has no `InitialScale`/`StaticScale` exports,
+and no `TrackType::ObjectScale` exists. Sized as ~3–4 commits
+across psxsplash (eventMask split into 16+16 with scaleFp12,
+renderer branch, Lua bindings) + PS1Godot (inspector exports,
+writer optional scale, Entity.AnimateScale helper) + Stage 3
+ObjectScale track type. Deferred to its own session — naturally
+pairs with the prerendered-meshes session that unblocks
+pulse-scale / spawn-pop usage.
+
 Closes a small but specific gap referenced in
 `prerendered-meshes.md` and called out as a Phase 2.5
 community ask:
