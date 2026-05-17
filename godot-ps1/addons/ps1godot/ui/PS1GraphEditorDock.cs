@@ -209,6 +209,7 @@ public partial class PS1GraphEditorDock : VBoxContainer
             return;
         }
         GD.Print($"[PS1Godot] PS1Graph: saved '{path}'.");
+        WriteCompiledLuaSibling(path);
     }
 
     private void OnCompilePressed()
@@ -248,6 +249,30 @@ public partial class PS1GraphEditorDock : VBoxContainer
         }
         UpdatePathLabel();
         GD.Print($"[PS1Godot] PS1Graph: saved '{path}'.");
+        WriteCompiledLuaSibling(path);
+    }
+
+    // Each Save also writes a sibling .lua holding the compiled output.
+    // Authors attach that .lua to a node via the existing Lua-script
+    // pipeline — no graph-aware code in the exporter / runtime needed.
+    // If the compile fails (empty graph, malformed kind), the .lua
+    // still gets written with the header comment + a TODO body so the
+    // sibling exists and dependent script-list references don't break.
+    private void WriteCompiledLuaSibling(string tresPath)
+    {
+        if (string.IsNullOrEmpty(tresPath)) return;
+        string luaPath = System.IO.Path.ChangeExtension(tresPath, ".lua");
+        string content = PS1GraphCompiler.Compile(_resource);
+
+        using var f = Godot.FileAccess.Open(luaPath, Godot.FileAccess.ModeFlags.Write);
+        if (f == null)
+        {
+            var openErr = Godot.FileAccess.GetOpenError();
+            GD.PushError($"[PS1Godot] PS1Graph: failed to open '{luaPath}' for write ({openErr}).");
+            return;
+        }
+        f.StoreString(content);
+        GD.Print($"[PS1Godot] PS1Graph: wrote compiled Lua to '{luaPath}'.");
     }
 
     // ── Palette ──────────────────────────────────────────────────────
