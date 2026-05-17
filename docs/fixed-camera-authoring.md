@@ -187,7 +187,7 @@ not happen.
 ## Until then
 
 Document the gotchas everywhere a fresh user is likely to look:
-- `docs/the-monitor-ide-brief.md` ← already patched (2026-04-24)
+- `docs/projects/the-monitor/the-monitor-ide-brief.md` ← already patched (2026-04-24)
 - `docs/api-showcase.md` if/when it covers Camera APIs
 - `docs/lua-ps1-cheatsheet.md` ← TODO add a "fixed CCTV cams" recipe block
 - Tool memories: `project_camera_lua_coord_frame.md`,

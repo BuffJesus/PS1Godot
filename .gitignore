@@ -112,7 +112,7 @@ __pycache__/
 godot-ps1/scenes/monitor/
 godot-ps1/lua/monitor/
 godot-ps1/assets/monitor/
-docs/the-monitor-*.md
+docs/projects/the-monitor/the-monitor-*.md
 scripts/regen-monitor-assets.py
 scripts/regen-monitor-audio.py
 scripts/rebuild_monitor_kenney.py
