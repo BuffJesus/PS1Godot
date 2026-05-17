@@ -201,16 +201,25 @@ per-object level, not per-triangle. Good.
 
 Three stages.
 
-### Stage 1 — Scratchpad allocation map + accessors
+### Stage 1 — Scratchpad allocation map + accessors ✅ shipped 2026-05-16
 
-Smallest first-step. No behavior change, just plumbing.
+Header-only — `psxsplash-main/src/scratchpad.hh`. No consumers yet.
 
-- Define the `psxsplash::Scratchpad` namespace.
-- Map the four hottest regions: OT roots, camera rotation,
-  camera translation, frustum planes.
-- Add typed accessors.
-- *Don't* change anything to use them yet — verify the
-  allocation map compiles, doesn't conflict with anything.
+- `psxsplash::Scratchpad` namespace with the full 1 KB map
+  (OT roots, camera rotation, camera translation, frustum
+  planes, counters, hot scratch, DMA chain, Lua VM reserve).
+- Typed accessors return references pinned at hardware
+  addresses — MIPS compiler emits `lw` from a known offset,
+  no indirection.
+- `static_assert` chain enforces the map fills exactly 1024
+  bytes and PSYQo type sizes (Matrix33=36, Vec3=12) stay
+  within their region.
+- Doc's original Matrix33 slot was 32 B; corrected to 48 B
+  (Matrix33 itself is 36 B, padded to 16-byte alignment).
+
+Stages 2 and 3 (consumer migration + GameObject reorder) are
+deferred — each touches the renderer hot path and wants
+host-mode-testing coverage first.
 
 ### Stage 2 — Migrate hot accesses
 
