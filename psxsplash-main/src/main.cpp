@@ -132,10 +132,13 @@ void MainScene::frame() {
     // Lua hot-swap poll. Runs before GameTick so a swap takes effect
     // on the same frame it's detected — and so the VM is in a known
     // quiescent state (no in-flight Lua call) when we re-register.
+    // Editor REPL piggybacks on the same poll cadence (UE editor port
+    // plan pick #4) — both PCdrv-only, both quiescent-VM safe here.
     m_hotSwapTickAccum += deltaTime;
     if (m_hotSwapTickAccum >= kHotSwapPollFrames) {
         m_hotSwapTickAccum = 0;
         m_sceneManager.getLua().TryHotSwap(m_sceneManager);
+        m_sceneManager.getLua().TryRepl(m_sceneManager);
     }
 
     #if defined(PSXSPLASH_PERFOVERLAY)

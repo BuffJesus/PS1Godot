@@ -61,7 +61,14 @@ class Lua {
     // Caller throttles the polling cadence; this method does no internal
     // rate-limiting.
     void TryHotSwap(SceneManager& sm);
-    
+
+    // Editor REPL (UE editor port plan pick #4). Polls the PCdrv-
+    // mounted `repl.ver` for a changed version stamp; if the stamp
+    // moved, reads `repl.lua` and pcalls it in the global env so
+    // authored snippets see/mutate _G directly. PCdrv-only — silent
+    // no-op when the version file isn't present.
+    void TryRepl(SceneManager& sm);
+
     // Get the underlying psyqo::Lua state for API registration
     psyqo::Lua& getState() { return m_state; }
     
@@ -207,6 +214,12 @@ class Lua {
     // authoritative.
     uint8_t* m_hotSwapBuffers[MAX_LUA_FILES] = {};
     uint32_t m_lastHotSwapVersion = 0;
+
+    // REPL version stamp — last-seen contents of `repl.ver` on disk
+    // (PCdrv host filesystem). Compared as opaque bytes (no parsing)
+    // so the editor can write any monotonic string format.
+    uint8_t m_lastReplVerBuf[16] = {};
+    int     m_lastReplVerLen = 0;
 
     template <int methodId, typename methodName>
     friend struct FunctionWrapper;

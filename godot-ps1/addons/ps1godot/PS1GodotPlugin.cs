@@ -73,6 +73,7 @@ public partial class PS1GodotPlugin : EditorPlugin
     private PS1QuestJournalDock? _questJournalDock;
     private PS1GraphFindDock? _graphFindDock;
     private PS1ReferenceViewerDock? _referenceViewerDock;
+    private PS1LuaReplDock? _luaReplDock;
     private PS1AudioClipPreviewGenerator? _audioClipPreviewGen;
     private PS1ToastNotifier? _toast;
     private LuaHotSwapWatcher? _luaHotSwapWatcher;
@@ -383,6 +384,15 @@ public partial class PS1GodotPlugin : EditorPlugin
         AddControlToBottomPanel(_referenceViewerDock, "PS1 References");
 #pragma warning restore CS0618
 
+        // PS1 Lua REPL (UE editor port plan pick #4): live Lua
+        // snippets sent to the running PCSX-Redux via PCdrv
+        // file-watch. Runtime side polls repl.ver + repl.lua in
+        // psxsplash's TryRepl alongside hot-swap polling.
+        _luaReplDock = new PS1LuaReplDock();
+#pragma warning disable CS0618 // Obsolete: AddControlToBottomPanel — see AddControlToDock site above.
+        AddControlToBottomPanel(_luaReplDock, "PS1 Lua REPL");
+#pragma warning restore CS0618
+
         // Custom resource thumbnails (UE editor port plan pick #1):
         // register a per-type EditorResourcePreviewGenerator so
         // PS1AudioClip resources render an actual waveform + route
@@ -661,6 +671,15 @@ public partial class PS1GodotPlugin : EditorPlugin
 #pragma warning restore CS0618
             _referenceViewerDock.QueueFree();
             _referenceViewerDock = null;
+        }
+
+        if (_luaReplDock != null)
+        {
+#pragma warning disable CS0618 // Obsolete — see AddControlToBottomPanel site above.
+            RemoveControlFromBottomPanel(_luaReplDock);
+#pragma warning restore CS0618
+            _luaReplDock.QueueFree();
+            _luaReplDock = null;
         }
 
         if (_audioClipPreviewGen != null)

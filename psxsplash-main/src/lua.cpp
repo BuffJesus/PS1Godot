@@ -1002,6 +1002,64 @@ void psxsplash::Lua::TryHotSwap(SceneManager& sm) {
            (unsigned)version, (unsigned)fileIdx, (unsigned)codeLen, affected);
 }
 
+void psxsplash::Lua::TryRepl(SceneManager& sm) {
+    // UE editor port-plan pick #4 — editor REPL. The editor dock
+    // writes the snippet to `repl.lua` and bumps `repl.ver` with a
+    // monotonic byte sequence. We compare the .ver contents to the
+    // last-seen bytes (no parse: any monotonic format the editor
+    // chooses works), and when they differ load + pcall the .lua.
+    //
+    // Result printed via printf so PCSX-Redux's debug console shows
+    // it — slice 1 doesn't write back to a response file. PCdrv-
+    // only by definition (no .ver file under CD-ROM ISO mode).
+    auto& loader = FileLoader::Get();
+    int verSize = 0;
+    uint8_t* verBuf = loader.LoadFileSync("repl.ver", verSize);
+    if (!verBuf) return;
+    if (verSize <= 0 || verSize > (int)sizeof(m_lastReplVerBuf)) {
+        loader.FreeFile(verBuf);
+        return;
+    }
+    bool changed = (verSize != m_lastReplVerLen);
+    if (!changed) {
+        for (int i = 0; i < verSize; i++) {
+            if (verBuf[i] != m_lastReplVerBuf[i]) { changed = true; break; }
+        }
+    }
+    if (!changed) {
+        loader.FreeFile(verBuf);
+        return;
+    }
+    // Update last-seen stamp BEFORE executing — a buggy snippet that
+    // crashes the VM would otherwise re-fire on the next poll.
+    for (int i = 0; i < verSize; i++) m_lastReplVerBuf[i] = verBuf[i];
+    m_lastReplVerLen = verSize;
+    loader.FreeFile(verBuf);
+
+    int srcSize = 0;
+    uint8_t* srcBuf = loader.LoadFileSync("repl.lua", srcSize);
+    if (!srcBuf) {
+        printf("[REPL] version bumped but repl.lua missing\n");
+        return;
+    }
+
+    auto L = m_state;
+    if (L.loadBuffer(reinterpret_cast<const char*>(srcBuf), srcSize, "repl") != LUA_OK) {
+        printf("[REPL] load error: %s\n", L.optString(-1, "Unknown error"));
+        L.pop();
+        loader.FreeFile(srcBuf);
+        return;
+    }
+    loader.FreeFile(srcBuf);
+
+    if (L.pcall(0, 0) != LUA_OK) {
+        printf("[REPL] runtime error: %s\n", L.optString(-1, "Unknown error"));
+        L.pop();
+        return;
+    }
+    printf("[REPL] OK\n");
+}
+
 void psxsplash::Lua::PushGameObject(GameObject* go) {
     auto L = m_state;
     L.push(go);
