@@ -1930,13 +1930,29 @@ project structure, assets, VRAM, SPU, meshes, Lua scripts, chunks,
 saves, and deployment. Status levels: Info / Warning / Error /
 Blocking. Author runs once, sees everything wrong with the project.
 
-- [ ] **`PS1 Doctor` dock** — single tabbed panel. Tabs: Project
+- [🟡] **`PS1 Doctor` dock** — single panel. Future tabs: Project
       (manifest / disc layout / version mismatch), Assets (atlas
       coverage / orphans / 16bpp / one-offs), Memory (per-bus
       residency / budget overruns), Lua (parse / API / load order),
       Chunks (budgets / neighbor links / disc ownership), Save
       (slot version / migration). One re-run button + auto-run on
       export.
+      - **Slice 1 shipped 2026-05-17 (MVP — uncapped offender view).**
+        `addons/ps1godot/ui/PS1DoctorDock.cs` registers a bottom-
+        panel tab "PS1 Doctor" alongside PS1 Graph. Pulls the same
+        `LastExportSummary` snapshot the small dock uses, renders
+        the FULL offender list (no 8-row cap) grouped by inline-
+        classified category (UV / Texture / VRAM / Audio / Mesh
+        quality / Animation / Decal / Other). Severity-filter
+        checkboxes at the top. Each row: severity glyph + click-to-
+        focus LinkButton (highlights node in SceneTree) + the full
+        reason text. Updates whenever `ApplyLastExportSummary`
+        fires (every export run).
+      - **Slice 2 (later)**: explicit `Category` field on
+        `LastExportSummary.Offender` (drops the inline string parse),
+        per-category tabs instead of a single scroll, manual
+        "Re-run validators" button that runs the export validator
+        pipeline without writing the splashpack.
 - [ ] **Status aggregation** across existing per-pass linters so
       authors don't hunt through three docks for findings.
 - [ ] **Fix-suggestion text** plain-language ("Texture `Wood_05` is

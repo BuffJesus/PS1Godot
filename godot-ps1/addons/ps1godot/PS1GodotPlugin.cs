@@ -69,6 +69,7 @@ public partial class PS1GodotPlugin : EditorPlugin
     private PS1AudioRoutingDock? _audioRoutingDock;
     private PS1LuaApiCheatsheetDock? _luaApiDock;
     private PS1GraphEditorDock? _graphEditorDock;
+    private PS1DoctorDock? _doctorDock;
     private LuaHotSwapWatcher? _luaHotSwapWatcher;
     private PS1ViewportOverlay? _viewportOverlay;
 
@@ -334,6 +335,16 @@ public partial class PS1GodotPlugin : EditorPlugin
         AddControlToBottomPanel(_graphEditorDock, "PS1 Graph");
 #pragma warning restore CS0618
 
+        // PS1 Doctor: unified validator view. Renders the full
+        // LastExportSummary offender list (uncapped, grouped by
+        // category, severity-filterable), as a "show me everything
+        // wrong with the project" surface separate from the compact
+        // 8-row preview the PS1Godot dock shows.
+        _doctorDock = new PS1DoctorDock();
+#pragma warning disable CS0618 // Obsolete: AddControlToBottomPanel — see AddControlToDock site above.
+        AddControlToBottomPanel(_doctorDock, "PS1 Doctor");
+#pragma warning restore CS0618
+
         // Lua hot-swap watcher: polls scene_0's exported .lua files and
         // writes res://build/hotswap.luac when one changes. Runtime side
         // (psxsplash-main/src/lua.cpp Lua::TryHotSwap) consumes that file
@@ -561,6 +572,15 @@ public partial class PS1GodotPlugin : EditorPlugin
 #pragma warning restore CS0618
             _graphEditorDock.QueueFree();
             _graphEditorDock = null;
+        }
+
+        if (_doctorDock != null)
+        {
+#pragma warning disable CS0618 // Obsolete — see AddControlToBottomPanel site above.
+            RemoveControlFromBottomPanel(_doctorDock);
+#pragma warning restore CS0618
+            _doctorDock.QueueFree();
+            _doctorDock = null;
         }
 
         if (_luaHotSwapWatcher != null)
@@ -1258,6 +1278,7 @@ public partial class PS1GodotPlugin : EditorPlugin
         // Output panel. Tooltip on the dock label expands to per-category
         // subtotals + the worst mesh-cleanup names.
         _dock?.ApplyLastExportSummary(_lastExportSummary);
+        _doctorDock?.ApplyLastExportSummary(_lastExportSummary);
     }
 
     private void ExportOneScene(Node sceneRoot, int sceneIndex)
