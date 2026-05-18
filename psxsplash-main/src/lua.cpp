@@ -320,6 +320,61 @@ void psxsplash::Lua::Init() {
         L.setField(-2, "__concat");
     }
     L.pop();
+
+    // FSM helper (slice D3-2) — installs `_G.FSM = { new = function(def) ... end }`
+    // so authored fsm.lua tables can be consumed without hand-rolling
+    // the walker every time. The compiled fsm table shape (states,
+    // transitions, optional on_enter/on_exit/on_update lookup tables)
+    // matches what `PS1GraphCompiler.CompileFsm` emits. on_*
+    // callbacks are aspirational for slice D3-3 — the helper checks
+    // for them defensively but the compiler doesn't populate them yet,
+    // so today they just no-op.
+    //
+    // Embedded as a string literal rather than a separate asset so
+    // there's no chance the user ships a splashpack missing the
+    // helper. Pcall'd in the GLOBAL env (no per-script wrapping) so
+    // FSM lands in _G, not in a sandbox.
+    static const char kFsmHelperSrc[] =
+        "FSM = FSM or {}\n"
+        "function FSM.new(def)\n"
+        "    local inst = { _def = def, _current = def and def.initial or nil }\n"
+        "    function inst:Current() return self._current end\n"
+        "    function inst:Is(state) return self._current == state end\n"
+        "    function inst:Send(event)\n"
+        "        local d = self._def\n"
+        "        if not d or not d.transitions then return false end\n"
+        "        for i = 1, #d.transitions do\n"
+        "            local t = d.transitions[i]\n"
+        "            if t.from == self._current and t.event == event then\n"
+        "                local prev = self._current\n"
+        "                self._current = t.to\n"
+        "                if d.on_exit and d.on_exit[prev] then d.on_exit[prev](self, event) end\n"
+        "                if d.on_enter and d.on_enter[self._current] then d.on_enter[self._current](self, event) end\n"
+        "                return true\n"
+        "            end\n"
+        "        end\n"
+        "        return false\n"
+        "    end\n"
+        "    function inst:Update(dt)\n"
+        "        local d = self._def\n"
+        "        if d and d.on_update and d.on_update[self._current] then\n"
+        "            d.on_update[self._current](self, dt)\n"
+        "        end\n"
+        "    end\n"
+        "    if def and def.on_enter and def.on_enter[def.initial] then\n"
+        "        def.on_enter[def.initial](inst, nil)\n"
+        "    end\n"
+        "    return inst\n"
+        "end\n";
+    if (L.loadBuffer(kFsmHelperSrc, sizeof(kFsmHelperSrc) - 1, "builtin:fsm") == LUA_OK) {
+        if (L.pcall(0, 0) != LUA_OK) {
+            printf("Error installing FSM helper: %s\n", L.optString(-1, "Unknown error"));
+            L.pop();
+        }
+    } else {
+        printf("Error loading FSM helper: %s\n", L.optString(-1, "Unknown error"));
+        L.pop();
+    }
 }
 
 void psxsplash::Lua::Shutdown() {

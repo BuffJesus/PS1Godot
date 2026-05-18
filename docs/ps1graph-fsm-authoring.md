@@ -1,9 +1,11 @@
 # PS1Graph FSM Authoring
 
 How to author a finite-state machine in the PS1Graph dock and consume
-it from Lua. Slice D3-1 ships the compiler + node palette. The
-runtime `FSM.new` helper that walks the compiled table lands in
-slice D3-2; until then you drive the table manually.
+it from Lua. Slice D3-1 shipped the compiler + node palette;
+slice D3-2 added the `FSM.new` runtime helper so you don't hand-roll
+the walker. Per-state Lua callbacks (`on_enter` / `on_exit` /
+`on_update`) are aspirational — the helper checks for them
+defensively, the compiler doesn't populate them yet (D3-3).
 
 ## TL;DR — the five steps
 
@@ -45,35 +47,62 @@ Cycles are allowed and expected — FSM back-edges are how state
 machines model "go back to idle" / "loop into the same state on
 event X." The PS1Graph cycle guard is skipped for `Kind = "fsm"`.
 
-## Driving it from Lua (until FSM.new ships)
+## Driving it from Lua
 
-Until the runtime helper lands, you drive the table by hand:
+`FSM.new` is built into the runtime as of slice D3-2 — it lives in
+`_G.FSM` before any scene script runs, no setup required.
 
 ```lua
--- In any scene script:
-local current = _G.fsm_my_bot.initial
+-- Construct an instance from the compiled table.
+local bot = FSM.new(_G.fsm_my_bot)
 
-local function send(event)
-    for _, t in ipairs(_G.fsm_my_bot.transitions) do
-        if t.from == current and t.event == event then
-            current = t.to
-            return true
-        end
-    end
-    return false  -- event doesn't apply in this state
-end
+-- Query state.
+bot:Current()         --> "patrol"
+bot:Is("patrol")      --> true
 
+-- Drive transitions by sending events.
 function onUpdate(self)
-    if see_player(self) then send("see_player") end
-    if in_range(self)   then send("in_range")   end
-    -- ...
+    if see_player(self) then bot:Send("see_player") end
+    if in_range(self)   then bot:Send("in_range")   end
 end
+
+-- Per-frame tick — if you wire per-state on_update callbacks
+-- (D3-3) you'll call this to dispatch them.
+bot:Update(dt)
 ```
 
-The state machine logic is ~10 lines of Lua per entity. Once
-`FSM.new` ships (slice D3-2), you'll get `:Send(event)`, `:Current()`,
-and per-state `onEnter` / `onExit` / `onUpdate` callbacks without
-hand-rolling the loop.
+`Send(event)` returns `true` if a transition fired,
+`false` if no transition matches `(current, event)` (so you can
+detect "event ignored").
+
+### Multiple instances
+
+`FSM.new` produces independent instances. One FSM table can back
+many entities — every enemy with the same brain shares one definition
+but tracks its own state.
+
+```lua
+local def = _G.fsm_my_bot
+local enemy1 = FSM.new(def)
+local enemy2 = FSM.new(def)
+-- enemy1 and enemy2 transition independently.
+```
+
+### Optional per-state callbacks (D3-3, opt-in today)
+
+The helper checks for `def.on_enter[state]`, `def.on_exit[state]`,
+`def.on_update[state]` and invokes them when present. Today the
+compiler doesn't populate these (D3-3 will add per-state Lua-snippet
+fields on the State node), but you can hand-attach them yourself if
+you want the hook now:
+
+```lua
+local def = _G.fsm_my_bot
+def.on_enter = {
+    chase = function(self, event) Audio.PlaySfx("growl") end,
+}
+local bot = FSM.new(def)  -- enter(initial) NOT fired since initial is set up before callbacks.
+```
 
 ## Node-kind reference
 
@@ -87,13 +116,18 @@ by connecting its exec-out to several Transition exec-ins.
 
 ## Limits to know about
 
-- **No per-state Lua snippets yet.** Slice D3-2 will add
-  `onEnter` / `onExit` / `onUpdate` payloads.
+- **No per-state Lua snippets compiled in yet.** D3-3 will add
+  Payload slots on the State node for `on_enter` / `on_exit` /
+  `on_update` snippets that the compiler emits into the `on_*`
+  lookup tables. Until then, hand-attach callbacks as shown above
+  if you need them.
 - **No initial-state checkbox.** Lowest-Id state wins.
-- **No runtime helper.** Drive the table from your own Lua for now;
-  the 10-line walker above is the recipe.
 - **Transition events are strings.** No type system — typos compile
-  silently. Plan to add an event-vocabulary validation slice.
+  silently. Plan to add an event-vocabulary validation slice (warn
+  on `Send("typo")` calls that don't match any transition).
+- **No `:Update(dt)` self-tick.** You call `bot:Update(dt)` from your
+  own per-frame Lua (e.g. PS1Player.onUpdate). The helper doesn't
+  hook the runtime per-frame tick on its own.
 
 ## Where the code lives
 

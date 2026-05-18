@@ -1752,12 +1752,19 @@ graph-walker overhead.
         Initial-state rule: lowest-Id named state wins. Author drives
         the table via a ~10-line Lua walker until D3-2 ships
         `FSM.new`. See [`docs/ps1graph-fsm-authoring.md`](docs/ps1graph-fsm-authoring.md).
-      - **Slice D3-2 (next)**: `FSM.new(table)` runtime helper —
-        returns an instance with `:Send(event)`, `:Current()`,
-        per-state `onEnter`/`onExit`/`onUpdate` callback dispatch.
-        Either ship as a built-in Lua chunk pcall'd at scene init,
-        or wire into psxsplash like Dialog. Walker is ~30 lines of
-        Lua; psxsplash side is just exposing per-frame ticks.
+      - **Slice D3-2 shipped 2026-05-17 (`FSM.new` runtime helper).**
+        Embedded as a Lua-string built-in pcall'd at the end of
+        `Lua::Init` (in `psxsplash-main/src/lua.cpp`), installing
+        `_G.FSM = { new = function(def) ... end }` before any scene
+        script loads. Instance API: `:Current()`, `:Is(state)`,
+        `:Send(event) -> bool`, `:Update(dt)`. Multiple instances
+        from one definition table run independently. Helper
+        defensively dispatches optional `on_enter[state]` /
+        `on_exit[state]` / `on_update[state]` callbacks if the
+        definition table populates them (D3-3 will wire the compiler
+        to emit those tables from per-state Payload snippets; today
+        authors can hand-attach for early adoption).
+        ~30 lines of Lua, zero per-instance C++ state.
       - **Slice D3-3 (later)**: per-state Lua snippets (Payloads[1..N]
         for enter/update/exit), event vocabulary validation (warn on
         unreachable transitions / dangling event names), explicit
