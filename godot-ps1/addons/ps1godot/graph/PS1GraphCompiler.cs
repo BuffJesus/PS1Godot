@@ -48,11 +48,15 @@ public static class PS1GraphCompiler
         //   "quest"      → a _G.quest_<basename> table; objectives +
         //                  outcomes with prereq edges. Author drives
         //                  manually until Quest.new ships (slice D2-2).
+        //   "bt"         → a _G.bt_<basename> behavior-tree table.
+        //                  Sequence/Selector/Leaf nodes; BT.new ticks
+        //                  it once per frame from author Lua.
         return resource.Kind switch
         {
             "dialogue" => CompileDialogue(resource, effectivePath),
             "fsm"      => CompileFsm(resource, effectivePath),
             "quest"    => CompileQuest(resource, effectivePath),
+            "bt"       => CompileBt(resource, effectivePath),
             _          => CompileUntyped(resource),
         };
     }
@@ -509,6 +513,114 @@ public static class PS1GraphCompiler
             ids.Add(id);
         }
         return ids;
+    }
+
+    private static bool IsBtKind(string kind) => kind switch
+    {
+        "bt_sequence" => true,
+        "bt_selector" => true,
+        "bt_leaf"     => true,
+        _             => false,
+    };
+
+    // Behavior Tree compile (slice BT-1). Emits a flat node table the
+    // BT.new runtime helper walks recursively. Shape:
+    //
+    //   _G.bt_<basename> = {
+    //       root = "n0",
+    //       nodes = {
+    //           n0 = { kind = "sequence", children = {"n1", "n2"} },
+    //           n1 = { kind = "leaf", fn = function(self) return "success" end },
+    //           ...
+    //       },
+    //   }
+    //
+    // Root = lowest-Id BT node with no incoming exec edge. Composites
+    // (sequence / selector) collect their children by walking FindNextKey
+    // for ports 1..kBtChildSlots (mirrors the dock's per-row exec-out
+    // slots) and dropping nil entries — authors leave unused slots
+    // unwired.
+    //
+    // Leaf snippets are wrapped as `function(self) return <snippet> end`
+    // so the walker calls the function directly (avoids a load+pcall
+    // per tick). Empty leaf compiles to `return "failure"` — a stable
+    // debuggable default rather than a syntax error.
+    private static string CompileBt(PS1GraphResource resource, string effectivePath)
+    {
+        var sb = new StringBuilder();
+        string pathLabel = string.IsNullOrEmpty(effectivePath) ? "(unsaved)" : effectivePath;
+        string basename = BasenameForGlobal(effectivePath);
+        sb.AppendLine($"-- Compiled from {pathLabel} (bt)");
+        sb.AppendLine($"-- {resource.Nodes.Count} node(s), {resource.Connections.Count} connection(s)");
+        sb.AppendLine($"-- Walker: local bt = BT.new(_G.bt_{basename}); bt:Tick(self)");
+        sb.AppendLine();
+
+        var byId = new Dictionary<int, PS1GraphNode>();
+        foreach (var n in resource.Nodes) byId[n.Id] = n;
+
+        // Root selection: lowest-Id BT-kind node with no incoming exec
+        // edge. Skip Disabled (pick #2) and non-BT kinds.
+        var hasIncomingExec = new HashSet<int>();
+        foreach (var c in resource.Connections)
+        {
+            if (IsExecPort(byId, c.ToNodeId, c.ToPort, isInput: true))
+                hasIncomingExec.Add(c.ToNodeId);
+        }
+        int rootId = -1;
+        foreach (var n in resource.Nodes)
+        {
+            if (!IsBtKind(n.Kind) || n.IsDisabled) continue;
+            if (hasIncomingExec.Contains(n.Id)) continue;
+            if (rootId < 0 || n.Id < rootId) rootId = n.Id;
+        }
+
+        sb.AppendLine($"_G.bt_{basename} = {{");
+        sb.AppendLine($"    root = {(rootId < 0 ? "nil" : "\"n" + rootId + "\"")},");
+        sb.AppendLine($"    nodes = {{");
+
+        const int kBtChildSlots = 6;  // mirrors PS1GraphEditorDock's per-composite slot cap
+        foreach (var n in resource.Nodes)
+        {
+            if (!IsBtKind(n.Kind) || n.IsDisabled) continue;
+            if (n.IsDevelopmentOnly) sb.AppendLine($"        -- @dev-only n{n.Id}");
+
+            switch (n.Kind)
+            {
+                case "bt_sequence":
+                case "bt_selector":
+                {
+                    string kindStr = n.Kind == "bt_sequence" ? "sequence" : "selector";
+                    sb.Append($"        n{n.Id} = {{ kind = \"{kindStr}\", children = {{");
+                    bool wroteAny = false;
+                    for (int i = 0; i < kBtChildSlots; i++)
+                    {
+                        // Composite child slot N → right-port N (the
+                        // exec-out at SetSlot row N+1). FindNextKey
+                        // chases through Disabled / reroute already.
+                        string child = FindNextKey(resource.Connections, n.Id, byId: byId, fromPort: i);
+                        if (child == "nil") continue;
+                        if (wroteAny) sb.Append(", ");
+                        sb.Append(child);
+                        wroteAny = true;
+                    }
+                    sb.AppendLine(" } },");
+                    break;
+                }
+                case "bt_leaf":
+                {
+                    string snippet = n.GetPayload(0);
+                    string body = string.IsNullOrEmpty(snippet)
+                        ? "return \"failure\""
+                        : $"return ({snippet})";
+                    sb.AppendLine($"        n{n.Id} = {{ kind = \"leaf\", fn = function(self) {body} end }},");
+                    break;
+                }
+            }
+        }
+
+        sb.AppendLine("    },");
+        sb.AppendLine("}");
+        return sb.ToString();
     }
 
     private static bool IsLuaIdentifier(string s)
@@ -1010,6 +1122,9 @@ public static class PS1GraphCompiler
         "objective"      => true,
         "outcome"        => true,
         "reroute"        => true,
+        "bt_sequence"    => true,
+        "bt_selector"    => true,
+        "bt_leaf"        => true,
         "comment"        => false,
         _                => false,
     };
@@ -1050,6 +1165,12 @@ public static class PS1GraphCompiler
             "outcome"        => isInput && port == 0,
             // reroute: row 0 in+out — pinless body but exec slot at 0.
             "reroute"        => port == 0,
+            // BT composites: row 0 = exec in (left-port 0); rows 1..6
+            // = exec outs (right-ports 0..5).
+            "bt_sequence"    => (isInput && port == 0) || (!isInput && port >= 0 && port <= 5),
+            "bt_selector"    => (isInput && port == 0) || (!isInput && port >= 0 && port <= 5),
+            // BT leaf: row 0 in only — leaves are terminal in BT.
+            "bt_leaf"        => isInput && port == 0,
             _                => false,
         };
     }

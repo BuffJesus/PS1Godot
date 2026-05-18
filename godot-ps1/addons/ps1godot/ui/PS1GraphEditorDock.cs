@@ -112,6 +112,9 @@ public partial class PS1GraphEditorDock : VBoxContainer
         new NodeKindEntry("transition",     "Transition",       GraphKind: "fsm"),
         new NodeKindEntry("objective",      "Objective",        GraphKind: "quest"),
         new NodeKindEntry("outcome",        "Outcome",          GraphKind: "quest"),
+        new NodeKindEntry("bt_sequence",    "BT Sequence",      GraphKind: "bt"),
+        new NodeKindEntry("bt_selector",    "BT Selector",      GraphKind: "bt"),
+        new NodeKindEntry("bt_leaf",        "BT Leaf",          GraphKind: "bt"),
     };
 
     // Available graph kinds, surfaced when the author hits New.
@@ -124,6 +127,7 @@ public partial class PS1GraphEditorDock : VBoxContainer
         ("dialogue", "Dialogue"),
         ("fsm",      "FSM (state machine)"),
         ("quest",    "Quest"),
+        ("bt",       "Behavior Tree"),
     };
 
     // Per-kind metadata for tooltips, palette categorisation, and the
@@ -174,6 +178,9 @@ public partial class PS1GraphEditorDock : VBoxContainer
         ["transition"]     = new[] { "event name" },
         ["objective"]      = new[] { "objective id", "display title", "on_activate Lua", "on_complete Lua" },
         ["outcome"]        = new[] { "outcome id", "on_trigger Lua" },
+        ["bt_sequence"]    = new string[0],   // composite — no payloads
+        ["bt_selector"]    = new string[0],
+        ["bt_leaf"]        = new[] { "Lua snippet (return 'success' / 'failure' / 'running')" },
     };
 
     // Corner-icon glyph table for the GraphNode title (UE port-plan
@@ -212,6 +219,9 @@ public partial class PS1GraphEditorDock : VBoxContainer
         ["transition"]     = new("FSM",      "Event-driven edge: source state's exec-out → transition's exec-in (event name) → destination state's exec-in. Send the event with instance:Send(name)."),
         ["objective"]      = new("Quest",    "Quest task. Incoming objective edges become prereqs (AND-merged). On-activate / on-complete snippets dispatch via Quest.new."),
         ["outcome"]        = new("Quest",    "Terminal quest node. Fires when all incoming objectives complete; Quest:Outcome() returns its id. on_trigger snippet fires once via fired-outcome tracking."),
+        ["bt_sequence"]    = new("BT",       "Behavior Tree Sequence: ticks children left-to-right. Stops + returns 'failure' on first failed child; returns 'running' if any child returns 'running' (resumes next tick); returns 'success' only if all children succeed."),
+        ["bt_selector"]    = new("BT",       "Behavior Tree Selector (fallback): ticks children left-to-right. Stops + returns 'success' on first succeeded child; returns 'running' if any child returns 'running'; returns 'failure' only if all children fail."),
+        ["bt_leaf"]        = new("BT",       "Behavior Tree Leaf: author-supplied Lua snippet that must return 'success', 'failure', or 'running'. Snippet receives `self` (the BT instance) as parameter. Use self._scratch to hold per-tick state."),
     };
 
     // Slice-2 palette: per-pin-type colours. Picked to match common
@@ -1197,6 +1207,54 @@ public partial class PS1GraphEditorDock : VBoxContainer
                 exitEdit.TextChanged += text => n.SetPayload(3, text);
                 g.AddChild(exitEdit);
                 // Rows 1..4 are pinless — no SetSlot calls.
+                break;
+            }
+            case "bt_sequence":
+            case "bt_selector":
+            {
+                // BT composite — N child exec-outs. Sequence runs them
+                // left-to-right requiring all-success; Selector runs
+                // them left-to-right requiring any-success. Same UI
+                // shape (mirrors Choice's 3-option pattern but with 6
+                // slots, since BT trees commonly fan wider).
+                //
+                // Row 0: Exec in (left only).
+                // Rows 1..6: Exec out (right only) — child N at port (N-1)
+                //            on the right side per GraphEdit indexing.
+                string composite = n.Kind == "bt_sequence" ? "sequence" : "selector";
+                g.AddChild(new Label { Text = $"exec in ({composite})" });
+                g.SetSlot(0, true,  (int)PinType.Exec, s_pinColors[PinType.Exec],
+                             false, (int)PinType.Exec, s_pinColors[PinType.Exec]);
+
+                const int kBtChildSlots = 6;
+                for (int i = 0; i < kBtChildSlots; i++)
+                {
+                    g.AddChild(new Label { Text = $"child {i + 1}" });
+                    g.SetSlot(i + 1, false, (int)PinType.Exec, s_pinColors[PinType.Exec],
+                                      true,  (int)PinType.Exec, s_pinColors[PinType.Exec]);
+                }
+                break;
+            }
+            case "bt_leaf":
+            {
+                // BT Leaf — single Lua snippet returning the BT result
+                // string. No exec-out (leaves are terminal in BT
+                // semantics; the composite parent moves to the next
+                // child / decides outcome based on this return value).
+                //
+                // Row 0: Exec in.
+                // Row 1: snippet LineEdit (Payloads[0]).
+                g.AddChild(new Label { Text = "exec in" });
+                g.SetSlot(0, true,  (int)PinType.Exec, s_pinColors[PinType.Exec],
+                             false, (int)PinType.Exec, s_pinColors[PinType.Exec]);
+
+                var snippetEdit = new LineEdit
+                {
+                    Text = n.GetPayload(0),
+                    PlaceholderText = "return 'success' / 'failure' / 'running'…",
+                };
+                snippetEdit.TextChanged += text => n.SetPayload(0, text);
+                g.AddChild(snippetEdit);
                 break;
             }
             case "objective":

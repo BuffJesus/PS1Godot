@@ -500,6 +500,88 @@ void psxsplash::Lua::Init() {
         printf("Error loading Quest helper: %s\n", L.optString(-1, "Unknown error"));
         L.pop();
     }
+
+    // BT helper (UE editor port plan pick #5) — installs
+    // `_G.BT = { new = function(def) ... end }` so authored
+    // bt.lua tables can be ticked without hand-rolling the
+    // tree walker. Shape matches what PS1GraphCompiler.CompileBt
+    // emits:
+    //
+    //   { root = "n0",
+    //     nodes = {
+    //         n0 = { kind = "sequence", children = {"n1", "n2"} },
+    //         n1 = { kind = "leaf", fn = function(self) return "success" end },
+    //         ...
+    //     } }
+    //
+    // Instance API:
+    //   :Tick(actor)  → "success" / "failure" / "running"
+    //   :Reset()      → clears all in-flight "running" state on
+    //                   composites so the next Tick restarts each
+    //                   subtree fresh.
+    //
+    // The Lua snippet inside each leaf receives `self` = the BT
+    // instance (so leaves can stash per-instance scratch on
+    // `self._scratch`). The `actor` arg passed to Tick is stored
+    // on self.actor for convenience.
+    //
+    // ~50 lines of embedded Lua, zero per-instance C++ state.
+    static const char kBtHelperSrc[] =
+        "BT = BT or {}\n"
+        "function BT.new(def)\n"
+        "    local inst = { _def = def, _running = {}, _scratch = {}, actor = nil }\n"
+        "    local function tickNode(id)\n"
+        "        if not id then return \"failure\" end\n"
+        "        local node = def.nodes and def.nodes[id]\n"
+        "        if not node then return \"failure\" end\n"
+        "        local k = node.kind\n"
+        "        if k == \"leaf\" then\n"
+        "            if not node.fn then return \"failure\" end\n"
+        "            local ok, res = pcall(node.fn, inst)\n"
+        "            if not ok then return \"failure\" end\n"
+        "            if res ~= \"success\" and res ~= \"failure\" and res ~= \"running\" then\n"
+        "                return \"failure\"\n"
+        "            end\n"
+        "            return res\n"
+        "        elseif k == \"sequence\" then\n"
+        "            local startIdx = inst._running[id] or 1\n"
+        "            for i = startIdx, #(node.children or {}) do\n"
+        "                local r = tickNode(node.children[i])\n"
+        "                if r == \"failure\" then inst._running[id] = nil; return \"failure\" end\n"
+        "                if r == \"running\" then inst._running[id] = i; return \"running\" end\n"
+        "            end\n"
+        "            inst._running[id] = nil\n"
+        "            return \"success\"\n"
+        "        elseif k == \"selector\" then\n"
+        "            local startIdx = inst._running[id] or 1\n"
+        "            for i = startIdx, #(node.children or {}) do\n"
+        "                local r = tickNode(node.children[i])\n"
+        "                if r == \"success\" then inst._running[id] = nil; return \"success\" end\n"
+        "                if r == \"running\" then inst._running[id] = i; return \"running\" end\n"
+        "            end\n"
+        "            inst._running[id] = nil\n"
+        "            return \"failure\"\n"
+        "        end\n"
+        "        return \"failure\"\n"
+        "    end\n"
+        "    function inst:Tick(actor)\n"
+        "        self.actor = actor\n"
+        "        return tickNode(def.root)\n"
+        "    end\n"
+        "    function inst:Reset()\n"
+        "        self._running = {}\n"
+        "    end\n"
+        "    return inst\n"
+        "end\n";
+    if (L.loadBuffer(kBtHelperSrc, sizeof(kBtHelperSrc) - 1, "builtin:bt") == LUA_OK) {
+        if (L.pcall(0, 0) != LUA_OK) {
+            printf("Error installing BT helper: %s\n", L.optString(-1, "Unknown error"));
+            L.pop();
+        }
+    } else {
+        printf("Error loading BT helper: %s\n", L.optString(-1, "Unknown error"));
+        L.pop();
+    }
 }
 
 void psxsplash::Lua::Shutdown() {
