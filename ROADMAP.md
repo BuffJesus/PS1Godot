@@ -1771,10 +1771,18 @@ graph-walker overhead.
         recomputed from completed + initial_objectives for
         deterministic restore. ~50 lines of embedded Lua, zero
         per-instance C++ state.
-      - **Slice D2-3 (later)**: per-objective `on_activate` /
-        `on_complete` Lua snippets (Payloads[2..3] on Objective),
-        per-outcome `on_trigger` snippet (Payload[1] on Outcome).
-        Compiler emits `on_*` lookup tables; Quest.new dispatches.
+      - **Slice D2-3 shipped 2026-05-17 (per-objective/outcome Lua
+        snippets).** Objective gains two LineEdit rows
+        (`on_activate` Payloads[2], `on_complete` Payloads[3]);
+        Outcome gains one (`on_trigger` Payloads[1]). Compiler emits
+        `on_activate` / `on_complete` / `on_trigger` lookup tables
+        keyed by id. Quest.new dispatches them defensively: on_activate
+        fires for each objective entering active state (initial OR
+        newly-unlocked); on_complete fires inside :Complete(); on_trigger
+        fires once per outcome when its prereqs first become satisfied,
+        tracked via a `_firedOutcomes` set so callbacks don't double-fire
+        across :Complete()/:Load() cycles. Save snapshot now includes
+        `fired_outcomes` alongside `completed`.
 - [🟡] **D3. `PS1FSMGraph`** — states + transitions. Replaces the
       hand-written `StateMachine.new({...})` from Phase 2.5 AI with
       visual authoring. Same Lua output shape, different front end.

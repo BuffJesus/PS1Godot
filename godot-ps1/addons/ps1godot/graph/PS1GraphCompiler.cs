@@ -399,6 +399,7 @@ public static class PS1GraphCompiler
         sb.AppendLine($"    }},");
 
         sb.AppendLine($"    outcomes = {{");
+        var outcomeNodes = new List<PS1GraphNode>();
         foreach (var n in resource.Nodes)
         {
             if (n.Kind != "outcome") continue;
@@ -408,6 +409,7 @@ public static class PS1GraphCompiler
                 sb.AppendLine($"        -- skipped outcome n{n.Id}: no id authored.");
                 continue;
             }
+            outcomeNodes.Add(n);
             var prereqs = ResolveUpstreamObjectiveIds(n.Id, byId, resource.Connections);
             sb.Append($"        {{ id = {EscapeLuaString(id)}, prereqs = {{");
             for (int i = 0; i < prereqs.Count; i++)
@@ -419,8 +421,40 @@ public static class PS1GraphCompiler
         }
         sb.AppendLine($"    }},");
 
+        // Per-objective + per-outcome callback tables (slice D2-3).
+        // Objective Payloads[2..3] = on_activate / on_complete.
+        // Outcome Payload[1]       = on_trigger (fires once when the
+        // outcome first becomes satisfied; Quest.new tracks fired set).
+        // Empty snippets are skipped — Quest.new dispatches defensively
+        // so missing keys are clean no-ops.
+        EmitQuestCallbackTable(sb, objectiveNodes, "on_activate", payloadIdx: 2);
+        EmitQuestCallbackTable(sb, objectiveNodes, "on_complete", payloadIdx: 3);
+        EmitQuestCallbackTable(sb, outcomeNodes,   "on_trigger",  payloadIdx: 1);
+
         sb.AppendLine("}");
         return sb.ToString();
+    }
+
+    // Emit one Quest callback lookup table keyed by node id.
+    // Identical structure to FSM's EmitFsmCallbackTable but the
+    // function signature is `function(self) ... end` — quest callbacks
+    // don't take an event/dt parameter; the id is implied by the table
+    // key.
+    private static void EmitQuestCallbackTable(StringBuilder sb, List<PS1GraphNode> nodes,
+                                                string tableName, int payloadIdx)
+    {
+        sb.AppendLine($"    {tableName} = {{");
+        foreach (var n in nodes)
+        {
+            string snippet = n.GetPayload(payloadIdx);
+            if (string.IsNullOrEmpty(snippet)) continue;
+            string id = n.GetPayload(0);
+            string keyForm = IsLuaIdentifier(id)
+                ? id
+                : $"[{EscapeLuaString(id)}]";
+            sb.AppendLine($"        {keyForm} = function(self) {snippet} end,");
+        }
+        sb.AppendLine($"    }},");
     }
 
     // Does any incoming exec edge to nodeId come from an objective?

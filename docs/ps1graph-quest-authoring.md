@@ -2,8 +2,10 @@
 
 How to author a quest in the PS1Graph dock. Slice D2-1 shipped the
 compiler + node palette; slice D2-2 added the `Quest.new` runtime
-helper with full prereq resolution + save/load. Per-objective and
-per-outcome Lua callbacks are slice D2-3 territory.
+helper with full prereq resolution + save/load; slice D2-3 wires
+per-objective and per-outcome Lua callbacks (`on_activate` /
+`on_complete` / `on_trigger`) so quest progress can drive game-side
+behaviour without polling.
 
 ## TL;DR
 
@@ -115,26 +117,56 @@ delivery contracts).
 
 | Editor node | Pins | Payloads | Compiles to |
 |---|---|---|---|
-| **Objective** | Exec in + Exec out | [0] id, [1] display title | entry in `objectives[id]` with `{ id, title, prereqs }` |
-| **Outcome** | Exec in only | [0] id | entry in `outcomes` array with `{ id, prereqs }` |
+| **Objective** | Exec in + Exec out | [0] id, [1] display title, [2] on_activate, [3] on_complete | entry in `objectives[id]` + `on_activate[id]` / `on_complete[id]` for non-empty snippets |
+| **Outcome** | Exec in only | [0] id, [1] on_trigger | entry in `outcomes` array + `on_trigger[id]` for non-empty snippet |
+
+### Per-objective / per-outcome Lua snippets
+
+Each Objective node has two optional snippet fields below the title:
+
+- **on_activate** — runs when the objective becomes active (initial
+  state OR a prereq just completed unlocking it). Signature:
+  `function(self)` where `self` is the Quest instance.
+- **on_complete** — runs when the author calls `q:Complete(id)`.
+  Signature: `function(self)`.
+
+Outcome nodes have one snippet field below the id:
+
+- **on_trigger** — runs **once** when the outcome's prereqs first
+  become satisfied. `Quest.new` tracks a fired-outcome set so the
+  callback doesn't double-fire on subsequent `:Complete()` calls or
+  across `:Load()` cycles.
+
+All snippets are single-line Lua. Chain statements with `;`.
+
+Example:
+
+```
+Objective "find_npc":
+  on_activate: HUD.PopBanner("Find the village elder")
+  on_complete: Audio.PlaySfx("ding")
+
+Outcome "victory":
+  on_trigger:  Persist.Set("chapter1_done", true); Cutscene.Play("villagers_cheer")
+```
+
+`self` is the Quest instance — set fields like `self._gold_earned`
+to hold per-quest scratch state.
 
 ## Limits to know about
 
-- **Outcomes don't run code.** They're terminal id markers; the
-  author dispatches on `:Outcome()` from their own Lua. Per-outcome
-  Lua snippets land in slice D2-3.
-- **Per-objective callbacks (on_activate / on_complete) aren't
-  compiled in yet.** D2-3 will add Payload slots on the Objective
-  node + emit `on_*` lookup tables the helper dispatches.
+- **Snippets are single-line.** Chain with `;` for multiple
+  statements. Multi-line text-area authoring is a later polish slice.
 - **Cycle guard is ON for quests** — a back-edge would mean
   "completing A depends on B which depends on A," always a logic
   bug. Use multiple objectives for genuinely parallel branches.
 - **OR-of-prereqs needs structural workaround** — add an intermediate
   objective with no prereqs of its own and trigger it explicitly from
   your game code from either branch.
-- **Save snapshots are just `{ completed = {ids} }`.** Active set is
-  always recomputed from completed + initial; never persisted
-  directly.
+- **Save snapshots are `{ completed, fired_outcomes }`.** Active set
+  is always recomputed from completed + initial; never persisted
+  directly. `fired_outcomes` is tracked so `on_trigger` callbacks
+  don't double-fire after a save/load.
 
 ## Where the code lives
 
