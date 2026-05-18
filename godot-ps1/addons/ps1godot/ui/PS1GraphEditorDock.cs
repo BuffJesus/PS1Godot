@@ -117,6 +117,33 @@ public partial class PS1GraphEditorDock : VBoxContainer
         ("quest",    "Quest"),
     };
 
+    // Per-kind metadata for tooltips, palette categorisation, and the
+    // forthcoming corner-icon / title-bar tint (UE port plan picks #5,
+    // #6). Indexed by the same Kind string s_kinds uses. Missing
+    // entries fall back to "(no description)" so adding a kind doesn't
+    // need an entry to compile.
+    private record KindMeta(string Category, string Tooltip);
+    private static readonly System.Collections.Generic.Dictionary<string, KindMeta> s_kindMeta = new()
+    {
+        ["print"]          = new("Untyped",  "Print one Lua expression to the debug console. Slice-1 placeholder kind."),
+        ["branch"]         = new("Untyped",  "if/else split on a Bool input. Two exec outs (true/false)."),
+        ["bool_literal"]   = new("Untyped",  "Constant Bool source. Feeds a Branch condition."),
+        ["comment"]        = new("Meta",     "Pinless decoration. Compiles to nothing."),
+        ["line"]           = new("Dialogue", "Display one line of dialogue. Optional audio clip; optional skippable flag; pipe-separated notify markers fire timed Lua snippets while the line is active."),
+        ["choice"]         = new("Dialogue", "Branch on player input. Up to 3 options; D-pad navigates, X confirms. Walker prefixes selected option with > when no cursor element is on the canvas."),
+        ["set_flag"]       = new("Dialogue", "Persist.Set(name, bool). Auto-advances."),
+        ["condition"]      = new("Dialogue", "Branch on Persist.Get(flag) == true. Two exec outs (true/false)."),
+        ["play_sound"]     = new("Dialogue", "Audio.PlaySfx(clip). Auto-advances. Use the Line node's audio field for voiced dialogue instead — this is for one-shot SFX between lines."),
+        ["start_cutscene"] = new("Dialogue", "Cutscene.Play(id). Auto-advances; cutscene runs concurrently. Put at the end of the line chain (next=nil) if you want the dialogue to wait."),
+        ["lua_snippet"]    = new("Dialogue", "Power-user: runs arbitrary Lua, auto-advances. Walker pcalls so syntax errors print rather than crash."),
+        ["lua_condition"]  = new("Dialogue", "Power-user: branch on `return (<expr>)`. Empty expression compiles to `return false`."),
+        ["sub_dialogue"]   = new("Dialogue", "Call into another dialogue table (target = .tres basename). Pushes a stack frame, walks the sub, returns at the exec-out on the sub's nil-next. Depth capped at 4."),
+        ["state"]          = new("FSM",      "FSM state. Lowest-Id state is the initial state. Per-state Lua snippets (on_enter / on_update / on_exit) get dispatched by FSM.new."),
+        ["transition"]     = new("FSM",      "Event-driven edge: source state's exec-out → transition's exec-in (event name) → destination state's exec-in. Send the event with instance:Send(name)."),
+        ["objective"]      = new("Quest",    "Quest task. Incoming objective edges become prereqs (AND-merged). On-activate / on-complete snippets dispatch via Quest.new."),
+        ["outcome"]        = new("Quest",    "Terminal quest node. Fires when all incoming objectives complete; Quest:Outcome() returns its id. on_trigger snippet fires once via fired-outcome tracking."),
+    };
+
     // Slice-2 palette: per-pin-type colours. Picked to match common
     // node-graph conventions (Blueprint / Houdini / ShaderForge):
     // exec=white, strings=yellow, numbers=green, bools=red, vectors=blue,
@@ -263,26 +290,19 @@ public partial class PS1GraphEditorDock : VBoxContainer
             GD.PushError($"[PS1Godot] PS1Graph: failed to load '{path}' (file missing or not a PS1GraphResource).");
             return;
         }
-        // Wrap ResourcePath assignment: when the load fell back to a
-        // reconstructed resource, Godot's resource cache already holds
-        // the original bare Resource at this path and setting our
-        // reconstructed one's path emits "Another resource is loaded"
-        // ERROR. The reconstructed object isn't registered in the
-        // cache, so it can't claim the path. Path threading below
-        // (Save / Compile) takes a path parameter explicitly so we
-        // don't need ResourcePath to stick for correctness — just for
-        // the dock label and saved .tres metadata.
-        try
-        {
-            loaded.ResourcePath = path;
-        }
-        catch (System.Exception ex)
-        {
-            GD.PushWarning($"[PS1Godot] PS1Graph: couldn't claim ResourcePath '{path}' on reconstructed graph: {ex.Message}. Save / Compile paths handle this via explicit pathOverride; label may show '(unsaved)' until next Save.");
-        }
+        // Don't assign ResourcePath on the reconstructed graph —
+        // Godot's resource cache already holds the original (bare)
+        // Resource at this path, and SetPath emits a native ERROR
+        // ("Another resource is loaded from path") that the C# try/
+        // catch can't suppress (the error fires inside C++ before any
+        // C# exception path). _loadedFromPath below is the dock-side
+        // source of truth; UpdatePathLabel / OnSavePressed / Compile
+        // all funnel through EffectivePath() which prefers ResourcePath
+        // when set and falls back to _loadedFromPath otherwise. The
+        // fast-path generic load already had ResourcePath set by
+        // ResourceLoader, so the reconstruct path is the only one that
+        // needs the fallback.
         _resource = loaded;
-        // Track the path on the dock so UpdatePathLabel / OnSavePressed
-        // see it even when ResourcePath didn't stick on the resource.
         _loadedFromPath = path;
 
         // Sync the toolbar Kind dropdown to whatever the loaded graph
@@ -334,7 +354,12 @@ public partial class PS1GraphEditorDock : VBoxContainer
     private void OnCompilePressed()
     {
         SyncVisualPositionsBackToResource();
-        string lua = PS1GraphCompiler.Compile(_resource);
+        // Thread EffectivePath() so the preview matches what Save
+        // would write — without it, reconstructed-loaded graphs (which
+        // lose ResourcePath to the Godot 4.7-dev5 binding quirk)
+        // compile as `_G.dialogue_unnamed` "from (unsaved)" and the
+        // author thinks the dock is broken.
+        string lua = PS1GraphCompiler.Compile(_resource, EffectivePath());
         GD.Print("[PS1Godot] PS1Graph: compiled to Lua —");
         GD.Print(lua);
     }
@@ -466,11 +491,20 @@ public partial class PS1GraphEditorDock : VBoxContainer
             // on GraphKind == resource.Kind.
             _palettePopup.Clear();
             string currentGraphKind = _resource?.Kind ?? "";
+            int itemIdx = 0;
             for (int i = 0; i < s_kinds.Length; i++)
             {
                 var k = s_kinds[i];
                 if (!k.AvailableInAll && k.GraphKind != currentGraphKind) continue;
                 _palettePopup.AddItem(k.DisplayName, i);
+                // Hover-tooltip from s_kindMeta (UE port-plan pick #6).
+                // Per-item tooltip on Godot PopupMenu is set by item
+                // index, NOT by id — use the running itemIdx, not i.
+                if (s_kindMeta.TryGetValue(k.Kind, out var meta))
+                {
+                    _palettePopup.SetItemTooltip(itemIdx, meta.Tooltip);
+                }
+                itemIdx++;
             }
 
             // Popup at the global screen position so the menu appears under
@@ -589,6 +623,17 @@ public partial class PS1GraphEditorDock : VBoxContainer
             PositionOffset = n.Position,
             Resizable = false,
         };
+        // Tooltip on the node title — UE port-plan pick #6. Falls back
+        // to "(no description)" so kinds that pre-date a metadata entry
+        // still render a tooltip rather than nothing.
+        if (s_kindMeta.TryGetValue(n.Kind, out var nodeMeta))
+        {
+            g.TooltipText = nodeMeta.Tooltip;
+        }
+        else
+        {
+            g.TooltipText = $"({n.Kind}) — no description registered in s_kindMeta.";
+        }
 
         BuildVisualBody(g, n);
 
