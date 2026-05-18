@@ -72,6 +72,8 @@ public partial class PS1GodotPlugin : EditorPlugin
     private PS1DoctorDock? _doctorDock;
     private PS1QuestJournalDock? _questJournalDock;
     private PS1GraphFindDock? _graphFindDock;
+    private PS1AudioClipPreviewGenerator? _audioClipPreviewGen;
+    private PS1ToastNotifier? _toast;
     private LuaHotSwapWatcher? _luaHotSwapWatcher;
     private PS1ViewportOverlay? _viewportOverlay;
 
@@ -90,6 +92,12 @@ public partial class PS1GodotPlugin : EditorPlugin
 
     public override void _EnterTree()
     {
+        // Project Settings → PS1Godot (UE editor port plan pick #6).
+        // Registers first so any consumer that reads a budget /
+        // launcher path during plugin setup sees the registered
+        // defaults rather than triggering AddPropertyInfo races.
+        PS1ProjectSettings.Register();
+
         // Top-level: the primary CTA only. Mirrors the dock's big red
         // Run button — same handler, same tooltip semantics.
         AddToolMenuItem(RunOnPsxMenuLabel, Callable.From(OnRunOnPsx));
@@ -364,6 +372,21 @@ public partial class PS1GodotPlugin : EditorPlugin
         AddControlToBottomPanel(_graphFindDock, "PS1 Graph Find");
 #pragma warning restore CS0618
 
+        // Custom resource thumbnails (UE editor port plan pick #1):
+        // register a per-type EditorResourcePreviewGenerator so
+        // PS1AudioClip resources render an actual waveform + route
+        // stripe in the FileSystem dock instead of the anonymous
+        // Resource icon. Slice-2 candidates: PS1MaterialMetadata
+        // (bpp/alpha badge), PS1MusicSequence (channel count).
+        _audioClipPreviewGen = new PS1AudioClipPreviewGenerator();
+        EditorInterface.Singleton.GetResourcePreviewer().AddPreviewGenerator(_audioClipPreviewGen);
+
+        // Toast notifier (UE editor port plan pick #3): transient
+        // status pops anchored to the bottom-right of the editor
+        // base Control. Cleared on plugin unload.
+        _toast = new PS1ToastNotifier();
+        EditorInterface.Singleton.GetBaseControl().AddChild(_toast);
+
         // Lua hot-swap watcher: polls scene_0's exported .lua files and
         // writes res://build/hotswap.luac when one changes. Runtime side
         // (psxsplash-main/src/lua.cpp Lua::TryHotSwap) consumes that file
@@ -618,6 +641,18 @@ public partial class PS1GodotPlugin : EditorPlugin
 #pragma warning restore CS0618
             _graphFindDock.QueueFree();
             _graphFindDock = null;
+        }
+
+        if (_audioClipPreviewGen != null)
+        {
+            EditorInterface.Singleton.GetResourcePreviewer().RemovePreviewGenerator(_audioClipPreviewGen);
+            _audioClipPreviewGen = null;
+        }
+
+        if (_toast != null)
+        {
+            _toast.QueueFree();
+            _toast = null;
         }
 
         if (_luaHotSwapWatcher != null)
@@ -920,6 +955,8 @@ public partial class PS1GodotPlugin : EditorPlugin
                     $"Fix the offending mesh(es) and press Run again. " +
                     $"(Hover the dock 'Last export' line for the full list.)");
                 _dock?.SetPipelineStatus($"✗ Halted: {errCount} export error(s) — fix and rerun.");
+                _toast?.Show($"Run on PSX halted: {errCount} export error(s){topReason}",
+                             PS1ToastNotifier.Severity.Error, durationSec: 8.0);
                 return;
             }
 
@@ -934,6 +971,17 @@ public partial class PS1GodotPlugin : EditorPlugin
                 _dock?.SetPipelineStatus("Launching PCSX-Redux…");
                 RunPcdrvMode(buildDir);
             }
+
+            // Success toast — warning-tinted when warnings fired
+            // (most authors run with VRAM-over-budget or texture-
+            // downscale warnings; surface that they happened without
+            // halting on them).
+            int warnCount = _lastExportSummary?.Warnings ?? 0;
+            string warnTail = warnCount > 0 ? $" ({warnCount} warning(s))" : "";
+            _toast?.Show($"Launched PCSX-Redux{warnTail}",
+                         warnCount > 0 ? PS1ToastNotifier.Severity.Warning
+                                       : PS1ToastNotifier.Severity.Info,
+                         durationSec: 3.5);
         }
         finally
         {

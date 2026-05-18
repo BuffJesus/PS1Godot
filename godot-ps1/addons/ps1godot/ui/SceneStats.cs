@@ -18,8 +18,13 @@ public static class SceneStats
     // sample storage caps at 256 KB. Match what the exporter actually
     // packs so the dock bars predict over-budget exports instead of
     // greenlighting them.
-    public const int VramBudgetBytes = 512 * 1024;
-    public const int SpuBudgetBytes  = 256 * 1024;
+    // Surface the budgets as static properties that defer to
+    // ProjectSettings (PS1ProjectSettings) so authors can tune them
+    // under Project → Project Settings → PS1Godot without recompiling
+    // the plugin. Defaults match the prior const values, so projects
+    // that don't set the new keys behave identically.
+    public static int VramBudgetBytes => PS1Godot.PS1ProjectSettings.GetVramBudgetBytes();
+    public static int SpuBudgetBytes  => PS1Godot.PS1ProjectSettings.GetSpuBudgetBytes();
 
     // PSX fill-rate ceiling. The GPU paints ~28 Mpix/s for textured+
     // Gouraud — at 30 fps × 320×240 that's ~12× the screen area as a
