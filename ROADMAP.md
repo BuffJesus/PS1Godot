@@ -1740,8 +1740,33 @@ graph-walker overhead.
           runtime `kind="condition"`. Empty expression compiles to
           `return false` (stable, debuggable rather than syntax error).
         Both reuse existing walker code — zero psxsplash change.
+      - **Slice D1h shipped 2026-05-17 (per-line audio + skippable).**
+        Line node gains `audio` (Payloads[2]) + `skippable`
+        CheckBox (Payloads[3]). On line entry the walker pcalls
+        `Audio.PlaySfx(name)` (routing-aware) and queries
+        `Audio.GetClipDuration` to set `m_lineAdvanceLockFrames`.
+        Non-skippable lines block the X-press advance for the clip
+        duration (or 120 frames if no audio). Defaults preserve
+        legacy "X always advances" for pre-D1h graphs.
+      - **Slice D1i shipped 2026-05-17 (Anim Notify markers).**
+        Line node gains `notifies` (Payloads[4]) pipe-string field:
+        `"frame:lua | frame:lua"` parsed at compile into a
+        `notifies = { {at=12, lua="..."}, ... }` Lua array.
+        Walker ticks a per-line frame counter and pcalls each
+        notify's snippet when the counter reaches its threshold;
+        fired flags prevent double-fire. Cap of 8 notifies per
+        line. Mined from UE's AnimNotify pattern.
+      - **Slice D1j shipped 2026-05-17 (Sub-Dialogue node).**
+        New `sub_dialogue` kind compiles to
+        `{ kind="sub_dialogue", target="<basename>", next=... }`.
+        Walker pushes the current (table_ref, resume_id) onto a
+        4-deep stack, swaps to `_G.dialogue_<target>`, walks to
+        nil-next, then pops + resumes at the parent's next. Drains
+        the stack on stop() to free registry refs. Lets authors
+        factor shared sequences (shopkeeper greeting, death sting)
+        into reusable dialogue.tres files.
       - **Still open**: GiveItem once an Inventory API ships;
-        multi-line text-area snippet inputs (D1h polish).
+        multi-line text-area snippet inputs.
 - [🟡] **D2. `PS1QuestGraph`** — objectives as nodes, prerequisites as
       edges, branch outcomes (success / fail paths). Compiles to a
       quest state machine with save/load integration
@@ -1783,6 +1808,16 @@ graph-walker overhead.
         tracked via a `_firedOutcomes` set so callbacks don't double-fire
         across :Complete()/:Load() cycles. Save snapshot now includes
         `fired_outcomes` alongside `completed`.
+      - **Slice D2-4 shipped 2026-05-17 (PS1 Quest Journal dock).**
+        `addons/ps1godot/ui/PS1QuestJournalDock.cs` — in-editor
+        quest simulator. Load a quest `.tres` via file dialog
+        (uses `PS1GraphCompiler.RobustLoad` for the binding-quirk
+        fallback), shows every objective with a state badge
+        (active / completed / locked) + a Complete button on each
+        active row. Recomputes the active set on completion mirroring
+        Quest.new's `recomputeActive`. Outcome label updates live.
+        Collapses the quest-design round-trip from "save .tres → F5
+        → boot PSX → script triggers" to "load → click Complete".
 - [🟡] **D3. `PS1FSMGraph`** — states + transitions. Replaces the
       hand-written `StateMachine.new({...})` from Phase 2.5 AI with
       visual authoring. Same Lua output shape, different front end.
