@@ -1,9 +1,9 @@
 # PS1Graph Quest Authoring
 
-How to author a quest in the PS1Graph dock. Slice D2-1 ships the
-compiler + node palette; the `Quest.new` runtime helper that walks
-the compiled table lands in slice D2-2. Until then you drive the
-table manually (10-line walker recipe below).
+How to author a quest in the PS1Graph dock. Slice D2-1 shipped the
+compiler + node palette; slice D2-2 added the `Quest.new` runtime
+helper with full prereq resolution + save/load. Per-objective and
+per-outcome Lua callbacks are slice D2-3 territory.
 
 ## TL;DR
 
@@ -51,45 +51,65 @@ complete before the node activates / fires.
 **Outcomes** are terminal. A quest with no outcomes is a checklist
 (player completes objectives but the quest never "ends").
 
-## Driving it from Lua (until Quest.new ships)
+## Driving it from Lua
 
-10-line manual walker — sufficient for slice D2-1 testing:
+`Quest.new` is built into the runtime as of slice D2-2 — it lives in
+`_G.Quest` before any scene script runs.
 
 ```lua
-local q = _G.quest_save_the_village
-local completed = {}
-local active    = {}
-for _, id in ipairs(q.initial_objectives) do active[id] = true end
+-- Construct an instance from the compiled table. Auto-activates
+-- the initial objectives on construction.
+local q = Quest.new(_G.quest_save_the_village)
 
-local function complete(id)
-    completed[id] = true
-    active[id]    = nil
-    for objId, obj in pairs(q.objectives) do
-        if not completed[objId] and not active[objId] then
-            local ok = true
-            for _, p in ipairs(obj.prereqs) do
-                if not completed[p] then ok = false; break end
-            end
-            if ok then active[objId] = true end
-        end
-    end
-end
+q:IsActive("find_npc")     --> true
+q:IsActive("talk_to_npc")  --> false (prereq not met yet)
 
-local function outcome()
-    for _, o in ipairs(q.outcomes) do
-        local ok = true
-        for _, p in ipairs(o.prereqs) do
-            if not completed[p] then ok = false; break end
-        end
-        if ok then return o.id end
-    end
-    return nil
-end
+-- Player completes "find_npc". Returns the list of newly-unlocked
+-- objective ids so you can pop a "New objective: ..." HUD.
+local unlocked = q:Complete("find_npc")
+-- unlocked == { "talk_to_npc" }
+
+q:IsActive("talk_to_npc")  --> true
+
+-- Check for an outcome — returns the first outcome whose prereqs
+-- are all complete, or nil.
+q:Outcome()                --> nil (defeat_orc not done)
+q:Complete("talk_to_npc")
+q:Complete("defeat_orc")
+q:Outcome()                --> "victory"
 ```
 
-Slice D2-2 will ship `Quest.new(table)` returning an instance with
-`:Activate()`, `:Complete(id)`, `:IsActive(id)`, `:Outcome()`, and
-`:Save() / :Load()` for persistence via `Persist`.
+### Save / load via Persist
+
+```lua
+-- Snapshot the completed set for persistence.
+local snap = q:Save()                -- { completed = {"find_npc", ...} }
+Persist.SetTable("quest_village", snap)
+
+-- ... later, on game load:
+local restored = Quest.new(_G.quest_save_the_village)
+restored:Load(Persist.GetTable("quest_village"))
+-- Active set recomputes deterministically from completed.
+```
+
+### Multiple instances
+
+`Quest.new` produces independent instances — useful when one quest
+template backs multiple repeatable variants (escort missions,
+delivery contracts).
+
+### Full API surface
+
+| Method | Returns | Notes |
+|---|---|---|
+| `:Activate()` | array of newly-unlocked ids | Idempotent; called once on construction |
+| `:Complete(id)` | array of newly-unlocked ids | No-op if id is already complete or not in objectives |
+| `:IsActive(id)` | bool | |
+| `:IsComplete(id)` | bool | |
+| `:ActiveSet()` | array of ids | Order unspecified |
+| `:Outcome()` | string or nil | First satisfied outcome |
+| `:Save()` | snapshot table | `{ completed = {ids} }` |
+| `:Load(snap)` | array of newly-unlocked ids | Replaces internal state, recomputes active |
 
 ## Node-kind reference
 
@@ -100,18 +120,21 @@ Slice D2-2 will ship `Quest.new(table)` returning an instance with
 
 ## Limits to know about
 
-- **No Quest.new runtime helper yet** (D2-2).
-- **No save/load tie-in yet** — D2-2 will fold completed-objective
-  state into the `Persist` system.
-- **Outcomes don't run code.** They're just terminal id markers; the
-  author dispatches on `:Outcome()` from their own Lua. A per-outcome
-  Lua snippet field is a D2-3 candidate.
+- **Outcomes don't run code.** They're terminal id markers; the
+  author dispatches on `:Outcome()` from their own Lua. Per-outcome
+  Lua snippets land in slice D2-3.
+- **Per-objective callbacks (on_activate / on_complete) aren't
+  compiled in yet.** D2-3 will add Payload slots on the Objective
+  node + emit `on_*` lookup tables the helper dispatches.
 - **Cycle guard is ON for quests** — a back-edge would mean
-  "completing A depends on B which depends on A," which is always a
+  "completing A depends on B which depends on A," always a logic
   bug. Use multiple objectives for genuinely parallel branches.
 - **OR-of-prereqs needs structural workaround** — add an intermediate
-  objective that AND-merges nothing (no prereqs of its own) and is
-  triggered explicitly by your game code from either branch.
+  objective with no prereqs of its own and trigger it explicitly from
+  your game code from either branch.
+- **Save snapshots are just `{ completed = {ids} }`.** Active set is
+  always recomputed from completed + initial; never persisted
+  directly.
 
 ## Where the code lives
 

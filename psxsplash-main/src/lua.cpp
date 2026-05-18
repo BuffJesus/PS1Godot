@@ -375,6 +375,106 @@ void psxsplash::Lua::Init() {
         printf("Error loading FSM helper: %s\n", L.optString(-1, "Unknown error"));
         L.pop();
     }
+
+    // Quest helper (slice D2-2) — installs `_G.Quest = { new = function(def) ... end }`
+    // so authored quest.lua tables can be walked without hand-rolling
+    // the prereq-evaluation loop. Shape matches what
+    // `PS1GraphCompiler.CompileQuest` emits:
+    //
+    //   { initial_objectives = { id, ... },
+    //     objectives = { id = { id, title, prereqs = {ids} }, ... },
+    //     outcomes  = { { id, prereqs = {ids} }, ... } }
+    //
+    // Instance API:
+    //   :Activate()                — seed active set from initial_objectives
+    //   :Complete(id)              — mark completed, unlock newly-satisfied
+    //                                objectives, return list of newly-unlocked ids
+    //   :IsActive(id)              — bool
+    //   :IsComplete(id)            — bool
+    //   :ActiveSet()               — array of currently-active objective ids
+    //   :Outcome()                 — first outcome whose prereqs are all
+    //                                complete, or nil if none yet
+    //   :Save() → table            — { completed = {ids} } snapshot for Persist
+    //   :Load(snap)                — restore from a Save() snapshot,
+    //                                recomputes active set deterministically
+    static const char kQuestHelperSrc[] =
+        "Quest = Quest or {}\n"
+        "function Quest.new(def)\n"
+        "    local inst = { _def = def, _active = {}, _completed = {} }\n"
+        "    local function prereqsMet(prereqs)\n"
+        "        if not prereqs then return true end\n"
+        "        for i = 1, #prereqs do\n"
+        "            if not inst._completed[prereqs[i]] then return false end\n"
+        "        end\n"
+        "        return true\n"
+        "    end\n"
+        "    local function recomputeActive()\n"
+        "        local newlyUnlocked = {}\n"
+        "        for id, obj in pairs(def.objectives or {}) do\n"
+        "            if not inst._completed[id] and not inst._active[id] then\n"
+        "                if prereqsMet(obj.prereqs) then\n"
+        "                    inst._active[id] = true\n"
+        "                    newlyUnlocked[#newlyUnlocked + 1] = id\n"
+        "                end\n"
+        "            end\n"
+        "        end\n"
+        "        return newlyUnlocked\n"
+        "    end\n"
+        "    function inst:Activate()\n"
+        "        for _, id in ipairs(def.initial_objectives or {}) do\n"
+        "            if not self._completed[id] then self._active[id] = true end\n"
+        "        end\n"
+        "        return recomputeActive()\n"
+        "    end\n"
+        "    function inst:Complete(id)\n"
+        "        if not (def.objectives and def.objectives[id]) then return {} end\n"
+        "        if self._completed[id] then return {} end\n"
+        "        self._completed[id] = true\n"
+        "        self._active[id] = nil\n"
+        "        return recomputeActive()\n"
+        "    end\n"
+        "    function inst:IsActive(id)   return self._active[id]    == true end\n"
+        "    function inst:IsComplete(id) return self._completed[id] == true end\n"
+        "    function inst:ActiveSet()\n"
+        "        local out = {}\n"
+        "        for id, _ in pairs(self._active) do out[#out + 1] = id end\n"
+        "        return out\n"
+        "    end\n"
+        "    function inst:Outcome()\n"
+        "        for i = 1, #(def.outcomes or {}) do\n"
+        "            local o = def.outcomes[i]\n"
+        "            if prereqsMet(o.prereqs) then return o.id end\n"
+        "        end\n"
+        "        return nil\n"
+        "    end\n"
+        "    function inst:Save()\n"
+        "        local completed = {}\n"
+        "        for id, _ in pairs(self._completed) do completed[#completed + 1] = id end\n"
+        "        return { completed = completed }\n"
+        "    end\n"
+        "    function inst:Load(snap)\n"
+        "        self._completed = {}\n"
+        "        self._active = {}\n"
+        "        if snap and snap.completed then\n"
+        "            for _, id in ipairs(snap.completed) do self._completed[id] = true end\n"
+        "        end\n"
+        "        for _, id in ipairs(def.initial_objectives or {}) do\n"
+        "            if not self._completed[id] then self._active[id] = true end\n"
+        "        end\n"
+        "        return recomputeActive()\n"
+        "    end\n"
+        "    inst:Activate()\n"
+        "    return inst\n"
+        "end\n";
+    if (L.loadBuffer(kQuestHelperSrc, sizeof(kQuestHelperSrc) - 1, "builtin:quest") == LUA_OK) {
+        if (L.pcall(0, 0) != LUA_OK) {
+            printf("Error installing Quest helper: %s\n", L.optString(-1, "Unknown error"));
+            L.pop();
+        }
+    } else {
+        printf("Error loading Quest helper: %s\n", L.optString(-1, "Unknown error"));
+        L.pop();
+    }
 }
 
 void psxsplash::Lua::Shutdown() {

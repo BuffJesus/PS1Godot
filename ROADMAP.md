@@ -1759,10 +1759,18 @@ graph-walker overhead.
         for quests (unlike FSM). Author drives the table via a ~10-
         line Lua walker until D2-2 ships `Quest.new`. See
         [`docs/ps1graph-quest-authoring.md`](docs/ps1graph-quest-authoring.md).
-      - **Slice D2-2 (next)**: `Quest.new(table)` runtime helper —
-        `:Activate()`, `:Complete(id)`, `:IsActive(id)`, `:Outcome()`,
-        `:Save() / :Load()` via `Persist`. Same embed-in-Lua::Init
-        pattern as `FSM.new`.
+      - **Slice D2-2 shipped 2026-05-17 (`Quest.new` runtime helper).**
+        Embedded as a Lua-string built-in pcall'd at the end of
+        `Lua::Init` alongside `FSM.new`. Installs `_G.Quest = { new
+        = function(def) ... end }` before any scene script loads.
+        Instance API: `:Activate()`, `:Complete(id)`, `:IsActive(id)`,
+        `:IsComplete(id)`, `:ActiveSet()`, `:Outcome()`, `:Save()`,
+        `:Load(snap)`. `Complete()` returns the list of newly-unlocked
+        ids so authors can drive "New objective: …" HUD pops. Save
+        snapshots are `{ completed = {ids} }`; active is always
+        recomputed from completed + initial_objectives for
+        deterministic restore. ~50 lines of embedded Lua, zero
+        per-instance C++ state.
       - **Slice D2-3 (later)**: per-objective `on_activate` /
         `on_complete` Lua snippets (Payloads[2..3] on Objective),
         per-outcome `on_trigger` snippet (Payload[1] on Outcome).
