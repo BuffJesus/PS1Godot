@@ -165,11 +165,62 @@ interrupts).
 | **Start Cutscene** | `kind="action"` + `Cutscene.Play(id)` | Auto-advance |
 | **Lua Snippet** | `kind="action"` + author-supplied Lua | Power-user action — runs arbitrary Lua, auto-advance |
 | **Lua Condition** | `kind="condition"` + `return (<expr>)` | Power-user branch — arbitrary Lua expression, two exec outs |
+| **Sub-Dialogue** | `kind="sub_dialogue"` + target basename | Call into another dialogue table; return on the sub's nil-next |
 | **Comment** | — | Decoration; compiles to nothing |
 
 Action and Condition nodes chain at one node per frame (~16ms each)
 which is imperceptible — a Set-Flag → Play-Sound → Line sequence
 looks instant.
+
+### Per-line audio + skip control (D1h)
+
+Line nodes have two extra fields beneath the text:
+
+- **audio clip name** — references a clip in `PS1Scene.AudioClips`.
+  Plays via `Audio.PlaySfx` on line entry so XA / SPU / CDDA
+  routing stays in one place. Empty = no audio.
+- **skippable** CheckBox — when **off**, the X-button advance is
+  blocked. If the line has audio: locked for the clip's duration.
+  No audio: locked for 2 seconds (120 frames @ 60Hz). The lock is
+  per-line; subsequent lines reset it.
+
+Use non-skippable lines for cutscene-style narration where the
+player shouldn't dismiss the line before the voiceover finishes.
+
+### Anim Notify markers (D1i)
+
+Lines have a `notifies` field below the skippable checkbox.
+Pipe-separated entries of the form `frame:lua`:
+
+```
+12:Audio.PlaySfx("thunder") | 30:Cutscene.Play("bolt") | 60:Persist.Set("seen_storm", true)
+```
+
+When the line is active, the runner ticks a per-line frame counter
+and pcalls each entry's Lua snippet on the frame matching its `:`
+prefix. Use these to punctuate a line with timed SFX, set-flag
+pulses, or camera moves without splitting the line across many
+graph nodes.
+
+Up to 8 notifies per line (runtime cap). Malformed entries
+(missing colon, non-integer frame) compile to a `--[[…]]` comment
+in the .lua so you can see them in the generated output.
+
+### Sub-Dialogue node (D1j)
+
+A `Sub-Dialogue` node runs another dialogue table inline, then
+returns to the parent at the node's exec-out. Use to factor shared
+sequences (shopkeeper greeting, death sting, "are you sure?"
+confirmation) into reusable `.tres` files.
+
+The Payload is the **target's basename** — for `res://dlg/shopkeeper.tres`
+that's `shopkeeper`. At runtime the walker resolves it as
+`_G.dialogue_shopkeeper`, so the target's `.lua` must be loaded
+(usually via the same `PS1Scene.UserScripts` list).
+
+Stack depth is capped at 4 — sub-dialogue chains beyond that print
+a debug warning and end the dialogue cleanly rather than blowing
+the stack.
 
 ### Power-user nodes (Lua Snippet / Lua Condition)
 

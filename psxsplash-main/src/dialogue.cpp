@@ -122,6 +122,16 @@ void DialogueRunner::stop(lua_State* L) {
         luaL_unref(L, LUA_REGISTRYINDEX, m_tableRef);
         m_tableRef = -1;
     }
+    // Drain the sub-dialogue stack so the parent table refs we held
+    // open don't leak registry slots (slice D1j).
+    while (m_subStackDepth > 0) {
+        m_subStackDepth--;
+        int ref = m_subStack[m_subStackDepth].tableRef;
+        if (ref != -1) luaL_unref(L, LUA_REGISTRYINDEX, ref);
+    }
+    m_numNotifies = 0;
+    m_lineFrameCounter = 0;
+    m_lineAdvanceLockFrames = 0;
     if (m_useCanvas && m_ui && m_canvasIdx >= 0) {
         manageAuxElements(false);
         clearCanvasUI();
@@ -168,10 +178,29 @@ void DialogueRunner::tick(lua_State* L) {
         }
     }
 
+    // Advance lock (slice D1h). Lines flagged skippable=false hold
+    // the player on the current node until the lock expires (audio
+    // length when present, or a fixed read window). Tick down before
+    // the X-press check so the X press that hits the same frame the
+    // lock expires advances cleanly.
+    if (m_lineAdvanceLockFrames > 0) m_lineAdvanceLockFrames--;
+
+    // Notifies (slice D1i). Tick the per-line frame counter and fire
+    // any notifies whose threshold matches this frame. Only relevant
+    // while a line is active; choice / action / condition nodes don't
+    // populate m_numNotifies so this is a cheap no-op there.
+    if (m_numNotifies > 0) {
+        m_lineFrameCounter++;
+        tickLineNotifies(L);
+    }
+
     // X / Cross button advances. Per-frame edge so holding the button
-    // doesn't chew through the whole graph in one frame.
+    // doesn't chew through the whole graph in one frame. Gated by
+    // the advance lock.
     if (m_controls && m_controls->wasButtonPressed(psyqo::AdvancedPad::Button::Cross)) {
-        advanceFromCurrent(L);
+        if (m_lineAdvanceLockFrames <= 0) {
+            advanceFromCurrent(L);
+        }
     }
 }
 
@@ -206,9 +235,44 @@ void DialogueRunner::emitCurrentNode(lua_State* L) {
         m_selectedChoice = 0;
 
         char speaker[32] = "";
-        char text[128] = "";
+        char text[128]   = "";
+        char audio[40]   = "";
         readStringField(L, -1, "speaker", speaker, sizeof(speaker));
         readStringField(L, -1, "text",    text,    sizeof(text));
+        readStringField(L, -1, "audio",   audio,   sizeof(audio));
+
+        // skippable defaults to TRUE so pre-D1h graphs (no key at
+        // all) keep the legacy "always press-X advances" behaviour.
+        bool skippable = true;
+        lua_getfield(L, -1, "skippable");
+        if (lua_isboolean(L, -1)) skippable = lua_toboolean(L, -1) != 0;
+        lua_pop(L, 1);
+
+        // Audio + advance-lock (slice D1h). Fire the line's audio
+        // clip via the existing Lua Audio.PlaySfx routing so XA / SPU
+        // / CDDA dispatch stays in one place; query the duration on
+        // the C++ side via SceneManager → AudioManager so the lock
+        // can sit a player out for the spoken length of the clip.
+        m_lineAdvanceLockFrames = 0;
+        if (audio[0]) {
+            playLineAudio(L, audio, skippable);
+        }
+        if (!skippable && m_lineAdvanceLockFrames == 0) {
+            // No audio (or audio not found) — give the player a fixed
+            // read window. 2 seconds at 60 Hz is a comfortable
+            // "letter from grandma" pace; authors who want a longer
+            // gate either set skippable=true and trust the player, or
+            // chain a Lua Snippet that sets a Persist flag for a
+            // gameplay-side gate.
+            m_lineAdvanceLockFrames = 120;
+        }
+
+        // Notifies (slice D1i). Reset counter + load the line's
+        // notifies array (if any). Cleared on every line entry so a
+        // line with no notifies cleanly leaves stale state behind.
+        m_numNotifies = 0;
+        m_lineFrameCounter = 0;
+        loadLineNotifies(L, -1);
 
         if (m_useCanvas && m_ui) {
             // Populate AND make visible: authors keep VisibleOnLoad=false
@@ -363,6 +427,69 @@ void DialogueRunner::emitCurrentNode(lua_State* L) {
         }
         return;  // skip trailing lua_pop.
     }
+    else if (streq(kind, "sub_dialogue")) {
+        // Slice D1j — call into another dialogue table. Push current
+        // (table, resume_id) onto the stack, swap the live table to
+        // the sub's `_G.dialogue_<target>`, set current = sub's
+        // entry. When the sub eventually hits nil-next we pop and
+        // resume at `nextAfter`.
+        char target[32]    = "";
+        char nextAfter[16] = "";
+        readStringField(L, -1, "target", target,    sizeof(target));
+        readStringField(L, -1, "next",   nextAfter, sizeof(nextAfter));
+        lua_pop(L, 1);  // pop node-table (own our pop, early-return below)
+
+        if (m_subStackDepth >= kMaxSubgraphDepth) {
+            printf("[Dialog] sub_dialogue: depth %d exceeded at '%s' — treating as end\n",
+                   kMaxSubgraphDepth, m_currentNodeId);
+            stop(L);
+            return;
+        }
+        if (!target[0]) {
+            printf("[Dialog] sub_dialogue at '%s': no target — treating as end\n", m_currentNodeId);
+            stop(L);
+            return;
+        }
+
+        char globalName[40];
+        snprintf(globalName, sizeof(globalName), "dialogue_%s", target);
+        lua_getglobal(L, globalName);
+        if (!lua_istable(L, -1)) {
+            printf("[Dialog] sub_dialogue: _G.%s not found — ship the target's .lua in PS1Scene.UserScripts\n",
+                   globalName);
+            lua_pop(L, 1);
+            stop(L);
+            return;
+        }
+
+        lua_getfield(L, -1, "entry");
+        const char* entry = lua_isstring(L, -1) ? lua_tostring(L, -1) : nullptr;
+        if (!entry) {
+            printf("[Dialog] sub_dialogue: %s has no entry — treating as end\n", globalName);
+            lua_pop(L, 2);
+            stop(L);
+            return;
+        }
+        char entryCopy[16] = "";
+        bounded_strcpy(entryCopy, entry, sizeof(entryCopy));
+        lua_pop(L, 1);  // pop entry; sub-table still on top
+
+        // Push parent frame BEFORE replacing m_tableRef so the
+        // saved ref points at the right table.
+        m_subStack[m_subStackDepth].tableRef = m_tableRef;
+        bounded_strcpy(m_subStack[m_subStackDepth].resumeNodeId, nextAfter,
+                       sizeof(m_subStack[0].resumeNodeId));
+        m_subStackDepth++;
+
+        // Stash the sub's table — luaL_ref pops the value off the
+        // stack and gives us a registry slot.
+        m_tableRef = luaL_ref(L, LUA_REGISTRYINDEX);
+        bounded_strcpy(m_currentNodeId, entryCopy, sizeof(m_currentNodeId));
+        m_freshNode = true;
+        printf("[Dialog] sub_dialogue → %s/%s (depth=%d)\n",
+               globalName, entryCopy, m_subStackDepth);
+        return;  // skip trailing lua_pop — we already popped node-table.
+    }
     else {
         printf("[Dialog] emit: unknown kind '%s' at node '%s'\n", kind, m_currentNodeId);
     }
@@ -413,6 +540,28 @@ void DialogueRunner::advanceFromCurrent(lua_State* L) {
     lua_pop(L, 1);  // pop node-table
 
     if (next[0] == '\0') {
+        // Subgraph return (slice D1j) — when a sub-dialogue hits a
+        // nil-next, pop the call stack and resume the parent at the
+        // saved resume id. Keep popping while the resume id is empty
+        // (parent's sub_dialogue node itself had nil-next → its
+        // grandparent's resume id is the real target).
+        while (m_subStackDepth > 0) {
+            m_subStackDepth--;
+            auto& frame = m_subStack[m_subStackDepth];
+            // Free the sub's ref before swapping back.
+            if (m_tableRef != -1) luaL_unref(L, LUA_REGISTRYINDEX, m_tableRef);
+            m_tableRef = frame.tableRef;
+            if (frame.resumeNodeId[0]) {
+                bounded_strcpy(m_currentNodeId, frame.resumeNodeId, sizeof(m_currentNodeId));
+                m_freshNode = true;
+                printf("[Dialog] sub_dialogue ← (depth=%d) resume at %s\n",
+                       m_subStackDepth, m_currentNodeId);
+                return;
+            }
+            // Empty resume — loop once more, treating the parent as
+            // also "done." Falls through to stop() below if the
+            // stack drains without a resume id.
+        }
         printf("[Dialog] end (no next from '%s' kind=%s)\n", m_currentNodeId, kind);
         stop(L);
         return;
@@ -493,6 +642,107 @@ void DialogueRunner::refreshCursor() {
             if (m_optionHandles[i] >= 0) {
                 m_ui->setText(m_optionHandles[i], m_optionTexts[i]);
             }
+        }
+    }
+}
+
+void DialogueRunner::playLineAudio(lua_State* L, const char* clipName, bool skippable) {
+    if (!clipName || !clipName[0]) return;
+
+    // Build a one-shot snippet that both plays the clip and returns
+    // its duration in frames. Going through the Lua API (rather than
+    // calling AudioManager from C++) means routing (SPU/XA/CDDA)
+    // stays in one place and dialogue.cpp doesn't need to know which
+    // bus a clip lives on.
+    //
+    // Snippet shape:
+    //     local i = Audio.Find('clipname')
+    //     if i and i >= 0 then Audio.PlaySfx('clipname'); return Audio.GetClipDuration(i) end
+    //     return 0
+    char snippet[256];
+    int n = snprintf(snippet, sizeof(snippet),
+                     "local i = Audio.Find(\"%s\")\n"
+                     "if i and i >= 0 then Audio.PlaySfx(\"%s\"); return Audio.GetClipDuration(i) end\n"
+                     "return 0\n",
+                     clipName, clipName);
+    if (n <= 0 || n >= (int)sizeof(snippet)) {
+        printf("[Dialog] line audio: clip name too long, skipped: '%s'\n", clipName);
+        return;
+    }
+
+    if (luaL_loadstring(L, snippet) != LUA_OK) {
+        printf("[Dialog] line audio: load error: %s\n", lua_tostring(L, -1));
+        lua_pop(L, 1);
+        return;
+    }
+    if (lua_pcall(L, 0, 1, 0) != LUA_OK) {
+        printf("[Dialog] line audio: pcall error: %s\n", lua_tostring(L, -1));
+        lua_pop(L, 1);
+        return;
+    }
+    int frames = 0;
+    if (lua_isnumber(L, -1)) frames = (int)lua_tointeger(L, -1);
+    lua_pop(L, 1);
+
+    if (!skippable && frames > 0) {
+        m_lineAdvanceLockFrames = frames;
+    }
+}
+
+void DialogueRunner::loadLineNotifies(lua_State* L, int lineTableIndex) {
+    // `notifies` is an optional array on the line table:
+    //   notifies = { { at = 12, lua = "Audio.PlaySfx('thunder')" }, ... }
+    // We read up to kMaxNotifies entries; the rest are silently
+    // dropped. Each entry must carry numeric `at` and string `lua`;
+    // malformed entries are skipped with a console line so authors
+    // can diagnose without bricking the dialogue.
+    lua_getfield(L, lineTableIndex, "notifies");
+    if (!lua_istable(L, -1)) { lua_pop(L, 1); return; }
+
+    int n = (int)lua_rawlen(L, -1);
+    for (int i = 1; i <= n && m_numNotifies < kMaxNotifies; i++) {
+        lua_rawgeti(L, -1, i);
+        if (!lua_istable(L, -1)) {
+            printf("[Dialog] notify[%d] not a table — skipped\n", i);
+            lua_pop(L, 1);
+            continue;
+        }
+        lua_getfield(L, -1, "at");
+        int at = lua_isnumber(L, -1) ? (int)lua_tointeger(L, -1) : -1;
+        lua_pop(L, 1);
+
+        lua_getfield(L, -1, "lua");
+        const char* src = lua_isstring(L, -1) ? lua_tostring(L, -1) : nullptr;
+
+        if (at < 0 || !src) {
+            printf("[Dialog] notify[%d] missing at/lua — skipped\n", i);
+            lua_pop(L, 2);  // pop lua-field + entry-table
+            continue;
+        }
+        m_notifyAt[m_numNotifies] = at;
+        m_notifyFired[m_numNotifies] = false;
+        bounded_strcpy(m_notifyLua[m_numNotifies], src, sizeof(m_notifyLua[0]));
+        m_numNotifies++;
+
+        lua_pop(L, 2);  // pop lua-field + entry-table
+    }
+    lua_pop(L, 1);  // pop `notifies` table
+}
+
+void DialogueRunner::tickLineNotifies(lua_State* L) {
+    for (int i = 0; i < m_numNotifies; i++) {
+        if (m_notifyFired[i]) continue;
+        if (m_lineFrameCounter < m_notifyAt[i]) continue;
+        m_notifyFired[i] = true;
+
+        if (luaL_loadstring(L, m_notifyLua[i]) != LUA_OK) {
+            printf("[Dialog] notify[%d] load error: %s\n", i, lua_tostring(L, -1));
+            lua_pop(L, 1);
+            continue;
+        }
+        if (lua_pcall(L, 0, 0, 0) != LUA_OK) {
+            printf("[Dialog] notify[%d] pcall error: %s\n", i, lua_tostring(L, -1));
+            lua_pop(L, 1);
         }
     }
 }

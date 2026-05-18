@@ -98,6 +98,7 @@ public partial class PS1GraphEditorDock : VBoxContainer
         new NodeKindEntry("start_cutscene", "Start Cutscene",   GraphKind: "dialogue"),
         new NodeKindEntry("lua_snippet",    "Lua Snippet",      GraphKind: "dialogue"),
         new NodeKindEntry("lua_condition",  "Lua Condition",    GraphKind: "dialogue"),
+        new NodeKindEntry("sub_dialogue",   "Sub-Dialogue",     GraphKind: "dialogue"),
         new NodeKindEntry("state",          "State",            GraphKind: "fsm"),
         new NodeKindEntry("transition",     "Transition",       GraphKind: "fsm"),
         new NodeKindEntry("objective",      "Objective",        GraphKind: "quest"),
@@ -695,20 +696,24 @@ public partial class PS1GraphEditorDock : VBoxContainer
             }
             case "line":
             {
-                // Dialogue Line — speaker + text, single exec out (the
-                // "next line" link). Compiles to a Lua table entry of
-                // shape { kind="line", speaker=..., text=..., next=... }.
+                // Dialogue Line — speaker + text + optional audio +
+                // skippable flag. Compiles to:
+                //   { kind="line", speaker=..., text=..., audio=...,
+                //     skippable=..., next=... }
                 //
-                // Row 0: Exec in (left) + Exec out (right). Standard
-                // dialogue advance.
+                // Payloads:
+                //   [0] text          [1] speaker
+                //   [2] audio clip    [3] "true"/"false" (skippable)
+                //
+                // Row 0: Exec in + Exec out (standard dialogue advance).
+                // Row 1: speaker LineEdit.
+                // Row 2: text LineEdit.
+                // Row 3: audio LineEdit (clip name; D1h).
+                // Row 4: skippable CheckBox (D1h).
                 g.AddChild(new Label { Text = "exec / next" });
                 g.SetSlot(0, true, (int)PinType.Exec, s_pinColors[PinType.Exec],
                              true, (int)PinType.Exec, s_pinColors[PinType.Exec]);
 
-                // Row 1: speaker LineEdit. Pinless — slice D1a stores
-                // the literal directly. Future slice can promote to a
-                // typed String input if upstream Speaker sources become
-                // useful.
                 var speakerEdit = new LineEdit
                 {
                     Text = n.GetPayload(1),
@@ -716,9 +721,7 @@ public partial class PS1GraphEditorDock : VBoxContainer
                 };
                 speakerEdit.TextChanged += text => n.SetPayload(1, text);
                 g.AddChild(speakerEdit);
-                // No SetSlot — pinless.
 
-                // Row 2: text LineEdit. Same story — pinless literal.
                 var textEdit = new LineEdit
                 {
                     Text = n.GetPayload(0),
@@ -726,7 +729,38 @@ public partial class PS1GraphEditorDock : VBoxContainer
                 };
                 textEdit.TextChanged += text => n.SetPayload(0, text);
                 g.AddChild(textEdit);
-                // No SetSlot — pinless.
+
+                var audioEdit = new LineEdit
+                {
+                    Text = n.GetPayload(2),
+                    PlaceholderText = "audio clip name (optional)…",
+                };
+                audioEdit.TextChanged += text => n.SetPayload(2, text);
+                g.AddChild(audioEdit);
+
+                // Skippable defaults to true; empty Payload[3] (legacy
+                // graphs from before D1h) reads as default-true so old
+                // .tres files behave identically to pre-D1h.
+                var skippableCheck = new CheckBox
+                {
+                    Text = "skippable",
+                    ButtonPressed = !string.Equals(n.GetPayload(3), "false",
+                                                    System.StringComparison.OrdinalIgnoreCase),
+                };
+                skippableCheck.Toggled += pressed => n.SetPayload(3, pressed ? "true" : "false");
+                g.AddChild(skippableCheck);
+
+                // Row 5: notifies LineEdit (D1i). Pipe-separated
+                // "frame:lua | frame:lua" — fires each Lua snippet
+                // when the line's frame counter reaches the threshold.
+                // Up to 8 notifies per line (runtime cap).
+                var notifiesEdit = new LineEdit
+                {
+                    Text = n.GetPayload(4),
+                    PlaceholderText = "notifies: 12:Audio.PlaySfx(\"x\") | 30:...",
+                };
+                notifiesEdit.TextChanged += text => n.SetPayload(4, text);
+                g.AddChild(notifiesEdit);
                 break;
             }
             case "set_flag":
@@ -817,6 +851,26 @@ public partial class PS1GraphEditorDock : VBoxContainer
                 idEdit.TextChanged += text => n.SetPayload(0, text);
                 g.AddChild(idEdit);
                 // No SetSlot — pinless.
+                break;
+            }
+            case "sub_dialogue":
+            {
+                // Slice D1j — call into another dialogue table.
+                // Payload[0] = target basename (e.g. "shopkeeper_greeting"
+                // resolves at runtime to _G.dialogue_shopkeeper_greeting).
+                // Exec in / out — out fires when the sub-dialogue
+                // returns (hits a node with nil-next).
+                g.AddChild(new Label { Text = "exec / return" });
+                g.SetSlot(0, true, (int)PinType.Exec, s_pinColors[PinType.Exec],
+                             true, (int)PinType.Exec, s_pinColors[PinType.Exec]);
+
+                var targetEdit = new LineEdit
+                {
+                    Text = n.GetPayload(0),
+                    PlaceholderText = "target dialogue basename (e.g. shopkeeper)…",
+                };
+                targetEdit.TextChanged += text => n.SetPayload(0, text);
+                g.AddChild(targetEdit);
                 break;
             }
             case "lua_snippet":

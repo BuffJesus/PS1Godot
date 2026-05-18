@@ -168,6 +168,7 @@ public static class PS1GraphCompiler
         "start_cutscene" => true,
         "lua_snippet"    => true,
         "lua_condition"  => true,
+        "sub_dialogue"   => true,
         _                => false,
     };
 
@@ -533,6 +534,50 @@ public static class PS1GraphCompiler
         return null;
     }
 
+    // Parse the Line node's "notifies" pipe-string (Payload[4]) into
+    // a `, notifies = { {at=12, lua="..."}, ... }` Lua table fragment.
+    // Format: "<frame>:<lua> | <frame>:<lua> | …" — whitespace around
+    // tokens trimmed; entries missing a colon dropped with a `--`
+    // comment so the author sees them in the compiled .lua. Returns
+    // empty string when no notifies authored, so the line table stays
+    // compact.
+    private static string CompileLineNotifies(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return "";
+        var entries = raw!.Split('|');
+        var sb = new StringBuilder();
+        sb.Append(", notifies = { ");
+        int written = 0;
+        for (int i = 0; i < entries.Length; i++)
+        {
+            string e = entries[i].Trim();
+            if (e.Length == 0) continue;
+            int colon = e.IndexOf(':');
+            if (colon < 0)
+            {
+                sb.Append($"--[[malformed notify '{e}' (no colon)]] ");
+                continue;
+            }
+            string atRaw = e.Substring(0, colon).Trim();
+            string lua   = e.Substring(colon + 1).Trim();
+            if (!int.TryParse(atRaw, out int at) || at < 0)
+            {
+                sb.Append($"--[[notify frame not int: '{atRaw}']] ");
+                continue;
+            }
+            if (lua.Length == 0)
+            {
+                sb.Append($"--[[notify frame {at} missing lua]] ");
+                continue;
+            }
+            if (written > 0) sb.Append(", ");
+            sb.Append($"{{at = {at}, lua = {EscapeLuaString(lua)}}}");
+            written++;
+        }
+        sb.Append(" }");
+        return sb.ToString();
+    }
+
     private static void EmitDialogueNode(StringBuilder sb, Dictionary<int, PS1GraphNode> byId,
                                           Godot.Collections.Array<PS1GraphConnection> conns,
                                           PS1GraphNode n)
@@ -541,15 +586,28 @@ public static class PS1GraphCompiler
         {
             case "line":
             {
-                // Line: { kind="line", speaker=..., text=..., next=... }
-                // text → Payloads[0]; speaker → Payloads[1]; next →
-                // follow exec out (slot 0 right) to the receiver's node
-                // (encoded as "n{id}" key, matching the keys we emit
-                // for every node in the nodes table).
+                // Line: { kind="line", speaker=..., text=..., audio=...,
+                //         skippable=..., notifies={...}, next=... }
+                //
+                // Payloads:
+                //   [0] text          [1] speaker
+                //   [2] audio clip    [3] "true"/"false" (skippable)
+                //   [4] notifies      — pipe-string "frame:lua | frame:lua"
+                //
+                // Empty audio / notifies → omitted key (walker treats
+                // missing as none). Skippable defaults to true so
+                // pre-D1h graphs keep the legacy advance behaviour.
                 string text    = EscapeLuaString(n.GetPayload(0));
                 string speaker = EscapeLuaString(n.GetPayload(1));
+                string audio   = n.GetPayload(2) ?? "";
+                string audioField = string.IsNullOrEmpty(audio)
+                    ? ""
+                    : $", audio = {EscapeLuaString(audio)}";
+                bool skippable = !string.Equals(n.GetPayload(3), "false",
+                                                 System.StringComparison.OrdinalIgnoreCase);
+                string notifiesField = CompileLineNotifies(n.GetPayload(4));
                 string next    = FindNextKey(conns, n.Id, fromPort: 0);
-                sb.AppendLine($"        n{n.Id} = {{ kind = \"line\", speaker = {speaker}, text = {text}, next = {next} }},");
+                sb.AppendLine($"        n{n.Id} = {{ kind = \"line\", speaker = {speaker}, text = {text}{audioField}, skippable = {(skippable ? "true" : "false")}{notifiesField}, next = {next} }},");
                 break;
             }
             case "set_flag":
@@ -580,6 +638,22 @@ public static class PS1GraphCompiler
                 string lua  = $"Cutscene.Play({id})";
                 string next = FindNextKey(conns, n.Id, fromPort: 0);
                 sb.AppendLine($"        n{n.Id} = {{ kind = \"action\", lua = {EscapeLuaString(lua)}, next = {next} }},");
+                break;
+            }
+            case "sub_dialogue":
+            {
+                // Slice D1j — `{ kind="sub_dialogue", target="<basename>",
+                // next="<resume_id>" }`. Runtime walker pushes the
+                // current (table, resume) onto its stack, swaps to
+                // `_G.dialogue_<target>`, walks until it hits a
+                // nil-next then pops back to `next`.
+                //
+                // BasenameForGlobal normalises the target so authors
+                // can type the .tres basename directly (e.g.
+                // "shopkeeper-greeting" → "shopkeeper_greeting").
+                string target = BasenameForGlobal(n.GetPayload(0));
+                string next   = FindNextKey(conns, n.Id, fromPort: 0);
+                sb.AppendLine($"        n{n.Id} = {{ kind = \"sub_dialogue\", target = {EscapeLuaString(target)}, next = {next} }},");
                 break;
             }
             case "lua_snippet":
@@ -862,6 +936,7 @@ public static class PS1GraphCompiler
         "start_cutscene" => true,
         "lua_snippet"    => true,
         "lua_condition"  => true,
+        "sub_dialogue"   => true,
         "state"          => true,
         "transition"     => true,
         "objective"      => true,
@@ -893,6 +968,8 @@ public static class PS1GraphCompiler
             // lua_condition mirrors condition — row 0 in+out (true),
             // row 1 out-only (false).
             "lua_condition"  => port == 0 || (!isInput && port == 1),
+            // sub_dialogue mirrors line — exec in+out at row 0.
+            "sub_dialogue"   => port == 0,
             // state, transition: row 0 in+out (exec in left-port 0,
             // exec out right-port 0). State's exec out can drive many
             // transitions; transition's exec out drives the next state.
