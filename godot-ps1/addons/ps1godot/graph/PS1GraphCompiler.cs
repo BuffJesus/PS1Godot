@@ -162,6 +162,8 @@ public static class PS1GraphCompiler
         "condition"      => true,
         "play_sound"     => true,
         "start_cutscene" => true,
+        "lua_snippet"    => true,
+        "lua_condition"  => true,
         _                => false,
     };
 
@@ -384,6 +386,40 @@ public static class PS1GraphCompiler
                 string lua  = $"Cutscene.Play({id})";
                 string next = FindNextKey(conns, n.Id, fromPort: 0);
                 sb.AppendLine($"        n{n.Id} = {{ kind = \"action\", lua = {EscapeLuaString(lua)}, next = {next} }},");
+                break;
+            }
+            case "lua_snippet":
+            {
+                // Power-user action — author-supplied snippet, baked
+                // verbatim into the runtime "action" kind. Walker
+                // pcalls each snippet so syntax errors print + advance
+                // doesn't fire rather than crash the scene.
+                string snippet = n.GetPayload(0);
+                if (string.IsNullOrEmpty(snippet))
+                {
+                    // Empty snippet is a no-op action — still emit so the
+                    // exec edge resolves. Walker handles empty body fine.
+                    snippet = "";
+                }
+                string next = FindNextKey(conns, n.Id, fromPort: 0);
+                sb.AppendLine($"        n{n.Id} = {{ kind = \"action\", lua = {EscapeLuaString(snippet)}, next = {next} }},");
+                break;
+            }
+            case "lua_condition":
+            {
+                // Power-user condition — author-supplied expression,
+                // wrapped in `return (<expr>)` so the walker's pcall
+                // gets a boolean stack slot regardless of expression
+                // form. Empty expression compiles to `return false` so
+                // the false branch always fires (stable, debuggable
+                // behaviour rather than a Lua syntax error).
+                string expr = n.GetPayload(0);
+                string lua  = string.IsNullOrEmpty(expr)
+                    ? "return false"
+                    : $"return ({expr})";
+                string nextTrue  = FindNextKey(conns, n.Id, fromPort: 0);
+                string nextFalse = FindNextKey(conns, n.Id, fromPort: 1);
+                sb.AppendLine($"        n{n.Id} = {{ kind = \"condition\", lua = {EscapeLuaString(lua)}, next_true = {nextTrue}, next_false = {nextFalse} }},");
                 break;
             }
             case "condition":
@@ -630,6 +666,8 @@ public static class PS1GraphCompiler
         "condition"      => true,
         "play_sound"     => true,
         "start_cutscene" => true,
+        "lua_snippet"    => true,
+        "lua_condition"  => true,
         "state"          => true,
         "transition"     => true,
         "comment"        => false,
@@ -654,6 +692,11 @@ public static class PS1GraphCompiler
             "condition"      => port == 0 || (!isInput && port == 1), // row 0 in+out (true), row 1 out (false)
             "play_sound"     => port == 0,
             "start_cutscene" => port == 0,
+            // lua_snippet mirrors set_flag/play_sound — exec in+out at row 0.
+            "lua_snippet"    => port == 0,
+            // lua_condition mirrors condition — row 0 in+out (true),
+            // row 1 out-only (false).
+            "lua_condition"  => port == 0 || (!isInput && port == 1),
             // state, transition: row 0 in+out (exec in left-port 0,
             // exec out right-port 0). State's exec out can drive many
             // transitions; transition's exec out drives the next state.

@@ -96,6 +96,8 @@ public partial class PS1GraphEditorDock : VBoxContainer
         new NodeKindEntry("condition",      "Condition (flag)", GraphKind: "dialogue"),
         new NodeKindEntry("play_sound",     "Play Sound",       GraphKind: "dialogue"),
         new NodeKindEntry("start_cutscene", "Start Cutscene",   GraphKind: "dialogue"),
+        new NodeKindEntry("lua_snippet",    "Lua Snippet",      GraphKind: "dialogue"),
+        new NodeKindEntry("lua_condition",  "Lua Condition",    GraphKind: "dialogue"),
         new NodeKindEntry("state",          "State",            GraphKind: "fsm"),
         new NodeKindEntry("transition",     "Transition",       GraphKind: "fsm"),
     };
@@ -811,6 +813,60 @@ public partial class PS1GraphEditorDock : VBoxContainer
                 };
                 idEdit.TextChanged += text => n.SetPayload(0, text);
                 g.AddChild(idEdit);
+                // No SetSlot — pinless.
+                break;
+            }
+            case "lua_snippet":
+            {
+                // Power-user action node — runs an arbitrary author-
+                // supplied Lua snippet and auto-advances via the exec
+                // edge. Same compile/runtime shape as set_flag /
+                // play_sound (compiles to kind="action"), but the body
+                // is whatever the author types.
+                //
+                // Row 0: Exec in/out.
+                // Row 1: Lua snippet LineEdit (Payloads[0]).
+                g.AddChild(new Label { Text = "exec / next" });
+                g.SetSlot(0, true, (int)PinType.Exec, s_pinColors[PinType.Exec],
+                             true, (int)PinType.Exec, s_pinColors[PinType.Exec]);
+
+                var snippetEdit = new LineEdit
+                {
+                    Text = n.GetPayload(0),
+                    PlaceholderText = "Lua snippet (e.g. Audio.PlaySfx(\"x\"); Persist.Set(\"y\", true))…",
+                };
+                snippetEdit.TextChanged += text => n.SetPayload(0, text);
+                g.AddChild(snippetEdit);
+                // No SetSlot — pinless.
+                break;
+            }
+            case "lua_condition":
+            {
+                // Power-user condition node — branches on an arbitrary
+                // Lua expression instead of the structured flag-only
+                // check the regular Condition node ships. Same exec
+                // shape as condition (true on row 0, false on row 1),
+                // and compiles to the same runtime kind="condition"
+                // with a "return <expr>" body.
+                //
+                // Row 0: Exec in (left) + Exec out true (right).
+                // Row 1: Exec out false (right only).
+                // Row 2: expression LineEdit (Payloads[0], pinless).
+                g.AddChild(new Label { Text = "exec / true" });
+                g.SetSlot(0, true,  (int)PinType.Exec, s_pinColors[PinType.Exec],
+                             true,  (int)PinType.Exec, s_pinColors[PinType.Exec]);
+
+                g.AddChild(new Label { Text = "false" });
+                g.SetSlot(1, false, (int)PinType.Exec, s_pinColors[PinType.Exec],
+                             true,  (int)PinType.Exec, s_pinColors[PinType.Exec]);
+
+                var exprEdit = new LineEdit
+                {
+                    Text = n.GetPayload(0),
+                    PlaceholderText = "Lua expression returning bool (e.g. Persist.Get(\"x\") > 5)…",
+                };
+                exprEdit.TextChanged += text => n.SetPayload(0, text);
+                g.AddChild(exprEdit);
                 // No SetSlot — pinless.
                 break;
             }

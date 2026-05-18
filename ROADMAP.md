@@ -1729,10 +1729,19 @@ graph-walker overhead.
         correct `_G.dialogue_<basename>` global instead of falling
         back to "unnamed" and silently breaking author scripts.
         F5 auto-recompile in `SceneCollector` uses the same override.
-      - **Still open**: arbitrary-Lua-expression Condition
-        node (current Condition is structured: just a flag name);
-        generic "Lua snippet" power-user node; GiveItem once an
-        Inventory API ships.
+      - **Slice D1g shipped 2026-05-17 (power-user nodes).**
+        Two new dialogue-graph node kinds for cases the structured
+        nodes don't cover:
+        - **Lua Snippet** — author-supplied snippet baked into the
+          existing runtime `kind="action"`. Walker pcalls so syntax
+          errors print + don't fire instead of crashing.
+        - **Lua Condition** — arbitrary expression wrapped in
+          `return (<expr>)` at compile, runs through existing
+          runtime `kind="condition"`. Empty expression compiles to
+          `return false` (stable, debuggable rather than syntax error).
+        Both reuse existing walker code — zero psxsplash change.
+      - **Still open**: GiveItem once an Inventory API ships;
+        multi-line text-area snippet inputs (D1h polish).
 - [ ] **D2. `PS1QuestGraph`** — objectives as nodes, prerequisites as
       edges, branch outcomes (success / fail paths). Compiles to a
       quest state machine with save/load integration

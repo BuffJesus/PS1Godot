@@ -163,11 +163,41 @@ interrupts).
 | **Condition (flag)** | `kind="condition"` + `Persist.Get(name) == true` | Branch on flag, two exec outs |
 | **Play Sound** | `kind="action"` + `Audio.PlaySfx(clip)` | Auto-advance |
 | **Start Cutscene** | `kind="action"` + `Cutscene.Play(id)` | Auto-advance |
+| **Lua Snippet** | `kind="action"` + author-supplied Lua | Power-user action — runs arbitrary Lua, auto-advance |
+| **Lua Condition** | `kind="condition"` + `return (<expr>)` | Power-user branch — arbitrary Lua expression, two exec outs |
 | **Comment** | — | Decoration; compiles to nothing |
 
 Action and Condition nodes chain at one node per frame (~16ms each)
 which is imperceptible — a Set-Flag → Play-Sound → Line sequence
 looks instant.
+
+### Power-user nodes (Lua Snippet / Lua Condition)
+
+`Lua Snippet` runs whatever Lua you type, single line (chain with `;`
+for multiple statements). Reach for it when the structured nodes
+above don't cover what you need — calling a custom Lua function,
+mutating a global table, sequencing several APIs in one step. The
+walker `pcall`s the snippet so a syntax error prints + doesn't fire
+rather than crashing the scene.
+
+```
+Lua Snippet: self._npc_anger = (self._npc_anger or 0) + 1; Audio.PlaySfx("growl")
+```
+
+`Lua Condition` is the same idea for branches. The expression is
+wrapped in `return (<expr>)` at compile time, so you can write any
+boolean expression (or anything Lua treats as truthy — only `nil`
+and `false` are false). Empty expression compiles to `return false`,
+so leaving the field blank is debuggable, not a crash.
+
+```
+Lua Condition: Persist.Get("npc_anger") > 5 and not Persist.Get("apology_given")
+```
+
+Both are intentional escape hatches. Prefer the structured nodes
+when they cover the case (better introspection, easier to lint
+later) and reach for the Lua versions when the structured set falls
+short.
 
 ## Player controls during dialogue
 
