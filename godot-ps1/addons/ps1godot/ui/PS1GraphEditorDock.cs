@@ -42,6 +42,14 @@ public partial class PS1GraphEditorDock : VBoxContainer
     // Save → no Save As dialog, and the label / compile use it via
     // EffectivePath().
     private string _loadedFromPath = "";
+
+    // Node Details inspector (UE port-plan pick #1). Right pane of
+    // an HSplitContainer; populated on NodeSelected, cleared on
+    // NodeDeselected. Holds multi-line TextEdits for each payload
+    // slot so authors can write long Lua snippets without packing
+    // statements into a one-line LineEdit.
+    private VBoxContainer? _inspectorPanel;
+    private int _inspectorNodeId = -1;
     private GraphEdit? _graphEdit;
     private Label? _pathLabel;
     private EditorFileDialog? _openDialog;
@@ -123,6 +131,65 @@ public partial class PS1GraphEditorDock : VBoxContainer
     // entries fall back to "(no description)" so adding a kind doesn't
     // need an entry to compile.
     private record KindMeta(string Category, string Tooltip);
+
+    // Category-tint table for the GraphNode title bar (UE port-plan
+    // pick #5). Each category gets a distinct hue: Dialogue = blue,
+    // FSM = teal, Quest = orange-amber, Untyped = neutral grey, Meta =
+    // muted purple. Picked low-saturation so the title strip reads as
+    // a category tag, not a primary-color landmine.
+    private static readonly System.Collections.Generic.Dictionary<string, Color> s_categoryTints = new()
+    {
+        ["Dialogue"] = new Color(0.30f, 0.55f, 0.85f),  // blue
+        ["FSM"]      = new Color(0.30f, 0.75f, 0.70f),  // teal
+        ["Quest"]    = new Color(0.85f, 0.60f, 0.30f),  // amber
+        ["Untyped"]  = new Color(0.55f, 0.55f, 0.55f),  // grey
+        ["Meta"]     = new Color(0.65f, 0.50f, 0.75f),  // muted purple
+    };
+
+    // Per-kind payload-slot labels for the Node Details inspector
+    // (UE port-plan pick #1). Each entry maps Kind → array of human-
+    // readable slot labels; the inspector renders one TextEdit per
+    // label, indexed by position. Kinds without an entry get a
+    // generic "Payload[N]" fallback. Inspector edits write back to
+    // PS1GraphNode.Payloads — on the next graph reload the on-canvas
+    // LineEdits re-read these values.
+    private static readonly System.Collections.Generic.Dictionary<string, string[]> s_kindPayloadLabels = new()
+    {
+        ["print"]          = new[] { "message" },
+        ["branch"]         = new[] { "default condition (true/false)" },
+        ["bool_literal"]   = new[] { "value (true/false)" },
+        ["comment"]        = new[] { "comment text" },
+        ["line"]           = new[] { "text", "speaker", "audio clip", "skippable (true/false)", "notifies (frame:lua | ...)" },
+        ["choice"]         = new[] { "option 1 text", "option 2 text", "option 3 text" },
+        ["set_flag"]       = new[] { "flag name", "value (true/false)" },
+        ["condition"]      = new[] { "flag name" },
+        ["play_sound"]     = new[] { "clip name" },
+        ["start_cutscene"] = new[] { "cutscene id" },
+        ["lua_snippet"]    = new[] { "Lua snippet" },
+        ["lua_condition"]  = new[] { "Lua expression (no 'return ' prefix)" },
+        ["sub_dialogue"]   = new[] { "target dialogue basename" },
+        ["state"]          = new[] { "state name", "on_enter Lua", "on_update Lua", "on_exit Lua" },
+        ["transition"]     = new[] { "event name" },
+        ["objective"]      = new[] { "objective id", "display title", "on_activate Lua", "on_complete Lua" },
+        ["outcome"]        = new[] { "outcome id", "on_trigger Lua" },
+    };
+
+    // Corner-icon glyph table for the GraphNode title (UE port-plan
+    // pick #5 companion). Side-effect / state-mutating kinds get a
+    // visual flag the eye can scan: ▶ for actions (advance), ⚡ for
+    // power-user Lua escape hatches, ✱ for outcomes / state-mutating.
+    // Empty = no glyph (the common "render a value" case).
+    private static readonly System.Collections.Generic.Dictionary<string, string> s_kindGlyphs = new()
+    {
+        ["set_flag"]       = "✱",
+        ["play_sound"]     = "♪",
+        ["start_cutscene"] = "▶",
+        ["lua_snippet"]    = "⚡",
+        ["lua_condition"]  = "⚡",
+        ["sub_dialogue"]   = "↪",
+        ["transition"]     = "→",
+        ["outcome"]        = "🏁",
+    };
     private static readonly System.Collections.Generic.Dictionary<string, KindMeta> s_kindMeta = new()
     {
         ["print"]          = new("Untyped",  "Print one Lua expression to the debug console. Slice-1 placeholder kind."),
@@ -207,6 +274,19 @@ public partial class PS1GraphEditorDock : VBoxContainer
         };
         toolbar.AddChild(_pathLabel);
 
+        // HSplit (UE port-plan pick #1) — GraphEdit on the left, Node
+        // Details inspector on the right. SplitOffset sets the
+        // inspector's width from the right edge; -300 keeps it compact
+        // while still fitting a multi-line TextEdit for snippet
+        // authoring. Author can drag the splitter to taste.
+        var splitter = new HSplitContainer
+        {
+            SizeFlagsVertical   = SizeFlags.ExpandFill,
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+            SplitOffset = -300,
+        };
+        AddChild(splitter);
+
         _graphEdit = new GraphEdit
         {
             SizeFlagsVertical = SizeFlags.ExpandFill,
@@ -219,7 +299,19 @@ public partial class PS1GraphEditorDock : VBoxContainer
         _graphEdit.DisconnectionRequest += OnDisconnectionRequest;
         _graphEdit.DeleteNodesRequest   += OnDeleteNodesRequest;
         _graphEdit.PopupRequest         += OnGraphPopupRequest;
-        AddChild(_graphEdit);
+        _graphEdit.NodeSelected         += OnGraphNodeSelected;
+        _graphEdit.NodeDeselected       += OnGraphNodeDeselected;
+        splitter.AddChild(_graphEdit);
+
+        // Node Details inspector (right pane).
+        _inspectorPanel = new VBoxContainer
+        {
+            SizeFlagsVertical   = SizeFlags.ExpandFill,
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+        };
+        _inspectorPanel.AddThemeConstantOverride("separation", 6);
+        splitter.AddChild(_inspectorPanel);
+        ShowInspectorEmpty();
 
         // Right-click palette. Items rebuilt on each popup based on
         // the current graph's Kind — kinds with GraphKind == "" are
@@ -629,6 +721,23 @@ public partial class PS1GraphEditorDock : VBoxContainer
         if (s_kindMeta.TryGetValue(n.Kind, out var nodeMeta))
         {
             g.TooltipText = nodeMeta.Tooltip;
+
+            // UE port-plan pick #5 — category-tinted title bar. Godot's
+            // GraphNode title color is theme-driven (`title_color`).
+            // AddThemeColorOverride on the title affects only this node.
+            if (s_categoryTints.TryGetValue(nodeMeta.Category, out var tint))
+            {
+                g.AddThemeColorOverride("title_color", tint);
+            }
+
+            // Optional corner glyph — prepend to the title so it sits
+            // left of the kind name. Cheaper than overlaying an icon
+            // Control on the title bar (which GraphNode doesn't expose
+            // a clean slot for) and reads fine at the dock's zoom range.
+            if (s_kindGlyphs.TryGetValue(n.Kind, out var glyph))
+            {
+                g.Title = $"{glyph}  {g.Title}";
+            }
         }
         else
         {
@@ -1422,6 +1531,123 @@ public partial class PS1GraphEditorDock : VBoxContainer
         _pathLabel.Text = string.IsNullOrEmpty(path)
             ? $"(unsaved){kindTag}"
             : $"{path}{kindTag}";
+    }
+
+    // ── Node Details inspector (UE port-plan pick #1) ──────────────
+
+    private void OnGraphNodeSelected(Node selected)
+    {
+        if (selected is not GraphNode gn) return;
+        int id = ExtractIdFromVisualName(gn.Name);
+        if (id < 0) return;
+        PS1GraphNode? node = null;
+        foreach (var n in _resource.Nodes)
+        {
+            if (n.Id == id) { node = n; break; }
+        }
+        if (node == null) return;
+        BuildInspectorFor(node);
+        _inspectorNodeId = id;
+    }
+
+    private void OnGraphNodeDeselected(Node deselected)
+    {
+        if (deselected is not GraphNode gn) return;
+        int id = ExtractIdFromVisualName(gn.Name);
+        // Only clear if the deselected node is the one currently shown
+        // — multi-select would otherwise wipe the panel on every click.
+        if (id != _inspectorNodeId) return;
+        ShowInspectorEmpty();
+        _inspectorNodeId = -1;
+    }
+
+    private void ShowInspectorEmpty()
+    {
+        if (_inspectorPanel == null) return;
+        foreach (var child in _inspectorPanel.GetChildren())
+        {
+            _inspectorPanel.RemoveChild(child);
+            child.QueueFree();
+        }
+        var hint = new Label
+        {
+            Text = "Select a node to edit its payloads here.\n\nMulti-line snippets supported — Enter inserts a newline.",
+            HorizontalAlignment = HorizontalAlignment.Center,
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+        };
+        hint.AddThemeColorOverride("font_color", new Color(0.55f, 0.55f, 0.55f));
+        _inspectorPanel.AddChild(hint);
+    }
+
+    private void BuildInspectorFor(PS1GraphNode node)
+    {
+        if (_inspectorPanel == null) return;
+        foreach (var child in _inspectorPanel.GetChildren())
+        {
+            _inspectorPanel.RemoveChild(child);
+            child.QueueFree();
+        }
+
+        // Header — kind + id + tooltip text (so the author always has
+        // the kind's description visible while editing).
+        var title = new Label
+        {
+            Text = $"{TitleFor(node)}  (id #{node.Id})",
+        };
+        title.AddThemeColorOverride("font_color", new Color(0.75f, 0.85f, 1.00f));
+        _inspectorPanel.AddChild(title);
+
+        if (s_kindMeta.TryGetValue(node.Kind, out var meta))
+        {
+            var desc = new Label
+            {
+                Text = meta.Tooltip,
+                AutowrapMode = TextServer.AutowrapMode.WordSmart,
+                SizeFlagsHorizontal = SizeFlags.ExpandFill,
+            };
+            desc.AddThemeColorOverride("font_color", new Color(0.70f, 0.70f, 0.70f));
+            _inspectorPanel.AddChild(desc);
+            _inspectorPanel.AddChild(new HSeparator());
+        }
+
+        // Resolve the labels list. Kinds without an entry render
+        // payloads as "Payload[0]", "Payload[1]" etc. up to a sensible
+        // cap (4 slots) so a new kind is still editable.
+        string[] labels = s_kindPayloadLabels.TryGetValue(node.Kind, out var l)
+            ? l
+            : new[] { "Payload[0]", "Payload[1]", "Payload[2]", "Payload[3]" };
+
+        var scroll = new ScrollContainer
+        {
+            SizeFlagsVertical   = SizeFlags.ExpandFill,
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+        };
+        _inspectorPanel.AddChild(scroll);
+
+        var rows = new VBoxContainer
+        {
+            SizeFlagsVertical   = SizeFlags.ExpandFill,
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+        };
+        rows.AddThemeConstantOverride("separation", 8);
+        scroll.AddChild(rows);
+
+        for (int i = 0; i < labels.Length; i++)
+        {
+            int slot = i;  // capture
+            rows.AddChild(new Label { Text = labels[i] });
+            var edit = new TextEdit
+            {
+                Text = node.GetPayload(slot),
+                CustomMinimumSize = new Vector2(0, 64),
+                SizeFlagsHorizontal = SizeFlags.ExpandFill,
+                ScrollFitContentHeight = true,
+                WrapMode = TextEdit.LineWrappingMode.Boundary,
+            };
+            edit.TextChanged += () => node.SetPayload(slot, edit.Text ?? "");
+            rows.AddChild(edit);
+        }
     }
 
     // Resolves the "where is this graph saved" path with the binding-
