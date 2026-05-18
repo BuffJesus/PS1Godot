@@ -35,6 +35,13 @@ namespace PS1Godot.UI;
 public partial class PS1GraphEditorDock : VBoxContainer
 {
     private PS1GraphResource _resource = new();
+    // Fallback path tracking: Godot 4.7-dev5 sometimes rejects setting
+    // ResourcePath on a reconstructed PS1GraphResource ("Another
+    // resource is loaded from path"). When that happens we still need
+    // to remember the path the author loaded from so subsequent
+    // Save → no Save As dialog, and the label / compile use it via
+    // EffectivePath().
+    private string _loadedFromPath = "";
     private GraphEdit? _graphEdit;
     private Label? _pathLabel;
     private EditorFileDialog? _openDialog;
@@ -210,6 +217,7 @@ public partial class PS1GraphEditorDock : VBoxContainer
             var (kind, displayName) = s_graphKinds[idx];
 
             _resource = new PS1GraphResource { Kind = kind };
+            _loadedFromPath = "";
             ReloadGraphView();
             UpdatePathLabel();
             GD.Print($"[PS1Godot] PS1Graph: new {displayName} graph (unsaved). " +
@@ -239,41 +247,37 @@ public partial class PS1GraphEditorDock : VBoxContainer
 
     private void OnLoadPathChosen(string path)
     {
-        // Godot 4.7-dev5 sometimes returns custom-script Resources from
-        // ResourceLoader.Load without attaching the C# wrapper class —
-        // the runtime type comes back as plain Godot.Resource and the
-        // generic Load<T> wrapper throws InvalidCastException at its
-        // internal `(T)resource` cast. We catch and fall back to a non-
-        // generic load + manual property copy. Slower path, but it
-        // robustly produces a wired-up PS1GraphResource regardless of
-        // whether Godot binds the script.
-        PS1GraphResource? loaded = null;
-        try
-        {
-            loaded = ResourceLoader.Load<PS1GraphResource>(path);
-        }
-        catch (System.InvalidCastException)
-        {
-            // Expected when the C# binding didn't attach. Fall through.
-        }
+        // RobustLoad handles the Godot 4.7-dev5 binding-quirk fallback —
+        // see PS1GraphCompiler.RobustLoad for the full story. Same
+        // helper is used by SceneCollector's F5 auto-recompile so the
+        // two paths stay in lockstep.
+        var loaded = PS1GraphCompiler.RobustLoad(path);
         if (loaded == null)
         {
-            var raw = ResourceLoader.Load(path);
-            if (raw == null)
-            {
-                GD.PushError($"[PS1Godot] PS1Graph: failed to load '{path}'.");
-                return;
-            }
-            loaded = ReconstructGraphFromBareResource(raw);
-            if (loaded == null)
-            {
-                GD.PushError($"[PS1Godot] PS1Graph: '{path}' doesn't look like a PS1GraphResource (Godot returned a bare Resource and the script-binding workaround failed).");
-                return;
-            }
+            GD.PushError($"[PS1Godot] PS1Graph: failed to load '{path}' (file missing or not a PS1GraphResource).");
+            return;
+        }
+        // Wrap ResourcePath assignment: when the load fell back to a
+        // reconstructed resource, Godot's resource cache already holds
+        // the original bare Resource at this path and setting our
+        // reconstructed one's path emits "Another resource is loaded"
+        // ERROR. The reconstructed object isn't registered in the
+        // cache, so it can't claim the path. Path threading below
+        // (Save / Compile) takes a path parameter explicitly so we
+        // don't need ResourcePath to stick for correctness — just for
+        // the dock label and saved .tres metadata.
+        try
+        {
             loaded.ResourcePath = path;
-            GD.Print($"[PS1Godot] PS1Graph: script binding wasn't attached on load — reconstructed via property copy.");
+        }
+        catch (System.Exception ex)
+        {
+            GD.PushWarning($"[PS1Godot] PS1Graph: couldn't claim ResourcePath '{path}' on reconstructed graph: {ex.Message}. Save / Compile paths handle this via explicit pathOverride; label may show '(unsaved)' until next Save.");
         }
         _resource = loaded;
+        // Track the path on the dock so UpdatePathLabel / OnSavePressed
+        // see it even when ResourcePath didn't stick on the resource.
+        _loadedFromPath = path;
 
         // Sync the toolbar Kind dropdown to whatever the loaded graph
         // says. Otherwise the right-click palette filters against the
@@ -301,7 +305,7 @@ public partial class PS1GraphEditorDock : VBoxContainer
     {
         SyncVisualPositionsBackToResource();
 
-        string path = _resource.ResourcePath;
+        string path = EffectivePath();
         if (string.IsNullOrEmpty(path))
         {
             // First save — fall through to Save As… so the author picks
@@ -349,7 +353,12 @@ public partial class PS1GraphEditorDock : VBoxContainer
     private void OnSavePathChosen(string path)
     {
         SyncVisualPositionsBackToResource();
-        _resource.ResourcePath = path;
+        try { _resource.ResourcePath = path; }
+        catch (System.Exception ex)
+        {
+            GD.PushWarning($"[PS1Godot] PS1Graph: couldn't claim ResourcePath on save: {ex.Message} — using path-tracked fallback.");
+        }
+        _loadedFromPath = path;
         var err = ResourceSaver.Save(_resource, path);
         if (err != Error.Ok)
         {
@@ -934,71 +943,6 @@ public partial class PS1GraphEditorDock : VBoxContainer
         return int.TryParse(name.Substring(1), out var id) ? id : -1;
     }
 
-    // Rebuild a typed PS1GraphResource from a bare Godot.Resource when
-    // Godot 4.7-dev5 fails to attach the C# script binding on load.
-    // Reads exported properties via Resource.Get; tolerates Nodes /
-    // Connections subresources that also lost their bindings by doing
-    // the same property-copy on each entry.
-    private static PS1GraphResource? ReconstructGraphFromBareResource(Resource raw)
-    {
-        var graph = new PS1GraphResource
-        {
-            Kind = raw.Get("Kind").AsString() ?? "",
-            NextNodeId = raw.Get("NextNodeId").AsInt32(),
-        };
-
-        var rawNodes = raw.Get("Nodes").AsGodotArray();
-        if (rawNodes != null)
-        {
-            foreach (var item in rawNodes)
-            {
-                if (item.AsGodotObject() is not Resource rn) continue;
-                if (rn is PS1GraphNode boundNode)
-                {
-                    graph.Nodes.Add(boundNode);
-                    continue;
-                }
-                // Sub-resource also lost its binding — rebuild manually.
-                var node = new PS1GraphNode
-                {
-                    Id = rn.Get("Id").AsInt32(),
-                    Kind = rn.Get("Kind").AsString() ?? "",
-                    Position = rn.Get("Position").AsVector2(),
-                    Payload = rn.Get("Payload").AsString() ?? "",
-                };
-                var rawPayloads = rn.Get("Payloads").AsGodotArray<string>();
-                if (rawPayloads != null)
-                {
-                    foreach (var s in rawPayloads) node.Payloads.Add(s ?? "");
-                }
-                graph.Nodes.Add(node);
-            }
-        }
-
-        var rawConns = raw.Get("Connections").AsGodotArray();
-        if (rawConns != null)
-        {
-            foreach (var item in rawConns)
-            {
-                if (item.AsGodotObject() is not Resource rc) continue;
-                if (rc is PS1GraphConnection boundConn)
-                {
-                    graph.Connections.Add(boundConn);
-                    continue;
-                }
-                graph.Connections.Add(new PS1GraphConnection
-                {
-                    FromNodeId = rc.Get("FromNodeId").AsInt32(),
-                    FromPort   = rc.Get("FromPort").AsInt32(),
-                    ToNodeId   = rc.Get("ToNodeId").AsInt32(),
-                    ToPort     = rc.Get("ToPort").AsInt32(),
-                });
-            }
-        }
-
-        return graph;
-    }
-
     // ── GraphEdit signal handlers ────────────────────────────────────
 
     private void OnConnectionRequest(StringName fromNode, long fromPort, StringName toNode, long toPort)
@@ -1195,10 +1139,23 @@ public partial class PS1GraphEditorDock : VBoxContainer
         {
             if (k == (_resource?.Kind ?? "")) { kindTag = $"  [{display}]"; break; }
         }
-        string path = _resource?.ResourcePath ?? "";
+        string path = EffectivePath();
         _pathLabel.Text = string.IsNullOrEmpty(path)
             ? $"(unsaved){kindTag}"
             : $"{path}{kindTag}";
+    }
+
+    // Resolves the "where is this graph saved" path with the binding-
+    // quirk fallback. Prefer the Godot-managed ResourcePath when it
+    // stuck; fall back to whatever Load remembered. Save / label /
+    // compile all funnel through here so dialogues like
+    // "(unsaved) for an FSM that's actually loaded from disk" don't
+    // happen.
+    private string EffectivePath()
+    {
+        var rp = _resource?.ResourcePath;
+        if (!string.IsNullOrEmpty(rp)) return rp;
+        return _loadedFromPath ?? "";
     }
 }
 #endif

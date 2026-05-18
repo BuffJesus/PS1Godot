@@ -613,6 +613,106 @@ public static class PS1GraphCompiler
         };
     }
 
+    // ── Robust .tres → PS1GraphResource loader ──────────────────────
+    //
+    // Godot 4.7-dev5 sometimes returns custom-script Resources from
+    // `ResourceLoader.Load` without attaching the C# wrapper class —
+    // the runtime type comes back as plain `Godot.Resource` and the
+    // generic `Load<T>` wrapper throws `InvalidCastException` at its
+    // internal `(T)resource` cast. RobustLoad does the try-fallback-
+    // reconstruct dance so the dock + auto-recompile + any other site
+    // that needs to load a PS1GraphResource always gets a wired-up
+    // typed object (even when Godot's binding fails).
+    //
+    // Returns null only when the file doesn't exist or can't be
+    // interpreted as a graph at all.
+    public static PS1GraphResource? RobustLoad(string tresPath)
+    {
+        if (string.IsNullOrEmpty(tresPath)) return null;
+        if (!Godot.FileAccess.FileExists(tresPath)) return null;
+
+        PS1GraphResource? loaded = null;
+        try
+        {
+            loaded = Godot.ResourceLoader.Load<PS1GraphResource>(tresPath);
+        }
+        catch (System.InvalidCastException)
+        {
+            // Binding-quirk; fall through.
+        }
+        if (loaded != null) return loaded;
+
+        var raw = Godot.ResourceLoader.Load(tresPath);
+        if (raw == null) return null;
+        return ReconstructGraphFromBareResource(raw);
+    }
+
+    // Rebuild a typed PS1GraphResource from a bare Godot.Resource when
+    // Godot 4.7-dev5 fails to attach the C# script binding on load.
+    // Reads exported properties via Resource.Get; tolerates Nodes /
+    // Connections subresources that also lost their bindings by doing
+    // the same property-copy on each entry.
+    public static PS1GraphResource? ReconstructGraphFromBareResource(Godot.Resource raw)
+    {
+        if (raw == null) return null;
+        var graph = new PS1GraphResource
+        {
+            Kind = raw.Get("Kind").AsString() ?? "",
+            NextNodeId = raw.Get("NextNodeId").AsInt32(),
+        };
+
+        var rawNodes = raw.Get("Nodes").AsGodotArray();
+        if (rawNodes != null)
+        {
+            foreach (var item in rawNodes)
+            {
+                if (item.AsGodotObject() is not Godot.Resource rn) continue;
+                if (rn is PS1GraphNode boundNode)
+                {
+                    graph.Nodes.Add(boundNode);
+                    continue;
+                }
+                // Sub-resource also lost its binding — rebuild manually.
+                var node = new PS1GraphNode
+                {
+                    Id = rn.Get("Id").AsInt32(),
+                    Kind = rn.Get("Kind").AsString() ?? "",
+                    Position = rn.Get("Position").AsVector2(),
+                    Payload = rn.Get("Payload").AsString() ?? "",
+                };
+                var rawPayloads = rn.Get("Payloads").AsGodotArray<string>();
+                if (rawPayloads != null)
+                {
+                    foreach (var s in rawPayloads) node.Payloads.Add(s ?? "");
+                }
+                graph.Nodes.Add(node);
+            }
+        }
+
+        var rawConns = raw.Get("Connections").AsGodotArray();
+        if (rawConns != null)
+        {
+            foreach (var item in rawConns)
+            {
+                if (item.AsGodotObject() is not Godot.Resource rc) continue;
+                if (rc is PS1GraphConnection boundConn)
+                {
+                    graph.Connections.Add(boundConn);
+                    continue;
+                }
+                graph.Connections.Add(new PS1GraphConnection
+                {
+                    FromNodeId = rc.Get("FromNodeId").AsInt32(),
+                    FromPort   = rc.Get("FromPort").AsInt32(),
+                    ToNodeId   = rc.Get("ToNodeId").AsInt32(),
+                    ToPort     = rc.Get("ToPort").AsInt32(),
+                });
+            }
+        }
+
+        return graph;
+    }
+
     // ── Escaping ────────────────────────────────────────────────────
 
     private static string EscapeLuaString(string s)

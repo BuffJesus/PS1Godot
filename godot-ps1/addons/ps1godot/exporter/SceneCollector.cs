@@ -4201,12 +4201,17 @@ public static class SceneCollector
         if (!luaPath.EndsWith(".lua", StringComparison.OrdinalIgnoreCase)) return;
         string tresPath = luaPath.Substring(0, luaPath.Length - 4) + ".tres";
         if (!Godot.FileAccess.FileExists(tresPath)) return;
-        var res = Godot.ResourceLoader.Load(tresPath);
-        if (res is not PS1Godot.Graph.PS1GraphResource graph) return;
 
-        // Pass tresPath explicitly — same Godot binding quirk that
-        // affects the dock save can leave `graph.ResourcePath` empty,
-        // emitting `_G.dialogue_unnamed` instead of the correct global.
+        // RobustLoad handles the Godot 4.7-dev5 binding-quirk fallback
+        // (see PS1GraphCompiler.RobustLoad). Without it, every author
+        // whose .tres triggers the cast issue would see stale .lua
+        // shipped to PSX silently.
+        var graph = PS1Godot.Graph.PS1GraphCompiler.RobustLoad(tresPath);
+        if (graph == null) return;
+
+        // Pass tresPath explicitly — same binding quirk can leave
+        // `graph.ResourcePath` empty, emitting `_G.dialogue_unnamed`
+        // / `_G.fsm_unnamed` instead of the correct global.
         string compiled = PS1Godot.Graph.PS1GraphCompiler.Compile(graph, tresPath);
         using var f = Godot.FileAccess.Open(luaPath, Godot.FileAccess.ModeFlags.Write);
         if (f == null)
