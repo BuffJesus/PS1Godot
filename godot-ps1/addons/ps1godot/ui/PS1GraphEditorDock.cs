@@ -464,9 +464,16 @@ public partial class PS1GraphEditorDock : VBoxContainer
         // lose ResourcePath to the Godot 4.7-dev5 binding quirk)
         // compile as `_G.dialogue_unnamed` "from (unsaved)" and the
         // author thinks the dock is broken.
-        string lua = PS1GraphCompiler.Compile(_resource, EffectivePath());
+        string path = EffectivePath();
+        string lua = PS1GraphCompiler.Compile(_resource, path);
         GD.Print("[PS1Godot] PS1Graph: compiled to Lua —");
         GD.Print(lua);
+        if (string.IsNullOrEmpty(path))
+        {
+            GD.PushWarning("[PS1Godot] PS1Graph: graph has no saved path — sibling .lua not written. Use Save As first.");
+            return;
+        }
+        WriteCompiledLuaSibling(path);
     }
 
     private void OnSaveAsPressed()
