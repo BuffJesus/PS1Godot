@@ -98,6 +98,7 @@ public partial class PS1GraphEditorDock : VBoxContainer
         new NodeKindEntry("branch",         "Branch (if/else)", GraphKind: ""),
         new NodeKindEntry("bool_literal",   "Bool Literal",     GraphKind: ""),
         new NodeKindEntry("comment",        "Comment",          AvailableInAll: true),
+        new NodeKindEntry("reroute",        "Reroute",          AvailableInAll: true),
         new NodeKindEntry("line",           "Line",             GraphKind: "dialogue"),
         new NodeKindEntry("choice",         "Choice",           GraphKind: "dialogue"),
         new NodeKindEntry("set_flag",       "Set Flag",         GraphKind: "dialogue"),
@@ -159,6 +160,7 @@ public partial class PS1GraphEditorDock : VBoxContainer
         ["branch"]         = new[] { "default condition (true/false)" },
         ["bool_literal"]   = new[] { "value (true/false)" },
         ["comment"]        = new[] { "comment text" },
+        ["reroute"]        = new string[0],   // no payloads — passthrough only
         ["line"]           = new[] { "text", "speaker", "audio clip", "skippable (true/false)", "notifies (frame:lua | ...)" },
         ["choice"]         = new[] { "option 1 text", "option 2 text", "option 3 text" },
         ["set_flag"]       = new[] { "flag name", "value (true/false)" },
@@ -196,6 +198,7 @@ public partial class PS1GraphEditorDock : VBoxContainer
         ["branch"]         = new("Untyped",  "if/else split on a Bool input. Two exec outs (true/false)."),
         ["bool_literal"]   = new("Untyped",  "Constant Bool source. Feeds a Branch condition."),
         ["comment"]        = new("Meta",     "Pinless decoration. Compiles to nothing."),
+        ["reroute"]        = new("Meta",     "Pinless 1-in/1-out passthrough — bends exec edges without affecting flow. Compiler chases through it like a Disabled node, so the runtime never sees it."),
         ["line"]           = new("Dialogue", "Display one line of dialogue. Optional audio clip; optional skippable flag; pipe-separated notify markers fire timed Lua snippets while the line is active."),
         ["choice"]         = new("Dialogue", "Branch on player input. Up to 3 options; D-pad navigates, X confirms. Walker prefixes selected option with > when no cursor element is on the canvas."),
         ["set_flag"]       = new("Dialogue", "Persist.Set(name, bool). Auto-advances."),
@@ -840,6 +843,21 @@ public partial class PS1GraphEditorDock : VBoxContainer
                 g.AddChild(valueCheck);
                 g.SetSlot(0, false, (int)PinType.Bool, s_pinColors[PinType.Bool],
                              true,  (int)PinType.Bool, s_pinColors[PinType.Bool]);
+                break;
+            }
+            case "reroute":
+            {
+                // UE port-plan pick #3 — pinless 1-in/1-out passthrough
+                // for bending exec edges. Body is a single bullet so
+                // the node stays visually tiny. Compiler treats it as
+                // transparent (chase-through, same as Disabled).
+                g.AddChild(new Label
+                {
+                    Text = " • ",
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                });
+                g.SetSlot(0, true, (int)PinType.Exec, s_pinColors[PinType.Exec],
+                             true, (int)PinType.Exec, s_pinColors[PinType.Exec]);
                 break;
             }
             case "comment":

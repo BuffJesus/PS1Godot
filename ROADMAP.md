@@ -1554,6 +1554,52 @@ The Blender ↔ Godot pipeline is now first-class in both directions:
       `SplashpackWriter.WriteUITableBlock`. ISO bundler picks up the
       sidecar as `SCENE_n.LDG`.
 
+### UE Blueprint port picks — all six shipped 2026-05-17
+
+Plan source: [`docs/ps1graph-ue-blueprint-port-plan.md`](docs/ps1graph-ue-blueprint-port-plan.md).
+
+- **#6 — Kind-meta tooltips.** `s_kindMeta` dictionary keyed by Kind
+  feeds the right-click palette's per-item tooltip AND each
+  GraphNode's title TooltipText. Authors see what each kind does
+  before spawning + by hovering existing nodes.
+- **#5 — Corner-icon glyph + category-tinted title bar.**
+  `s_categoryTints` maps each Category (Dialogue/FSM/Quest/Untyped/
+  Meta) to a low-saturation tint applied via title_color theme
+  override per node. `s_kindGlyphs` prepends ▶ / ✱ / ♪ / ⚡ / ↪ / →
+  / 🏁 to side-effect or state-mutating kinds.
+- **#1 — Node Details inspector.** Right pane of an HSplitContainer
+  inside the PS1 Graph dock. NodeSelected → builds multi-line
+  TextEdits for each payload slot (`s_kindPayloadLabels` per-kind
+  label arrays). Closes the "snippets are single-line, chain with
+  `;`" limitation from the FSM / Quest / Dialogue docs.
+- **#2 — Enabled / Disabled / DevelopmentOnly tri-state.** New
+  `NodeEnabledState` enum on PS1GraphNode. Inspector OptionButton
+  drives the state; canvas reflects with [OFF]/[DEV] title prefix
+  + desaturated title for Disabled. Compiler chases past Disabled
+  linear nodes (line/set_flag/play_sound/start_cutscene/lua_snippet/
+  sub_dialogue/print) up to a 32-hop cycle guard; prunes Disabled
+  from all dialogue/FSM/quest emit loops; DevelopmentOnly emits
+  with a `-- @dev-only n<id>` marker comment for future build-flag
+  stripping.
+- **#4 — PS1 Graph Find dock.** Bottom-panel substring search
+  across every .tres under res:// (DirAccess walk, skip .godot /
+  .import / build). RobustLoad → check Payload + Payloads[]
+  against query. Click result → highlight .tres in FileSystem
+  dock. Case-sensitive + include-disabled toggles. Targets the
+  silent-typo failure mode flagged in the dialogue troubleshooting
+  doc.
+- **#3 — Reroute / Knot nodes.** New `reroute` kind available in
+  every graph (`AvailableInAll: true`). Pinless 1-in/1-out body
+  with a single bullet glyph. Compile chase treats them identically
+  to Disabled — invisible to the runtime, useful for wire
+  organisation. Skipped UE's "drag-to-empty-canvas spawns knot"
+  interaction (Godot framework gap); author spawns via the palette.
+
+Rejected from the original plan (still rejected, see plan doc for
+rationale): Variables / Functions / Macros "My Blueprint" tree,
+visual breakpoints, wildcard pins, resizable comment containers
+with drag-along children.
+
 ### Graph authoring framework (PS1Graph)
 
 Visual node-graph authoring is the right shape for a whole family of

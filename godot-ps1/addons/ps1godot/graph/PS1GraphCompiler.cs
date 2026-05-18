@@ -776,10 +776,14 @@ public static class PS1GraphCompiler
         if (byId != null)
         {
             int hops = 0;
+            // Chase through targets that should be invisible to the
+            // runtime: Disabled linear nodes (UE pick #2) AND every
+            // reroute knot (UE pick #3). Both compile to nothing;
+            // exec edges chase past them transparently.
             while (hops++ < 32 &&
                    byId.TryGetValue(target, out var tn) &&
-                   tn.IsDisabled &&
-                   HasSingleExecOut(tn.Kind))
+                   HasSingleExecOut(tn.Kind) &&
+                   (tn.IsDisabled || tn.Kind == "reroute"))
             {
                 int nextTarget = -1;
                 foreach (var c2 in conns)
@@ -799,7 +803,7 @@ public static class PS1GraphCompiler
     }
 
     // Whether a kind has exactly one exec-out at port 0 — eligible
-    // for chase-through when Disabled.
+    // for chase-through when Disabled or always-transparent (reroute).
     private static bool HasSingleExecOut(string kind) => kind switch
     {
         "line"           => true,
@@ -809,6 +813,7 @@ public static class PS1GraphCompiler
         "lua_snippet"    => true,
         "sub_dialogue"   => true,
         "print"          => true,
+        "reroute"        => true,
         _                => false,
     };
 
@@ -1004,6 +1009,7 @@ public static class PS1GraphCompiler
         "transition"     => true,
         "objective"      => true,
         "outcome"        => true,
+        "reroute"        => true,
         "comment"        => false,
         _                => false,
     };
@@ -1042,6 +1048,8 @@ public static class PS1GraphCompiler
             // outcomes). outcome: row 0 in only (terminal).
             "objective"      => port == 0,
             "outcome"        => isInput && port == 0,
+            // reroute: row 0 in+out — pinless body but exec slot at 0.
+            "reroute"        => port == 0,
             _                => false,
         };
     }
