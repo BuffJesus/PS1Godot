@@ -130,13 +130,20 @@ public static class PS1GraphCompiler
         // Entry = the first dialogue node with no incoming exec edge,
         // in Id order. If there's no dialogue-kind node at all, entry
         // is `nil` and the table is essentially empty.
+        //
+        // Edges from Disabled source nodes don't count — disabling a
+        // node falls through its exec edges (FindNextKey already chases
+        // past Disabled for downstream navigation), so the entry-picker
+        // mirrors that and promotes the next downstream node when the
+        // author disables the entry. Without this, disabling the entry
+        // would orphan every reachable node and the dialogue dies with
+        // `entry = nil` even though the rest of the graph is intact.
         var hasIncomingExec = new HashSet<int>();
         foreach (var c in resource.Connections)
         {
-            if (IsExecPort(byId, c.ToNodeId, c.ToPort, isInput: true))
-            {
-                hasIncomingExec.Add(c.ToNodeId);
-            }
+            if (!IsExecPort(byId, c.ToNodeId, c.ToPort, isInput: true)) continue;
+            if (byId.TryGetValue(c.FromNodeId, out var src) && src.IsDisabled) continue;
+            hasIncomingExec.Add(c.ToNodeId);
         }
         int entryId = -1;
         foreach (var n in resource.Nodes)
@@ -1235,12 +1242,18 @@ public static class PS1GraphCompiler
                     continue;
                 }
                 // Sub-resource also lost its binding — rebuild manually.
+                // Every [Export] property on PS1GraphNode must be copied
+                // here, including EnabledState (UE port-plan pick #2) —
+                // skipping it silently reverts Disabled/DevelopmentOnly
+                // to Enabled on every reload, and downstream compile +
+                // runtime behave as if the author never set it.
                 var node = new PS1GraphNode
                 {
                     Id = rn.Get("Id").AsInt32(),
                     Kind = rn.Get("Kind").AsString() ?? "",
                     Position = rn.Get("Position").AsVector2(),
                     Payload = rn.Get("Payload").AsString() ?? "",
+                    EnabledState = (PS1GraphNode.NodeEnabledState)rn.Get("EnabledState").AsInt32(),
                 };
                 var rawPayloads = rn.Get("Payloads").AsGodotArray<string>();
                 if (rawPayloads != null)
