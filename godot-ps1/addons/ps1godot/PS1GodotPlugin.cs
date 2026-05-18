@@ -70,6 +70,7 @@ public partial class PS1GodotPlugin : EditorPlugin
     private PS1LuaApiCheatsheetDock? _luaApiDock;
     private PS1GraphEditorDock? _graphEditorDock;
     private PS1DoctorDock? _doctorDock;
+    private PS1QuestJournalDock? _questJournalDock;
     private LuaHotSwapWatcher? _luaHotSwapWatcher;
     private PS1ViewportOverlay? _viewportOverlay;
 
@@ -345,6 +346,15 @@ public partial class PS1GodotPlugin : EditorPlugin
         AddControlToBottomPanel(_doctorDock, "PS1 Doctor");
 #pragma warning restore CS0618
 
+        // PS1 Quest Journal (D2-4): in-editor quest simulator. Load a
+        // quest .tres, click "Complete" on active objectives, watch the
+        // outcome resolve — no PSX round-trip needed for design
+        // iteration. Mirrors Quest.new's prereq-resolution logic.
+        _questJournalDock = new PS1QuestJournalDock();
+#pragma warning disable CS0618 // Obsolete: AddControlToBottomPanel — see AddControlToDock site above.
+        AddControlToBottomPanel(_questJournalDock, "PS1 Quest Journal");
+#pragma warning restore CS0618
+
         // Lua hot-swap watcher: polls scene_0's exported .lua files and
         // writes res://build/hotswap.luac when one changes. Runtime side
         // (psxsplash-main/src/lua.cpp Lua::TryHotSwap) consumes that file
@@ -581,6 +591,15 @@ public partial class PS1GodotPlugin : EditorPlugin
 #pragma warning restore CS0618
             _doctorDock.QueueFree();
             _doctorDock = null;
+        }
+
+        if (_questJournalDock != null)
+        {
+#pragma warning disable CS0618 // Obsolete — see AddControlToBottomPanel site above.
+            RemoveControlFromBottomPanel(_questJournalDock);
+#pragma warning restore CS0618
+            _questJournalDock.QueueFree();
+            _questJournalDock = null;
         }
 
         if (_luaHotSwapWatcher != null)
