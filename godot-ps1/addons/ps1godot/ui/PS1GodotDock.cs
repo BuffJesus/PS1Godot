@@ -68,13 +68,28 @@ public partial class PS1GodotDock : VBoxContainer
 
     private void BuildUI()
     {
+        // Vertical scroll wrapper — dock content has outgrown the right-side
+        // panel height; without this, sections below the fold are unreachable.
+        var scroll = new ScrollContainer
+        {
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+            SizeFlagsVertical = SizeFlags.ExpandFill,
+            HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
+            VerticalScrollMode = ScrollContainer.ScrollMode.Auto,
+        };
+        AddChild(scroll);
+
         // Outer margin so content doesn't kiss the dock edges.
-        var margin = new MarginContainer { SizeFlagsVertical = SizeFlags.ExpandFill };
+        var margin = new MarginContainer
+        {
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+            SizeFlagsVertical = SizeFlags.ShrinkBegin,
+        };
         margin.AddThemeConstantOverride("margin_top", 8);
         margin.AddThemeConstantOverride("margin_bottom", 8);
         margin.AddThemeConstantOverride("margin_left", 8);
         margin.AddThemeConstantOverride("margin_right", 8);
-        AddChild(margin);
+        scroll.AddChild(margin);
 
         var inner = new VBoxContainer { SizeFlagsVertical = SizeFlags.ExpandFill };
         inner.AddThemeConstantOverride("separation", 12);
