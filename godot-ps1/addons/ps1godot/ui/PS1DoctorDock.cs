@@ -186,12 +186,21 @@ public partial class PS1DoctorDock : VBoxContainer
         if (r.Contains("uv "))                      return Category.Uv;
         if (r.Contains("vertex reuse"))             return Category.Mesh;
         if (r.Contains("merge-by-distance"))        return Category.Mesh;
-        if (r.Contains("texture") || r.Contains("vram") ||
-            r.Contains("atlas")   || r.Contains("4bpp") || r.Contains("8bpp")) return Category.Texture;
+        // Audio MUST run before Animation because audio reasons can
+        // contain "clip" (e.g. "long SPU clip") that would otherwise
+        // mis-classify. Audio match uses bus names (SPU/XA/CDDA/ADPCM)
+        // which never appear in animation linter output.
         if (r.Contains("audio") || r.Contains("spu") || r.Contains("xa") ||
             r.Contains("cdda")  || r.Contains("adpcm"))  return Category.Audio;
-        if (r.Contains("animation") || r.Contains("keyframe") ||
-            r.Contains("clip")      || r.Contains("fps"))     return Category.Animation;
+        if (r.Contains("texture") || r.Contains("vram") ||
+            r.Contains("atlas")   || r.Contains("4bpp") || r.Contains("8bpp")) return Category.Texture;
+        // Animation match uses "anim"/"keyframe"/"frames"/"fps" — covers
+        // every reason AnimationLinter emits today ("no keyframes",
+        // "TotalFrames=0", "0 frames — clip plays as a no-op", "fps>30")
+        // without claiming bare "clip" which any new audio validator
+        // could legitimately emit.
+        if (r.Contains("anim") || r.Contains("keyframe") ||
+            r.Contains("frames") || r.Contains("fps"))    return Category.Animation;
         if (r.Contains("decal") || r.Contains("translucent")) return Category.Decal;
         return Category.Other;
     }
