@@ -725,18 +725,24 @@ public partial class PS1GraphEditorDock : VBoxContainer
             // UE port-plan pick #5 — category-tinted title bar. Godot's
             // GraphNode title color is theme-driven (`title_color`).
             // AddThemeColorOverride on the title affects only this node.
-            if (s_categoryTints.TryGetValue(nodeMeta.Category, out var tint))
-            {
-                g.AddThemeColorOverride("title_color", tint);
-            }
+            // Disabled nodes get a desaturated grey instead of the
+            // category tint (UE port-plan pick #2 visual feedback).
+            Color titleTint = n.IsDisabled
+                ? new Color(0.35f, 0.35f, 0.35f)
+                : (s_categoryTints.TryGetValue(nodeMeta.Category, out var t) ? t : new Color(0.55f, 0.55f, 0.55f));
+            g.AddThemeColorOverride("title_color", titleTint);
 
             // Optional corner glyph — prepend to the title so it sits
             // left of the kind name. Cheaper than overlaying an icon
             // Control on the title bar (which GraphNode doesn't expose
             // a clean slot for) and reads fine at the dock's zoom range.
-            if (s_kindGlyphs.TryGetValue(n.Kind, out var glyph))
+            string prefix = "";
+            if (n.IsDisabled)             prefix = "[OFF] ";
+            else if (n.IsDevelopmentOnly) prefix = "[DEV] ";
+            else if (s_kindGlyphs.TryGetValue(n.Kind, out var glyph)) prefix = $"{glyph}  ";
+            if (prefix.Length > 0)
             {
-                g.Title = $"{glyph}  {g.Title}";
+                g.Title = $"{prefix}{g.Title}";
             }
         }
         else
@@ -1597,6 +1603,33 @@ public partial class PS1GraphEditorDock : VBoxContainer
         };
         title.AddThemeColorOverride("font_color", new Color(0.75f, 0.85f, 1.00f));
         _inspectorPanel.AddChild(title);
+
+        // Enabled tri-state (UE port-plan pick #2). Sits at the top of
+        // the inspector so the state toggle is always one click away
+        // when debugging a graph — flip a node Disabled to mute it
+        // without deleting + re-authoring it, then flip back.
+        var stateRow = new HBoxContainer();
+        stateRow.AddThemeConstantOverride("separation", 6);
+        stateRow.AddChild(new Label { Text = "State:", VerticalAlignment = VerticalAlignment.Center });
+        var stateBtn = new OptionButton();
+        stateBtn.AddItem("Enabled",          (int)PS1GraphNode.NodeEnabledState.Enabled);
+        stateBtn.AddItem("Disabled",         (int)PS1GraphNode.NodeEnabledState.Disabled);
+        stateBtn.AddItem("DevelopmentOnly",  (int)PS1GraphNode.NodeEnabledState.DevelopmentOnly);
+        stateBtn.Selected = (int)node.EnabledState;
+        stateBtn.TooltipText =
+            "Enabled: compiles normally.\n" +
+            "Disabled: skipped at compile — surrounding graph's exec edges chase through.\n" +
+            "DevelopmentOnly: emits with a marker comment; future slice can strip via build flag.";
+        stateBtn.ItemSelected += idx =>
+        {
+            node.EnabledState = (PS1GraphNode.NodeEnabledState)(int)idx;
+            // Refresh the canvas so the title prefix + tint update
+            // immediately. ReloadGraphView is a hammer but the dock's
+            // node counts are small and selection loss is acceptable.
+            ReloadGraphView();
+        };
+        stateRow.AddChild(stateBtn);
+        _inspectorPanel.AddChild(stateRow);
 
         if (s_kindMeta.TryGetValue(node.Kind, out var meta))
         {

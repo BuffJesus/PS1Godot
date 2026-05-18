@@ -67,4 +67,22 @@ public partial class PS1GraphNode : Resource
         Payloads[i] = value ?? "";
         if (i == 0) Payload = value ?? "";
     }
+
+    // Enabled tri-state (UE port-plan pick #2, mirrors UE's
+    // ENodeEnabledState). Default Enabled keeps every existing .tres
+    // unchanged. Disabled excludes the node from the compiled output —
+    // the compiler chases past it through linear `next` chains so the
+    // surrounding graph still flows. DevelopmentOnly emits normally
+    // today; a future slice can add a build-time strip toggle.
+    public enum NodeEnabledState
+    {
+        Enabled = 0,
+        Disabled = 1,
+        DevelopmentOnly = 2,
+    }
+
+    [Export] public NodeEnabledState EnabledState { get; set; } = NodeEnabledState.Enabled;
+
+    public bool IsDisabled        => EnabledState == NodeEnabledState.Disabled;
+    public bool IsDevelopmentOnly => EnabledState == NodeEnabledState.DevelopmentOnly;
 }

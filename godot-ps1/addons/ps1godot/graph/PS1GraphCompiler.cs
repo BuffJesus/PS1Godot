@@ -138,6 +138,7 @@ public static class PS1GraphCompiler
         foreach (var n in resource.Nodes)
         {
             if (!IsDialogueKind(n.Kind)) continue;
+            if (n.IsDisabled) continue;  // pick #2 — disabled can't be entry
             if (hasIncomingExec.Contains(n.Id)) continue;
             if (entryId < 0 || n.Id < entryId) entryId = n.Id;
         }
@@ -149,6 +150,14 @@ public static class PS1GraphCompiler
         foreach (var n in resource.Nodes)
         {
             if (!IsDialogueKind(n.Kind)) continue;
+            // Disabled nodes (UE port-plan pick #2) are pruned from
+            // the compiled table entirely — exec-edge chase logic in
+            // FindNextKey routes other nodes past them.
+            if (n.IsDisabled) continue;
+            if (n.IsDevelopmentOnly)
+            {
+                sb.AppendLine($"        -- @dev-only n{n.Id}");
+            }
             EmitDialogueNode(sb, byId, resource.Connections, n);
         }
 
@@ -222,6 +231,7 @@ public static class PS1GraphCompiler
         foreach (var n in resource.Nodes)
         {
             if (n.Kind != "state") continue;
+            if (n.IsDisabled) continue;  // pick #2 — pruned from `states`
             if (string.IsNullOrEmpty(n.GetPayload(0))) continue;
             stateNodes.Add(n);
         }
@@ -243,6 +253,7 @@ public static class PS1GraphCompiler
         foreach (var n in resource.Nodes)
         {
             if (n.Kind != "transition") continue;
+            if (n.IsDisabled) continue;  // pick #2 — pruned from `transitions`
             string ev = n.GetPayload(0);
             if (string.IsNullOrEmpty(ev))
             {
@@ -357,6 +368,7 @@ public static class PS1GraphCompiler
         foreach (var n in resource.Nodes)
         {
             if (n.Kind != "objective") continue;
+            if (n.IsDisabled) continue;  // pick #2 — pruned from `objectives`
             if (string.IsNullOrEmpty(n.GetPayload(0))) continue;
             objectiveNodes.Add(n);
         }
@@ -404,6 +416,7 @@ public static class PS1GraphCompiler
         foreach (var n in resource.Nodes)
         {
             if (n.Kind != "outcome") continue;
+            if (n.IsDisabled) continue;  // pick #2 — pruned from `outcomes`
             string id = n.GetPayload(0);
             if (string.IsNullOrEmpty(id))
             {
@@ -606,7 +619,7 @@ public static class PS1GraphCompiler
                 bool skippable = !string.Equals(n.GetPayload(3), "false",
                                                  System.StringComparison.OrdinalIgnoreCase);
                 string notifiesField = CompileLineNotifies(n.GetPayload(4));
-                string next    = FindNextKey(conns, n.Id, fromPort: 0);
+                string next    = FindNextKey(conns, n.Id, byId: byId, fromPort: 0);
                 sb.AppendLine($"        n{n.Id} = {{ kind = \"line\", speaker = {speaker}, text = {text}{audioField}, skippable = {(skippable ? "true" : "false")}{notifiesField}, next = {next} }},");
                 break;
             }
@@ -620,7 +633,7 @@ public static class PS1GraphCompiler
                                               System.StringComparison.OrdinalIgnoreCase)
                                 ? "true" : "false";
                 string lua   = $"Persist.Set({flag}, {value})";
-                string next  = FindNextKey(conns, n.Id, fromPort: 0);
+                string next  = FindNextKey(conns, n.Id, byId: byId, fromPort: 0);
                 sb.AppendLine($"        n{n.Id} = {{ kind = \"action\", lua = {EscapeLuaString(lua)}, next = {next} }},");
                 break;
             }
@@ -628,7 +641,7 @@ public static class PS1GraphCompiler
             {
                 string clip = EscapeLuaString(n.GetPayload(0));
                 string lua  = $"Audio.PlaySfx({clip})";
-                string next = FindNextKey(conns, n.Id, fromPort: 0);
+                string next = FindNextKey(conns, n.Id, byId: byId, fromPort: 0);
                 sb.AppendLine($"        n{n.Id} = {{ kind = \"action\", lua = {EscapeLuaString(lua)}, next = {next} }},");
                 break;
             }
@@ -636,7 +649,7 @@ public static class PS1GraphCompiler
             {
                 string id   = EscapeLuaString(n.GetPayload(0));
                 string lua  = $"Cutscene.Play({id})";
-                string next = FindNextKey(conns, n.Id, fromPort: 0);
+                string next = FindNextKey(conns, n.Id, byId: byId, fromPort: 0);
                 sb.AppendLine($"        n{n.Id} = {{ kind = \"action\", lua = {EscapeLuaString(lua)}, next = {next} }},");
                 break;
             }
@@ -652,7 +665,7 @@ public static class PS1GraphCompiler
                 // can type the .tres basename directly (e.g.
                 // "shopkeeper-greeting" → "shopkeeper_greeting").
                 string target = BasenameForGlobal(n.GetPayload(0));
-                string next   = FindNextKey(conns, n.Id, fromPort: 0);
+                string next   = FindNextKey(conns, n.Id, byId: byId, fromPort: 0);
                 sb.AppendLine($"        n{n.Id} = {{ kind = \"sub_dialogue\", target = {EscapeLuaString(target)}, next = {next} }},");
                 break;
             }
@@ -669,7 +682,7 @@ public static class PS1GraphCompiler
                     // exec edge resolves. Walker handles empty body fine.
                     snippet = "";
                 }
-                string next = FindNextKey(conns, n.Id, fromPort: 0);
+                string next = FindNextKey(conns, n.Id, byId: byId, fromPort: 0);
                 sb.AppendLine($"        n{n.Id} = {{ kind = \"action\", lua = {EscapeLuaString(snippet)}, next = {next} }},");
                 break;
             }
@@ -685,8 +698,8 @@ public static class PS1GraphCompiler
                 string lua  = string.IsNullOrEmpty(expr)
                     ? "return false"
                     : $"return ({expr})";
-                string nextTrue  = FindNextKey(conns, n.Id, fromPort: 0);
-                string nextFalse = FindNextKey(conns, n.Id, fromPort: 1);
+                string nextTrue  = FindNextKey(conns, n.Id, byId: byId, fromPort: 0);
+                string nextFalse = FindNextKey(conns, n.Id, byId: byId, fromPort: 1);
                 sb.AppendLine($"        n{n.Id} = {{ kind = \"condition\", lua = {EscapeLuaString(lua)}, next_true = {nextTrue}, next_false = {nextFalse} }},");
                 break;
             }
@@ -700,8 +713,8 @@ public static class PS1GraphCompiler
                 // node kind.
                 string flag      = EscapeLuaString(n.GetPayload(0));
                 string lua       = $"return Persist.Get({flag}) == true";
-                string nextTrue  = FindNextKey(conns, n.Id, fromPort: 0);
-                string nextFalse = FindNextKey(conns, n.Id, fromPort: 1);
+                string nextTrue  = FindNextKey(conns, n.Id, byId: byId, fromPort: 0);
+                string nextFalse = FindNextKey(conns, n.Id, byId: byId, fromPort: 1);
                 sb.AppendLine($"        n{n.Id} = {{ kind = \"condition\", lua = {EscapeLuaString(lua)}, next_true = {nextTrue}, next_false = {nextFalse} }},");
                 break;
             }
@@ -724,7 +737,7 @@ public static class PS1GraphCompiler
                     string optText = n.GetPayload(opt);
                     if (string.IsNullOrEmpty(optText)) continue;
                     string text = EscapeLuaString(optText);
-                    string next = FindNextKey(conns, n.Id, fromPort: opt);
+                    string next = FindNextKey(conns, n.Id, byId: byId, fromPort: opt);
                     sb.AppendLine($"            {{ text = {text}, next = {next} }},");
                 }
                 sb.AppendLine("        } },");
@@ -736,18 +749,68 @@ public static class PS1GraphCompiler
     // Lua key for the node connected to (srcId, fromPort), or `nil`
     // when the exec out is dangling. Returns a quoted string like "n3"
     // so callers can drop it straight into Lua source.
+    //
+    // If `byId` is supplied, chases through `Disabled` linear-flow
+    // nodes — line / set_flag / play_sound / start_cutscene /
+    // lua_snippet / sub_dialogue — so the surrounding graph's exec
+    // edges skip past disabled segments. Bails out at nil or at a
+    // non-linear kind (choice / condition / branch) since multi-out
+    // chasing is ambiguous. Cycle guard: chase budget of 32 hops
+    // (any genuine graph hits non-disabled or nil long before that).
+    // Without byId, retains the slice-1 single-hop behaviour.
     private static string FindNextKey(Godot.Collections.Array<PS1GraphConnection> conns,
-                                       int srcId, int fromPort)
+                                       int srcId, int fromPort,
+                                       Dictionary<int, PS1GraphNode>? byId = null)
     {
+        int target = -1;
         foreach (var c in conns)
         {
             if (c.FromNodeId == srcId && c.FromPort == fromPort)
             {
-                return $"\"n{c.ToNodeId}\"";
+                target = c.ToNodeId;
+                break;
             }
         }
-        return "nil";
+        if (target < 0) return "nil";
+
+        if (byId != null)
+        {
+            int hops = 0;
+            while (hops++ < 32 &&
+                   byId.TryGetValue(target, out var tn) &&
+                   tn.IsDisabled &&
+                   HasSingleExecOut(tn.Kind))
+            {
+                int nextTarget = -1;
+                foreach (var c2 in conns)
+                {
+                    if (c2.FromNodeId == target && c2.FromPort == 0)
+                    {
+                        nextTarget = c2.ToNodeId;
+                        break;
+                    }
+                }
+                if (nextTarget < 0) return "nil";
+                target = nextTarget;
+            }
+        }
+
+        return $"\"n{target}\"";
     }
+
+    // Whether a kind has exactly one exec-out at port 0 — eligible
+    // for chase-through when Disabled.
+    private static bool HasSingleExecOut(string kind) => kind switch
+    {
+        "line"           => true,
+        "set_flag"       => true,
+        "play_sound"     => true,
+        "start_cutscene" => true,
+        "lua_snippet"    => true,
+        "sub_dialogue"   => true,
+        "print"          => true,
+        _                => false,
+    };
 
     // Derive a Lua-safe identifier from the resource's .tres path.
     // Strips directory + extension, lowercases, replaces anything
