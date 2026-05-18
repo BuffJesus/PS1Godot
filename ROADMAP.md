@@ -1765,10 +1765,22 @@ graph-walker overhead.
         to emit those tables from per-state Payload snippets; today
         authors can hand-attach for early adoption).
         ~30 lines of Lua, zero per-instance C++ state.
-      - **Slice D3-3 (later)**: per-state Lua snippets (Payloads[1..N]
-        for enter/update/exit), event vocabulary validation (warn on
-        unreachable transitions / dangling event names), explicit
-        "is initial" checkbox on state node.
+      - **Slice D3-3 shipped 2026-05-17 (per-state Lua snippets).**
+        State node gains three single-line `LineEdit` rows beneath
+        the name: `on_enter`, `on_update`, `on_exit` (stored in
+        `Payloads[1..3]`). Compiler emits `on_enter = { state_name =
+        function(self, event) <snippet> end, ... }` lookup tables
+        (and `on_update` / `on_exit`) on the FSM definition table.
+        Empty snippets are skipped so missing entries no-op via
+        FSM.new's defensive dispatch. State names with non-Lua-safe
+        characters get bracketed via `["state name"]` keys.
+        Multi-statement authoring chains via `;` for now; multi-line
+        text-area inputs deferred to slice D3-4.
+      - **Slice D3-4 (later)**: explicit "is initial" checkbox on
+        state node (override the lowest-Id rule), event vocabulary
+        validation (warn on unreachable transitions / dangling
+        Send() calls referencing events nowhere transitioned on),
+        multi-line text-area snippet authoring.
 - [ ] **D4. `PS1ScriptGraph`** — general-purpose Blueprint-style
       scripting for trigger logic and event reactions. Last in order
       because the node palette is unbounded and the use cases are

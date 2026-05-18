@@ -260,8 +260,58 @@ public static class PS1GraphCompiler
         }
         sb.AppendLine($"    }},");
 
+        // Per-state callback tables. Slice D3-3 emits `on_enter`,
+        // `on_update`, `on_exit` lookup tables (keyed by state name)
+        // wrapping each non-empty snippet in a Lua function with
+        // (self, event_or_dt) parameters. Empty tables are emitted
+        // even when no states have snippets in that category so the
+        // FSM.new helper's defensive `if d.on_enter and d.on_enter[..]`
+        // checks short-circuit on miss without a table-not-found.
+        EmitFsmCallbackTable(sb, stateNodes, "on_enter",  payloadIdx: 1, paramName: "event");
+        EmitFsmCallbackTable(sb, stateNodes, "on_update", payloadIdx: 2, paramName: "dt");
+        EmitFsmCallbackTable(sb, stateNodes, "on_exit",   payloadIdx: 3, paramName: "event");
+
         sb.AppendLine("}");
         return sb.ToString();
+    }
+
+    // Emit one FSM callback lookup table. Skips states with no snippet
+    // in this slot so the table only contains the entries the author
+    // actually wrote — FSM.new dispatches via key-lookup, missing entries
+    // are no-ops. The wrapping `function(self, <paramName>) <snippet> end`
+    // matches the signature the helper invokes with.
+    private static void EmitFsmCallbackTable(StringBuilder sb, List<PS1GraphNode> states,
+                                              string tableName, int payloadIdx, string paramName)
+    {
+        sb.AppendLine($"    {tableName} = {{");
+        foreach (var s in states)
+        {
+            string snippet = s.GetPayload(payloadIdx);
+            if (string.IsNullOrEmpty(snippet)) continue;
+            string stateName = s.GetPayload(0);
+            // Keys with a Lua-safe identifier go through `name = ...`;
+            // anything else gets bracketed via `[\"name\"] = ...`. State
+            // names from the dock LineEdit can contain spaces / punctuation,
+            // so be defensive.
+            string keyForm = IsLuaIdentifier(stateName)
+                ? stateName
+                : $"[{EscapeLuaString(stateName)}]";
+            sb.AppendLine($"        {keyForm} = function(self, {paramName}) {snippet} end,");
+        }
+        sb.AppendLine($"    }},");
+    }
+
+    private static bool IsLuaIdentifier(string s)
+    {
+        if (string.IsNullOrEmpty(s)) return false;
+        char c0 = s[0];
+        if (!(char.IsLetter(c0) || c0 == '_')) return false;
+        for (int i = 1; i < s.Length; i++)
+        {
+            char c = s[i];
+            if (!(char.IsLetterOrDigit(c) || c == '_')) return false;
+        }
+        return true;
     }
 
     // Find the state-node adjacent to a transition along the given

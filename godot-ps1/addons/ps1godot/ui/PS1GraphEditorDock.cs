@@ -853,13 +853,23 @@ public partial class PS1GraphEditorDock : VBoxContainer
             {
                 // FSM State — represents one FSM state. Payloads[0] is
                 // the state name (used as the Lua table key). Exec in
-                // is the entry point; the lowest-Id state with an
-                // unconnected exec-in is the initial state. Exec out
-                // fans out to one or more transition nodes; GraphEdit
-                // allows multiple connections from a single right pin.
+                // is the entry point; the lowest-Id state is initial.
+                // Exec out fans out to one or more transition nodes;
+                // GraphEdit allows multiple connections from a single
+                // right pin.
+                //
+                // Per-state Lua snippets in Payloads[1..3] compile to
+                // on_enter[name] / on_update[name] / on_exit[name]
+                // lookup tables the FSM.new runtime helper dispatches
+                // automatically. Single-line statements; multi-line
+                // authoring chains with `;` (or use a Lua snippet node
+                // pattern in a later slice).
                 //
                 // Row 0: Exec in (left) + Exec out (right).
-                // Row 1: state name LineEdit (pinless).
+                // Row 1: state name LineEdit (Payloads[0]).
+                // Row 2: on_enter LineEdit (Payloads[1]).
+                // Row 3: on_update LineEdit (Payloads[2]).
+                // Row 4: on_exit LineEdit (Payloads[3]).
                 g.AddChild(new Label { Text = "exec in / transitions" });
                 g.SetSlot(0, true, (int)PinType.Exec, s_pinColors[PinType.Exec],
                              true, (int)PinType.Exec, s_pinColors[PinType.Exec]);
@@ -871,7 +881,31 @@ public partial class PS1GraphEditorDock : VBoxContainer
                 };
                 nameEdit.TextChanged += text => n.SetPayload(0, text);
                 g.AddChild(nameEdit);
-                // No SetSlot — pinless.
+
+                var enterEdit = new LineEdit
+                {
+                    Text = n.GetPayload(1),
+                    PlaceholderText = "on_enter Lua (optional)…",
+                };
+                enterEdit.TextChanged += text => n.SetPayload(1, text);
+                g.AddChild(enterEdit);
+
+                var updateEdit = new LineEdit
+                {
+                    Text = n.GetPayload(2),
+                    PlaceholderText = "on_update Lua (optional, gets dt)…",
+                };
+                updateEdit.TextChanged += text => n.SetPayload(2, text);
+                g.AddChild(updateEdit);
+
+                var exitEdit = new LineEdit
+                {
+                    Text = n.GetPayload(3),
+                    PlaceholderText = "on_exit Lua (optional)…",
+                };
+                exitEdit.TextChanged += text => n.SetPayload(3, text);
+                g.AddChild(exitEdit);
+                // Rows 1..4 are pinless — no SetSlot calls.
                 break;
             }
             case "transition":

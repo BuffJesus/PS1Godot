@@ -3,9 +3,9 @@
 How to author a finite-state machine in the PS1Graph dock and consume
 it from Lua. Slice D3-1 shipped the compiler + node palette;
 slice D3-2 added the `FSM.new` runtime helper so you don't hand-roll
-the walker. Per-state Lua callbacks (`on_enter` / `on_exit` /
-`on_update`) are aspirational — the helper checks for them
-defensively, the compiler doesn't populate them yet (D3-3).
+the walker; slice D3-3 wires per-state Lua snippets (`on_enter` /
+`on_update` / `on_exit`) so the FSM can drive behaviour, not just
+track state.
 
 ## TL;DR — the five steps
 
@@ -106,22 +106,59 @@ local bot = FSM.new(def)  -- enter(initial) NOT fired since initial is set up be
 
 ## Node-kind reference
 
-| Editor node | Pins | Payload | Compiles to |
+| Editor node | Pins | Payloads | Compiles to |
 |---|---|---|---|
-| **State** | Exec in + Exec out | State name | `"patrol"` entry in `states` |
-| **Transition** | Exec in + Exec out | Event name | `{ from=…, event=…, to=… }` in `transitions` |
+| **State** | Exec in + Exec out | [0] name, [1] on_enter, [2] on_update, [3] on_exit | `"patrol"` in `states` + entries in `on_enter[name]` / `on_update[name]` / `on_exit[name]` for non-empty snippets |
+| **Transition** | Exec in + Exec out | [0] event name | `{ from=…, event=…, to=… }` in `transitions` |
 
 State exec-out fans out — drive multiple transitions from one state
 by connecting its exec-out to several Transition exec-ins.
 
+### Per-state Lua snippets
+
+Each State node has three optional snippet fields beneath the name:
+
+- **on_enter** — runs when the FSM transitions INTO this state.
+  Signature: `function(self, event)` where `event` is the event name
+  that caused the transition (or `nil` for the initial state).
+- **on_update** — runs when the author calls `instance:Update(dt)`.
+  Signature: `function(self, dt)`. The author controls the cadence;
+  the FSM helper doesn't auto-tick.
+- **on_exit** — runs when the FSM transitions OUT of this state.
+  Signature: `function(self, event)` with the trigger event name.
+
+Snippets are single-line Lua. Chain statements with `;` if you need
+more than one. The compiler emits each as `function(self, event) <snippet> end`
+into the appropriate `on_*` lookup table on the dialogue table.
+
+Example:
+
+```
+State "patrol":
+  on_enter:  Audio.PlaySfx("idle_loop")
+  on_exit:   Audio.StopMusic()
+
+State "chase":
+  on_enter:  Audio.PlaySfx("alert_sting"); self._chase_time = 0
+  on_update: self._chase_time = self._chase_time + dt
+  on_exit:   Audio.PlaySfx("lost_sting")
+```
+
+Notes:
+- `self` is the FSM instance — set fields like `self._chase_time` to
+  hold per-instance scratch state.
+- Empty snippets are skipped at emit, so a State with no `on_enter`
+  just doesn't get an `on_enter[name]` entry. FSM.new defensively
+  checks before dispatch.
+
 ## Limits to know about
 
-- **No per-state Lua snippets compiled in yet.** D3-3 will add
-  Payload slots on the State node for `on_enter` / `on_exit` /
-  `on_update` snippets that the compiler emits into the `on_*`
-  lookup tables. Until then, hand-attach callbacks as shown above
-  if you need them.
-- **No initial-state checkbox.** Lowest-Id state wins.
+- **Snippets are single-line.** Chain with `;` for multiple
+  statements. Multi-line authoring is a polish slice — text-area
+  inputs in the State node body instead of LineEdits.
+- **No initial-state checkbox.** Lowest-Id state wins. Workaround:
+  delete + re-add the state you want as initial (new node gets a
+  higher Id) until the explicit checkbox lands.
 - **Transition events are strings.** No type system — typos compile
   silently. Plan to add an event-vocabulary validation slice (warn
   on `Send("typo")` calls that don't match any transition).
