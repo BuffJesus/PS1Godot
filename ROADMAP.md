@@ -1742,10 +1742,31 @@ graph-walker overhead.
         Both reuse existing walker code — zero psxsplash change.
       - **Still open**: GiveItem once an Inventory API ships;
         multi-line text-area snippet inputs (D1h polish).
-- [ ] **D2. `PS1QuestGraph`** — objectives as nodes, prerequisites as
+- [🟡] **D2. `PS1QuestGraph`** — objectives as nodes, prerequisites as
       edges, branch outcomes (success / fail paths). Compiles to a
       quest state machine with save/load integration
       (`QuestFlag.Set/Has`). `Quest.*` Lua API.
+      - **Slice D2-1 shipped 2026-05-17 (graph kind + Objective +
+        Outcome + table compiler).** New `Kind = "quest"` dispatches
+        to `CompileQuest` which emits `_G.quest_<basename> = {
+        initial_objectives, objectives = {id → {id, title, prereqs}},
+        outcomes = [{id, prereqs}, ...] }`. Two new node kinds:
+        `objective` (Payload[0] = id, Payload[1] = display title;
+        exec in/out) and `outcome` (Payload[0] = outcome id;
+        exec in only — terminal). Prereqs derived from incoming
+        objective edges (AND-merged at runtime). Initial objectives
+        = those with no incoming objective edge. Cycle guard stays ON
+        for quests (unlike FSM). Author drives the table via a ~10-
+        line Lua walker until D2-2 ships `Quest.new`. See
+        [`docs/ps1graph-quest-authoring.md`](docs/ps1graph-quest-authoring.md).
+      - **Slice D2-2 (next)**: `Quest.new(table)` runtime helper —
+        `:Activate()`, `:Complete(id)`, `:IsActive(id)`, `:Outcome()`,
+        `:Save() / :Load()` via `Persist`. Same embed-in-Lua::Init
+        pattern as `FSM.new`.
+      - **Slice D2-3 (later)**: per-objective `on_activate` /
+        `on_complete` Lua snippets (Payloads[2..3] on Objective),
+        per-outcome `on_trigger` snippet (Payload[1] on Outcome).
+        Compiler emits `on_*` lookup tables; Quest.new dispatches.
 - [🟡] **D3. `PS1FSMGraph`** — states + transitions. Replaces the
       hand-written `StateMachine.new({...})` from Phase 2.5 AI with
       visual authoring. Same Lua output shape, different front end.

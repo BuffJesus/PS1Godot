@@ -100,6 +100,8 @@ public partial class PS1GraphEditorDock : VBoxContainer
         new NodeKindEntry("lua_condition",  "Lua Condition",    GraphKind: "dialogue"),
         new NodeKindEntry("state",          "State",            GraphKind: "fsm"),
         new NodeKindEntry("transition",     "Transition",       GraphKind: "fsm"),
+        new NodeKindEntry("objective",      "Objective",        GraphKind: "quest"),
+        new NodeKindEntry("outcome",        "Outcome",          GraphKind: "quest"),
     };
 
     // Available graph kinds, surfaced when the author hits New.
@@ -111,6 +113,7 @@ public partial class PS1GraphEditorDock : VBoxContainer
         ("",         "Untyped / Script"),
         ("dialogue", "Dialogue"),
         ("fsm",      "FSM (state machine)"),
+        ("quest",    "Quest"),
     };
 
     // Slice-2 palette: per-pin-type colours. Picked to match common
@@ -962,6 +965,66 @@ public partial class PS1GraphEditorDock : VBoxContainer
                 exitEdit.TextChanged += text => n.SetPayload(3, text);
                 g.AddChild(exitEdit);
                 // Rows 1..4 are pinless — no SetSlot calls.
+                break;
+            }
+            case "objective":
+            {
+                // Quest Objective — one task the player must complete.
+                // Payloads[0] = id (Lua table key + Persist key);
+                // Payloads[1] = display title for HUD / journal.
+                //
+                // Exec in = AND of upstream objectives must complete
+                // before this one becomes active. Exec out = "this one
+                // gates downstream nodes." An objective with no incoming
+                // exec edge is an "initial objective" — active when the
+                // quest starts.
+                //
+                // Row 0: Exec in (left) + Exec out (right).
+                // Row 1: id LineEdit (Payloads[0]).
+                // Row 2: title LineEdit (Payloads[1]).
+                g.AddChild(new Label { Text = "exec / unlocks" });
+                g.SetSlot(0, true, (int)PinType.Exec, s_pinColors[PinType.Exec],
+                             true, (int)PinType.Exec, s_pinColors[PinType.Exec]);
+
+                var idEdit = new LineEdit
+                {
+                    Text = n.GetPayload(0),
+                    PlaceholderText = "objective id (e.g. find_npc)…",
+                };
+                idEdit.TextChanged += text => n.SetPayload(0, text);
+                g.AddChild(idEdit);
+
+                var titleEdit = new LineEdit
+                {
+                    Text = n.GetPayload(1),
+                    PlaceholderText = "display title (HUD / journal)…",
+                };
+                titleEdit.TextChanged += text => n.SetPayload(1, text);
+                g.AddChild(titleEdit);
+                // Rows 1..2 pinless.
+                break;
+            }
+            case "outcome":
+            {
+                // Quest Outcome — terminal node. When all incoming
+                // objectives are complete, this outcome fires. Payload[0]
+                // is the outcome id (the value `quest:Outcome()` returns
+                // for branching downstream — victory / fail / bad_ending).
+                //
+                // Row 0: Exec in only.
+                // Row 1: outcome id LineEdit (Payloads[0]).
+                g.AddChild(new Label { Text = "exec in" });
+                g.SetSlot(0, true,  (int)PinType.Exec, s_pinColors[PinType.Exec],
+                             false, (int)PinType.Exec, s_pinColors[PinType.Exec]);
+
+                var outIdEdit = new LineEdit
+                {
+                    Text = n.GetPayload(0),
+                    PlaceholderText = "outcome id (e.g. victory, fail)…",
+                };
+                outIdEdit.TextChanged += text => n.SetPayload(0, text);
+                g.AddChild(outIdEdit);
+                // Row 1 pinless.
                 break;
             }
             case "transition":

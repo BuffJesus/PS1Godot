@@ -45,10 +45,14 @@ public static class PS1GraphCompiler
         //   "fsm"        → a _G.fsm_<basename> table the author drives
         //                  manually (slice D3-1 — no runtime helper
         //                  yet; FSM.new shipping later as slice D3-2).
+        //   "quest"      → a _G.quest_<basename> table; objectives +
+        //                  outcomes with prereq edges. Author drives
+        //                  manually until Quest.new ships (slice D2-2).
         return resource.Kind switch
         {
             "dialogue" => CompileDialogue(resource, effectivePath),
             "fsm"      => CompileFsm(resource, effectivePath),
+            "quest"    => CompileQuest(resource, effectivePath),
             _          => CompileUntyped(resource),
         };
     }
@@ -301,6 +305,162 @@ public static class PS1GraphCompiler
             sb.AppendLine($"        {keyForm} = function(self, {paramName}) {snippet} end,");
         }
         sb.AppendLine($"    }},");
+    }
+
+    // Quest compile (slice D2-1) — emit a Lua table the author drives
+    // manually; slice D2-2 will add a runtime `Quest.new` helper that
+    // consumes this exact shape. Shape:
+    //
+    //   _G.quest_<basename> = {
+    //       initial_objectives = { "find_npc" },
+    //       objectives = {
+    //           find_npc    = { id = "find_npc",    title = "...", prereqs = {} },
+    //           talk_to_npc = { id = "talk_to_npc", title = "...", prereqs = { "find_npc" } },
+    //       },
+    //       outcomes = {
+    //           { id = "victory", prereqs = { "defeat_orc" } },
+    //       },
+    //   }
+    //
+    // Prereqs come from incoming exec edges on each objective/outcome.
+    // Multiple incoming edges = AND (all upstream objectives must be
+    // complete before this node activates / fires). OR-of-prereqs is
+    // expressed by having multiple objectives drive the same downstream
+    // node from different chains.
+    //
+    // Initial objectives = objective nodes whose exec-in has no
+    // incoming edge from another objective. These activate when the
+    // quest starts.
+    //
+    // Outcomes are terminal — the quest helper exposes `:Outcome()`
+    // which returns the first outcome whose prereqs are all satisfied,
+    // or nil if none yet. Cycle guard stays on for quest graphs (unlike
+    // FSM) — a quest with a back-edge would be a logic bug.
+    private static string CompileQuest(PS1GraphResource resource, string effectivePath)
+    {
+        var sb = new StringBuilder();
+        string pathLabel = string.IsNullOrEmpty(effectivePath) ? "(unsaved)" : effectivePath;
+        string basename = BasenameForGlobal(effectivePath);
+        sb.AppendLine($"-- Compiled from {pathLabel} (quest)");
+        sb.AppendLine($"-- {resource.Nodes.Count} node(s), {resource.Connections.Count} connection(s)");
+        sb.AppendLine($"-- Author: drive _G.quest_{basename}.objectives / .outcomes until Quest.new ships.");
+        sb.AppendLine();
+
+        var byId = new Dictionary<int, PS1GraphNode>();
+        foreach (var n in resource.Nodes) byId[n.Id] = n;
+
+        // Index objectives by their authored id (Payload[0]) so prereq
+        // resolution can produce "objective_a", not "n3". Objectives
+        // without an id get skipped — Lua keys can't be empty strings.
+        var objectiveNodes = new List<PS1GraphNode>();
+        foreach (var n in resource.Nodes)
+        {
+            if (n.Kind != "objective") continue;
+            if (string.IsNullOrEmpty(n.GetPayload(0))) continue;
+            objectiveNodes.Add(n);
+        }
+        objectiveNodes.Sort((a, b) => a.Id.CompareTo(b.Id));
+
+        // Initial objectives = those with no incoming exec edge from
+        // any other objective. Outcomes don't count as upstream — an
+        // outcome's exec-out is null (it's a terminal node).
+        var initialObjectiveIds = new List<string>();
+        foreach (var o in objectiveNodes)
+        {
+            if (HasIncomingObjectiveEdge(o.Id, byId, resource.Connections)) continue;
+            initialObjectiveIds.Add(o.GetPayload(0));
+        }
+
+        sb.AppendLine($"_G.quest_{basename} = {{");
+        sb.Append($"    initial_objectives = {{");
+        for (int i = 0; i < initialObjectiveIds.Count; i++)
+        {
+            if (i > 0) sb.Append(", ");
+            sb.Append(EscapeLuaString(initialObjectiveIds[i]));
+        }
+        sb.AppendLine(" },");
+
+        sb.AppendLine($"    objectives = {{");
+        foreach (var o in objectiveNodes)
+        {
+            string id    = o.GetPayload(0);
+            string title = o.GetPayload(1);
+            var prereqs  = ResolveUpstreamObjectiveIds(o.Id, byId, resource.Connections);
+            string keyForm = IsLuaIdentifier(id) ? id : $"[{EscapeLuaString(id)}]";
+
+            sb.Append($"        {keyForm} = {{ id = {EscapeLuaString(id)}, title = {EscapeLuaString(title)}, prereqs = {{");
+            for (int i = 0; i < prereqs.Count; i++)
+            {
+                if (i > 0) sb.Append(", ");
+                sb.Append(EscapeLuaString(prereqs[i]));
+            }
+            sb.AppendLine(" } },");
+        }
+        sb.AppendLine($"    }},");
+
+        sb.AppendLine($"    outcomes = {{");
+        foreach (var n in resource.Nodes)
+        {
+            if (n.Kind != "outcome") continue;
+            string id = n.GetPayload(0);
+            if (string.IsNullOrEmpty(id))
+            {
+                sb.AppendLine($"        -- skipped outcome n{n.Id}: no id authored.");
+                continue;
+            }
+            var prereqs = ResolveUpstreamObjectiveIds(n.Id, byId, resource.Connections);
+            sb.Append($"        {{ id = {EscapeLuaString(id)}, prereqs = {{");
+            for (int i = 0; i < prereqs.Count; i++)
+            {
+                if (i > 0) sb.Append(", ");
+                sb.Append(EscapeLuaString(prereqs[i]));
+            }
+            sb.AppendLine(" } },");
+        }
+        sb.AppendLine($"    }},");
+
+        sb.AppendLine("}");
+        return sb.ToString();
+    }
+
+    // Does any incoming exec edge to nodeId come from an objective?
+    // Used to decide initial-objective status. Edges from non-objective
+    // sources (e.g. a future Trigger node kind) don't disqualify.
+    private static bool HasIncomingObjectiveEdge(int nodeId,
+                                                  Dictionary<int, PS1GraphNode> byId,
+                                                  Godot.Collections.Array<PS1GraphConnection> conns)
+    {
+        foreach (var c in conns)
+        {
+            if (c.ToNodeId != nodeId) continue;
+            if (c.ToPort != 0) continue;  // exec in is left-port 0
+            if (!byId.TryGetValue(c.FromNodeId, out var src)) continue;
+            if (src.Kind == "objective") return true;
+        }
+        return false;
+    }
+
+    // For a quest node (objective or outcome), collect the ids of all
+    // objective nodes whose exec-out drives this node's exec-in. Used
+    // for both objective prereqs and outcome trigger sets. Skips
+    // non-objective upstream (logically a quest only depends on
+    // objectives completing — outcomes don't gate anything).
+    private static List<string> ResolveUpstreamObjectiveIds(int nodeId,
+                                                              Dictionary<int, PS1GraphNode> byId,
+                                                              Godot.Collections.Array<PS1GraphConnection> conns)
+    {
+        var ids = new List<string>();
+        foreach (var c in conns)
+        {
+            if (c.ToNodeId != nodeId) continue;
+            if (c.ToPort != 0) continue;
+            if (!byId.TryGetValue(c.FromNodeId, out var src)) continue;
+            if (src.Kind != "objective") continue;
+            string id = src.GetPayload(0);
+            if (string.IsNullOrEmpty(id)) continue;
+            ids.Add(id);
+        }
+        return ids;
     }
 
     private static bool IsLuaIdentifier(string s)
@@ -670,6 +830,8 @@ public static class PS1GraphCompiler
         "lua_condition"  => true,
         "state"          => true,
         "transition"     => true,
+        "objective"      => true,
+        "outcome"        => true,
         "comment"        => false,
         _                => false,
     };
@@ -702,6 +864,10 @@ public static class PS1GraphCompiler
             // transitions; transition's exec out drives the next state.
             "state"          => port == 0,
             "transition"     => port == 0,
+            // objective: row 0 in+out (gates downstream objectives /
+            // outcomes). outcome: row 0 in only (terminal).
+            "objective"      => port == 0,
+            "outcome"        => isInput && port == 0,
             _                => false,
         };
     }
