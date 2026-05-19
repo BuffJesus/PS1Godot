@@ -150,6 +150,8 @@ nav:
       - Lua cheatsheet: reference/lua-cheatsheet.md
       - Lua editor setup: reference/lua-editor-setup.md
       - psxsplash improvements: reference/psxsplash-improvements.md
+  - Contributing:
+      - CI: contributing/ci.md
 
 # Exclude internal planning/handoff/RFC docs from the published site
 # entirely. They stay in the repo for project authors and future
