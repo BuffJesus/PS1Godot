@@ -7,7 +7,7 @@ that boots on PCSX-Redux and demonstrates the five core node types
 (`PS1Scene`, `PS1MeshInstance`, `PS1Player`, `PS1UICanvas`, plus a Lua
 script).
 
-**Prerequisites:** finish [`QUICKSTART.md`](../QUICKSTART.md) (or at
+**Prerequisites:** finish [`QUICKSTART.md`](https://github.com/BuffJesus/PS1Godot/blob/main/QUICKSTART.md){ target="_blank" } (or at
 least confirm the shipped demo runs on your machine).
 
 **Scope:** we skip music, cutscenes, rooms/portals, skinned meshes, and
@@ -220,7 +220,7 @@ beyond the basics. Open it and compare:
 | Skinned mesh + walk animation | `SkinnedTest` subtree (`PS1SkinnedMesh`) |
 | Dialog with audio-aware auto-hide | `test_logger.lua` + `Dialog` canvas + dialogue WAV clips under `demo/audio/dialogue/` |
 
-The [`ROADMAP.md`](../ROADMAP.md) is the source of truth for what each
+The [`ROADMAP.md`](https://github.com/BuffJesus/PS1Godot/blob/main/ROADMAP.md){ target="_blank" } is the source of truth for what each
 feature does + what's still pending.
 
 ## Quick Lua API reference

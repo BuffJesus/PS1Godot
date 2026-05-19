@@ -48,10 +48,10 @@ jobs:
       # the published reference always matches the runtime surface.
       - run: python scripts/py/gen_lua_api_docs.py
 
-      # Non-strict for the initial scaffold — existing docs have plenty
-      # of relative links that will be cleaned up during the restructure
-      # slice. Flip to --strict once the nav settles.
-      - run: mkdocs build
+      # --strict treats warnings as errors. Build is clean as of the
+      # 2026-05-19 tutorial-link cleanup. New broken cross-doc links
+      # will fail CI loudly instead of shipping a 404.
+      - run: mkdocs build --strict
 
       - uses: actions/upload-pages-artifact@v3
         with:

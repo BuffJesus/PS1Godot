@@ -5,7 +5,7 @@ floor under fog, viewed through a PS1 camera — with vertex jitter, nearest-
 neighbor texturing, and the 2× color modulate that gives PS1 games their
 characteristic punch.
 
-**What you need first:** complete [`SETUP.md`](../SETUP.md) through Phase 0.
+**What you need first:** complete [`SETUP.md`](https://github.com/BuffJesus/PS1Godot/blob/main/SETUP.md){ target="_blank" } through Phase 0.
 
 **Scope:** this tutorial ends at a preview-quality scene in the Godot
 viewport. Exporting the scene to PSX is a separate workflow — once the
@@ -157,7 +157,7 @@ function onInteract(self)
 end
 ```
 
-See [the API reference](../psxsplash-main/src/luaapi.hh) for all functions.
+See [the Lua API reference](lua-api/index.md) for all functions.
 
 You can write and version-control `.lua` files today — they just won't run
 in-editor until the `ScriptLanguageExtension` lands.
@@ -173,7 +173,7 @@ in-editor until the `ScriptLanguageExtension` lands.
   rendered at true 320×240 and upscaled.
 - **Phase 2 (exporter) is what makes the scene *run*.** Without it, scenes are
   Godot-only art assets. Follow `ROADMAP.md` for status.
-- **Read [`GLOSSARY.md`](../GLOSSARY.md)** if PS1 terms (CLUT, TPage, GTE,
+- **Read [`GLOSSARY.md`](https://github.com/BuffJesus/PS1Godot/blob/main/GLOSSARY.md){ target="_blank" }** if PS1 terms (CLUT, TPage, GTE,
   OT) are new — you'll encounter them constantly in the next phases.
 
 ## Troubleshooting
