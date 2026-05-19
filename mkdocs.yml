@@ -183,6 +183,7 @@ nav:
   - Contributing:
       - Architecture: contributing/architecture.md
       - Building from source: contributing/building.md
+      - Modifying the runtime: contributing/modifying-the-runtime.md
       - CI: contributing/ci.md
       - Adding screenshots: contributing/screenshots.md
 
