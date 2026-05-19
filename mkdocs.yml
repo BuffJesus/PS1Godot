@@ -116,6 +116,32 @@ nav:
       - UI & assets:
           - Custom boot logo: authoring/ui/custom-boot-logo.md
           - SplashEdit import: authoring/ui/splashedit-import.md
+  - Lua API:
+      - Overview: lua-api/index.md
+      - Animation: lua-api/animation.md
+      - Audio: lua-api/audio.md
+      - Camera: lua-api/camera.md
+      - Controls: lua-api/controls.md
+      - Convert: lua-api/convert.md
+      - Cutscene: lua-api/cutscene.md
+      - Debug: lua-api/debug.md
+      - Dialog: lua-api/dialog.md
+      - Entity: lua-api/entity.md
+      - GameState: lua-api/game-state.md
+      - Input: lua-api/input.md
+      - Interact: lua-api/interact.md
+      - Math: lua-api/math.md
+      - Music: lua-api/music.md
+      - Persist: lua-api/persist.md
+      - Physics: lua-api/physics.md
+      - Player: lua-api/player.md
+      - Random: lua-api/random.md
+      - Scene: lua-api/scene.md
+      - SkinnedAnim: lua-api/skinned-anim.md
+      - Sound: lua-api/sound.md
+      - Timer: lua-api/timer.md
+      - UI: lua-api/ui.md
+      - Vec3: lua-api/vec3.md
   - Reference:
       - Splashpack format: reference/splashpack-format.md
       - API showcase: reference/api-showcase.md

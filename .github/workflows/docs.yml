@@ -15,6 +15,8 @@ on:
       - mkdocs.yml
       - requirements-docs.txt
       - .github/workflows/docs.yml
+      - scripts/py/gen_lua_api_docs.py
+      - psxsplash-main/src/luaapi.hh
   workflow_dispatch:
 
 permissions:
@@ -41,6 +43,10 @@ jobs:
           cache-dependency-path: requirements-docs.txt
 
       - run: pip install -r requirements-docs.txt
+
+      # Regenerate Lua API pages from psxsplash-main/src/luaapi.hh so
+      # the published reference always matches the runtime surface.
+      - run: python scripts/py/gen_lua_api_docs.py
 
       # Non-strict for the initial scaffold — existing docs have plenty
       # of relative links that will be cleaned up during the restructure
