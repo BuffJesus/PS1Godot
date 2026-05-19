@@ -76,6 +76,14 @@ public partial class PS1GodotPlugin : EditorPlugin
     private PS1LuaReplDock? _luaReplDock;
     private PS1AudioClipPreviewGenerator? _audioClipPreviewGen;
     private PS1ToastNotifier? _toast;
+    // Container tabs that fold the secondary docks into two grouped
+    // bottom-panel items so the editor's tab strip stays scannable.
+    // Authors see 2 primary tabs (PS1 Graph, PS1 Doctor) + 2 grouped
+    // containers (PS1 Authoring, PS1 Tools) instead of 10 individual
+    // tabs — addresses the "non-intimidating" pillar of the UI/UX
+    // philosophy.
+    private PS1ToolsContainerDock? _authoringContainer;
+    private PS1ToolsContainerDock? _toolsContainer;
     private LuaHotSwapWatcher? _luaHotSwapWatcher;
     private PS1ViewportOverlay? _viewportOverlay;
 
@@ -249,13 +257,19 @@ public partial class PS1GodotPlugin : EditorPlugin
         SceneChanged += OnSceneChanged;
         OnSceneChanged(EditorInterface.Singleton.GetEditedSceneRoot());
 
-        // PS1 UI canvas editor — bottom-panel tab showing a WYSIWYG
-        // preview of the selected PS1UICanvas. Selecting any
-        // PS1UIElement picks up its owning canvas too.
+        // Bottom-panel grouping containers. Build these first so the
+        // secondary docks can register into them as they're constructed
+        // below. The two containers themselves get added to the bottom
+        // panel at the end of _EnterTree, in left-to-right order
+        // (Graph, Doctor, Authoring, Tools).
+        _authoringContainer = new PS1ToolsContainerDock("PS1 Authoring");
+        _toolsContainer = new PS1ToolsContainerDock("PS1 Tools");
+
+        // PS1 UI canvas editor — WYSIWYG preview of the selected
+        // PS1UICanvas. Selecting any PS1UIElement picks up its owning
+        // canvas too. Folds into the PS1 Authoring container.
         _uiCanvasEditor = new PS1UICanvasEditor();
-#pragma warning disable CS0618 // Obsolete: AddControlToBottomPanel / RemoveControlFromBottomPanel — migrate once 4.7 EditorDock API stabilizes (matches AddControlToDock site below).
-        AddControlToBottomPanel(_uiCanvasEditor, "PS1 UI");
-#pragma warning restore CS0618
+        _authoringContainer.AddSubTab("UI", _uiCanvasEditor);
         EditorInterface.Singleton.GetSelection().SelectionChanged += OnEditorSelectionChanged;
         OnEditorSelectionChanged();
 
@@ -317,80 +331,71 @@ public partial class PS1GodotPlugin : EditorPlugin
         _viewportOverlay = new PS1ViewportOverlay();
         AddControlToContainer(CustomControlContainer.SpatialEditorMenu, _viewportOverlay);
 
+        // PS1 VRAM — visualises the packed 1024×512 layout after each
+        // export (atlases, textures, CLUTs, reserved regions). Folds
+        // into PS1 Authoring.
         _vramViewerDock = new PS1VRAMViewerDock();
-#pragma warning disable CS0618 // Obsolete: AddControlToBottomPanel — see AddControlToDock site above.
-        AddControlToBottomPanel(_vramViewerDock, "PS1 VRAM");
-#pragma warning restore CS0618
+        _authoringContainer.AddSubTab("VRAM", _vramViewerDock);
 
         // Audio routing test panel — pick a clip from PS1Scene.AudioClips,
         // see what route the export pipeline will resolve it to, and
         // audition the SPU path through Godot's AudioStreamPlayer.
         _audioRoutingDock = new PS1AudioRoutingDock();
-#pragma warning disable CS0618 // Obsolete: AddControlToBottomPanel — see AddControlToDock site above.
-        AddControlToBottomPanel(_audioRoutingDock, "PS1 Audio");
-#pragma warning restore CS0618
+        _authoringContainer.AddSubTab("Audio", _audioRoutingDock);
 
         // Lua API cheatsheet — searchable browser sourced from the same
         // luaapi.hh parser the EmmyLua stub generator uses, so authors
         // see exactly the API their external editor's completion knows.
         _luaApiDock = new PS1LuaApiCheatsheetDock();
-#pragma warning disable CS0618 // Obsolete: AddControlToBottomPanel — see AddControlToDock site above.
-        AddControlToBottomPanel(_luaApiDock, "PS1 Lua API");
-#pragma warning restore CS0618
-
-        // PS1Graph editor — walking-skeleton node graph dock. Slice 1
-        // ships only the framework (resource + dock + one placeholder
-        // node kind); concrete graph kinds (Dialogue/Quest/FSM/Script)
-        // and the compile-to-Lua pass land in subsequent slices.
-        _graphEditorDock = new PS1GraphEditorDock();
-#pragma warning disable CS0618 // Obsolete: AddControlToBottomPanel — see AddControlToDock site above.
-        AddControlToBottomPanel(_graphEditorDock, "PS1 Graph");
-#pragma warning restore CS0618
-
-        // PS1 Doctor: unified validator view. Renders the full
-        // LastExportSummary offender list (uncapped, grouped by
-        // category, severity-filterable), as a "show me everything
-        // wrong with the project" surface separate from the compact
-        // 8-row preview the PS1Godot dock shows.
-        _doctorDock = new PS1DoctorDock();
-#pragma warning disable CS0618 // Obsolete: AddControlToBottomPanel — see AddControlToDock site above.
-        AddControlToBottomPanel(_doctorDock, "PS1 Doctor");
-#pragma warning restore CS0618
+        _authoringContainer.AddSubTab("Lua API", _luaApiDock);
 
         // PS1 Quest Journal (D2-4): in-editor quest simulator. Load a
         // quest .tres, click "Complete" on active objectives, watch the
         // outcome resolve — no PSX round-trip needed for design
         // iteration. Mirrors Quest.new's prereq-resolution logic.
         _questJournalDock = new PS1QuestJournalDock();
+        _authoringContainer.AddSubTab("Quest Journal", _questJournalDock);
+
+        // PS1Graph editor — primary authoring surface. Stays at the
+        // top level (not folded into a container) since it's the most
+        // frequently opened dock for graph-driven content.
+        _graphEditorDock = new PS1GraphEditorDock();
 #pragma warning disable CS0618 // Obsolete: AddControlToBottomPanel — see AddControlToDock site above.
-        AddControlToBottomPanel(_questJournalDock, "PS1 Quest Journal");
+        AddControlToBottomPanel(_graphEditorDock, "PS1 Graph");
+#pragma warning restore CS0618
+
+        // PS1 Doctor: unified validator view. Top-level for the same
+        // reason as PS1 Graph — checked frequently and shouldn't be
+        // hidden behind a container tab.
+        _doctorDock = new PS1DoctorDock();
+#pragma warning disable CS0618 // Obsolete: AddControlToBottomPanel — see AddControlToDock site above.
+        AddControlToBottomPanel(_doctorDock, "PS1 Doctor");
 #pragma warning restore CS0618
 
         // PS1 Graph Find (UE port-plan pick #4): cross-graph
-        // substring search. Mitigates the silent-typo class of
-        // bug that string-keyed flags / events / clip names cause.
+        // substring search. Folds into PS1 Tools — dev-only utility.
         _graphFindDock = new PS1GraphFindDock();
-#pragma warning disable CS0618 // Obsolete: AddControlToBottomPanel — see AddControlToDock site above.
-        AddControlToBottomPanel(_graphFindDock, "PS1 Graph Find");
-#pragma warning restore CS0618
+        _toolsContainer.AddSubTab("Graph Find", _graphFindDock);
 
         // Reference Viewer (UE editor port plan pick #2): cross-
         // project "who uses this asset?" scanner over .tscn / .tres /
-        // .lua. Matches UID references AND literal path strings so
-        // both Godot-side resource links and Lua runtime path usage
-        // surface. Click-to-jump highlights the referencing file.
+        // .lua. Folds into PS1 Tools.
         _referenceViewerDock = new PS1ReferenceViewerDock();
-#pragma warning disable CS0618 // Obsolete: AddControlToBottomPanel — see AddControlToDock site above.
-        AddControlToBottomPanel(_referenceViewerDock, "PS1 References");
-#pragma warning restore CS0618
+        _toolsContainer.AddSubTab("References", _referenceViewerDock);
 
         // PS1 Lua REPL (UE editor port plan pick #4): live Lua
         // snippets sent to the running PCSX-Redux via PCdrv
-        // file-watch. Runtime side polls repl.ver + repl.lua in
-        // psxsplash's TryRepl alongside hot-swap polling.
+        // file-watch. Folds into PS1 Tools.
         _luaReplDock = new PS1LuaReplDock();
+        _toolsContainer.AddSubTab("Lua REPL", _luaReplDock);
+
+        // Register the two grouped containers at the bottom panel.
+        // Order matters for the tab strip: Graph and Doctor have
+        // already been registered above, so the final strip reads
+        // PS1 Graph → PS1 Doctor → PS1 Authoring → PS1 Tools.
 #pragma warning disable CS0618 // Obsolete: AddControlToBottomPanel — see AddControlToDock site above.
-        AddControlToBottomPanel(_luaReplDock, "PS1 Lua REPL");
+        AddControlToBottomPanel(_authoringContainer, "PS1 Authoring");
+        AddControlToBottomPanel(_toolsContainer, "PS1 Tools");
 #pragma warning restore CS0618
 
         // Custom resource thumbnails (UE editor port plan pick #1):
@@ -544,11 +549,17 @@ public partial class PS1GodotPlugin : EditorPlugin
             _luaHighlighter = null;
         }
 
+        // Detach sub-tabs from their containers FIRST so the per-dock
+        // QueueFree calls below release controls that are no longer
+        // reparented inside a TabContainer. The grouped containers
+        // themselves are RemoveControlFromBottomPanel'd + QueueFree'd
+        // at the end of _ExitTree (symmetric with the _EnterTree
+        // registration order).
+        _authoringContainer?.DetachAllSubTabs();
+        _toolsContainer?.DetachAllSubTabs();
+
         if (_uiCanvasEditor != null)
         {
-#pragma warning disable CS0618 // Obsolete — see AddControlToBottomPanel site above.
-            RemoveControlFromBottomPanel(_uiCanvasEditor);
-#pragma warning restore CS0618
             _uiCanvasEditor.QueueFree();
             _uiCanvasEditor = null;
         }
@@ -601,33 +612,30 @@ public partial class PS1GodotPlugin : EditorPlugin
             _soundFamilyInspector = null;
         }
 
+        // Secondary docks were folded into _authoringContainer /
+        // _toolsContainer in _EnterTree, so they're no longer direct
+        // bottom-panel items — skip RemoveControlFromBottomPanel and
+        // just free each one. (Detach already happened above.)
         if (_vramViewerDock != null)
         {
-#pragma warning disable CS0618 // Obsolete — see AddControlToBottomPanel site above.
-            RemoveControlFromBottomPanel(_vramViewerDock);
-#pragma warning restore CS0618
             _vramViewerDock.QueueFree();
             _vramViewerDock = null;
         }
 
         if (_audioRoutingDock != null)
         {
-#pragma warning disable CS0618 // Obsolete — see AddControlToBottomPanel site above.
-            RemoveControlFromBottomPanel(_audioRoutingDock);
-#pragma warning restore CS0618
             _audioRoutingDock.QueueFree();
             _audioRoutingDock = null;
         }
 
         if (_luaApiDock != null)
         {
-#pragma warning disable CS0618 // Obsolete — see AddControlToBottomPanel site above.
-            RemoveControlFromBottomPanel(_luaApiDock);
-#pragma warning restore CS0618
             _luaApiDock.QueueFree();
             _luaApiDock = null;
         }
 
+        // PS1 Graph stays at the top level — RemoveControlFromBottomPanel
+        // still applies here.
         if (_graphEditorDock != null)
         {
 #pragma warning disable CS0618 // Obsolete — see AddControlToBottomPanel site above.
@@ -637,6 +645,7 @@ public partial class PS1GodotPlugin : EditorPlugin
             _graphEditorDock = null;
         }
 
+        // PS1 Doctor stays at the top level — same as PS1 Graph.
         if (_doctorDock != null)
         {
 #pragma warning disable CS0618 // Obsolete — see AddControlToBottomPanel site above.
@@ -648,38 +657,45 @@ public partial class PS1GodotPlugin : EditorPlugin
 
         if (_questJournalDock != null)
         {
-#pragma warning disable CS0618 // Obsolete — see AddControlToBottomPanel site above.
-            RemoveControlFromBottomPanel(_questJournalDock);
-#pragma warning restore CS0618
             _questJournalDock.QueueFree();
             _questJournalDock = null;
         }
 
         if (_graphFindDock != null)
         {
-#pragma warning disable CS0618 // Obsolete — see AddControlToBottomPanel site above.
-            RemoveControlFromBottomPanel(_graphFindDock);
-#pragma warning restore CS0618
             _graphFindDock.QueueFree();
             _graphFindDock = null;
         }
 
         if (_referenceViewerDock != null)
         {
-#pragma warning disable CS0618 // Obsolete — see AddControlToBottomPanel site above.
-            RemoveControlFromBottomPanel(_referenceViewerDock);
-#pragma warning restore CS0618
             _referenceViewerDock.QueueFree();
             _referenceViewerDock = null;
         }
 
         if (_luaReplDock != null)
         {
-#pragma warning disable CS0618 // Obsolete — see AddControlToBottomPanel site above.
-            RemoveControlFromBottomPanel(_luaReplDock);
-#pragma warning restore CS0618
             _luaReplDock.QueueFree();
             _luaReplDock = null;
+        }
+
+        // Tear down the grouped containers themselves (now empty).
+        if (_authoringContainer != null)
+        {
+#pragma warning disable CS0618 // Obsolete — see AddControlToBottomPanel site above.
+            RemoveControlFromBottomPanel(_authoringContainer);
+#pragma warning restore CS0618
+            _authoringContainer.QueueFree();
+            _authoringContainer = null;
+        }
+
+        if (_toolsContainer != null)
+        {
+#pragma warning disable CS0618 // Obsolete — see AddControlToBottomPanel site above.
+            RemoveControlFromBottomPanel(_toolsContainer);
+#pragma warning restore CS0618
+            _toolsContainer.QueueFree();
+            _toolsContainer = null;
         }
 
         if (_audioClipPreviewGen != null)
@@ -1236,9 +1252,17 @@ public partial class PS1GodotPlugin : EditorPlugin
             GD.PushWarning($"[PS1Godot] Look up Lua symbol: editor introspect failed: {e.Message}");
         }
 
+        // _luaApiDock is now a sub-tab inside _authoringContainer.
+        // Make the container visible at the bottom panel, then ask
+        // the container to switch its internal TabContainer to the
+        // Lua API sub-tab so the user lands directly on the cheatsheet.
+        if (_authoringContainer != null)
+        {
 #pragma warning disable CS0618 // Obsolete: see AddControlToBottomPanel sites — same migration window.
-        MakeBottomPanelItemVisible(_luaApiDock);
+            MakeBottomPanelItemVisible(_authoringContainer);
 #pragma warning restore CS0618
+            _authoringContainer.RevealSubTab(_luaApiDock);
+        }
         _luaApiDock.FocusAndFilter(filter);
     }
 
@@ -1321,14 +1345,16 @@ public partial class PS1GodotPlugin : EditorPlugin
     }
 
     // Dock thumbnail / "Open VRAM Viewer" button → switch the bottom
-    // panel to the PS1 VRAM tab. Use MakeBottomPanelItemVisible since
-    // we own the tab via AddControlToBottomPanel.
+    // panel to PS1 Authoring's VRAM sub-tab. The VRAM dock now lives
+    // inside _authoringContainer, so we open the container and switch
+    // its internal TabContainer to the VRAM sub-tab.
     private void OnOpenVramViewer()
     {
-        if (_vramViewerDock == null) return;
+        if (_vramViewerDock == null || _authoringContainer == null) return;
 #pragma warning disable CS0618 // Obsolete: see AddControlToBottomPanel sites — same migration window.
-        MakeBottomPanelItemVisible(_vramViewerDock);
+        MakeBottomPanelItemVisible(_authoringContainer);
 #pragma warning restore CS0618
+        _authoringContainer.RevealSubTab(_vramViewerDock);
     }
 
     private void OnExportEmptySplashpack()
