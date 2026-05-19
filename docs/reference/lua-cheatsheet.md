@@ -115,5 +115,5 @@ script — it's the closest thing to a known-good template.
 
 Godot itself opens `.lua` files as plain text. Point it at an external
 editor (Rider, VS Code, …) and run the API stub generator — see
-[`docs/lua-editor-setup.md`](lua-editor-setup.md). 5 minutes of config
+[`reference/lua-editor-setup.md`](lua-editor-setup.md). 5 minutes of config
 gets you highlighting + PS1Godot-aware completion.

@@ -25,15 +25,16 @@ format, different editor, deliberately better UX.
   [Quickstart](https://github.com/BuffJesus/PS1Godot/blob/main/QUICKSTART.md){ target="_blank" } ·
   [Hello cube tutorial](tutorial-hello-cube.md) ·
   [Basic scene tutorial](tutorial-basic-scene.md)
-- **Authoring** — [Fixed cameras](fixed-camera-authoring.md) ·
-  [Audio routing](ps1-audio-routing.md) · [UI canvas](ui-ux-plan.md) ·
-  [Custom boot logo](custom-boot-logo.md)
-- **PS1 Graphs** — [Dialogue](ps1graph-dialogue-authoring.md) ·
-  [FSM](ps1graph-fsm-authoring.md) · [Quest](ps1graph-quest-authoring.md) ·
-  [Behavior Tree](ps1graph-bt-authoring.md)
-- **Reference** — [Splashpack format](splashpack-format.md) ·
-  [API showcase](api-showcase.md) · [Lua cheatsheet](lua-ps1-cheatsheet.md) ·
-  [psxsplash improvements](psxsplash-improvements.md)
+- **Authoring** — [Fixed cameras](authoring/fixed-cameras.md) ·
+  [Audio routing](authoring/audio/routing.md) ·
+  [Custom boot logo](authoring/ui/custom-boot-logo.md)
+- **PS1 Graphs** — [Dialogue](authoring/graphs/dialogue.md) ·
+  [FSM](authoring/graphs/fsm.md) · [Quest](authoring/graphs/quest.md) ·
+  [Behavior Tree](authoring/graphs/behavior-tree.md)
+- **Reference** — [Splashpack format](reference/splashpack-format.md) ·
+  [API showcase](reference/api-showcase.md) ·
+  [Lua cheatsheet](reference/lua-cheatsheet.md) ·
+  [psxsplash improvements](reference/psxsplash-improvements.md)
 
 ## Releases
 
@@ -46,8 +47,9 @@ bundled in the plugin zip (Windows already was). Drop into your project's
 
 ---
 
-!!! note "Docs site under restructure"
-    This site is being reorganized into Getting Started · Authoring ·
-    Docks · Lua API · Reference · Contributing buckets. Until that
-    lands, navigation is auto-generated from the existing `docs/` tree
-    and you'll see internal planning docs in the sidebar.
+!!! note "Docs site is still filling in"
+    Nav skeleton (Getting started · Authoring · Reference) is in place;
+    per-node guides, per-dock pages, and the Lua API reference are
+    being written in follow-up passes. Internal planning docs live in
+    [`docs/internal/`](https://github.com/BuffJesus/PS1Godot/tree/main/docs/internal){ target="_blank" }
+    and aren't published here.

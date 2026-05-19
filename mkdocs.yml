@@ -94,5 +94,37 @@ extra:
       link: https://github.com/BuffJesus/PS1Godot
       name: PS1Godot on GitHub
 
-# Restructure pending — see docs/handoff-2026-05-18-docs-site-plan.md for the
-# target layout. Until then, nav is auto-generated from the docs/ tree.
+# Hand-authored guides for nodes, docks, per-bucket overviews, plus the
+# Lua API reference will join the nav as they're written. The current
+# nav lists existing content in its new home; "NEW" pages from the
+# restructure mapping land in follow-up commits.
+nav:
+  - Home: index.md
+  - Getting started:
+      - First tutorial (hello cube): tutorial-hello-cube.md
+      - Basic scene tutorial: tutorial-basic-scene.md
+  - Authoring:
+      - Fixed cameras: authoring/fixed-cameras.md
+      - Graphs:
+          - Dialogue: authoring/graphs/dialogue.md
+          - FSM: authoring/graphs/fsm.md
+          - Quest: authoring/graphs/quest.md
+          - Behavior Tree: authoring/graphs/behavior-tree.md
+      - Audio:
+          - Routing: authoring/audio/routing.md
+          - Sequenced music: authoring/audio/sequenced-music.md
+      - UI & assets:
+          - Custom boot logo: authoring/ui/custom-boot-logo.md
+          - SplashEdit import: authoring/ui/splashedit-import.md
+  - Reference:
+      - Splashpack format: reference/splashpack-format.md
+      - API showcase: reference/api-showcase.md
+      - Lua cheatsheet: reference/lua-cheatsheet.md
+      - Lua editor setup: reference/lua-editor-setup.md
+      - psxsplash improvements: reference/psxsplash-improvements.md
+
+# Exclude internal planning/handoff/RFC docs from the published site
+# entirely. They stay in the repo for project authors and future
+# sessions — browse on GitHub. See docs/internal/README.md.
+exclude_docs: |
+  internal/

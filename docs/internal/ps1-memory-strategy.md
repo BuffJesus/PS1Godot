@@ -20,7 +20,7 @@ fix) reflect those caps.
 - Music / ambient loops / dialog / large stingers → XA (Phase 3). Streams from
   disc, ~zero memory cost.
 - Title / credits → CDDA only when quality matters more than disc bandwidth.
-- See [`ps1-audio-routing.md`](ps1-audio-routing.md) for the full bus table and
+- See [`authoring/audio/routing.md`](../authoring/audio/routing.md) for the full bus table and
   per-clip routing API.
 
 ## Textures fight VRAM
@@ -102,6 +102,6 @@ should aim for.
 
 - Dock budget bars + per-bus caps: `godot-ps1/addons/ps1godot/ui/SceneStats.cs`
 - Splashpack format + version: `psxsplash-main/src/splashpack.{hh,cpp}` (currently v25)
-- Audio routing: [`ps1-audio-routing.md`](ps1-audio-routing.md)
+- Audio routing: [`authoring/audio/routing.md`](../authoring/audio/routing.md)
 - Texture / decal / alpha policy + asset pipeline plan: [`ps1_asset_pipeline_plan.md`](ps1_asset_pipeline_plan.md)
-- General improvement TODOs: [`psxsplash-improvements.md`](psxsplash-improvements.md)
+- General improvement TODOs: [`reference/psxsplash-improvements.md`](../reference/psxsplash-improvements.md)

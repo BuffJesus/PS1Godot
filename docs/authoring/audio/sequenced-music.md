@@ -267,10 +267,10 @@ the note wins.
 The current format is a **MIDI-note → PS1AudioClip** binding system —
 useful for short jingles and looping menu themes, but not a full
 PS1-style sequenced engine. Strategy doc:
-[`archive/superseded/ps1_true_sequenced_audio_strategy.md`](archive/superseded/ps1_true_sequenced_audio_strategy.md)
+[`internal/archive/superseded/ps1_true_sequenced_audio_strategy.md`](../../internal/archive/superseded/ps1_true_sequenced_audio_strategy.md)
 (original design, since superseded by the shipped sequencer).
 Phased plan with concrete file changes:
-[`archive/jam-2026-04/handoff-true-sequenced-audio-plan.md`](archive/jam-2026-04/handoff-true-sequenced-audio-plan.md).
+[`internal/archive/jam-2026-04/handoff-true-sequenced-audio-plan.md`](../../internal/archive/jam-2026-04/handoff-true-sequenced-audio-plan.md).
 
 **Phase 0 (landed)** — scaffold-only. Three new resource types are
 authorable in the inspector but the runtime ignores them; no on-disk
