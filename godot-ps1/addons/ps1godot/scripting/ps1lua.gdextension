@@ -4,5 +4,15 @@ compatibility_minimum = "4.4"
 reloadable = true
 
 [libraries]
-windows.debug.x86_64 = "build/libps1lua.windows.template_debug.x86_64.dll"
-windows.release.x86_64 = "build/libps1lua.windows.template_release.x86_64.dll"
+; Godot picks one of these at runtime based on its build flavor +
+; platform. Missing entries silently fall back to "no extension" —
+; Linux / macOS users won't see PS1Lua syntax highlighting or
+; autocomplete until they either build the GDExtension locally
+; (`scons platform=<linux|macos>` in this dir) or download a release
+; zip with the matching binary bundled.
+windows.debug.x86_64    = "build/libps1lua.windows.template_debug.x86_64.dll"
+windows.release.x86_64  = "build/libps1lua.windows.template_release.x86_64.dll"
+linux.debug.x86_64      = "build/libps1lua.linux.template_debug.x86_64.so"
+linux.release.x86_64    = "build/libps1lua.linux.template_release.x86_64.so"
+macos.debug             = "build/libps1lua.macos.template_debug.framework"
+macos.release           = "build/libps1lua.macos.template_release.framework"
