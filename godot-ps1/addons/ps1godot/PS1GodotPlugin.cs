@@ -526,6 +526,17 @@ public partial class PS1GodotPlugin : EditorPlugin
 
     public override void _ExitTree()
     {
+        // Shutdown-crash diagnostic markers (task #10). Godot 4.7-dev5
+        // sometimes emits a Windows 0xc0000005 access violation when
+        // the editor exits with this plugin loaded. The crash is a
+        // native fault (can't be caught with try/catch from C#), so
+        // we leave breadcrumbs in stdout — the last marker that
+        // prints before the crash dialog points at the offending
+        // teardown step. Absence of "_ExitTree: done" means the crash
+        // is in the post-_ExitTree finalizer phase (C# GC running
+        // Dispose on already-freed native objects), which needs a
+        // different fix.
+        GD.Print("[PS1Godot] _ExitTree: start");
         RemoveToolMenuItem(RunOnPsxMenuLabel);
         RemoveToolMenuItem(CopyCameraLuaMenuLabel);
         RemoveToolMenuItem(NewSceneWizardMenuLabel);
@@ -548,6 +559,7 @@ public partial class PS1GodotPlugin : EditorPlugin
             pm?.QueueFree();
         }
         _menuBake = _menuMesh = _menuMaterials = _menuBlender = _menuRunBuild = _menuAudit = _menuTests = null;
+        GD.Print("[PS1Godot] _ExitTree: menus removed");
 
         SceneChanged -= OnSceneChanged;
         EditorInterface.Singleton.GetSelection().SelectionChanged -= OnEditorSelectionChanged;
@@ -571,9 +583,11 @@ public partial class PS1GodotPlugin : EditorPlugin
         // registration order).
         _authoringContainer?.DetachAllSubTabs();
         _toolsContainer?.DetachAllSubTabs();
+        GD.Print("[PS1Godot] _ExitTree: subtabs detached");
 
         if (_uiCanvasEditor != null)
         {
+            GD.Print("[PS1Godot] _ExitTree: free PS1UICanvasEditor");
             _uiCanvasEditor.QueueFree();
             _uiCanvasEditor = null;
         }
@@ -632,18 +646,21 @@ public partial class PS1GodotPlugin : EditorPlugin
         // just free each one. (Detach already happened above.)
         if (_vramViewerDock != null)
         {
+            GD.Print("[PS1Godot] _ExitTree: free PS1VRAMViewerDock");
             _vramViewerDock.QueueFree();
             _vramViewerDock = null;
         }
 
         if (_audioRoutingDock != null)
         {
+            GD.Print("[PS1Godot] _ExitTree: free PS1AudioRoutingDock");
             _audioRoutingDock.QueueFree();
             _audioRoutingDock = null;
         }
 
         if (_luaApiDock != null)
         {
+            GD.Print("[PS1Godot] _ExitTree: free PS1LuaApiCheatsheetDock");
             _luaApiDock.QueueFree();
             _luaApiDock = null;
         }
@@ -652,6 +669,7 @@ public partial class PS1GodotPlugin : EditorPlugin
         // still applies here.
         if (_graphEditorDock != null)
         {
+            GD.Print("[PS1Godot] _ExitTree: free PS1GraphEditorDock");
 #pragma warning disable CS0618 // Obsolete — see AddControlToBottomPanel site above.
             RemoveControlFromBottomPanel(_graphEditorDock);
 #pragma warning restore CS0618
@@ -662,6 +680,7 @@ public partial class PS1GodotPlugin : EditorPlugin
         // PS1 Doctor stays at the top level — same as PS1 Graph.
         if (_doctorDock != null)
         {
+            GD.Print("[PS1Godot] _ExitTree: free PS1DoctorDock");
 #pragma warning disable CS0618 // Obsolete — see AddControlToBottomPanel site above.
             RemoveControlFromBottomPanel(_doctorDock);
 #pragma warning restore CS0618
@@ -671,24 +690,28 @@ public partial class PS1GodotPlugin : EditorPlugin
 
         if (_questJournalDock != null)
         {
+            GD.Print("[PS1Godot] _ExitTree: free PS1QuestJournalDock");
             _questJournalDock.QueueFree();
             _questJournalDock = null;
         }
 
         if (_graphFindDock != null)
         {
+            GD.Print("[PS1Godot] _ExitTree: free PS1GraphFindDock");
             _graphFindDock.QueueFree();
             _graphFindDock = null;
         }
 
         if (_referenceViewerDock != null)
         {
+            GD.Print("[PS1Godot] _ExitTree: free PS1ReferenceViewerDock");
             _referenceViewerDock.QueueFree();
             _referenceViewerDock = null;
         }
 
         if (_luaReplDock != null)
         {
+            GD.Print("[PS1Godot] _ExitTree: free PS1LuaReplDock");
             _luaReplDock.QueueFree();
             _luaReplDock = null;
         }
@@ -696,6 +719,7 @@ public partial class PS1GodotPlugin : EditorPlugin
         // Tear down the grouped containers themselves (now empty).
         if (_authoringContainer != null)
         {
+            GD.Print("[PS1Godot] _ExitTree: free PS1ToolsContainerDock(Authoring)");
 #pragma warning disable CS0618 // Obsolete — see AddControlToBottomPanel site above.
             RemoveControlFromBottomPanel(_authoringContainer);
 #pragma warning restore CS0618
@@ -705,6 +729,7 @@ public partial class PS1GodotPlugin : EditorPlugin
 
         if (_toolsContainer != null)
         {
+            GD.Print("[PS1Godot] _ExitTree: free PS1ToolsContainerDock(Tools)");
 #pragma warning disable CS0618 // Obsolete — see AddControlToBottomPanel site above.
             RemoveControlFromBottomPanel(_toolsContainer);
 #pragma warning restore CS0618
@@ -714,29 +739,34 @@ public partial class PS1GodotPlugin : EditorPlugin
 
         if (_audioClipPreviewGen != null)
         {
+            GD.Print("[PS1Godot] _ExitTree: free PS1AudioClipPreviewGenerator");
             EditorInterface.Singleton.GetResourcePreviewer().RemovePreviewGenerator(_audioClipPreviewGen);
             _audioClipPreviewGen = null;
         }
 
         if (_toast != null)
         {
+            GD.Print("[PS1Godot] _ExitTree: free PS1ToastNotifier");
             _toast.QueueFree();
             _toast = null;
         }
 
         if (_luaHotSwapWatcher != null)
         {
+            GD.Print("[PS1Godot] _ExitTree: free LuaHotSwapWatcher");
             _luaHotSwapWatcher.QueueFree();
             _luaHotSwapWatcher = null;
         }
 
         if (_viewportOverlay != null)
         {
+            GD.Print("[PS1Godot] _ExitTree: free PS1ViewportOverlay");
             RemoveControlFromContainer(CustomControlContainer.SpatialEditorMenu, _viewportOverlay);
             _viewportOverlay.QueueFree();
             _viewportOverlay = null;
         }
 
+        GD.Print("[PS1Godot] _ExitTree: done");
         GD.Print("[PS1Godot] Plugin disabled.");
     }
 
