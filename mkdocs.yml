@@ -150,6 +150,7 @@ nav:
       - Lua editor setup: reference/lua-editor-setup.md
       - psxsplash improvements: reference/psxsplash-improvements.md
   - Contributing:
+      - Architecture: contributing/architecture.md
       - CI: contributing/ci.md
 
 # Exclude internal planning/handoff/RFC docs from the published site
