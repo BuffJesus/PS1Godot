@@ -48,6 +48,18 @@ jobs:
       # the published reference always matches the runtime surface.
       - run: python scripts/py/gen_lua_api_docs.py
 
+      # Catch "luaapi.hh changed but docs/lua-api/ wasn't regenerated"
+      # before it ships. The live site is always rebuilt from source
+      # by the step above, but the committed .md files also serve
+      # GitHub-side readers and search-engine crawlers — keeping the
+      # two in sync prevents stale-content drift.
+      - name: Verify lua-api pages are up to date
+        run: |
+          if ! git diff --exit-code docs/lua-api/; then
+            echo "::error::docs/lua-api/ is stale — re-run scripts/py/gen_lua_api_docs.py and commit the result."
+            exit 1
+          fi
+
       # --strict treats warnings as errors. Build is clean as of the
       # 2026-05-19 tutorial-link cleanup. New broken cross-doc links
       # will fail CI loudly instead of shipping a 404.
