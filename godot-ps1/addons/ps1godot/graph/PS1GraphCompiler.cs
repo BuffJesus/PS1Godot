@@ -615,10 +615,28 @@ public static class PS1GraphCompiler
                 }
                 case "bt_leaf":
                 {
+                    // Author writes either a full statement
+                    // (`return "success"` — per the handoff docs) or a
+                    // bare expression (`Bot.IsHealthy(self)`). Wrapping
+                    // a statement with `return (...)` produces
+                    // `return (return "success")` which is Lua syntax
+                    // error and the BT silently fails to load. Detect
+                    // a leading `return` word and emit verbatim; only
+                    // wrap when the snippet is genuinely an expression.
                     string snippet = n.GetPayload(0);
-                    string body = string.IsNullOrEmpty(snippet)
-                        ? "return \"failure\""
-                        : $"return ({snippet})";
+                    string body;
+                    if (string.IsNullOrWhiteSpace(snippet))
+                    {
+                        body = "return \"failure\"";
+                    }
+                    else if (System.Text.RegularExpressions.Regex.IsMatch(snippet, @"^\s*return\b"))
+                    {
+                        body = snippet;
+                    }
+                    else
+                    {
+                        body = $"return ({snippet})";
+                    }
                     sb.AppendLine($"        n{n.Id} = {{ kind = \"leaf\", fn = function(self) {body} end }},");
                     break;
                 }
