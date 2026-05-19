@@ -1,0 +1,42 @@
+# Cross-platform line-ending policy.
+#
+# Default: let git auto-detect text vs binary and normalize line endings
+# on checkin (LF in the repo, native on checkout via autocrlf).
+* text=auto
+
+# Files that MUST be LF regardless of platform (Linux/macOS shells parse
+# CRLF as part of the line and choke; Python on those platforms is more
+# forgiving but still cleaner with LF; CMake / Makefiles are line-based).
+*.sh    text eol=lf
+*.py    text eol=lf
+Makefile text eol=lf
+*.mk    text eol=lf
+
+# Files that MUST be CRLF (Windows-only batch interpreters parse only one
+# line if they hit a bare LF and exit silently).
+*.cmd   text eol=crlf
+*.bat   text eol=crlf
+*.ps1   text eol=crlf
+
+# Binary assets — don't touch.
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.bmp   binary
+*.tga   binary
+*.wav   binary
+*.ogg   binary
+*.mp3   binary
+*.glb   binary
+*.gltf  binary
+*.bin   binary
+*.cue   binary
+*.iso   binary
+*.elf   binary
+*.ps-exe binary
+*.dll   binary
+*.so    binary
+*.dylib binary
+*.exe   binary
+*.zip   binary

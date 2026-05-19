@@ -969,19 +969,35 @@ public partial class PS1GodotPlugin : EditorPlugin
         return System.IO.Path.GetFullPath(System.IO.Path.Combine(projectDir, ".."));
     }
 
-    private static int RunScript(string scriptRelative, string label)
+    // Python interpreter name to invoke `scripts/run.py`. Windows ships
+    // `python.exe`; Linux/macOS conventionally expose Python 3 as
+    // `python3`. The shim .cmd / .sh files in scripts/ use the same
+    // convention so we stay in sync with what a terminal user would type.
+    private static string PythonExe()
+        => OS.GetName() == "Windows" ? "python" : "python3";
+
+    private static string RunPyPath()
+        => System.IO.Path.Combine(RepoRoot(), "scripts", "run.py");
+
+    // Dispatch a `scripts/run.py <action>` invocation. Action is the
+    // sub-command name ("build-psxsplash", "launch-editor", …);
+    // extraArgs are forwarded verbatim ("--loader=cdrom", "--iso", …).
+    // Output is captured and printed to the editor log so the user sees
+    // compile errors / missing-toolchain warnings without opening a
+    // terminal. Cross-platform — Windows / Linux / macOS all reach the
+    // same Python entry point.
+    private static int RunScript(string action, string label, params string[] extraArgs)
     {
-        string full = System.IO.Path.Combine(RepoRoot(), scriptRelative).Replace('/', '\\');
-        if (!System.IO.File.Exists(full))
+        string runPy = RunPyPath();
+        if (!System.IO.File.Exists(runPy))
         {
-            GD.PushError($"[PS1Godot] {label}: script not found at {full}");
+            GD.PushError($"[PS1Godot] {label}: scripts/run.py not found at {runPy}");
             return -1;
         }
         var output = new Godot.Collections.Array();
-        // /c → run and exit. Output is captured and printed to the editor log so
-        // the user sees compile errors / missing-toolchain warnings without
-        // opening a terminal.
-        int code = OS.Execute("cmd.exe", new[] { "/c", full }, output, /* readStderr */ true);
+        var argList = new System.Collections.Generic.List<string> { runPy, action };
+        argList.AddRange(extraArgs);
+        int code = OS.Execute(PythonExe(), argList.ToArray(), output, /* readStderr */ true);
         foreach (var line in output)
             GD.Print(line.AsString().TrimEnd('\r', '\n'));
         return code;
@@ -1011,7 +1027,7 @@ public partial class PS1GodotPlugin : EditorPlugin
     {
         GD.Print("[PS1Godot] Building psxsplash runtime…");
         _dock?.SetPipelineStatus("Building psxsplash runtime…");
-        int code = RunScript("scripts/build-psxsplash.cmd", "Build psxsplash");
+        int code = RunScript("build-psxsplash", "Build psxsplash");
         if (code == 0)
         {
             GD.Print("[PS1Godot] Build OK.");
@@ -1032,22 +1048,23 @@ public partial class PS1GodotPlugin : EditorPlugin
 
     private void OnLaunchEmulator()
     {
-        // launch-emulator.cmd does NOT block — PCSX-Redux opens in its own
-        // window and we get control back. CreateProcess is preferred over
-        // Execute so the editor doesn't freeze waiting on the emulator.
-        string script = System.IO.Path.Combine(RepoRoot(), "scripts", "launch-emulator.cmd").Replace('/', '\\');
-        if (!System.IO.File.Exists(script))
+        // launch-emulator (via run.py) does NOT block — PCSX-Redux opens
+        // in its own window and we get control back. CreateProcess is
+        // preferred over Execute so the editor doesn't freeze waiting on
+        // the emulator.
+        string runPy = RunPyPath();
+        if (!System.IO.File.Exists(runPy))
         {
             GD.PushError(
                 $"[PS1Godot] PCSX-Redux launcher script missing.\n" +
-                $"  Looked at: {script}\n" +
-                "  Why: the in-editor 'Launch in PCSX-Redux' wraps the scripts/launch-emulator.cmd file.\n" +
-                "  Fix: clone the full PS1Godot repo (the script lives at repo-root/scripts/) " +
-                "or copy the file from https://github.com/BuffJesus/PS1Godot/blob/main/scripts/launch-emulator.cmd");
+                $"  Looked at: {runPy}\n" +
+                "  Why: the in-editor 'Launch in PCSX-Redux' delegates to scripts/run.py.\n" +
+                "  Fix: clone the full PS1Godot repo (run.py lives at repo-root/scripts/) " +
+                "or copy the file from https://github.com/BuffJesus/PS1Godot/blob/main/scripts/run.py");
             return;
         }
         GD.Print("[PS1Godot] Launching PCSX-Redux…");
-        OS.CreateProcess("cmd.exe", new[] { "/c", script });
+        OS.CreateProcess(PythonExe(), new[] { runPy, "launch-emulator" });
     }
 
     private void OnRunOnPsx()
@@ -1212,7 +1229,7 @@ public partial class PS1GodotPlugin : EditorPlugin
                 ? "CDROM-loader runtime missing"
                 : "CDROM-loader runtime older than psxsplash sources";
             GD.Print($"[PS1Godot] {reason} — rebuilding (this clears the PCdrv build cache)…");
-            int code = RunScript("scripts/build-psxsplash-cdrom.cmd", "Build psxsplash CDROM");
+            int code = RunScript("build-psxsplash", "Build psxsplash CDROM", "--loader=cdrom");
             if (code != 0)
             {
                 GD.PushError($"[PS1Godot] CDROM build failed (exit {code}). Falling back to PCdrv (XA clips will be silent).");
@@ -1233,14 +1250,14 @@ public partial class PS1GodotPlugin : EditorPlugin
         }
 
         // 3. Launch PCSX-Redux with the ISO mounted.
-        string isoLauncher = System.IO.Path.Combine(RepoRoot(), "scripts", "launch-emulator-iso.cmd").Replace('/', '\\');
-        if (!System.IO.File.Exists(isoLauncher))
+        string runPy = RunPyPath();
+        if (!System.IO.File.Exists(runPy))
         {
-            GD.PushError($"[PS1Godot] launch-emulator-iso.cmd missing at {isoLauncher}");
+            GD.PushError($"[PS1Godot] scripts/run.py missing at {runPy}");
             return;
         }
         GD.Print("[PS1Godot] Launching PCSX-Redux (CD-ROM ISO mode)…");
-        OS.CreateProcess("cmd.exe", new[] { "/c", isoLauncher });
+        OS.CreateProcess(PythonExe(), new[] { runPy, "launch-emulator", "--iso" });
     }
 
     // True if any psxsplash-main/src/*.{cpp,hh,h} or the Makefile is
