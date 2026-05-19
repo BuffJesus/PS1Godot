@@ -14,7 +14,7 @@
 
 // Naive needle-in-haystack. Freestanding build doesn't pull <string.h>,
 // and this only runs on load errors so a straight two-pointer scan is
-// fine — the error strings are short.
+// fine -- the error strings are short.
 static bool containsSubstr(const char* haystack, const char* needle) {
     if (!haystack || !needle) return false;
     for (const char* h = haystack; *h; h++) {
@@ -29,15 +29,15 @@ static bool containsSubstr(const char* haystack, const char* needle) {
 // Print a Lua load-error with an actionable hint when psxlua's NOPARSER
 // tokenizer rejects a literal the Godot exporter-side rewriter should
 // have caught (decimal literals, rarely scientific notation). Authors
-// hitting this today either (a) have a form the rewriter skips —
-// scientific `1e-5`, bare trailing dot `5.`, `.5` — or (b) edited the
+// hitting this today either (a) have a form the rewriter skips --
+// scientific `1e-5`, bare trailing dot `5.`, `.5` -- or (b) edited the
 // splashpack out-of-band without re-exporting.
 static void printLuaLoadError(const char* errMsg, int fileIndex) {
     printf("Lua load error (asset %d): %s\n", fileIndex, errMsg ? errMsg : "(null)");
     if (containsSubstr(errMsg, "malformed number")) {
         printf("  hint: psxlua tokenizer is integer-only. Godot exporter auto-rewrites\n"
                "        '0.06' -> FixedPoint.newFromRaw(246). It skips scientific form\n"
-               "        (1e-5), '.5', and '5.' — write 0.5, 5.0, or\n"
+               "        (1e-5), '.5', and '5.' -- write 0.5, 5.0, or\n"
                "        FixedPoint.newFromRaw(raw_fp12) manually. raw_fp12 = int*4096 + frac.\n");
     }
 }
@@ -321,12 +321,12 @@ void psxsplash::Lua::Init() {
     }
     L.pop();
 
-    // FSM helper (slice D3-2) — installs `_G.FSM = { new = function(def) ... end }`
+    // FSM helper (slice D3-2) -- installs `_G.FSM = { new = function(def) ... end }`
     // so authored fsm.lua tables can be consumed without hand-rolling
     // the walker every time. The compiled fsm table shape (states,
     // transitions, optional on_enter/on_exit/on_update lookup tables)
     // matches what `PS1GraphCompiler.CompileFsm` emits. on_*
-    // callbacks are aspirational for slice D3-3 — the helper checks
+    // callbacks are aspirational for slice D3-3 -- the helper checks
     // for them defensively but the compiler doesn't populate them yet,
     // so today they just no-op.
     //
@@ -376,7 +376,7 @@ void psxsplash::Lua::Init() {
         L.pop();
     }
 
-    // Quest helper (slice D2-2) — installs `_G.Quest = { new = function(def) ... end }`
+    // Quest helper (slice D2-2) -- installs `_G.Quest = { new = function(def) ... end }`
     // so authored quest.lua tables can be walked without hand-rolling
     // the prereq-evaluation loop. Shape matches what
     // `PS1GraphCompiler.CompileQuest` emits:
@@ -386,16 +386,16 @@ void psxsplash::Lua::Init() {
     //     outcomes  = { { id, prereqs = {ids} }, ... } }
     //
     // Instance API:
-    //   :Activate()                — seed active set from initial_objectives
-    //   :Complete(id)              — mark completed, unlock newly-satisfied
+    //   :Activate()                -- seed active set from initial_objectives
+    //   :Complete(id)              -- mark completed, unlock newly-satisfied
     //                                objectives, return list of newly-unlocked ids
-    //   :IsActive(id)              — bool
-    //   :IsComplete(id)            — bool
-    //   :ActiveSet()               — array of currently-active objective ids
-    //   :Outcome()                 — first outcome whose prereqs are all
+    //   :IsActive(id)              -- bool
+    //   :IsComplete(id)            -- bool
+    //   :ActiveSet()               -- array of currently-active objective ids
+    //   :Outcome()                 -- first outcome whose prereqs are all
     //                                complete, or nil if none yet
-    //   :Save() → table            — { completed = {ids} } snapshot for Persist
-    //   :Load(snap)                — restore from a Save() snapshot,
+    //   :Save() → table            -- { completed = {ids} } snapshot for Persist
+    //   :Load(snap)                -- restore from a Save() snapshot,
     //                                recomputes active set deterministically
     static const char kQuestHelperSrc[] =
         "Quest = Quest or {}\n"
@@ -501,7 +501,7 @@ void psxsplash::Lua::Init() {
         L.pop();
     }
 
-    // BT helper (UE editor port plan pick #5) — installs
+    // BT helper (UE editor port plan pick #5) -- installs
     // `_G.BT = { new = function(def) ... end }` so authored
     // bt.lua tables can be ticked without hand-rolling the
     // tree walker. Shape matches what PS1GraphCompiler.CompileBt
@@ -915,7 +915,7 @@ void psxsplash::Lua::RelocateGameObjects(GameObject** objects, size_t count, int
     }
 }
 
-// Hot-swap protocol — see godot-ps1/addons/ps1godot/exporter/LuaHotSwapWatcher.cs
+// Hot-swap protocol -- see godot-ps1/addons/ps1godot/exporter/LuaHotSwapWatcher.cs
 // for the writer side. File layout (little-endian):
 //   [4]  magic 'PHSW' = 0x57534850
 //   [4]  u32 version
@@ -938,7 +938,7 @@ void psxsplash::Lua::TryHotSwap(SceneManager& sm) {
     auto& loader = FileLoader::Get();
     int size = 0;
     uint8_t* buf = loader.LoadFileSync("hotswap.luac", size);
-    if (!buf) return;  // file absent — fast path
+    if (!buf) return;  // file absent -- fast path
 
     if (size < kHotSwapHeaderBytes) { loader.FreeFile(buf); return; }
     if (readU32LE(buf) != kHotSwapMagic) { loader.FreeFile(buf); return; }
@@ -952,7 +952,7 @@ void psxsplash::Lua::TryHotSwap(SceneManager& sm) {
     if (version <= m_lastHotSwapVersion) { loader.FreeFile(buf); return; }
 
     if (fileIdx >= m_bytecodeRefCount) {
-        printf("Lua hot-swap: idx %u out of range (have %d) — re-export the scene\n",
+        printf("Lua hot-swap: idx %u out of range (have %d) -- re-export the scene\n",
                (unsigned)fileIdx, m_bytecodeRefCount);
         m_lastHotSwapVersion = version;  // suppress repeat warnings
         loader.FreeFile(buf);
@@ -978,7 +978,7 @@ void psxsplash::Lua::TryHotSwap(SceneManager& sm) {
     // Re-load the chunk into the script-environment table so any future
     // RegisterGameObject (and OnTriggerEnterScript / OnTriggerExitScript
     // calls keyed by file index) see the new code. LoadLuaFile rewrites
-    // m_bytecodeRefs[idx] back to the same pointer, which is fine — it's
+    // m_bytecodeRefs[idx] back to the same pointer, which is fine -- it's
     // now our owned buffer.
     LoadLuaFile(reinterpret_cast<const char*>(owned), (size_t)codeLen, fileIdx);
 
@@ -1003,14 +1003,14 @@ void psxsplash::Lua::TryHotSwap(SceneManager& sm) {
 }
 
 void psxsplash::Lua::TryRepl(SceneManager& sm) {
-    // UE editor port-plan pick #4 — editor REPL. The editor dock
+    // UE editor port-plan pick #4 -- editor REPL. The editor dock
     // writes the snippet to `repl.lua` and bumps `repl.ver` with a
     // monotonic byte sequence. We compare the .ver contents to the
     // last-seen bytes (no parse: any monotonic format the editor
     // chooses works), and when they differ load + pcall the .lua.
     //
     // Result printed via printf so PCSX-Redux's debug console shows
-    // it — slice 1 doesn't write back to a response file. PCdrv-
+    // it -- slice 1 doesn't write back to a response file. PCdrv-
     // only by definition (no .ver file under CD-ROM ISO mode).
     auto& loader = FileLoader::Get();
     int verSize = 0;
@@ -1030,7 +1030,7 @@ void psxsplash::Lua::TryRepl(SceneManager& sm) {
         loader.FreeFile(verBuf);
         return;
     }
-    // Update last-seen stamp BEFORE executing — a buggy snippet that
+    // Update last-seen stamp BEFORE executing -- a buggy snippet that
     // crashes the VM would otherwise re-fire on the next poll.
     for (int i = 0; i < verSize; i++) m_lastReplVerBuf[i] = verBuf[i];
     m_lastReplVerLen = verSize;

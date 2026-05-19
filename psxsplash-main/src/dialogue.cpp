@@ -6,7 +6,7 @@
 
 namespace psxsplash {
 
-// Bounded string copy — no <string.h> in the freestanding build.
+// Bounded string copy -- no <string.h> in the freestanding build.
 // Copies up to (outSize - 1) bytes from `src` into `out`, always
 // null-terminates. Tolerant of null `src` (writes empty string).
 static void bounded_strcpy(char* out, const char* src, size_t outSize) {
@@ -31,7 +31,7 @@ void DialogueRunner::init(Controls* controls, UISystem* ui) {
     m_tableRef = -1;
     m_currentNodeId[0] = '\0';
     m_freshNode = false;
-    // Canvas lookups happen on startFromStackTop — the canvas isn't
+    // Canvas lookups happen on startFromStackTop -- the canvas isn't
     // populated yet at SceneManager construction time.
     m_canvasIdx = -1;
     m_useCanvas = false;
@@ -92,7 +92,7 @@ void DialogueRunner::startFromStackTop(lua_State* L) {
             m_useCanvas = true;
             m_speakerHandle = m_ui->findElement(m_canvasIdx, "speaker");
             m_textHandle    = m_ui->findElement(m_canvasIdx, "text");
-            // option_1..3 and cursor_1..3 — author can ship any subset.
+            // option_1..3 and cursor_1..3 -- author can ship any subset.
             const char* optNames[kMaxOptions]    = { "option_1", "option_2", "option_3" };
             const char* cursorNames[kMaxOptions] = { "cursor_1", "cursor_2", "cursor_3" };
             m_hasAnyCursor = false;
@@ -107,7 +107,7 @@ void DialogueRunner::startFromStackTop(lua_State* L) {
         }
     }
 
-    printf("[Dialog] start — entry=%s (canvas=%s)\n",
+    printf("[Dialog] start -- entry=%s (canvas=%s)\n",
            m_currentNodeId, m_useCanvas ? "dialogue_box" : "none, printf-only");
     if (m_useCanvas) {
         printf("[Dialog] handles: speaker=%d text=%d option=[%d,%d,%d] cursor=[%d,%d,%d] (-1 = element not found on canvas)\n",
@@ -163,7 +163,7 @@ void DialogueRunner::tick(lua_State* L) {
         emitCurrentNode(L);
         // Defer this frame's input. Without it, the X press that
         // advanced INTO this node could also be edge-detected for
-        // advancing back OUT — fine for line→line (just feels twitchy)
+        // advancing back OUT -- fine for line->line (just feels twitchy)
         // but immediately auto-picks option 0 on a fresh choice node.
         return;
     }
@@ -171,7 +171,7 @@ void DialogueRunner::tick(lua_State* L) {
     // Choice navigation: D-pad Up/Down cycles m_selectedChoice within
     // [0, m_numActiveOptions). Only active when the current node is a
     // choice with at least one option. Holding the d-pad does NOT
-    // auto-repeat — wasButtonPressed is an edge-trigger.
+    // auto-repeat -- wasButtonPressed is an edge-trigger.
     if (m_onChoiceNode && m_numActiveOptions > 0 && m_controls) {
         if (m_controls->wasButtonPressed(psyqo::AdvancedPad::Button::Up)) {
             m_selectedChoice = (m_selectedChoice - 1 + m_numActiveOptions) % m_numActiveOptions;
@@ -224,8 +224,8 @@ void DialogueRunner::tick(lua_State* L) {
 
     // X / Cross button. Two distinct behaviours depending on reveal
     // state:
-    //   - reveal still running → snap cursor to end (skip the crawl).
-    //   - reveal complete (or off) → advance to the next node, gated
+    //   - reveal still running -> snap cursor to end (skip the crawl).
+    //   - reveal complete (or off) -> advance to the next node, gated
     //     by the advance lock as before.
     // Same edge-trigger guard (`wasButtonPressed`) so holding X
     // doesn't both skip-to-end AND advance on the same press.
@@ -248,7 +248,7 @@ void DialogueRunner::tick(lua_State* L) {
 
 void DialogueRunner::emitCurrentNode(lua_State* L) {
     if (!pushCurrentNode(L)) {
-        printf("[Dialog] emit: current node '%s' missing — stopping\n", m_currentNodeId);
+        printf("[Dialog] emit: current node '%s' missing -- stopping\n", m_currentNodeId);
         stop(L);
         return;
     }
@@ -256,7 +256,7 @@ void DialogueRunner::emitCurrentNode(lua_State* L) {
 
     char kind[16] = "";
     if (!readStringField(L, -1, "kind", kind, sizeof(kind))) {
-        printf("[Dialog] emit: node '%s' has no .kind — stopping\n", m_currentNodeId);
+        printf("[Dialog] emit: node '%s' has no .kind -- stopping\n", m_currentNodeId);
         lua_pop(L, 1);
         stop(L);
         return;
@@ -264,7 +264,7 @@ void DialogueRunner::emitCurrentNode(lua_State* L) {
 
     if (streq(kind, "line")) {
         // Wipe leftover canvas state from the previous node so stale
-        // option text doesn't bleed through on a choice→line transition.
+        // option text doesn't bleed through on a choice->line transition.
         // Skipped for action/condition (those don't render display).
         if (m_useCanvas) clearCanvasUI();
 
@@ -289,14 +289,14 @@ void DialogueRunner::emitCurrentNode(lua_State* L) {
         // Audio + advance-lock (slice D1h). Fire the line's audio
         // clip via the existing Lua Audio.PlaySfx routing so XA / SPU
         // / CDDA dispatch stays in one place; query the duration on
-        // the C++ side via SceneManager → AudioManager so the lock
+        // the C++ side via SceneManager -> AudioManager so the lock
         // can sit a player out for the spoken length of the clip.
         m_lineAdvanceLockFrames = 0;
         if (audio[0]) {
             playLineAudio(L, audio, skippable);
         }
         if (!skippable && m_lineAdvanceLockFrames == 0) {
-            // No audio (or audio not found) — give the player a fixed
+            // No audio (or audio not found) -- give the player a fixed
             // read window. 2 seconds at 60 Hz is a comfortable
             // "letter from grandma" pace; authors who want a longer
             // gate either set skippable=true and trust the player, or
@@ -315,7 +315,7 @@ void DialogueRunner::emitCurrentNode(lua_State* L) {
         // Text-reveal mode (typewriter). Reset state every line so a
         // mode-less line cleanly cancels a prior typewriter run.
         // reveal_rate is chars/sec; convert to frames/char at 60Hz
-        // (the runtime's frame cadence). Default 30 cps → 2 frames/char.
+        // (the runtime's frame cadence). Default 30 cps -> 2 frames/char.
         m_revealMode = RevealMode::None;
         m_revealCursor = 0;
         m_revealTickAccum = 0;
@@ -365,7 +365,7 @@ void DialogueRunner::emitCurrentNode(lua_State* L) {
                 m_ui->setElementVisible(m_textHandle, true);
             }
             // Mirror to console so we can confirm the line content
-            // even when the canvas is on — useful when the on-screen
+            // even when the canvas is on -- useful when the on-screen
             // text doesn't appear (color/coords/sortOrder issues).
             printf("[Dialog] line emit: speaker='%s' text='%s' (canvas%s)\n",
                    speaker[0] ? speaker : "(none)",
@@ -386,10 +386,10 @@ void DialogueRunner::emitCurrentNode(lua_State* L) {
 
         if (m_useCanvas && m_ui) {
             // Show "Choose:" or whatever the author wrote in the
-            // canvas. We don't override speaker/text — author can
+            // canvas. We don't override speaker/text -- author can
             // pre-populate them as a fixed prompt if they want.
         } else {
-            printf("[Dialog] choice (D-pad ↑↓ select, X confirm):\n");
+            printf("[Dialog] choice (D-pad Up/Down select, X confirm):\n");
         }
 
         // Walk options array: stack: node-table; push options at -2 then iterate.
@@ -427,7 +427,7 @@ void DialogueRunner::emitCurrentNode(lua_State* L) {
         // Cutscene.Play, etc. The compiler bakes the Lua snippet from
         // the per-kind authoring fields (set_flag, play_sound,
         // start_cutscene). Snapshot fields off the node-table, pop
-        // it, then run the snippet on a clean stack — `pcall` is
+        // it, then run the snippet on a clean stack -- `pcall` is
         // tolerant of leftover stack entries but cleaner this way.
         char snippet[256] = "";
         char next[16] = "";
@@ -453,14 +453,14 @@ void DialogueRunner::emitCurrentNode(lua_State* L) {
         // successor. Chain of action nodes runs at one node per frame
         // (~16ms) which is imperceptible.
         if (next[0]) {
-            printf("[Dialog] %s → %s\n", m_currentNodeId, next);
+            printf("[Dialog] %s -> %s\n", m_currentNodeId, next);
             bounded_strcpy(m_currentNodeId, next, sizeof(m_currentNodeId));
             m_freshNode = true;
         } else {
             printf("[Dialog] end (action '%s' has no next)\n", m_currentNodeId);
             stop(L);
         }
-        return;  // skip trailing lua_pop — we already popped node-table.
+        return;  // skip trailing lua_pop -- we already popped node-table.
     }
     else if (streq(kind, "condition")) {
         // Branch on a Lua expression. The compiler bakes the snippet
@@ -495,7 +495,7 @@ void DialogueRunner::emitCurrentNode(lua_State* L) {
 
         const char* picked = result ? nextTrue : nextFalse;
         if (picked[0]) {
-            printf("[Dialog] %s (%s) → %s\n",
+            printf("[Dialog] %s (%s) -> %s\n",
                    m_currentNodeId, result ? "true" : "false", picked);
             bounded_strcpy(m_currentNodeId, picked, sizeof(m_currentNodeId));
             m_freshNode = true;
@@ -507,7 +507,7 @@ void DialogueRunner::emitCurrentNode(lua_State* L) {
         return;  // skip trailing lua_pop.
     }
     else if (streq(kind, "sub_dialogue")) {
-        // Slice D1j — call into another dialogue table. Push current
+        // Slice D1j -- call into another dialogue table. Push current
         // (table, resume_id) onto the stack, swap the live table to
         // the sub's `_G.dialogue_<target>`, set current = sub's
         // entry. When the sub eventually hits nil-next we pop and
@@ -519,13 +519,13 @@ void DialogueRunner::emitCurrentNode(lua_State* L) {
         lua_pop(L, 1);  // pop node-table (own our pop, early-return below)
 
         if (m_subStackDepth >= kMaxSubgraphDepth) {
-            printf("[Dialog] sub_dialogue: depth %d exceeded at '%s' — treating as end\n",
+            printf("[Dialog] sub_dialogue: depth %d exceeded at '%s' -- treating as end\n",
                    kMaxSubgraphDepth, m_currentNodeId);
             stop(L);
             return;
         }
         if (!target[0]) {
-            printf("[Dialog] sub_dialogue at '%s': no target — treating as end\n", m_currentNodeId);
+            printf("[Dialog] sub_dialogue at '%s': no target -- treating as end\n", m_currentNodeId);
             stop(L);
             return;
         }
@@ -534,7 +534,7 @@ void DialogueRunner::emitCurrentNode(lua_State* L) {
         snprintf(globalName, sizeof(globalName), "dialogue_%s", target);
         lua_getglobal(L, globalName);
         if (!lua_istable(L, -1)) {
-            printf("[Dialog] sub_dialogue: _G.%s not found — ship the target's .lua in PS1Scene.UserScripts\n",
+            printf("[Dialog] sub_dialogue: _G.%s not found -- ship the target's .lua in PS1Scene.UserScripts\n",
                    globalName);
             lua_pop(L, 1);
             stop(L);
@@ -544,7 +544,7 @@ void DialogueRunner::emitCurrentNode(lua_State* L) {
         lua_getfield(L, -1, "entry");
         const char* entry = lua_isstring(L, -1) ? lua_tostring(L, -1) : nullptr;
         if (!entry) {
-            printf("[Dialog] sub_dialogue: %s has no entry — treating as end\n", globalName);
+            printf("[Dialog] sub_dialogue: %s has no entry -- treating as end\n", globalName);
             lua_pop(L, 2);
             stop(L);
             return;
@@ -560,14 +560,14 @@ void DialogueRunner::emitCurrentNode(lua_State* L) {
                        sizeof(m_subStack[0].resumeNodeId));
         m_subStackDepth++;
 
-        // Stash the sub's table — luaL_ref pops the value off the
+        // Stash the sub's table -- luaL_ref pops the value off the
         // stack and gives us a registry slot.
         m_tableRef = luaL_ref(L, LUA_REGISTRYINDEX);
         bounded_strcpy(m_currentNodeId, entryCopy, sizeof(m_currentNodeId));
         m_freshNode = true;
-        printf("[Dialog] sub_dialogue → %s/%s (depth=%d)\n",
+        printf("[Dialog] sub_dialogue -> %s/%s (depth=%d)\n",
                globalName, entryCopy, m_subStackDepth);
-        return;  // skip trailing lua_pop — we already popped node-table.
+        return;  // skip trailing lua_pop -- we already popped node-table.
     }
     else {
         printf("[Dialog] emit: unknown kind '%s' at node '%s'\n", kind, m_currentNodeId);
@@ -619,10 +619,10 @@ void DialogueRunner::advanceFromCurrent(lua_State* L) {
     lua_pop(L, 1);  // pop node-table
 
     if (next[0] == '\0') {
-        // Subgraph return (slice D1j) — when a sub-dialogue hits a
+        // Subgraph return (slice D1j) -- when a sub-dialogue hits a
         // nil-next, pop the call stack and resume the parent at the
         // saved resume id. Keep popping while the resume id is empty
-        // (parent's sub_dialogue node itself had nil-next → its
+        // (parent's sub_dialogue node itself had nil-next -> its
         // grandparent's resume id is the real target).
         while (m_subStackDepth > 0) {
             m_subStackDepth--;
@@ -633,11 +633,11 @@ void DialogueRunner::advanceFromCurrent(lua_State* L) {
             if (frame.resumeNodeId[0]) {
                 bounded_strcpy(m_currentNodeId, frame.resumeNodeId, sizeof(m_currentNodeId));
                 m_freshNode = true;
-                printf("[Dialog] sub_dialogue ← (depth=%d) resume at %s\n",
+                printf("[Dialog] sub_dialogue <- (depth=%d) resume at %s\n",
                        m_subStackDepth, m_currentNodeId);
                 return;
             }
-            // Empty resume — loop once more, treating the parent as
+            // Empty resume -- loop once more, treating the parent as
             // also "done." Falls through to stop() below if the
             // stack drains without a resume id.
         }
@@ -648,7 +648,7 @@ void DialogueRunner::advanceFromCurrent(lua_State* L) {
 
     bounded_strcpy(m_currentNodeId, next, sizeof(m_currentNodeId));
     m_freshNode = true;
-    printf("[Dialog] → %s\n", m_currentNodeId);
+    printf("[Dialog] -> %s\n", m_currentNodeId);
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -663,7 +663,7 @@ bool DialogueRunner::pushCurrentNode(lua_State* L) {
     if (!lua_istable(L, -1)) { lua_pop(L, 2); return false; }
     lua_getfield(L, -1, m_currentNodeId);
     if (!lua_istable(L, -1)) { lua_pop(L, 3); return false; }
-    // stack: table, nodes, node-table — collapse to leave just node-table on top.
+    // stack: table, nodes, node-table -- collapse to leave just node-table on top.
     lua_replace(L, -3);  // node-table replaces table
     lua_pop(L, 1);       // pop nodes
     return true;
@@ -782,7 +782,7 @@ void DialogueRunner::loadLineNotifies(lua_State* L, int lineTableIndex) {
     for (int i = 1; i <= n && m_numNotifies < kMaxNotifies; i++) {
         lua_rawgeti(L, -1, i);
         if (!lua_istable(L, -1)) {
-            printf("[Dialog] notify[%d] not a table — skipped\n", i);
+            printf("[Dialog] notify[%d] not a table -- skipped\n", i);
             lua_pop(L, 1);
             continue;
         }
@@ -794,7 +794,7 @@ void DialogueRunner::loadLineNotifies(lua_State* L, int lineTableIndex) {
         const char* src = lua_isstring(L, -1) ? lua_tostring(L, -1) : nullptr;
 
         if (at < 0 || !src) {
-            printf("[Dialog] notify[%d] missing at/lua — skipped\n", i);
+            printf("[Dialog] notify[%d] missing at/lua -- skipped\n", i);
             lua_pop(L, 2);  // pop lua-field + entry-table
             continue;
         }
@@ -829,7 +829,7 @@ void DialogueRunner::tickLineNotifies(lua_State* L) {
 void DialogueRunner::manageAuxElements(bool visible) {
     if (!m_useCanvas || !m_ui || m_canvasIdx < 0) return;
     // Walk every element on the canvas. Skip the named dialogue slots
-    // — those have their own visibility lifecycle (per-node fill, hide
+    // -- those have their own visibility lifecycle (per-node fill, hide
     // between modes). For everything else (background Box, frame
     // graphics, portraits, decorations, third-party elements an author
     // dropped on the dialogue canvas), flip visibility en bloc so the
