@@ -16,32 +16,32 @@ namespace PS1Godot;
 [Icon("res://addons/ps1godot/icons/ps1_mesh_instance.svg")]
 public partial class PS1MeshInstance : MeshInstance3D
 {
-    public enum CollisionKind
-    {
-        None,
-        Static,   // Participates in BVH/world collision
-        Dynamic,  // Per-object AABB collider
-    }
+	public enum CollisionKind
+	{
+		None,
+		Static,   // Participates in BVH/world collision
+		Dynamic,  // Per-object AABB collider
+	}
 
-    public enum ColorMode
-    {
-        FlatColor,        // Every vertex gets FlatColor (default — works today)
-        BakedLighting,    // Walk the scene's Light nodes, shade per-vertex (Phase 2.5)
-        MeshVertexColors, // Use the mesh's COLOR channel if present (Phase 2.5)
-    }
+	public enum ColorMode
+	{
+		FlatColor,        // Every vertex gets FlatColor (default — works today)
+		BakedLighting,    // Walk the scene's Light nodes, shade per-vertex (Phase 2.5)
+		MeshVertexColors, // Use the mesh's COLOR channel if present (Phase 2.5)
+	}
 
-    /// <summary>
-    /// Texture bit depth at export. 4bpp = 16-color CLUT (best VRAM, harshest
-    /// quantize), 8bpp = 256-color CLUT (default; safe middle ground), 16bpp =
-    /// direct color (no palette but eats 2× VRAM). Pick 4bpp for decals/sprites,
-    /// 8bpp for world geometry, 16bpp only for skies / cinematics.
-    /// </summary>
-    [ExportGroup("PS1 / Look")]
-    [Export] public PSXBPP BitDepth { get; set; } = PSXBPP.TEX_8BIT;
-    /// <summary>
-    /// How vertex colors get filled. FlatColor = every vertex gets the same
-    /// FlatColor field (default — works without baking). MeshVertexColors =
-    /// use the mesh's COLOR attribute. BakedLighting = walk scene lights.
+	/// <summary>
+	/// Texture bit depth at export. 4bpp = 16-color CLUT (best VRAM, harshest
+	/// quantize), 8bpp = 256-color CLUT (default; safe middle ground), 16bpp =
+	/// direct color (no palette but eats 2× VRAM). Pick 4bpp for decals/sprites,
+	/// 8bpp for world geometry, 16bpp only for skies / cinematics.
+	/// </summary>
+	[ExportGroup("PS1 / Look")]
+	[Export] public PSXBPP BitDepth { get; set; } = PSXBPP.TEX_8BIT;
+	/// <summary>
+	/// How vertex colors get filled. FlatColor = every vertex gets the same
+	/// FlatColor field (default — works without baking). MeshVertexColors =
+	/// use the mesh's COLOR attribute. BakedLighting = walk scene lights.
     /// </summary>
     [Export] public ColorMode VertexColorMode { get; set; } = ColorMode.FlatColor;
     /// <summary>
@@ -99,10 +99,10 @@ public partial class PS1MeshInstance : MeshInstance3D
     [Export] public bool Translucent { get; set; } = false;
 
     /// <summary>
-    /// Silence the MeshLinter's "UV out of [0,1]" warning. PSX hardware does
-    /// NOT wrap or clamp — out-of-range UVs sample garbage from neighbouring
-    /// VRAM regardless of this flag. Set true ONLY on meshes whose authoring
-    /// genuinely expects UV repeats AND you've subdivided at integer UV edges;
+	/// Silence the MeshLinter's "UV out of [0,1]" warning. PSX hardware does
+	/// NOT wrap or clamp — out-of-range UVs sample garbage from neighbouring
+	/// VRAM regardless of this flag. Set true ONLY on meshes whose authoring
+	/// genuinely expects UV repeats AND you've subdivided at integer UV edges;
     /// otherwise the sampling looks chaotic.
     /// </summary>
     [Export] public bool TilingUV { get; set; } = false;
@@ -111,17 +111,17 @@ public partial class PS1MeshInstance : MeshInstance3D
     //
     // These fields mirror tools/blender-addon/.../properties.py per-
     // object enums verbatim and are the contract for the Phase 2 JSON
-    // sidecar reader. Defaults are picked so existing scenes don't
-    // break: StaticWorld + MergeStatic + OpaqueStatic match what the
-    // exporter has been doing implicitly all along. Today these fields
-    // are recorded but don't change runtime behavior; Slot D
+	// sidecar reader. Defaults are picked so existing scenes don't
+	// break: StaticWorld + MergeStatic + OpaqueStatic match what the
+	// exporter has been doing implicitly all along. Today these fields
+	// are recorded but don't change runtime behavior; Slot D
     // render-group batching + the sidecar reader consume them.
     //
-    // Don't rename the enum members — they ARE the wire identifiers
-    // (see exporter/PS1Metadata.cs).
-    /// <summary>
-    /// Authoring role this mesh plays. Drives Slot D batching + chunk
-    /// residency decisions. StaticWorld = walls/floors/props that don't
+	// Don't rename the enum members — they ARE the wire identifiers
+	// (see exporter/PS1Metadata.cs).
+	/// <summary>
+	/// Authoring role this mesh plays. Drives Slot D batching + chunk
+	/// residency decisions. StaticWorld = walls/floors/props that don't
     /// move. DynamicRigid = moving doors/elevators. Skinned = characters.
     /// CollisionOnly = invisible mesh that supplies collision only (e.g.
     /// for fixed-camera scenes — see CollisionOnly in ExportMode below).
@@ -146,26 +146,26 @@ public partial class PS1MeshInstance : MeshInstance3D
     /// <summary>
     /// PSX shading mode. FlatColor = single color per face. VertexColor =
     /// per-vertex Gouraud (use MeshVertexColors / BakedLighting). CelShaded
-    /// = stepped ramp (Phase 4 stretch). MeshVertexColors needs the mesh's
-    /// COLOR channel populated (Vertex Lighting baker writes it).
-    /// </summary>
-    [Export] public ShadingMode ShadingMode { get; set; } = ShadingMode.FlatColor;
-    /// <summary>
-    /// Opaque = no transparency. Cutout = alpha-tested via CLUT[0]=0
-    /// (decals, foliage). SemiTransparent = additive 50/50 blend (smoke,
-    /// glass). Wired into the texture quantize step so the right CLUT
-    /// entries are reserved.
-    /// </summary>
-    [Export] public AlphaMode AlphaMode { get; set; } = AlphaMode.Opaque;
-    /// <summary>
-    /// Texture-page grouping hint. World = packed into the world atlas
-    /// (default). Characters = own atlas (skin/face textures group). UI =
-    /// uses the UI atlas. Different groups can swap independently for
-    /// chunk streaming.
-    /// </summary>
-    [Export] public AtlasGroup AtlasGroup { get; set; } = AtlasGroup.World;
-    /// <summary>
-    /// When does this mesh's data live in memory. Scene = always loaded
+	/// = stepped ramp (Phase 4 stretch). MeshVertexColors needs the mesh's
+	/// COLOR channel populated (Vertex Lighting baker writes it).
+	/// </summary>
+	[Export] public ShadingMode ShadingMode { get; set; } = ShadingMode.FlatColor;
+	/// <summary>
+	/// Opaque = no transparency. Cutout = alpha-tested via CLUT[0]=0
+	/// (decals, foliage). SemiTransparent = additive 50/50 blend (smoke,
+	/// glass). Wired into the texture quantize step so the right CLUT
+	/// entries are reserved.
+	/// </summary>
+	[Export] public AlphaMode AlphaMode { get; set; } = AlphaMode.Opaque;
+	/// <summary>
+	/// Texture-page grouping hint. World = packed into the world atlas
+	/// (default). Characters = own atlas (skin/face textures group). UI =
+	/// uses the UI atlas. Different groups can swap independently for
+	/// chunk streaming.
+	/// </summary>
+	[Export] public AtlasGroup AtlasGroup { get; set; } = AtlasGroup.World;
+	/// <summary>
+	/// When does this mesh's data live in memory. Scene = always loaded
     /// (default). Chunk = loaded with the chunk it belongs to. Prefetch =
     /// loaded ahead of time before chunk transition.
     /// </summary>
@@ -201,41 +201,41 @@ public partial class PS1MeshInstance : MeshInstance3D
 
     /// <summary>
     /// Per-instance vertex-color override. Vertex Lighting + AO bakers
-    /// write here. Empty = use the mesh's COLOR channel as-is. Populated =
-    /// these colors override at export. Same mesh in two scenes can have
-    /// two lighting setups. Survives .glb re-import (lives on the .tscn).
-    /// Use "PS1Godot: Bake / Clear BakedColors" to reset.
-    /// </summary>
-    [Export] public Color[] BakedColors { get; set; } = System.Array.Empty<Color>();
+	/// write here. Empty = use the mesh's COLOR channel as-is. Populated =
+	/// these colors override at export. Same mesh in two scenes can have
+	/// two lighting setups. Survives .glb re-import (lives on the .tscn).
+	/// Use "PS1Godot: Bake / Clear BakedColors" to reset.
+	/// </summary>
+	[Export] public Color[] BakedColors { get; set; } = System.Array.Empty<Color>();
 
-    /// <summary>
-    /// When true, the exporter auto-bakes vertex lighting from scene
-    /// DirectionalLight3D / OmniLight3D / SpotLight3D before writing the
-    /// splashpack. Eliminates the manual "select meshes → Bake Lighting"
-    /// step and prevents stale BakedColors when lights move. Only single-
-    /// surface meshes are supported (multi-surface falls back to existing
-    /// BakedColors with a warning). Note: baking mutates BakedColors on
-    /// the live scene — if export fails partway, the scene will be dirty.
-    /// </summary>
-    [ExportGroup("PS1 / Baking")]
-    [Export] public bool AutoBakeVertexLighting { get; set; } = false;
-    /// <summary>
-    /// When true AND AutoBakeVertexLighting is true, also bake vertex AO
-    /// (hemisphere occlusion) after the lighting pass. Multiplies AO
-    /// into BakedColors. Adds ~1-2 s per mesh depending on scene tri count.
-    /// </summary>
-    [Export] public bool AutoBakeVertexAO { get; set; } = false;
+	/// <summary>
+	/// When true, the exporter auto-bakes vertex lighting from scene
+	/// DirectionalLight3D / OmniLight3D / SpotLight3D before writing the
+	/// splashpack. Eliminates the manual "select meshes → Bake Lighting"
+	/// step and prevents stale BakedColors when lights move. Only single-
+	/// surface meshes are supported (multi-surface falls back to existing
+	/// BakedColors with a warning). Note: baking mutates BakedColors on
+	/// the live scene — if export fails partway, the scene will be dirty.
+	/// </summary>
+	[ExportGroup("PS1 / Baking")]
+	[Export] public bool AutoBakeVertexLighting { get; set; } = false;
+	/// <summary>
+	/// When true AND AutoBakeVertexLighting is true, also bake vertex AO
+	/// (hemisphere occlusion) after the lighting pass. Multiplies AO
+	/// into BakedColors. Adds ~1-2 s per mesh depending on scene tri count.
+	/// </summary>
+	[Export] public bool AutoBakeVertexAO { get; set; } = false;
 
-    /// <summary>
-    /// When true, runtime treats this mesh as interactable. Player presses
-    /// InteractButton within InteractionRadiusMeters → fires onInteract on
-    /// the attached ScriptFile. Most meshes are NOT interactive — opt in.
-    /// </summary>
-    [ExportGroup("PS1 / Interactable")]
-    [Export] public bool Interactable { get; set; } = false;
-    /// <summary>
-    /// Distance in meters at which the interact prompt becomes available.
-    /// 1.5 m ≈ arm's reach.
+	/// <summary>
+	/// When true, runtime treats this mesh as interactable. Player presses
+	/// InteractButton within InteractionRadiusMeters → fires onInteract on
+	/// the attached ScriptFile. Most meshes are NOT interactive — opt in.
+	/// </summary>
+	[ExportGroup("PS1 / Interactable")]
+	[Export] public bool Interactable { get; set; } = false;
+	/// <summary>
+	/// Distance in meters at which the interact prompt becomes available.
+	/// 1.5 m ≈ arm's reach.
     /// </summary>
     [Export(PropertyHint.Range, "0.1,10.0,0.1,suffix:m")]
     public float InteractionRadiusMeters { get; set; } = 1.5f;
@@ -266,6 +266,17 @@ public partial class PS1MeshInstance : MeshInstance3D
     /// </summary>
     [Export] public string InteractionPromptCanvas { get; set; } = "";
 
+    /// <summary>
+    /// Optional PS1Stats resource. When set, the exporter emits a stats
+    /// record for this entity and the runtime tracks current HP — query
+    /// via Lua's Stats.GetHP / Stats.SetHP / Stats.GetMaxHP. Multiple
+    /// PS1MeshInstance instances can share one .tres for shared
+    /// templates (e.g. one "small_skeleton_stats.tres" referenced by
+    /// many enemy instances). Null = entity has no stats and the
+    /// Stats.* Lua queries return 0.
+    /// </summary>
+    [Export] public PS1Stats? Stats { get; set; }
+
     // _EnterTree runs every time the node enters the scene tree — both at
     // runtime and on every editor scene-open. _Ready can miss hot-reload
     // re-instantiation in [Tool] scripts, so do the lifecycle setup here.
@@ -278,16 +289,16 @@ public partial class PS1MeshInstance : MeshInstance3D
             if (mat != null) MaterialOverride = mat;
         }
 
-        // Godot frustum-culls based on the mesh's exact AABB. The PS1 vertex
-        // snap moves verts in screen space, which sometimes pushes a triangle's
+		// Godot frustum-culls based on the mesh's exact AABB. The PS1 vertex
+		// snap moves verts in screen space, which sometimes pushes a triangle's
         // rendered footprint slightly outside the original AABB — Godot then
         // skips drawing the whole mesh once a corner crosses the frustum edge,
         // so the cube vanishes at certain orbit angles.
         //
-        // Scale the pad to the mesh size so a 0.1 m prop isn't wrapped in a
-        // 4 m halo (which looks like a giant yellow cage around the player
-        // when the mesh is a humanoid). 10 % of the largest AABB edge covers
-        // the snap's pixel-scale displacement at any reasonable zoom, and the
+		// Scale the pad to the mesh size so a 0.1 m prop isn't wrapped in a
+		// 4 m halo (which looks like a giant yellow cage around the player
+		// when the mesh is a humanoid). 10 % of the largest AABB edge covers
+		// the snap's pixel-scale displacement at any reasonable zoom, and the
         // clamp keeps absurdly tiny or absurdly huge meshes sane. Only raise
         // the margin — never lower a hand-set value.
         if (Mesh != null)
@@ -300,31 +311,31 @@ public partial class PS1MeshInstance : MeshInstance3D
     }
 
     // Progressive disclosure: hide fields whose controlling toggle is off
-    // so the inspector only shows what's relevant.
-    public override void _ValidateProperty(Godot.Collections.Dictionary property)
-    {
-        string name = property["name"].AsString();
-        bool hidden = name switch
-        {
-            "LayerMask" => Collision == CollisionKind.None,
-            "FlatColor" => VertexColorMode != ColorMode.FlatColor,
-            "InteractionRadiusMeters" or "InteractButton" or "InteractionRepeatable"
-                or "InteractionCooldownFrames" or "InteractionPromptCanvas"
-                => !Interactable,
-            "AutoBakeVertexAO" => !AutoBakeVertexLighting,
-            _ => false,
-        };
-        if (hidden)
-        {
-            property["usage"] = (long)PropertyUsageFlags.Storage;
-        }
-    }
+	// so the inspector only shows what's relevant.
+	public override void _ValidateProperty(Godot.Collections.Dictionary property)
+	{
+		string name = property["name"].AsString();
+		bool hidden = name switch
+		{
+			"LayerMask" => Collision == CollisionKind.None,
+			"FlatColor" => VertexColorMode != ColorMode.FlatColor,
+			"InteractionRadiusMeters" or "InteractButton" or "InteractionRepeatable"
+				or "InteractionCooldownFrames" or "InteractionPromptCanvas"
+				=> !Interactable,
+			"AutoBakeVertexAO" => !AutoBakeVertexLighting,
+			_ => false,
+		};
+		if (hidden)
+		{
+			property["usage"] = (long)PropertyUsageFlags.Storage;
+		}
+	}
 
-    public override string[] _GetConfigurationWarnings()
-    {
-        var w = new System.Collections.Generic.List<string>();
+	public override string[] _GetConfigurationWarnings()
+	{
+		var w = new System.Collections.Generic.List<string>();
 
-        // AutoBake on but BakedColors empty = first export hasn't run yet,
+		// AutoBake on but BakedColors empty = first export hasn't run yet,
         // or someone cleared the bake. Flag so authors know the next F5
         // will bake (cost: ~1-2s per mesh) — and that scene-tree COLOR
         // currently shows raw, not baked.
@@ -337,8 +348,8 @@ public partial class PS1MeshInstance : MeshInstance3D
         // dispatch. Mirrors the PS1TriggerBox check.
         if (Interactable && string.IsNullOrEmpty(ScriptFile))
             w.Add("Interactable is ON but ScriptFile is empty. Pressing the interact button " +
-                  "will fire onInteract on a script that doesn't exist — assign a .lua file " +
-                  "or turn off Interactable.");
+				  "will fire onInteract on a script that doesn't exist — assign a .lua file " +
+				  "or turn off Interactable.");
 
         return w.ToArray();
     }

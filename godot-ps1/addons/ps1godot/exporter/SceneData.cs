@@ -141,6 +141,21 @@ public sealed class MusicSequenceRecord
     public required string Name { get; init; }       // null-truncated to 15 chars in writer
 }
 
+// v33+: per-entity stats record. Sparse — only entities whose
+// PS1MeshInstance.Stats slot is non-null produce one. Writer emits as
+// a 16-byte StatsTableEntry; SceneManager builds a dense per-entity
+// array at scene init for O(1) Lua access.
+public sealed class StatsRecord
+{
+    public required int EntityIndex { get; init; }
+    public required int MaxHP { get; init; }
+    public required int InitialHP { get; init; }
+    public required int MaxStamina { get; init; }
+    public required int InitialStamina { get; init; }
+    public required int MaxMana { get; init; }
+    public required int InitialMana { get; init; }
+}
+
 // v28+: scene-wide instrument bank record (16 bytes on disk). Maps to
 // SPLASHPACKInstrumentRecord in psxsplash-main/src/splashpack.hh.
 public sealed class InstrumentBankRecord
@@ -639,6 +654,13 @@ public sealed class SceneData
     // Sequenced music tracks (.mid → PS1M). Parallel name lookup via
     // Music.Play("..."). Capped at 8 entries by the runtime.
     public List<MusicSequenceRecord> MusicSequences { get; } = new();
+
+    // v33+: per-entity stats (HP / Stamina / Mana). Sparse — only
+    // entities whose PS1MeshInstance.Stats slot is non-null land here.
+    // SplashpackWriter emits these as 16-byte StatsTableEntry rows
+    // under the v33 stats section; runtime expands into a dense
+    // per-entity array at scene init.
+    public List<StatsRecord> Stats { get; } = new();
 
     // v28+: scene-wide instrument bank. Each Instruments entry owns a
     // contiguous slice of Regions (firstRegionIndex / regionCount).

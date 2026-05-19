@@ -219,17 +219,19 @@ proposed in
 
 ## Boss HP
 
-No `PS1Stats` component exists yet. Author HP as a Lua local on the
-boss's script, surface via UI:
+Attach a [`PS1Stats`](nodes/ps1-mesh-instance.md) resource to the
+boss's `PS1MeshInstance.Stats` slot. The runtime tracks current HP
++ MaxHP per-entity; read via Lua's [`Stats.GetHP`](../lua-api/stats.md#stats-gethp).
 
 ```lua
-local maxHP = 100
-local hp = maxHP
+-- In the boss script. `self` is the boss entity handle.
+local DAMAGE_PER_HIT = 10
 
 local function takeDamage(amount)
-    hp = hp - amount
+    local hp = Stats.GetHP(self) - amount
+    Stats.SetHP(self, hp)            -- runtime clamps to [0, MaxHP]
     Camera.ShakeRaw(491, 8)
-    if hp <= 0 then onDeath() end
+    if Stats.GetHP(self) <= 0 then onDeath() end
     updateHPBar()
 end
 
@@ -237,12 +239,22 @@ local function updateHPBar()
     local canvas = UI.FindCanvas("boss_hp")
     if canvas >= 0 then
         local bar = UI.FindElement(canvas, "fill")
+        local hp     = Stats.GetHP(self)
+        local maxHP  = Stats.GetMaxHP(self)
         -- Width proportional to remaining HP. Original bar W = 200.
-        local fillW = (hp * 200) // maxHP
+        local fillW  = (hp * 200) // maxHP
         UI.SetElementW(bar, fillW)
     end
 end
 ```
+
+Stamina + Mana have the parallel pattern — `Stats.GetStamina` /
+`Stats.SetStamina` / `Stats.GetMaxStamina` and the same for Mana.
+Author the HUD bars the same way and read the matching stat.
+
+For games without stamina or mana, leave `MaxStamina` / `MaxMana`
+at 0 on the PS1Stats resource — every query returns 0, your HUD
+authoring can branch on max to skip those bars.
 
 The HP bar canvas is a normal `PS1UICanvas`:
 

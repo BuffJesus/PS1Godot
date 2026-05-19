@@ -124,6 +124,27 @@ void psxsplash::SceneManager::InitializeScene(uint8_t* splashpackData, LoadingSc
     m_roomPortalRefs = sceneSetup.roomPortalRefs;
     m_roomPortalRefCount = sceneSetup.roomPortalRefCount;
 
+    // v33+: expand the sparse stats table into a dense per-entity array.
+    // Entries default-construct to zero (no stats), and we overlay the
+    // authored values from the splashpack. Lua's Stats.* queries hit
+    // O(1) on entity index.
+    m_entityStats.clear();
+    m_entityStats.resize(m_gameObjects.size());
+    if (sceneSetup.statsTable && sceneSetup.statsCount > 0) {
+        for (uint16_t i = 0; i < sceneSetup.statsCount; ++i) {
+            const StatsTableEntry& src = sceneSetup.statsTable[i];
+            if (src.entityIndex < m_entityStats.size()) {
+                RuntimeStats& dst = m_entityStats[src.entityIndex];
+                dst.maxHP      = static_cast<int16_t>(src.maxHP);
+                dst.hp         = static_cast<int16_t>(src.initialHP);
+                dst.maxStamina = static_cast<int16_t>(src.maxStamina);
+                dst.stamina    = static_cast<int16_t>(src.initialStamina);
+                dst.maxMana    = static_cast<int16_t>(src.maxMana);
+                dst.mana       = static_cast<int16_t>(src.initialMana);
+            }
+        }
+    }
+
     // Configure fog and back color from splashpack data (v11+).
     // v32+: forward fogNearSZ/fogFarSZ if the scene authored explicit
     // values (0 = renderer derives the legacy density-based defaults).
@@ -1598,3 +1619,34 @@ int psxsplash::SceneManager::findUIModelByName(const char *name) const {
     }
     return -1;
 }
+
+int16_t psxsplash::SceneManager::setStatHP(uint16_t i, int v) {
+    if (i >= m_entityStats.size()) return 0;
+    RuntimeStats& s = m_entityStats[i];
+    if (s.maxHP <= 0) return 0;  // no stats authored — silent no-op
+    if (v < 0) v = 0;
+    if (v > s.maxHP) v = s.maxHP;
+    s.hp = static_cast<int16_t>(v);
+    return s.hp;
+}
+
+int16_t psxsplash::SceneManager::setStatStamina(uint16_t i, int v) {
+    if (i >= m_entityStats.size()) return 0;
+    RuntimeStats& s = m_entityStats[i];
+    if (s.maxStamina <= 0) return 0;
+    if (v < 0) v = 0;
+    if (v > s.maxStamina) v = s.maxStamina;
+    s.stamina = static_cast<int16_t>(v);
+    return s.stamina;
+}
+
+int16_t psxsplash::SceneManager::setStatMana(uint16_t i, int v) {
+    if (i >= m_entityStats.size()) return 0;
+    RuntimeStats& s = m_entityStats[i];
+    if (s.maxMana <= 0) return 0;
+    if (v < 0) v = 0;
+    if (v > s.maxMana) v = s.maxMana;
+    s.mana = static_cast<int16_t>(v);
+    return s.mana;
+}
+

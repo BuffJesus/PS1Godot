@@ -853,6 +853,51 @@ private:
     // results to bound the Lua table allocation on PSX RAM.
     static int Physics_OverlapBox(lua_State* L);
 
+    // ========================================================================
+    // STATS API — per-entity HP / Stamina / Mana (v33+).
+    // Backed by PS1Stats resources attached to PS1MeshInstance.Stats slots.
+    // Entities without authored stats return 0 from every getter; setters
+    // silently no-op on them. Use for HP / mana / stamina bars, damage
+    // dispatch, dodge cost, etc.
+    // ========================================================================
+
+    // Stats.GetHP(object) -> int
+    // Current HP. 0 if the entity has no PS1Stats authored or HP has
+    // hit 0 (the entity is "dead" from a stats perspective; runtime
+    // does not auto-destroy — your Lua decides what happens then).
+    static int Stats_GetHP(lua_State* L);
+
+    // Stats.SetHP(object, value) -> int
+    // Clamps value to [0, MaxHP] and stores it as the new current HP.
+    // Returns the stored value. No-op on entities without stats.
+    static int Stats_SetHP(lua_State* L);
+
+    // Stats.GetMaxHP(object) -> int
+    // 0 if the entity has no PS1Stats authored.
+    static int Stats_GetMaxHP(lua_State* L);
+
+    // Stats.GetStamina(object) -> int
+    // Current stamina. 0 if entity has no stamina system (MaxStamina = 0).
+    static int Stats_GetStamina(lua_State* L);
+
+    // Stats.SetStamina(object, value) -> int
+    // Clamps to [0, MaxStamina]. Returns stored value.
+    static int Stats_SetStamina(lua_State* L);
+
+    // Stats.GetMaxStamina(object) -> int
+    static int Stats_GetMaxStamina(lua_State* L);
+
+    // Stats.GetMana(object) -> int
+    // Current mana. 0 if entity has no mana system (MaxMana = 0).
+    static int Stats_GetMana(lua_State* L);
+
+    // Stats.SetMana(object, value) -> int
+    // Clamps to [0, MaxMana]. Returns stored value.
+    static int Stats_SetMana(lua_State* L);
+
+    // Stats.GetMaxMana(object) -> int
+    static int Stats_GetMaxMana(lua_State* L);
+
     // Controls.SetEnabled(bool)
     // Master switch for player input. When false, the player pawn
     // ignores stick + button events but the camera, cutscenes, music,

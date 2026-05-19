@@ -560,6 +560,7 @@ public static class SceneCollector
 
             EmitCollisionFor(pmi, objectIndex, data);
             EmitInteractableFor(pmi, objectIndex, data);
+            EmitStatsFor(pmi, objectIndex, data);
 
             // Stage 1 skinned-mesh export: if this is a PS1SkinnedMesh,
             // resolve its skeleton, compute per-triangle bone indices from
@@ -1951,6 +1952,32 @@ public static class SceneCollector
             LuaFileIndex = (short)luaIdx,
         });
         GD.Print($"[PS1Godot] Trigger '{tb.Name}': AABB=[{wMin}..{wMax}] luaIdx={luaIdx}");
+    }
+
+    // v33+: emit a Stats record for a PS1MeshInstance with an authored
+    // PS1Stats resource. Sparse — meshes without a Stats slot get no
+    // entry and the runtime's Stats.* queries return 0 for them.
+    private static void EmitStatsFor(PS1MeshInstance pmi, ushort objectIndex, SceneData data)
+    {
+        var s = pmi.Stats;
+        if (s == null) return;
+
+        if (s.MaxHP <= 0)
+        {
+            GD.PushWarning($"[PS1Godot] {pmi.Name}: PS1Stats.MaxHP <= 0 — skipping stats record.");
+            return;
+        }
+
+        data.Stats.Add(new StatsRecord
+        {
+            EntityIndex    = objectIndex,
+            MaxHP          = s.MaxHP,
+            InitialHP      = s.InitialHP,
+            MaxStamina     = s.MaxStamina,
+            InitialStamina = s.InitialStamina,
+            MaxMana        = s.MaxMana,
+            InitialMana    = s.InitialMana,
+        });
     }
 
     // Emit an Interactable record for a PS1MeshInstance marked interactable.

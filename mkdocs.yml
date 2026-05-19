@@ -172,6 +172,7 @@ nav:
       - Scene: lua-api/scene.md
       - SkinnedAnim: lua-api/skinned-anim.md
       - Sound: lua-api/sound.md
+      - Stats: lua-api/stats.md
       - Timer: lua-api/timer.md
       - UI: lua-api/ui.md
       - Vec3: lua-api/vec3.md

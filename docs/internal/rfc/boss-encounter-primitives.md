@@ -15,11 +15,11 @@ using only Lua + the existing runtime API. A full Elden Ring–style
 boss encounter is shippable today; the recipe is documented in
 [`authoring/combat-patterns.md`](https://github.com/BuffJesus/PS1Godot/blob/main/docs/authoring/combat-patterns.md){ target="_blank" }.
 
-But five patterns the recipe describes are awkward enough that
-landing them as first-class primitives would meaningfully
-streamline future encounter authoring:
+Six patterns where current authoring is awkward (or impossible):
 
-1. **Boss HP / stats** — currently per-enemy Lua locals.
+1. **Boss HP / stats** — ✅ landed 2026-05-19. PS1Stats Resource
+   carries HP / Stamina / Mana on PS1MeshInstance; Lua's Stats.*
+   API queries + mutates.
 2. **Hitbox / hurtbox distinction** — currently every `OverlapBox`
    tag is the same.
 3. **Damage events** — currently each caller (projectile, melee
@@ -31,12 +31,32 @@ streamline future encounter authoring:
    (controls.cpp:217–227), but sensitivity, deadzone, and pitch
    clamp are global runtime constants; per-scene tunables and an
    opt-out flag for fixed-camera scenes would close the gap.
+6. **Dodge / roll with i-frames** — most of dodge is Lua-side
+   recipe (movement override, stamina cost, cooldown) but i-frames
+   need runtime collision support — a per-entity invulnerability
+   counter that the collision queries skip.
 
 This RFC sketches the surface for each. Implementation is gated
 on prioritization — none of this is necessary to ship the first
 boss; all of it makes the second boss faster.
 
-## Primitive 1 — `PS1Stats` component
+## Primitive 1 — `PS1Stats` component  ✅ LANDED (2026-05-19)
+
+**Status:** shipped. Splashpack v33. `PS1Stats.cs` (Resource),
+`PS1MeshInstance.Stats` slot, exporter writes 16 B per record,
+runtime expands to a dense per-entity array, Lua bindings are 9
+methods under `Stats.*` (GetHP / SetHP / GetMaxHP and parallel
+Stamina + Mana getters/setters). HP + Stamina + Mana all ship in
+v1 — HUD authoring (health/stamina/mana bars) is one coherent
+setup. Mana for non-magic games and Stamina for non-action games
+default to 0 (every query returns 0; HUD authoring can branch on
+MaxStamina/MaxMana to skip those bars).
+
+Live: [Lua API → Stats](https://buffjesus.github.io/PS1Godot/lua-api/stats/).
+
+Original surface below for the record.
+
+### Original surface
 
 ### Surface
 
@@ -364,7 +384,137 @@ analog-stick and button-only at runtime.
 default already does most of the work.** Pure additive — no
 behavior change for scenes that don't touch the new fields.
 
-## Primitive 6 (bonus) — fog-gate trigger
+## Primitive 6 — dodge / roll with i-frames
+
+### Context
+
+Souls-likes hinge on the dodge mechanic — directional roll with a
+brief invulnerability window (i-frames), stamina cost, recovery
+frames. The other primitives (PS1Stats for stamina, onDamage for
+the damage flow that i-frames suppress) feed this one; landing
+those first means dodge slots in cleanly.
+
+Most of the dodge is buildable in Lua today, but **i-frames need
+runtime collision support** — the collision system has no concept
+of "this entity is currently invulnerable, skip my hit." That's
+the engine-side gap this primitive fills.
+
+### What's already buildable in Lua
+
+- **Movement override** — read left-stick at dodge press, lock
+  in the direction vector, override `Entity.SetPosition` each
+  frame for N frames.
+- **Stamina cost** — `Stats.GetStamina(self) - DODGE_COST`,
+  via the just-landed Stats API.
+- **Cooldown** — a frame counter local in `onUpdate`.
+- **Animation trigger** — `SkinnedAnim.Play(self, "dodge_fwd")`
+  picked by left-stick quadrant at press time.
+
+### The actual engine gap — i-frame collision
+
+The collision query path (`Physics.Raycast`, `Physics.OverlapBox`,
+the runtime's player↔enemy contact resolution) returns hits
+without checking any per-entity invulnerability state. The fix is
+small but invasive:
+
+```cpp
+// In gameobject.hh — add a per-entity i-frame counter
+struct GameObject {
+    // ... existing fields ...
+    uint16_t iframesRemaining = 0;  // decrements each tick; 0 = vulnerable
+};
+```
+
+Plus collision-side filtering:
+
+```cpp
+// In Physics_Raycast / Physics_OverlapBox / CollisionSystem
+if (target->iframesRemaining > 0) continue;  // skip — invulnerable
+```
+
+Plus a per-tick decrement somewhere in `SceneManager::GameTick`.
+
+### Proposed Lua surface
+
+```cpp
+// Controls.StartIFrames(object, frames) -> nil
+// Set the entity's invulnerability window to `frames`. Counts down
+// at 60 Hz. While > 0, all damage-dispatching collision queries
+// skip this entity.
+static int Controls_StartIFrames(lua_State* L);
+
+// Controls.IsInvulnerable(object) -> boolean
+static int Controls_IsInvulnerable(lua_State* L);
+```
+
+Lives under `Controls` not `Stats` because i-frames are a control-
+flow state, not a stat value. Could equally land under `Combat.*`
+if we add a new namespace.
+
+### Why engine-side
+
+- **Performance** — checking iframesRemaining inside the existing
+  collision loops adds one branch per hit candidate. Lua-side
+  equivalents would require post-filtering every Physics.Overlap
+  result, with the Lua tick cost that implies.
+- **Correctness** — the runtime's collision resolution
+  (player↔world, enemy↔player damage) doesn't surface through Lua
+  at all. Lua-side i-frames can only filter Lua-initiated queries;
+  they can't block the runtime's own contact response.
+
+### What dodge looks like end-to-end (with this primitive)
+
+```lua
+local DODGE_FRAMES = 18
+local IFRAME_WINDOW = 12   -- shorter than dodge duration — late-frame
+                           -- dodges are punished
+local STAMINA_COST = 25
+local DODGE_COOLDOWN = 30
+
+local dodgeFrames = 0
+local cooldown = 0
+
+function onUpdate(self, dt)
+    if cooldown > 0 then cooldown = cooldown - 1 end
+
+    -- Press to dodge — gated on stamina + cooldown
+    if cooldown == 0
+       and Input.IsPressed(Input.CIRCLE)
+       and Stats.GetStamina(self) >= STAMINA_COST then
+        local lx, _ = Input.GetAnalog(Input.LEFT_STICK)
+        -- ... compute direction ...
+        dodgeFrames = DODGE_FRAMES
+        cooldown = DODGE_COOLDOWN
+        Stats.SetStamina(self, Stats.GetStamina(self) - STAMINA_COST)
+        Controls.StartIFrames(self, IFRAME_WINDOW)
+        SkinnedAnim.Play(self, "dodge")
+    end
+
+    -- During dodge — manual movement override
+    if dodgeFrames > 0 then
+        -- ... advance position along stored dir ...
+        dodgeFrames = dodgeFrames - 1
+    end
+end
+```
+
+### Implementation cost
+
+- `GameObject.iframesRemaining` field + scene-init init to 0: trivial.
+- Per-tick decrement in `SceneManager::GameTick`: ~10 lines.
+- Filter in `Physics.Raycast` + `Physics.OverlapBox` + runtime
+  collision contact response: ~half day of careful edits across
+  collision.cpp + scenemanager.cpp.
+- `Controls.StartIFrames` + `Controls.IsInvulnerable` Lua bindings:
+  ~half day.
+- Documentation update — combat-patterns "Dodge / roll" section
+  showing the end-to-end pattern: half day.
+
+**Total: ~2 days.** Smaller than I expected when first writing
+this RFC — the rest of dodge is Lua-side recipe that doesn't
+need engine support.
+
+## Primitive 7 (deferred) — fog-gate trigger
 
 Not strictly necessary; the combat-patterns recipe shows how to
 compose one. But if a soul-like is a primary use case, a
@@ -376,19 +526,20 @@ composable pattern — landing it too early picks the wrong shape.
 
 ## Ordering
 
-Implementation order if we land any of this:
+Implementation order if we land more:
 
-1. **`PS1Stats`** — unblocks every other primitive. Land first.
-2. **`onDamage` callback** — small follow-up once Stats is live.
-3. **Twin-stick `CameraControl` mode on `PS1Player`** — purely
-   additive, runtime-only, no exporter changes. Cheap and
-   high-value win on its own.
-4. **`Camera.LockOn` / `Camera.LockOff`** — naturally pairs with
-   primitive 3 (the `LockedOn` mode is set by these). Combined
-   work: ~5.5 days for the full modern-action-game camera surface.
-5. **`PS1HurtBox`** — incremental refinement; works without it
+1. **`PS1Stats`** ✅ landed 2026-05-19 (v33).
+2. **`onDamage` callback** — small follow-up now that Stats is
+   live. Consolidates damage flow + i-frame check.
+3. **Dodge / roll with i-frames** — needs the per-entity i-frame
+   counter the onDamage path would also use, so they batch.
+   ~2 days together with onDamage.
+4. **`Camera.LockOn` / `Camera.LockOff`** — independent track,
+   marquee souls-like feel. ~4 days.
+5. **Twin-stick camera tuning** — small win, can land any time.
+6. **`PS1HurtBox`** — incremental refinement; works without it
    for first encounters.
-6. **`PS1FogGate`** — defer until composable pattern's pain is felt.
+7. **`PS1FogGate`** — defer until composable pattern's pain is felt.
 
 Stop at any step. The combat-patterns recipe page documents how
 to do the things this RFC adds without these primitives — so

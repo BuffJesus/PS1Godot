@@ -18,6 +18,27 @@
 
 namespace psxsplash {
 
+// v33+: on-disk per-entity stats record. The splashpack carries a flat
+// sparse array of these (only entities authoring PS1Stats); SceneManager
+// expands into a dense per-entity table at scene init so Lua's Stats.*
+// queries are O(1).
+//
+// 16 bytes per record — 6 stat values (max + initial for HP, Stamina,
+// Mana), entityIndex, and 2 reserved bytes for forward-compatible
+// fields (poise, defense, element flags) that can land without a
+// version bump.
+struct StatsTableEntry {
+    uint16_t entityIndex;     // index into GameObject array
+    uint16_t maxHP;           // [1, 32767]
+    uint16_t initialHP;       // [0, maxHP]
+    uint16_t maxStamina;      // 0 = no stamina system on this entity
+    uint16_t initialStamina;  // [0, maxStamina]
+    uint16_t maxMana;         // 0 = no mana system on this entity
+    uint16_t initialMana;     // [0, maxMana]
+    uint16_t reserved;        // future: poise / defense / element flags
+};
+static_assert(sizeof(StatsTableEntry) == 16, "StatsTableEntry must be 16 bytes");
+
 // v23+: per-PS1UIModel mutable runtime state (Lua mutates via SceneManager;
 // renderer reads each frame). Static layout authored in the splashpack
 // (canvas index, screen rect, projection H, name) lives in
@@ -277,6 +298,15 @@ struct SplashpackSceneSetup {
     uint8_t bgR = 0, bgG = 0, bgB = 0;
     uint16_t fogNearSZ = 0;
     uint16_t fogFarSZ  = 0;
+
+    // v33+: per-entity stats (HP / MaxHP). Sparse pointer + count;
+    // SceneManager copies into a dense per-entity array at scene init
+    // so Stats.* Lua queries are O(1). Both nullptr+0 = no entity in
+    // this scene authored stats. StatsTableEntry is declared at file
+    // scope below; the loader populates these pointers, SceneManager
+    // consumes them.
+    const StatsTableEntry* statsTable = nullptr;
+    uint16_t statsCount = 0;
 
     const RoomData* rooms = nullptr;
     uint16_t roomCount = 0;

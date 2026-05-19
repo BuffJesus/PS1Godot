@@ -29,11 +29,11 @@ namespace PS1Godot.Exporter;
 //                  Name table — referenced by header.nameTableOffset.
 public static class SplashpackWriter
 {
-    public const ushort SplashpackVersion = 32;
+    public const ushort SplashpackVersion = 33;
     // Header layout grew by 16 bytes in v24 (sky struct: tpage + clut + UVs
     // + bitDepth + tint + enabled flag, mirroring the UI Image typeData
     // union slot). See WriteHeader and the runtime's SPLASHPACKFileHeader.
-    public const int HeaderSize = 232;
+    public const int HeaderSize = 240;
     public const int GameObjectSize = 92;
     public const int TriSize = 52;
     public const int LuaFileSize = 8; // luaCodeOffset (u32) + length (u32)
@@ -432,6 +432,39 @@ public static class SplashpackWriter
         if (scene.SoundMacros.Count > 0 || scene.SoundFamilies.Count > 0)
         {
             WriteSoundBankSection(w, scene, headerOffsets);
+        }
+
+        // v33+: per-entity stats. Sparse — only entities that authored a
+        // PS1Stats land in the table. Empty list → counts/offsets stay 0
+        // and the runtime treats every Stats.* query as "no stats".
+        if (scene.Stats.Count > 0)
+        {
+            WriteStatsSection(w, scene, headerOffsets);
+        }
+    }
+
+    // ─── Per-entity stats section (v33+) ───────────────────────────────
+    //
+    // 16-byte StatsTableEntry × N. Each entry carries the entity index
+    // plus max+initial values for HP, Stamina, Mana. Runtime expands the
+    // sparse list into a dense per-entity array at scene init.
+    private static void WriteStatsSection(BinaryWriter w, SceneData scene, HeaderOffsets headerOffsets)
+    {
+        AlignTo4(w);
+        long tableStart = w.BaseStream.Position;
+        BackfillUInt16(w, headerOffsets.StatsCountPos, (ushort)scene.Stats.Count);
+        BackfillUInt32(w, headerOffsets.StatsTableOffsetPos, (uint)tableStart);
+
+        foreach (var s in scene.Stats)
+        {
+            w.Write((ushort)s.EntityIndex);
+            w.Write((ushort)Mathf.Clamp(s.MaxHP, 0, 32767));
+            w.Write((ushort)Mathf.Clamp(s.InitialHP, 0, 32767));
+            w.Write((ushort)Mathf.Clamp(s.MaxStamina, 0, 32767));
+            w.Write((ushort)Mathf.Clamp(s.InitialStamina, 0, 32767));
+            w.Write((ushort)Mathf.Clamp(s.MaxMana, 0, 32767));
+            w.Write((ushort)Mathf.Clamp(s.InitialMana, 0, 32767));
+            w.Write((ushort)0);  // reserved
         }
     }
 
@@ -1433,6 +1466,9 @@ public static class SplashpackWriter
         public long SoundMacroEventTableOffsetPos;
         public long SoundFamilyTableOffsetPos;
         public long FamilyClipIndexTableOffsetPos;
+        // v33+: per-entity stats backfill positions.
+        public long StatsCountPos;
+        public long StatsTableOffsetPos;
     }
 
     private static HeaderOffsets WriteHeader(BinaryWriter w, SceneData scene, int atlasCount, int clutCount, int colliderCount,
@@ -1673,6 +1709,15 @@ public static class SplashpackWriter
         w.Write((byte)(scene.BackgroundColorEnabled ? 1 : 0));                      // bgEnabled
         w.Write(scene.FogNear);                                                     // fogNearSZ (ushort)
         w.Write(scene.FogFar);                                                      // fogFarSZ  (ushort)
+
+        // v33+: per-entity stats. statsCount = number of entries in the
+        // sparse table; statsTableOffset = byte offset of the array. Both
+        // backfilled by WriteStatsSection after the section lands.
+        offsets.StatsCountPos = w.BaseStream.Position;
+        w.Write((ushort)0);    // statsCount (backfilled)
+        w.Write((ushort)0);    // pad_stats
+        offsets.StatsTableOffsetPos = w.BaseStream.Position;
+        w.Write((uint)0);      // statsTableOffset (backfilled)
 
         long written = w.BaseStream.Position - headerStart;
         if (written != HeaderSize)

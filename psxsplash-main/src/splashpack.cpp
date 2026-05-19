@@ -165,8 +165,20 @@ struct SPLASHPACKFileHeader {
     uint8_t  bgEnabled;
     uint16_t fogNearSZ;
     uint16_t fogFarSZ;
+    // v33+: per-entity stats (HP / MaxHP) sparse table. Each entry is
+    // 8 bytes (see StatsTableEntry); the array is indexed by its own
+    // offset, not by entityIndex, so callers iterate the count and
+    // hash on entry.entityIndex. `statsCount == 0` means no entity in
+    // the scene authored a PS1Stats resource — runtime treats every
+    // Stats.* query as "no stats" and the table pointer is ignored.
+    uint16_t statsCount;
+    uint16_t pad_stats;
+    uint32_t statsTableOffset;
 };
-static_assert(sizeof(SPLASHPACKFileHeader) == 232, "SPLASHPACKFileHeader must be 232 bytes");
+static_assert(sizeof(SPLASHPACKFileHeader) == 240, "SPLASHPACKFileHeader must be 240 bytes");
+
+// StatsTableEntry is the on-disk record; the same layout is exposed
+// at file scope in splashpack.hh so SceneManager / Lua can walk it.
 
 struct MusicTableEntry {
     uint32_t dataOffset;
@@ -196,7 +208,7 @@ void SplashPackLoader::LoadSplashpack(uint8_t *data, SplashpackSceneSetup &setup
     psyqo::Kernel::assert(data != nullptr, "Splashpack loading data pointer is null");
     psxsplash::SPLASHPACKFileHeader *header = reinterpret_cast<psxsplash::SPLASHPACKFileHeader *>(data);
     psyqo::Kernel::assert(__builtin_memcmp(header->magic, "SP", 2) == 0, "Splashpack has incorrect magic");
-    psyqo::Kernel::assert(header->version >= 32, "Splashpack version too old (need v32+): re-export from PS1Godot");
+    psyqo::Kernel::assert(header->version >= 33, "Splashpack version too old (need v33+): re-export from PS1Godot");
 
     setup.playerStartPosition = header->playerStartPos;
     setup.playerStartRotation = header->playerStartRot;
@@ -493,6 +505,17 @@ void SplashPackLoader::LoadSplashpack(uint8_t *data, SplashpackSceneSetup &setup
     setup.bgB = header->bgB;
     setup.fogNearSZ = header->fogNearSZ;
     setup.fogFarSZ  = header->fogFarSZ;
+
+    // v33+: per-entity stats table. Sparse — entries only for entities
+    // that author a PS1Stats. SceneManager builds a dense per-entity
+    // map at init so Lua's Stats.* queries are O(1).
+    setup.statsCount = 0;
+    setup.statsTable = nullptr;
+    if (header->statsCount > 0 && header->statsTableOffset != 0) {
+        setup.statsCount = header->statsCount;
+        setup.statsTable = reinterpret_cast<const StatsTableEntry *>(
+            data + header->statsTableOffset);
+    }
 
     // v22+: sequenced music table. Entries live at
     // header->musicTableOffset; each is MusicTableEntry {u32 dataOff,

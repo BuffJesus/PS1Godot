@@ -77,6 +77,23 @@ class SceneManager {
     
     // Get total object count
     size_t getGameObjectCount() const { return m_gameObjects.size(); }
+
+    // ---- v33+: per-entity stats (HP / Stamina / Mana). -----------------
+    // Lua's Stats.* API reaches in via these getters. For entities with
+    // no PS1Stats authored, max* fields stay 0 and the cur* values stay
+    // 0 too — callers get well-defined "no stats" sentinels.
+    int16_t getStatHP       (uint16_t i) const { return i < m_entityStats.size() ? m_entityStats[i].hp        : 0; }
+    int16_t getStatMaxHP    (uint16_t i) const { return i < m_entityStats.size() ? m_entityStats[i].maxHP     : 0; }
+    int16_t getStatStamina  (uint16_t i) const { return i < m_entityStats.size() ? m_entityStats[i].stamina   : 0; }
+    int16_t getStatMaxStamina(uint16_t i) const { return i < m_entityStats.size() ? m_entityStats[i].maxStamina : 0; }
+    int16_t getStatMana     (uint16_t i) const { return i < m_entityStats.size() ? m_entityStats[i].mana      : 0; }
+    int16_t getStatMaxMana  (uint16_t i) const { return i < m_entityStats.size() ? m_entityStats[i].maxMana   : 0; }
+
+    // Setters clamp into [0, max]. No-op for entities without stats
+    // (max == 0). Returns the clamped value actually stored.
+    int16_t setStatHP      (uint16_t i, int v);
+    int16_t setStatStamina (uint16_t i, int v);
+    int16_t setStatMana    (uint16_t i, int v);
     
     // Get object name by index (returns nullptr if no name table or out of range)
     const char* getObjectName(uint16_t index) const {
@@ -239,6 +256,20 @@ class SceneManager {
 
     eastl::vector<LuaFile*> m_luaFiles;
     eastl::vector<GameObject*> m_gameObjects;
+
+    // v33+: per-entity stats dense array, parallel to m_gameObjects.
+    // Built once at scene init from the sparse SplashpackSceneSetup
+    // statsTable. Entities without an authored PS1Stats get the
+    // zero-initialized default (max* == 0 → Stats.* queries return 0).
+    struct RuntimeStats {
+        int16_t hp;
+        int16_t maxHP;
+        int16_t stamina;
+        int16_t maxStamina;
+        int16_t mana;
+        int16_t maxMana;
+    };
+    eastl::vector<RuntimeStats> m_entityStats;
     
     // Object name table (v9+): parallel to m_gameObjects, points into splashpack data
     eastl::vector<const char*> m_objectNames;

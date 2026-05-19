@@ -111,6 +111,21 @@ void LuaAPI::RegisterAll(psyqo::Lua& L, SceneManager* scene, CutscenePlayer* cut
     L.setField(-2, "FindNearest");
 
     L.setGlobal("Entity");
+
+    // ========================================================================
+    // STATS API (v33+) — per-entity HP / Stamina / Mana
+    // ========================================================================
+    L.newTable();
+    L.push(Stats_GetHP);          L.setField(-2, "GetHP");
+    L.push(Stats_SetHP);          L.setField(-2, "SetHP");
+    L.push(Stats_GetMaxHP);       L.setField(-2, "GetMaxHP");
+    L.push(Stats_GetStamina);     L.setField(-2, "GetStamina");
+    L.push(Stats_SetStamina);     L.setField(-2, "SetStamina");
+    L.push(Stats_GetMaxStamina);  L.setField(-2, "GetMaxStamina");
+    L.push(Stats_GetMana);        L.setField(-2, "GetMana");
+    L.push(Stats_SetMana);        L.setField(-2, "SetMana");
+    L.push(Stats_GetMaxMana);     L.setField(-2, "GetMaxMana");
+    L.setGlobal("Stats");
     
     // ========================================================================
     // VEC3 API
@@ -3698,6 +3713,87 @@ int LuaAPI::Physics_OverlapBox(lua_State* L) {
         PushGameObjectHandle(lua, go);
         lua.rawSetI(-2, outIdx++);
     }
+    return 1;
+}
+
+// ============================================================================
+// STATS API IMPLEMENTATION (v33+)
+// ============================================================================
+
+// Resolves a Lua-side entity handle (table with .object index) to a
+// SceneManager entity index. Returns 0xFFFF on miss.
+static uint16_t StatsResolveIndex(psyqo::Lua& lua, int luaArgIdx) {
+    if (!lua.isTable(luaArgIdx)) return 0xFFFF;
+    lua.getField(luaArgIdx, "object");
+    int idx = lua.isNumber(-1) ? static_cast<int>(lua.toNumber(-1)) : -1;
+    lua.pop(1);
+    if (idx < 0 || idx > 0xFFFE) return 0xFFFF;
+    return static_cast<uint16_t>(idx);
+}
+
+int LuaAPI::Stats_GetHP(lua_State* L) {
+    psyqo::Lua lua(L);
+    if (!s_sceneManager) { lua.pushNumber(0); return 1; }
+    lua.pushNumber(s_sceneManager->getStatHP(StatsResolveIndex(lua, 1)));
+    return 1;
+}
+
+int LuaAPI::Stats_SetHP(lua_State* L) {
+    psyqo::Lua lua(L);
+    if (!s_sceneManager) { lua.pushNumber(0); return 1; }
+    int v = lua.isNumber(2) ? static_cast<int>(lua.toNumber(2)) : 0;
+    lua.pushNumber(s_sceneManager->setStatHP(StatsResolveIndex(lua, 1), v));
+    return 1;
+}
+
+int LuaAPI::Stats_GetMaxHP(lua_State* L) {
+    psyqo::Lua lua(L);
+    if (!s_sceneManager) { lua.pushNumber(0); return 1; }
+    lua.pushNumber(s_sceneManager->getStatMaxHP(StatsResolveIndex(lua, 1)));
+    return 1;
+}
+
+int LuaAPI::Stats_GetStamina(lua_State* L) {
+    psyqo::Lua lua(L);
+    if (!s_sceneManager) { lua.pushNumber(0); return 1; }
+    lua.pushNumber(s_sceneManager->getStatStamina(StatsResolveIndex(lua, 1)));
+    return 1;
+}
+
+int LuaAPI::Stats_SetStamina(lua_State* L) {
+    psyqo::Lua lua(L);
+    if (!s_sceneManager) { lua.pushNumber(0); return 1; }
+    int v = lua.isNumber(2) ? static_cast<int>(lua.toNumber(2)) : 0;
+    lua.pushNumber(s_sceneManager->setStatStamina(StatsResolveIndex(lua, 1), v));
+    return 1;
+}
+
+int LuaAPI::Stats_GetMaxStamina(lua_State* L) {
+    psyqo::Lua lua(L);
+    if (!s_sceneManager) { lua.pushNumber(0); return 1; }
+    lua.pushNumber(s_sceneManager->getStatMaxStamina(StatsResolveIndex(lua, 1)));
+    return 1;
+}
+
+int LuaAPI::Stats_GetMana(lua_State* L) {
+    psyqo::Lua lua(L);
+    if (!s_sceneManager) { lua.pushNumber(0); return 1; }
+    lua.pushNumber(s_sceneManager->getStatMana(StatsResolveIndex(lua, 1)));
+    return 1;
+}
+
+int LuaAPI::Stats_SetMana(lua_State* L) {
+    psyqo::Lua lua(L);
+    if (!s_sceneManager) { lua.pushNumber(0); return 1; }
+    int v = lua.isNumber(2) ? static_cast<int>(lua.toNumber(2)) : 0;
+    lua.pushNumber(s_sceneManager->setStatMana(StatsResolveIndex(lua, 1), v));
+    return 1;
+}
+
+int LuaAPI::Stats_GetMaxMana(lua_State* L) {
+    psyqo::Lua lua(L);
+    if (!s_sceneManager) { lua.pushNumber(0); return 1; }
+    lua.pushNumber(s_sceneManager->getStatMaxMana(StatsResolveIndex(lua, 1)));
     return 1;
 }
 
