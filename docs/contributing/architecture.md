@@ -6,18 +6,13 @@ constraints are non-negotiable.
 
 ## The pipeline at a glance
 
-```
-┌────────────────────┐  splashpack .bin  ┌──────────────────┐  MIPS ELF  ┌─────────────┐
-│  Godot editor      │ ────────────────▶ │  psxsplash       │ ─────────▶ │ PCSX-Redux  │
-│  + PS1Godot        │  (binary scene)   │  runtime (C++)   │            │ or real PS1 │
-│  plugin (C#/.NET)  │                   │  on psyqo        │            │             │
-└────────────────────┘                   └──────────────────┘            └─────────────┘
-        ▲                                         ▲
-        │                                         │
-   You author here.                          Vendored as-is.
-   Scenes, materials,                        Loads splashpack;
-   Lua scripts, UI                           runs the game.
-   canvases.
+```mermaid
+flowchart LR
+    A["<b>Godot editor</b><br/>+ PS1Godot plugin<br/>C# / .NET<br/><i>you author here</i>"]
+    B["<b>psxsplash runtime</b><br/>C++ on psyqo<br/><i>vendored as-is</i>"]
+    C["<b>PCSX-Redux</b><br/>or real PS1"]
+    A -->|splashpack .bin<br/>(binary scene)| B
+    B -->|MIPS ELF| C
 ```
 
 Three independent pieces:

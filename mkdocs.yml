@@ -81,7 +81,11 @@ markdown_extensions:
   - pymdownx.mark
   - pymdownx.smartsymbols
   - pymdownx.snippets
-  - pymdownx.superfences
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
   - pymdownx.tabbed:
       alternate_style: true
   - pymdownx.tasklist:
@@ -153,6 +157,7 @@ nav:
       - Architecture: contributing/architecture.md
       - Building from source: contributing/building.md
       - CI: contributing/ci.md
+      - Adding screenshots: contributing/screenshots.md
 
 # Exclude internal planning/handoff/RFC docs from the published site
 # entirely. They stay in the repo for project authors and future
