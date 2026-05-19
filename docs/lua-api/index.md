@@ -12,7 +12,7 @@ consumed three ways:
   parses the structured `// Namespace.Method(...)` comments
   and writes one page per namespace.
 
-**24 namespaces, 145 entries** across the surface.
+**24 namespaces, 152 entries** across the surface.
 
 ## Namespaces
 
@@ -20,12 +20,12 @@ consumed three ways:
 | --- | --- | --- |
 | `Animation` | 1 | [`Animation`](animation.md) |
 | `Audio` | 15 | [`Audio`](audio.md) |
-| `Camera` | 14 | [`Camera`](camera.md) |
+| `Camera` | 15 | [`Camera`](camera.md) |
 | `Controls` | 2 | [`Controls`](controls.md) |
 | `Convert` | 2 | [`Convert`](convert.md) |
 | `Cutscene` | 2 | [`Cutscene`](cutscene.md) |
 | `Debug` | 3 | [`Debug`](debug.md) |
-| `Dialog` | 1 | [`Dialog`](dialog.md) |
+| `Dialog` | 3 | [`Dialog`](dialog.md) |
 | `Entity` | 17 | [`Entity`](entity.md) |
 | `GameState` | 7 | [`GameState`](game-state.md) |
 | `Input` | 4 | [`Input`](input.md) |
@@ -33,14 +33,14 @@ consumed three ways:
 | `Math` | 11 | [`Math`](math.md) |
 | `Music` | 7 | [`Music`](music.md) |
 | `Persist` | 2 | [`Persist`](persist.md) |
-| `Physics` | 1 | [`Physics`](physics.md) |
+| `Physics` | 2 | [`Physics`](physics.md) |
 | `Player` | 3 | [`Player`](player.md) |
 | `Random` | 5 | [`Random`](random.md) |
 | `Scene` | 3 | [`Scene`](scene.md) |
 | `SkinnedAnim` | 5 | [`SkinnedAnim`](skinned-anim.md) |
 | `Sound` | 3 | [`Sound`](sound.md) |
 | `Timer` | 1 | [`Timer`](timer.md) |
-| `UI` | 22 | [`UI`](ui.md) |
+| `UI` | 25 | [`UI`](ui.md) |
 | `Vec3` | 12 | [`Vec3`](vec3.md) |
 
 ## Calling convention

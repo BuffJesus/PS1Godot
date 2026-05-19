@@ -43,11 +43,31 @@ EXAMPLE_RANKS = (
 EXAMPLE_RANK_DEFAULT = 9
 
 
+# Match the signature head — namespace, method, args — and the three
+# valid post-args forms. Tight enough to reject freeform prose that
+# happens to mention a method name (e.g. `// FixedPoint.new(integer, 0)
+# but shorter.` is doc text in another binding's comment, not a real
+# signature).
+#
+# Three accepted post-args forms after the closing paren:
+#   1. End of line — `// Foo.Bar()` or `// Foo.Bar(x, y)`.
+#   2. `-> retval` (retval optional — empty means it continues on the
+#      next comment line, the Physics.Raycast pattern).
+#   3. `— description text` — em-dash inline doc, the Dialog.RunGraph
+#      pattern. Captured as the first doc line.
+#
+# An earlier regex required `\s*$` after an optional `->` group,
+# which silently dropped both forms 2-empty and 3.
 SIG_LINE = re.compile(
     r"^\s*//\s*(?P<ns>[A-Z][A-Za-z0-9]+)\."
     r"(?P<name>[A-Za-z_][A-Za-z0-9_]*)"
     r"\s*\((?P<args>[^)]*)\)"
-    r"(?:\s*->\s*(?P<ret>.+?))?\s*$"
+    r"(?:"
+        r"\s*->\s*(?P<ret>.*?)"
+        r"|"
+        r"\s*—\s*(?P<inline_doc>.*?)"
+    r")?"
+    r"\s*$"
 )
 
 
@@ -61,30 +81,48 @@ def parse(lines):
     entries = []
     cur = None
     doc_lines = []
+    need_continuation_ret = False  # set when `->` was on the sig line
+                                   # with no retval; the first doc
+                                   # line is the return type.
 
     def finalize():
-        nonlocal cur, doc_lines
+        nonlocal cur, doc_lines, need_continuation_ret
         if cur is None:
             return
         cur["doc"] = "\n".join(doc_lines).strip()
         entries.append(cur)
         cur = None
         doc_lines = []
+        need_continuation_ret = False
 
     for line in lines:
         m = SIG_LINE.match(line)
         if m:
             finalize()
+            ret = (m.group("ret") or "").strip()
+            inline_doc = (m.group("inline_doc") or "").strip()
+            # `->` with no retval on the sig line: return type
+            # continues on the next comment line.
+            need_continuation_ret = (
+                m.group("ret") is not None and not ret
+            )
             cur = {
                 "ns":   m.group("ns"),
                 "name": m.group("name"),
                 "args": (m.group("args") or "").strip(),
-                "ret":  (m.group("ret") or "").strip(),
+                "ret":  ret,
             }
+            if inline_doc:
+                doc_lines.append(inline_doc)
             continue
         stripped = line.lstrip()
         if stripped.startswith("//") and cur is not None:
-            doc_lines.append(stripped[2:].lstrip().rstrip())
+            body = stripped[2:].lstrip().rstrip()
+            if need_continuation_ret and body:
+                cur["ret"] = body
+                need_continuation_ret = False
+                continue
+            doc_lines.append(body)
         else:
             finalize()
 

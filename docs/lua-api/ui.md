@@ -4,9 +4,26 @@
 !!! info "Generated"
     This page is auto-generated from `psxsplash-main/src/luaapi.hh` by `scripts/py/gen_lua_api_docs.py`. Edits won't survive the next build — fix the source comments instead.
 
-22 entries, 4 with worked examples mined from `godot-ps1/demo/scripts/` and the bundled templates.
+25 entries, 4 with worked examples mined from `godot-ps1/demo/scripts/` and the bundled templates.
 
 ## Methods
+
+### `UI.SetModelVisible(name, bool)` { #ui-setmodelvisible }
+
+show/hide the HUD model
+
+### `UI.SetModelOrbit(name, yawPi, pitchPi [, distance])` { #ui-setmodelorbit }
+
+update the
+per-frame camera orbit. Angles are "pi fractions" (1.0 = π), same
+convention as Entity.SetRotationY. distance optional; omit to keep
+the authored value.
+
+### `UI.SetModel(name, gameObjectName)` { #ui-setmodel }
+
+swap which GameObject the slot
+renders. Used for inventory icon scrolling (preview slot persists;
+target object changes per selection).
 
 ### `UI.FindCanvas(name) -> integer` { #ui-findcanvas }
 

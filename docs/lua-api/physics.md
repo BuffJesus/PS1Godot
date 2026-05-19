@@ -4,9 +4,23 @@
 !!! info "Generated"
     This page is auto-generated from `psxsplash-main/src/luaapi.hh` by `scripts/py/gen_lua_api_docs.py`. Edits won't survive the next build — fix the source comments instead.
 
-1 entries, 1 with worked examples mined from `godot-ps1/demo/scripts/` and the bundled templates.
+2 entries, 2 with worked examples mined from `godot-ps1/demo/scripts/` and the bundled templates.
 
 ## Methods
+
+### `Physics.Raycast({x,y,z}, {x,y,z}, maxDist) -> nil on miss, or { object = <goIndex>, distance = <t>, point = {x,y,z} }` { #physics-raycast }
+
+Tests against all Solid colliders (NOT world geometry triangles). Pass
+a roughly-unit direction so `distance` is in world units. Safe to call
+a few times per frame; linear scan over up to 64 colliders.
+
+**Example**
+
+```lua
+local hit = Physics.Raycast(origin, dirV, BULLET_RAYCAST_DIST)
+```
+
+_Source: `godot-ps1/demo/scripts/combat_showcase.lua` line 127._
 
 ### `Physics.OverlapBox({x,y,z}, {x,y,z} [, tag]) -> array of object handles` { #physics-overlapbox }
 

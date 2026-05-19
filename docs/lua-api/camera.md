@@ -4,7 +4,7 @@
 !!! info "Generated"
     This page is auto-generated from `psxsplash-main/src/luaapi.hh` by `scripts/py/gen_lua_api_docs.py`. Edits won't survive the next build — fix the source comments instead.
 
-14 entries, 2 with worked examples mined from `godot-ps1/demo/scripts/` and the bundled templates.
+15 entries, 3 with worked examples mined from `godot-ps1/demo/scripts/` and the bundled templates.
 
 ## Methods
 
@@ -70,6 +70,19 @@ Translates the camera by `step` units along its right side
 Switch to follow-player mode: the camera tracks PsxPlayer using the
 configured rig offset (PS1Player camera offset + avatar offset). Use
 to return to "default" behaviour after a manual SetPosition / LookAt.
+
+### `Camera.SetMode("first"|"third")` { #camera-setmode }
+
+flips between 1st and 3rd-person
+camera. Avatar mesh (if any) auto-hides in 1st-person.
+
+**Example**
+
+```lua
+Camera.SetMode("third")
+```
+
+_Source: `godot-ps1/demo/scripts/realm_init.lua` line 18._
 
 ### `Camera.GetH() -> number` { #camera-geth }
 
