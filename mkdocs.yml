@@ -121,6 +121,21 @@ nav:
       - Graph Find: docks/graph-find.md
       - References: docks/references.md
   - Authoring:
+      - Nodes:
+          - Overview: authoring/nodes/overview.md
+          - PS1Scene: authoring/nodes/ps1-scene.md
+          - PS1MeshInstance: authoring/nodes/ps1-mesh-instance.md
+          - PS1SkinnedMesh: authoring/nodes/ps1-skinned-mesh.md
+          - PS1Camera: authoring/nodes/ps1-camera.md
+          - PS1Player: authoring/nodes/ps1-player.md
+          - PS1Animation: authoring/nodes/ps1-animation.md
+          - PS1Cutscene: authoring/nodes/ps1-cutscene.md
+          - PS1AudioClip: authoring/nodes/ps1-audio-clip.md
+          - PS1TriggerBox: authoring/nodes/ps1-trigger-box.md
+          - PS1UICanvas: authoring/nodes/ps1-ui-canvas.md
+          - PS1Room: authoring/nodes/ps1-room.md
+          - PS1PortalLink: authoring/nodes/ps1-portal-link.md
+          - PS1Sky: authoring/nodes/ps1-sky.md
       - Fixed cameras: authoring/fixed-cameras.md
       - Graphs:
           - Dialogue: authoring/graphs/dialogue.md
