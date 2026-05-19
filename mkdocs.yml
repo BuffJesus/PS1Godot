@@ -101,6 +101,8 @@ extra:
 nav:
   - Home: index.md
   - Getting started:
+      - Install: getting-started/installation.md
+      - Quickstart: getting-started/quickstart.md
       - First tutorial (hello cube): tutorial-hello-cube.md
       - Basic scene tutorial: tutorial-basic-scene.md
   - Authoring:

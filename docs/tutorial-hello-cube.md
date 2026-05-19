@@ -5,7 +5,7 @@ floor under fog, viewed through a PS1 camera — with vertex jitter, nearest-
 neighbor texturing, and the 2× color modulate that gives PS1 games their
 characteristic punch.
 
-**What you need first:** complete [`SETUP.md`](https://github.com/BuffJesus/PS1Godot/blob/main/SETUP.md){ target="_blank" } through Phase 0.
+**What you need first:** complete [`installation.md`](getting-started/installation.md) through Phase 0.
 
 **Scope:** this tutorial ends at a preview-quality scene in the Godot
 viewport. Exporting the scene to PSX is a separate workflow — once the

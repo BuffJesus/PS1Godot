@@ -16,13 +16,13 @@ format, different editor, deliberately better UX.
 ## Where to start
 
 !!! tip "New here?"
-    [Install the plugin](https://github.com/BuffJesus/PS1Godot/blob/main/SETUP.md){ target="_blank" } →
-    [Run the demo](https://github.com/BuffJesus/PS1Godot/blob/main/QUICKSTART.md){ target="_blank" } →
+    [Install the plugin](getting-started/installation.md) →
+    [Run the demo](getting-started/quickstart.md) →
     [Build your first scene](tutorial-hello-cube.md).
 
 - **Getting started** —
-  [Setup](https://github.com/BuffJesus/PS1Godot/blob/main/SETUP.md){ target="_blank" } ·
-  [Quickstart](https://github.com/BuffJesus/PS1Godot/blob/main/QUICKSTART.md){ target="_blank" } ·
+  [Install](getting-started/installation.md) ·
+  [Quickstart](getting-started/quickstart.md) ·
   [Hello cube tutorial](tutorial-hello-cube.md) ·
   [Basic scene tutorial](tutorial-basic-scene.md)
 - **Authoring** — [Fixed cameras](authoring/fixed-cameras.md) ·

@@ -89,10 +89,13 @@ flat). See `ROADMAP.md`.
 
 ## Getting started
 
-1. **Set up your environment** → [`SETUP.md`](SETUP.md)
-2. **Walk through your first scene** → [`docs/tutorial-hello-cube.md`](docs/tutorial-hello-cube.md)
-3. **Understand the pipeline** → [`CLAUDE.md`](CLAUDE.md)
-4. **See what's next** → [`ROADMAP.md`](ROADMAP.md)
+1. **Set up your environment** → [`docs/getting-started/installation.md`](docs/getting-started/installation.md)
+2. **Run the bundled demo** → [`docs/getting-started/quickstart.md`](docs/getting-started/quickstart.md)
+3. **Walk through your first scene** → [`docs/tutorial-hello-cube.md`](docs/tutorial-hello-cube.md)
+4. **Understand the pipeline** → [`CLAUDE.md`](CLAUDE.md)
+5. **See what's next** → [`ROADMAP.md`](ROADMAP.md)
+
+Rendered docs: <https://buffjesus.github.io/PS1Godot/>.
 
 The reference source trees (`godot-master/`, `pcsx-redux-main/`,
 `splashedit-main/`) are **not included** in this repo — clone them

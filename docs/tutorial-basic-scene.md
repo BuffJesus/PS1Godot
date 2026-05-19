@@ -7,7 +7,7 @@ that boots on PCSX-Redux and demonstrates the five core node types
 (`PS1Scene`, `PS1MeshInstance`, `PS1Player`, `PS1UICanvas`, plus a Lua
 script).
 
-**Prerequisites:** finish [`QUICKSTART.md`](https://github.com/BuffJesus/PS1Godot/blob/main/QUICKSTART.md){ target="_blank" } (or at
+**Prerequisites:** finish [`quickstart.md`](getting-started/quickstart.md) (or at
 least confirm the shipped demo runs on your machine).
 
 **Scope:** we skip music, cutscenes, rooms/portals, skinned meshes, and
