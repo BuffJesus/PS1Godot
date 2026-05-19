@@ -26,9 +26,11 @@ streamline future encounter authoring:
    swing, environmental hazard) handles damage application inline.
 4. **Lock-on camera** — currently a tag-based marker; no auto-yaw
    or strafe-relative movement.
-5. **Twin-stick camera mode** — right stick exposed but unwired;
-   every scene that wants twin-stick copy-pastes the same
-   `Input.GetAnalog(Input.RIGHT_STICK)` → `Camera.SetH` snippet.
+5. **Twin-stick camera tuning** — twin-stick analog input is
+   already wired by default in `Controls::HandleControls`
+   (controls.cpp:217–227), but sensitivity, deadzone, and pitch
+   clamp are global runtime constants; per-scene tunables and an
+   opt-out flag for fixed-camera scenes would close the gap.
 
 This RFC sketches the surface for each. Implementation is gated
 on prioritization — none of this is necessary to ship the first
@@ -254,108 +256,113 @@ The Lua loop equivalent works but has issues:
 **Total: ~4 days.** Highest impact for souls-like feel but
 biggest engine investment.
 
-## Primitive 5 — twin-stick camera mode on `PS1Player`
+## Primitive 5 — twin-stick camera tuning on `PS1Player`
+
+!!! warning "Earlier draft was wrong"
+    The first draft of this section claimed "right stick is
+    exposed but unwired" and proposed a ~2.5-day implementation.
+    Re-reading `psxsplash-main/src/controls.cpp:217–227` proved
+    that wrong — the right stick **already drives** player yaw
+    (X) and pitch (Y, clamped to `[-0.5π, +0.5π]`) every frame in
+    `HandleControls`, and the existing `playerRotationY` →
+    camera-rig formula in `scenemanager.cpp:947` makes the camera
+    follow visibly. So twin-stick is the **default** for analog
+    pads, not a missing feature. This primitive is what actually
+    *is* missing — per-scene tuning, opt-out for fixed-camera
+    scenes, and an authoring-level toggle.
 
 ### Context
 
-Twin-stick (left = move, right = camera) is the modern action-game
-default and a natural pairing with Camera.LockOn (lock-off mode
-needs the right stick for camera control). Right now every scene
-that wants twin-stick copy-pastes ~15 lines of Lua into `onUpdate`
-to read `Input.GetAnalog(Input.RIGHT_STICK)`, apply deadzone, and
-push to `Camera.SetH` / `Camera.SetRotation`. See
-[combat-patterns § twin-stick camera](https://github.com/BuffJesus/PS1Godot/blob/main/docs/authoring/combat-patterns.md#twin-stick-camera){ target="_blank" }
-for the per-scene snippet.
+Twin-stick (left = move, right = camera) already ships for analog
+pads via the default `HandleControls` tick:
 
-The right stick is already exposed at the API level
-(`Input.GetAnalog(1)` reads it, `Input.RIGHT_STICK` constant
-landed alongside this RFC) — the gap is the runtime-side default
-behavior.
+```cpp
+// psxsplash-main/src/controls.cpp:217-227 (paraphrased)
+if (abs(rightStickX) > m_stickDeadzone) {
+    playerRotationY += (rightStickX * rotSpeed) >> 7 * dt12;
+}
+if (abs(rightStickY) > m_stickDeadzone) {
+    playerRotationX -= (rightStickY * rotSpeed) >> 7 * dt12;
+    playerRotationX = clamp(playerRotationX, -0.5_pi, +0.5_pi);
+}
+```
+
+`m_stickDeadzone`, `rotSpeed`, and the pitch clamp range are
+**global runtime constants** today. Fine for the demo. Insufficient
+for a project with multiple distinct scenes (slow boss arena
+needs a slower turn rate; high-speed scene wants snappy control;
+fixed-camera scenes shouldn't move the camera at all).
 
 ### Proposed surface
-
-A new enum-shaped field on `PS1Player`:
 
 ```cs
 public enum CameraControlMode
 {
-    ButtonsLR = 0,   // current default — L1/R1 yaw, no stick
-    RightStick = 1,  // twin-stick — right-stick X = yaw, Y = pitch
-    LockedOn = 2,    // runtime drives yaw from Camera.LockOn target
+    AnalogStick = 0,  // current default — right stick → yaw + pitch
+    ButtonsOnly = 1,  // ignore the right stick (fixed-camera scenes,
+                      // tank-controls homages, etc.). L1/R1 still rotate.
+    LockedOn = 2,     // reserved for primitive 4 (Camera.LockOn).
+                      // Camera tracks target; left-stick strafes.
 }
 
-[Export] public CameraControlMode CameraControl = CameraControlMode.ButtonsLR;
-[Export] public int YawSensitivity = 8;
-[Export] public int PitchSensitivity = 12;
-[Export] public int RightStickDeadzone = 256;  // ~0.06 of range
+[Export] public CameraControlMode CameraControl = CameraControlMode.AnalogStick;
+[Export] public int YawSensitivity = 100;    // % of default (100 = current)
+[Export] public int PitchSensitivity = 100;  // % of default
+[Export] public int StickDeadzone = 32;      // raw fp7 stick units
 ```
 
-When `RightStick`, the runtime's per-frame camera tick reads the
-right stick directly (no Lua) and applies yaw/pitch with the
-authored sensitivity + deadzone.
+The exporter stamps these fields into the splashpack player
+record (one new struct, ~8 bytes). The runtime reads them at
+scene init and passes them into `Controls` so `HandleControls`
+uses per-scene values instead of globals.
 
-`LockedOn` is set by `Camera.LockOn` and reverts to whatever the
-authored default was on `Camera.LockOff`. So scenes that author
-`CameraControl = RightStick` get the twin-stick default and
-seamlessly switch to locked-on mode when the player triggers
-lock-on; on lock-off, twin-stick comes back.
+`ButtonsOnly` short-circuits the right-stick block in
+`HandleControls` — `playerRotationY` only moves on L1/R1
+presses. Cleaner than asking authors to set sensitivity to 0
+(which would still consume input).
 
 ### Lua surface
 
-No new Lua bindings strictly needed — the mode is set per-scene
-in the inspector. Optional getters/setters for runtime toggling:
-
 ```cpp
-// Camera.GetControlMode() -> string ("buttons" | "rightstick" | "lockedon")
-static int Camera_GetControlMode(lua_State* L);
+// Camera.GetControlMode() -> string ("analog" | "buttons" | "lockedon")
 // Camera.SetControlMode(name) -> nil
-static int Camera_SetControlMode(lua_State* L);
 ```
 
-Useful for "options menu lets the player flip between twin-stick
-and L1/R1" patterns.
-
-### Strafe-relative movement
-
-The complete twin-stick feel needs the player's left-stick to
-drive **strafe-relative** movement when locked on (left-stick X
-strafes orthogonal to player→target, not relative to camera-
-forward). Currently the default rig uses camera-forward
-relative. The `LockedOn` mode would re-bind left-stick input the
-same way Camera.LockOn re-binds the camera tick.
-
-Twin-stick free-camera mode (no lock) keeps the existing
-camera-forward left-stick semantics — only `LockedOn` mode
-changes left-stick behavior.
+For an options menu that lets the player toggle between
+analog-stick and button-only at runtime.
 
 ### Why engine-side
 
-The Lua copy-paste pattern works but:
+- **Tuning across scenes** — authors set values in the
+  inspector, no per-scene Lua hacks.
+- **Fixed-camera opt-out** — a clean `ButtonsOnly` mode for
+  Resident Evil / FFVII-style scenes is more readable than
+  "set sensitivity to 0."
+- **Hook for `LockedOn`** — once primitive 4 lands, the same
+  enum lets `Camera.LockOn` swap behavior without a separate
+  flag.
 
-- Runs the read+apply in Lua tick, adding per-frame cost on PSX's
-  clock budget. Runtime-side reads + applies in the same C++ pass
-  the existing button-driven yaw uses.
-- Doesn't compose cleanly with `Camera.LockOn` — the locked-on
-  case needs the right stick *off* (no camera drift) while strafe
-  movement engages on the left stick. Authoring this in Lua means
-  threading the lock state through both stick handlers; runtime-
-  side wires it once.
-- Pad-quality deadzones become a per-scene tuning instead of a
-  per-project default.
+### What this is **not**
+
+- Not adding twin-stick (already there).
+- Not decoupling camera yaw from player yaw (that's the lock-on
+  primitive 4).
+- Not adding lock-on (that's primitive 4).
 
 ### Implementation cost
 
-- `CameraControlMode` enum + `PS1Player` Inspector fields: ~half day.
-- Runtime per-frame stick-read + apply (mirrors existing L1/R1
-  yaw path): ~half day.
-- Strafe-relative movement under `LockedOn` mode: ~1 day (testing
-  + edge cases — player directly under target, etc.).
-- Optional `Camera.GetControlMode` / `SetControlMode` Lua bindings:
+- C# enum + inspector fields on `PS1Player`: ~half day.
+- Splashpack format bump (one new player record): ~half day.
+- Exporter wiring (`SplashpackWriter` emits the new bytes): ~half
+  day.
+- Runtime reads the new fields, threads them into `Controls`:
+  ~half day.
+- Optional Lua bindings (`Camera.GetControlMode/SetControlMode`):
   ~half day.
 
-**Total: ~2.5 days.** Pairs naturally with Camera.LockOn
-(primitive 4) — land them together for ~5.5 days of work that
-unlocks the full modern-action-game / souls-like camera surface.
+**Total: ~2.5 days. Smallest material primitive after the runtime
+default already does most of the work.** Pure additive — no
+behavior change for scenes that don't touch the new fields.
 
 ## Primitive 6 (bonus) — fog-gate trigger
 
