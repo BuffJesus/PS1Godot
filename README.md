@@ -91,7 +91,7 @@ flat). See `ROADMAP.md`.
 
 1. **Set up your environment** → [`docs/getting-started/installation.md`](docs/getting-started/installation.md)
 2. **Run the bundled demo** → [`docs/getting-started/quickstart.md`](docs/getting-started/quickstart.md)
-3. **Walk through your first scene** → [`docs/tutorial-hello-cube.md`](docs/tutorial-hello-cube.md)
+3. **Walk through your first scene** → [`docs/getting-started/first-scene.md`](docs/getting-started/first-scene.md)
 4. **Understand the pipeline** → [`CLAUDE.md`](CLAUDE.md)
 5. **See what's next** → [`ROADMAP.md`](ROADMAP.md)
 

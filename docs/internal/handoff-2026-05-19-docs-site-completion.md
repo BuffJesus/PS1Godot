@@ -89,31 +89,26 @@ wasn't set yet; subsequent runs are green.
 
 ## Open follow-ups (judgment / hardware / user-side)
 
-1. **Merge `tutorial-hello-cube.md` + `tutorial-basic-scene.md` into
-   `docs/getting-started/first-scene.md`** per the prior handoff's
-   restructure mapping. Content judgment — the two existing tutorials
-   target slightly different audiences (look-and-feel vs interactive
-   slice). Worth a fresh draft rather than mechanical concat.
-2. **Per-node guides under `docs/authoring/nodes/`** — 15 stubs
+1. **Per-node guides under `docs/authoring/nodes/`** — 15 stubs
    pending (PS1Scene, PS1MeshInstance, PS1SkinnedMesh, PS1Camera,
    PS1Player, PS1Animation, PS1Cutscene, PS1AudioClip, PS1TriggerBox,
    PS1UICanvas, PS1Room, PS1PortalLink, PS1Sky, plus the music nodes).
    Best done alongside the screenshot pass — node inspector shots
    from Tier 5 in the prior handoff are the visual anchor.
-3. **Per-dock guides under `docs/docks/`** — 14 docks (Tier 2 of the
+2. **Per-dock guides under `docs/docks/`** — 14 docks (Tier 2 of the
    prior handoff's screenshot list). Same as above — pair the page
    with the screenshot.
-4. **Contributing section** — `docs/contributing/{architecture,
-   building, adding-a-node-kind, adding-a-graph-kind, ci}.md`.
-   Architectural overview is the only one with real prerequisite
-   research; the rest are recipes derived from the build-gdextension
-   workflow + existing CLAUDE.md.
-5. **Screenshots Tier 1–5** — purely user work. The prior handoff's
+3. **Contributing section** — `docs/contributing/{architecture,
+   building, adding-a-node-kind, adding-a-graph-kind}.md`. `ci.md`
+   shipped 2026-05-19. Architectural overview is the only one with
+   real prerequisite research; the rest are recipes derived from
+   the build-gdextension workflow + existing CLAUDE.md.
+4. **Screenshots Tier 1–5** — purely user work. The prior handoff's
    §Screenshot capture checklist is the playbook. Hero shot + the
    bottom-panel strip + the right-side dock are the three highest-
    leverage shots; everything else falls out naturally once those
    land.
-6. **Linux smoke** of the built plugin on a real Linux box (CI proves
+5. **Linux smoke** of the built plugin on a real Linux box (CI proves
    compile, not workflow). godot-cpp local tweak decision still open
    per the prior handoff.
 

@@ -18,13 +18,12 @@ format, different editor, deliberately better UX.
 !!! tip "New here?"
     [Install the plugin](getting-started/installation.md) →
     [Run the demo](getting-started/quickstart.md) →
-    [Build your first scene](tutorial-hello-cube.md).
+    [Build your first scene](getting-started/first-scene.md).
 
 - **Getting started** —
   [Install](getting-started/installation.md) ·
   [Quickstart](getting-started/quickstart.md) ·
-  [Hello cube tutorial](tutorial-hello-cube.md) ·
-  [Basic scene tutorial](tutorial-basic-scene.md)
+  [Your first scene](getting-started/first-scene.md)
 - **Authoring** — [Fixed cameras](authoring/fixed-cameras.md) ·
   [Audio routing](authoring/audio/routing.md) ·
   [Custom boot logo](authoring/ui/custom-boot-logo.md)

@@ -103,8 +103,7 @@ nav:
   - Getting started:
       - Install: getting-started/installation.md
       - Quickstart: getting-started/quickstart.md
-      - First tutorial (hello cube): tutorial-hello-cube.md
-      - Basic scene tutorial: tutorial-basic-scene.md
+      - Your first scene: getting-started/first-scene.md
   - Authoring:
       - Fixed cameras: authoring/fixed-cameras.md
       - Graphs:

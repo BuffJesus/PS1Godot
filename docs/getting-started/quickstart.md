@@ -149,15 +149,9 @@ sequenced-music session. The details of that format are documented in
 
 ## Authoring your own scene
 
-Once the demo runs, two tutorials get you building your own:
-
-**→ [`tutorial-hello-cube.md`](../tutorial-hello-cube.md)** —
-look-and-feel: set up a PS1-shaded scene in Godot's viewport, see the
-jitter and fog and color clamp working.
-
-**→ [`tutorial-basic-scene.md`](../tutorial-basic-scene.md)** —
-interactive slice of the demo: floor + third-person player + a cube you
-walk up to and press Triangle on to trigger a Lua-driven dialog line.
+**→ [`first-scene.md`](first-scene.md)** — build a scene from
+scratch in ~40 minutes: floor with PS1 textures, third-person
+player, an interactive cube that triggers a Lua-driven dialog line.
 Ends with a working splashpack booting in PCSX-Redux.
 
 And the pipeline architecture / file-layout conventions live in
