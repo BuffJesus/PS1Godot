@@ -742,15 +742,65 @@ public partial class PS1GraphEditorDock : VBoxContainer
         {
             g.TooltipText = nodeMeta.Tooltip;
 
-            // UE port-plan pick #5 — category-tinted title bar. Godot's
-            // GraphNode title color is theme-driven (`title_color`).
-            // AddThemeColorOverride on the title affects only this node.
-            // Disabled nodes get a desaturated grey instead of the
-            // category tint (UE port-plan pick #2 visual feedback).
+            // UE port-plan pick #5 — category-tinted title bar.
+            // Godot's `title_color` theme entry only colors the title
+            // TEXT, not the bar background — so overriding it alone
+            // produces tinted text on a grey strip, which doesn't read
+            // as a "category tag" at the dock's zoom level. Override
+            // the `titlebar` StyleBox instead (and `titlebar_selected`
+            // for the focused state) so the strip itself takes the
+            // category color. Keep title text white for contrast on
+            // the mid-saturation tints. Disabled nodes get a
+            // desaturated grey strip (UE port-plan pick #2 feedback).
             Color titleTint = n.IsDisabled
                 ? new Color(0.35f, 0.35f, 0.35f)
                 : (s_categoryTints.TryGetValue(nodeMeta.Category, out var t) ? t : new Color(0.55f, 0.55f, 0.55f));
-            g.AddThemeColorOverride("title_color", titleTint);
+            var titleBar = new StyleBoxFlat
+            {
+                BgColor = titleTint,
+                ContentMarginLeft = 8,
+                ContentMarginRight = 8,
+                ContentMarginTop = 4,
+                ContentMarginBottom = 4,
+                CornerRadiusTopLeft = 4,
+                CornerRadiusTopRight = 4,
+            };
+            var titleBarSelected = new StyleBoxFlat
+            {
+                BgColor = titleTint.Lightened(0.15f),
+                ContentMarginLeft = 8,
+                ContentMarginRight = 8,
+                ContentMarginTop = 4,
+                ContentMarginBottom = 4,
+                CornerRadiusTopLeft = 4,
+                CornerRadiusTopRight = 4,
+                BorderWidthLeft = 1,
+                BorderWidthTop = 1,
+                BorderWidthRight = 1,
+                BorderColor = Colors.White,
+            };
+            g.AddThemeStyleboxOverride("titlebar", titleBar);
+            g.AddThemeStyleboxOverride("titlebar_selected", titleBarSelected);
+            // Title text color — picked by relative luminance (Rec. 709)
+            // so light tints (teal, amber, untyped grey, meta purple)
+            // get dark text and dark tints (Disabled) get white.
+            //
+            // Godot 4.7-dev5 GraphNode keeps the title in an internal
+            // Label themed as `GraphNodeTitleLabel`; the `title_color`
+            // theme entry on the GraphNode itself doesn't reach the
+            // Label. Override the Label's `font_color` directly via
+            // GetTitlebarHbox so the contrast switch actually applies.
+            float lum = 0.2126f * titleTint.R + 0.7152f * titleTint.G + 0.0722f * titleTint.B;
+            Color titleTextColor = lum > 0.5f ? new Color(0.10f, 0.10f, 0.10f) : Colors.White;
+            var titlebarHbox = g.GetTitlebarHBox();
+            foreach (Node child in titlebarHbox.GetChildren())
+            {
+                if (child is Label titleLabel)
+                {
+                    titleLabel.AddThemeColorOverride("font_color", titleTextColor);
+                    break;
+                }
+            }
 
             // Optional corner glyph — prepend to the title so it sits
             // left of the kind name. Cheaper than overlaying an icon
