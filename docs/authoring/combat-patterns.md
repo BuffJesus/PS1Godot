@@ -269,6 +269,124 @@ Scene (PS1Scene)
 Show on encounter start: `UI.SetCanvasVisible(canvas, true)`. Hide
 on boss death.
 
+## Damage dispatch (Stats.DealDamage)
+
+Once you have [`PS1Stats`](nodes/ps1-mesh-instance.md) authored,
+the canonical damage entry point is
+[`Stats.DealDamage`](../lua-api/stats.md#stats-dealdamage):
+
+```lua
+-- Where you used to call Entity.Destroy(victim) directly:
+local applied = Stats.DealDamage(victim, 10, self)
+if applied > 0 then
+    Camera.ShakeRaw(614, 14)
+    Scene.PauseFor(4)
+end
+if Stats.GetHP(victim) <= 0 then
+    -- HP hit zero — your call what happens. Destroy / play
+    -- death anim / drop loot / etc.
+    onDeath(victim)
+end
+```
+
+`DealDamage` returns the damage that actually landed. **0 means
+the entity is invulnerable** — either i-frames active (the dodge
+case below), already at 0 HP, or no stats authored. Branch on the
+return value before playing impact feedback so whiffing a dodging
+enemy doesn't flash hit-confirm shake.
+
+The runtime fires `onDamage(self, applied, source)` on the target
+after debiting HP. Use it for hit-reaction state changes:
+
+```lua
+-- In the boss's script:
+function onDamage(self, applied, source)
+    -- Phase transition at 50%
+    if Stats.GetHP(self) < Stats.GetMaxHP(self) // 2
+       and not self.phase2_triggered then
+        self.phase2_triggered = true
+        Cutscene.Play("phase2_intro")
+    end
+
+    -- Brief hitstun
+    Controls.StartIFrames(self, 8)
+end
+```
+
+`onDamage` is informational — it can't override the amount.
+Authors who want override behavior call `Stats.GetHP` /
+`Stats.SetHP` manually and skip `DealDamage`.
+
+## Dodge / roll
+
+Souls-like dodge: directional roll with i-frames, stamina cost,
+cooldown. Most of it is Lua-side recipe; the engine provides the
+i-frame primitive that the damage system honors.
+
+```lua
+local DODGE_FRAMES   = 18  -- total dodge animation duration
+local IFRAME_WINDOW  = 12  -- subset where i-frames are active —
+                           -- shorter than DODGE_FRAMES so late
+                           -- dodges get punished
+local STAMINA_COST   = 25
+local DODGE_COOLDOWN = 30
+local DODGE_SPEED    = 0.25  -- world units / frame
+
+local dodgeFrames = 0
+local dodgeDir = { x = 0, z = 0 }
+local cooldown = 0
+
+function onUpdate(self, dt)
+    if cooldown > 0 then cooldown = cooldown - 1 end
+
+    -- Trigger a dodge on Circle if available
+    if cooldown == 0
+       and dodgeFrames == 0
+       and Input.IsPressed(Input.CIRCLE)
+       and Stats.GetStamina(self) >= STAMINA_COST then
+
+        -- Direction: left-stick if held, otherwise player-facing back
+        local lx, ly = Input.GetAnalog(Input.LEFT_STICK)
+        if math.abs(lx) < 0.2 and math.abs(ly) < 0.2 then
+            -- No stick input → back-step. Use player yaw to compute.
+            local rot = Player.GetRotation()
+            -- forward = (sin(yaw), cos(yaw)) so back = negated
+            dodgeDir.x = -math.sin(rot.y * math.pi)
+            dodgeDir.z = -math.cos(rot.y * math.pi)
+        else
+            -- Stick direction (camera-relative; for lock-on this would
+            -- compute strafe-relative — see Camera.LockOn primitive 4)
+            dodgeDir.x = lx
+            dodgeDir.z = -ly
+        end
+
+        dodgeFrames = DODGE_FRAMES
+        cooldown = DODGE_COOLDOWN
+        Stats.SetStamina(self, Stats.GetStamina(self) - STAMINA_COST)
+        Controls.StartIFrames(self, IFRAME_WINDOW)
+        -- SkinnedAnim.Play(self, "dodge")  -- when skinned animation lands
+    end
+
+    -- Active dodge — manual movement override
+    if dodgeFrames > 0 then
+        local p = Entity.GetPosition(self)
+        Entity.SetPosition(self, Vec3.new(
+            p.x + dodgeDir.x * DODGE_SPEED,
+            p.y,
+            p.z + dodgeDir.z * DODGE_SPEED))
+        dodgeFrames = dodgeFrames - 1
+    end
+end
+```
+
+**Why i-frames need engine support**: the collision system's
+contact resolution and `Stats.DealDamage`'s damage debit both
+honor `Controls.StartIFrames` automatically. A Lua-only i-frame
+implementation could only filter Lua-initiated queries — it
+couldn't block damage from runtime-driven collision (an enemy
+swinging into the player). The engine-side counter is the
+single source of truth.
+
 ## Boss phases
 
 FSM graphs handle this cleanly. Each phase is a state; the
@@ -395,8 +513,6 @@ get awkward and a first-class primitive would help. Listed in the
 - **Stagger / poise** — running a poise counter in Lua works but
   the dispatch (`onStagger(self)`) wants to be a runtime callback,
   not a Lua poll.
-- **Damage events** — `onDamage(self, amount, source)` would
-  consolidate the "every caller handles damage" pattern.
 
 ## Related
 

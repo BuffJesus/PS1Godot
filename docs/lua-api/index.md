@@ -12,7 +12,7 @@ consumed three ways:
   parses the structured `// Namespace.Method(...)` comments
   and writes one page per namespace.
 
-**25 namespaces, 161 entries** across the surface.
+**25 namespaces, 164 entries** across the surface.
 
 ## Namespaces
 
@@ -21,7 +21,7 @@ consumed three ways:
 | `Animation` | 1 | [`Animation`](animation.md) |
 | `Audio` | 15 | [`Audio`](audio.md) |
 | `Camera` | 15 | [`Camera`](camera.md) |
-| `Controls` | 2 | [`Controls`](controls.md) |
+| `Controls` | 4 | [`Controls`](controls.md) |
 | `Convert` | 2 | [`Convert`](convert.md) |
 | `Cutscene` | 2 | [`Cutscene`](cutscene.md) |
 | `Debug` | 3 | [`Debug`](debug.md) |
@@ -39,7 +39,7 @@ consumed three ways:
 | `Scene` | 3 | [`Scene`](scene.md) |
 | `SkinnedAnim` | 5 | [`SkinnedAnim`](skinned-anim.md) |
 | `Sound` | 3 | [`Sound`](sound.md) |
-| `Stats` | 9 | [`Stats`](stats.md) |
+| `Stats` | 10 | [`Stats`](stats.md) |
 | `Timer` | 1 | [`Timer`](timer.md) |
 | `UI` | 25 | [`UI`](ui.md) |
 | `Vec3` | 12 | [`Vec3`](vec3.md) |

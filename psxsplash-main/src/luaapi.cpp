@@ -125,6 +125,7 @@ void LuaAPI::RegisterAll(psyqo::Lua& L, SceneManager* scene, CutscenePlayer* cut
     L.push(Stats_GetMana);        L.setField(-2, "GetMana");
     L.push(Stats_SetMana);        L.setField(-2, "SetMana");
     L.push(Stats_GetMaxMana);     L.setField(-2, "GetMaxMana");
+    L.push(Stats_DealDamage);     L.setField(-2, "DealDamage");
     L.setGlobal("Stats");
     
     // ========================================================================
@@ -583,6 +584,12 @@ void LuaAPI::RegisterAll(psyqo::Lua& L, SceneManager* scene, CutscenePlayer* cut
 
     L.push(Controls_IsEnabled);
     L.setField(-2, "IsEnabled");
+
+    L.push(Controls_StartIFrames);
+    L.setField(-2, "StartIFrames");
+
+    L.push(Controls_IsInvulnerable);
+    L.setField(-2, "IsInvulnerable");
 
     L.setGlobal("Controls");
 
@@ -3794,6 +3801,39 @@ int LuaAPI::Stats_GetMaxMana(lua_State* L) {
     psyqo::Lua lua(L);
     if (!s_sceneManager) { lua.pushNumber(0); return 1; }
     lua.pushNumber(s_sceneManager->getStatMaxMana(StatsResolveIndex(lua, 1)));
+    return 1;
+}
+
+int LuaAPI::Stats_DealDamage(lua_State* L) {
+    psyqo::Lua lua(L);
+    if (!s_sceneManager) { lua.pushNumber(0); return 1; }
+    uint16_t targetIdx = StatsResolveIndex(lua, 1);
+    int amount = lua.isNumber(2) ? static_cast<int>(lua.toNumber(2)) : 0;
+    GameObject* source = nullptr;
+    if (lua.isTable(3)) {
+        uint16_t sourceIdx = StatsResolveIndex(lua, 3);
+        if (sourceIdx != 0xFFFF) source = s_sceneManager->getGameObject(sourceIdx);
+    }
+    int applied = s_sceneManager->dealDamage(targetIdx, amount, source);
+    lua.pushNumber(applied);
+    return 1;
+}
+
+int LuaAPI::Controls_StartIFrames(lua_State* L) {
+    psyqo::Lua lua(L);
+    if (!s_sceneManager) return 0;
+    uint16_t idx = StatsResolveIndex(lua, 1);
+    int frames = lua.isNumber(2) ? static_cast<int>(lua.toNumber(2)) : 0;
+    if (frames < 0) frames = 0;
+    if (frames > 0xFFFF) frames = 0xFFFF;
+    s_sceneManager->startIFrames(idx, static_cast<uint16_t>(frames));
+    return 0;
+}
+
+int LuaAPI::Controls_IsInvulnerable(lua_State* L) {
+    psyqo::Lua lua(L);
+    if (!s_sceneManager) { lua.push(false); return 1; }
+    lua.push(s_sceneManager->isInvulnerable(StatsResolveIndex(lua, 1)));
     return 1;
 }
 

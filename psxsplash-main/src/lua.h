@@ -38,6 +38,7 @@ enum EventMask : uint32_t {
     EVENT_ON_DISABLE        = 1 << 8,
     EVENT_ON_BUTTON_PRESS   = 1 << 9,
     EVENT_ON_BUTTON_RELEASE = 1 << 10,
+    EVENT_ON_DAMAGE         = 1 << 11,  // v33+ — fired by Stats.DealDamage
 };
 
 class SceneManager;  // forward; TryHotSwap walks its game-object list
@@ -100,6 +101,12 @@ class Lua {
     void OnDisable(GameObject* go);
     void OnButtonPress(GameObject* go, int button);
     void OnButtonRelease(GameObject* go, int button);
+
+    // v33+: damage notification. Fired by Stats.DealDamage after the
+    // HP debit lands; purely informational, scripts can't override the
+    // amount. `source` is the entity that caused the damage (nil for
+    // environmental damage like falling).
+    void OnDamage(GameObject* target, int amount, GameObject* source);
 
   private:
     template <int methodId, typename methodName>
@@ -188,6 +195,7 @@ class Lua {
     [[no_unique_address]] FunctionWrapper<108, typestring_is("onDisable")> onDisableMethodWrapper;
     [[no_unique_address]] FunctionWrapper<109, typestring_is("onButtonPress")> onButtonPressMethodWrapper;
     [[no_unique_address]] FunctionWrapper<110, typestring_is("onButtonRelease")> onButtonReleaseMethodWrapper;
+    [[no_unique_address]] FunctionWrapper<111, typestring_is("onDamage")> onDamageMethodWrapper;
     
     void PushGameObject(GameObject* go);
 

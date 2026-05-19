@@ -898,6 +898,28 @@ private:
     // Stats.GetMaxMana(object) -> int
     static int Stats_GetMaxMana(lua_State* L);
 
+    // Stats.DealDamage(target, amount, source?) -> int
+    // Central damage entry point. Skips silently when target has
+    // i-frames active (returns 0). Otherwise debits HP (clamped to 0)
+    // and fires the target's onDamage(self, applied, source) Lua
+    // callback if defined. `source` is optional — pass nil for
+    // environmental damage (fall, poison, world hazards). Returns the
+    // damage that actually landed; 0 when blocked by i-frames, no
+    // stats, or already-dead target.
+    static int Stats_DealDamage(lua_State* L);
+
+    // Controls.StartIFrames(target, frames) -> nil
+    // Set the target's invulnerability window to `frames`. Counts
+    // down at 60 Hz inside the SceneManager game tick. While > 0,
+    // Stats.DealDamage skips this entity. Calling again before the
+    // window expires OVERWRITES (not adds to) the remaining frames.
+    static int Controls_StartIFrames(lua_State* L);
+
+    // Controls.IsInvulnerable(target) -> boolean
+    // True if the target has any i-frames remaining. Cheap lookup;
+    // safe to call per frame.
+    static int Controls_IsInvulnerable(lua_State* L);
+
     // Controls.SetEnabled(bool)
     // Master switch for player input. When false, the player pawn
     // ignores stick + button events but the camera, cutscenes, music,

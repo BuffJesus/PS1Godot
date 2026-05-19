@@ -4,9 +4,21 @@
 !!! info "Generated"
     This page is auto-generated from `psxsplash-main/src/luaapi.hh` by `scripts/py/gen_lua_api_docs.py`. Edits won't survive the next build — fix the source comments instead.
 
-2 entries, 1 with worked examples mined from `godot-ps1/demo/scripts/` and the bundled templates.
+4 entries, 1 with worked examples mined from `godot-ps1/demo/scripts/` and the bundled templates.
 
 ## Methods
+
+### `Controls.StartIFrames(target, frames) -> nil` { #controls-startiframes }
+
+Set the target's invulnerability window to `frames`. Counts
+down at 60 Hz inside the SceneManager game tick. While > 0,
+Stats.DealDamage skips this entity. Calling again before the
+window expires OVERWRITES (not adds to) the remaining frames.
+
+### `Controls.IsInvulnerable(target) -> boolean` { #controls-isinvulnerable }
+
+True if the target has any i-frames remaining. Cheap lookup;
+safe to call per frame.
 
 ### `Controls.SetEnabled(bool)` { #controls-setenabled }
 

@@ -766,6 +766,7 @@ void psxsplash::Lua::RegisterGameObject(GameObject* go) {
                 if (onDisableMethodWrapper.resolveGlobal(L))             eventMask |= EVENT_ON_DISABLE;
                 if (onButtonPressMethodWrapper.resolveGlobal(L))         eventMask |= EVENT_ON_BUTTON_PRESS;
                 if (onButtonReleaseMethodWrapper.resolveGlobal(L))       eventMask |= EVENT_ON_BUTTON_RELEASE;
+                if (onDamageMethodWrapper.resolveGlobal(L))              eventMask |= EVENT_ON_DAMAGE;
 
                 L.pop(2); // pop nil and env
             } else {
@@ -869,6 +870,13 @@ void psxsplash::Lua::OnButtonPress(GameObject* go, int button) {
 void psxsplash::Lua::OnButtonRelease(GameObject* go, int button) {
     if (!hasEvent(go, EVENT_ON_BUTTON_RELEASE)) return;
     onButtonReleaseMethodWrapper.callMethod(*this, go, button);
+}
+
+void psxsplash::Lua::OnDamage(GameObject* target, int amount, GameObject* source) {
+    if (!hasEvent(target, EVENT_ON_DAMAGE)) return;
+    // PushGameObject(nullptr) pushes nil — handles environmental damage
+    // (poison, fall damage, world hazards) with no attacker.
+    onDamageMethodWrapper.callMethod(*this, target, amount, source);
 }
 
 void psxsplash::Lua::OnUpdate(GameObject* go, int32_t dt12) {

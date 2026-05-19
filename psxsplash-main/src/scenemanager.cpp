@@ -127,9 +127,11 @@ void psxsplash::SceneManager::InitializeScene(uint8_t* splashpackData, LoadingSc
     // v33+: expand the sparse stats table into a dense per-entity array.
     // Entries default-construct to zero (no stats), and we overlay the
     // authored values from the splashpack. Lua's Stats.* queries hit
-    // O(1) on entity index.
+    // O(1) on entity index. Parallel i-frame counters reset to 0.
     m_entityStats.clear();
     m_entityStats.resize(m_gameObjects.size());
+    m_iframes.clear();
+    m_iframes.resize(m_gameObjects.size(), 0);
     if (sceneSetup.statsTable && sceneSetup.statsCount > 0) {
         for (uint16_t i = 0; i < sceneSetup.statsCount; ++i) {
             const StatsTableEntry& src = sceneSetup.statsTable[i];
@@ -768,6 +770,13 @@ void psxsplash::SceneManager::GameTick(psyqo::GPU &gpu) {
 
     // Button-state tracking already ran above the pause short-circuit so the
     // delta stays in sync across hit-stops. Just dispatch events below.
+
+    // v33+: tick i-frame counters. Saturating decrement so a freshly-
+    // entered invulnerable window doesn't wrap. Cheap; even a scene
+    // with 200 entities is 200 u16 writes.
+    for (size_t i = 0; i < m_iframes.size(); ++i) {
+        if (m_iframes[i] > 0) --m_iframes[i];
+    }
 
     // Update interaction system (checks for interact button press)
     updateInteractionSystem();
@@ -1650,3 +1659,27 @@ int16_t psxsplash::SceneManager::setStatMana(uint16_t i, int v) {
     return s.mana;
 }
 
+
+int psxsplash::SceneManager::dealDamage(uint16_t targetIndex, int amount, GameObject* source) {
+    if (amount <= 0) return 0;
+    if (targetIndex >= m_entityStats.size()) return 0;
+
+    // v33+: i-frame check. Invulnerable entities take 0 damage —
+    // dodge / roll windows, on-hit invuln after a successful parry, etc.
+    if (m_iframes[targetIndex] > 0) return 0;
+
+    RuntimeStats& s = m_entityStats[targetIndex];
+    if (s.maxHP <= 0) return 0;  // no stats → no damage path
+    if (s.hp <= 0)    return 0;  // already dead
+
+    int applied = amount;
+    if (applied > s.hp) applied = s.hp;
+    s.hp = static_cast<int16_t>(s.hp - applied);
+
+    // Fire onDamage(self, applied, source) on the target. PushGameObject
+    // handles nullptr source by pushing nil.
+    GameObject* target = getGameObject(targetIndex);
+    if (target) L.OnDamage(target, applied, source);
+
+    return applied;
+}

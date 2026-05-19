@@ -22,8 +22,10 @@ Six patterns where current authoring is awkward (or impossible):
    API queries + mutates.
 2. **Hitbox / hurtbox distinction** — currently every `OverlapBox`
    tag is the same.
-3. **Damage events** — currently each caller (projectile, melee
-   swing, environmental hazard) handles damage application inline.
+3. **Damage events** — ✅ landed 2026-05-19. Stats.DealDamage
+   central entry point; onDamage(self, applied, source) callback
+   fires after the HP debit. Runs alongside primitive 6's i-frame
+   check.
 4. **Lock-on camera** — currently a tag-based marker; no auto-yaw
    or strafe-relative movement.
 5. **Twin-stick camera tuning** — twin-stick analog input is
@@ -31,10 +33,11 @@ Six patterns where current authoring is awkward (or impossible):
    (controls.cpp:217–227), but sensitivity, deadzone, and pitch
    clamp are global runtime constants; per-scene tunables and an
    opt-out flag for fixed-camera scenes would close the gap.
-6. **Dodge / roll with i-frames** — most of dodge is Lua-side
-   recipe (movement override, stamina cost, cooldown) but i-frames
-   need runtime collision support — a per-entity invulnerability
-   counter that the collision queries skip.
+6. **Dodge / roll with i-frames** — ✅ landed 2026-05-19.
+   Per-entity i-frame counter in SceneManager; per-tick decrement
+   in GameTick; Controls.StartIFrames / IsInvulnerable Lua API;
+   Stats.DealDamage skips when invulnerable. Dodge movement +
+   stamina cost stays Lua-side per the recipe.
 
 This RFC sketches the surface for each. Implementation is gated
 on prioritization — none of this is necessary to ship the first
@@ -168,7 +171,25 @@ static int Physics_OverlapBoxDetailed(lua_State* L);
 **Total: ~3 days.** Pairs naturally with `PS1Stats` —
 `Stats.DealDamage(target, base * multiplier // 100)`.
 
-## Primitive 3 — `onDamage` callback
+## Primitive 3 — `onDamage` callback  ✅ LANDED (2026-05-19)
+
+**Status:** shipped alongside primitive 6.
+`Stats.DealDamage(target, amount, source?) -> appliedDamage` is the
+central damage entry point. Honors i-frames (returns 0). Debits HP
+via the existing Stats setter (with clamp to 0). Fires
+`onDamage(self, applied, source)` Lua callback on the target if
+defined — informational, can't override.
+
+`EVENT_ON_DAMAGE = 1 << 11` in lua.h's EventMask;
+`onDamageMethodWrapper` registered alongside the existing
+onTriggerEnter / onInteract wrappers; resolveGlobal call added in
+RegisterGameObject.
+
+Live: [Lua API → Stats.DealDamage](https://buffjesus.github.io/PS1Godot/lua-api/stats/#stats-dealdamage).
+
+Original surface below for the record.
+
+### Original surface
 
 ### Surface
 
@@ -384,7 +405,28 @@ analog-stick and button-only at runtime.
 default already does most of the work.** Pure additive — no
 behavior change for scenes that don't touch the new fields.
 
-## Primitive 6 — dodge / roll with i-frames
+## Primitive 6 — dodge / roll with i-frames  ✅ LANDED (2026-05-19)
+
+**Status:** shipped alongside primitive 3 (they share the i-frame
+check). Per-entity `m_iframes` parallel array in SceneManager,
+decremented once per `GameTick` frame. Lua API: `Controls.StartIFrames(target, frames)`
+and `Controls.IsInvulnerable(target) -> boolean`.
+
+`Stats.DealDamage` honors the i-frame state automatically — returns
+0 applied damage when target is invulnerable. The dodge motion +
+stamina cost + cooldown stay Lua-side per the recipe in
+[combat-patterns § dodge / roll](https://github.com/BuffJesus/PS1Godot/blob/main/docs/authoring/combat-patterns.md#dodge--roll){ target="_blank" }
+since those are per-game-feel decisions.
+
+The GameObject struct stayed at 92 bytes — the i-frame counter
+lives in SceneManager's runtime side, parallel to m_gameObjects,
+so no splashpack format bump was needed.
+
+Live: [Lua API → Controls](https://buffjesus.github.io/PS1Godot/lua-api/controls/#controls-startiframes).
+
+Original surface below for the record.
+
+### Original surface
 
 ### Context
 
@@ -526,20 +568,23 @@ composable pattern — landing it too early picks the wrong shape.
 
 ## Ordering
 
-Implementation order if we land more:
+Implementation order. Updated as primitives land:
 
 1. **`PS1Stats`** ✅ landed 2026-05-19 (v33).
-2. **`onDamage` callback** — small follow-up now that Stats is
-   live. Consolidates damage flow + i-frame check.
-3. **Dodge / roll with i-frames** — needs the per-entity i-frame
-   counter the onDamage path would also use, so they batch.
-   ~2 days together with onDamage.
-4. **`Camera.LockOn` / `Camera.LockOff`** — independent track,
+2. **`onDamage` callback** ✅ landed 2026-05-19 (alongside dodge).
+3. **Dodge / roll with i-frames** ✅ landed 2026-05-19.
+4. **`Camera.LockOn` / `Camera.LockOff`** — next big primitive,
    marquee souls-like feel. ~4 days.
 5. **Twin-stick camera tuning** — small win, can land any time.
 6. **`PS1HurtBox`** — incremental refinement; works without it
    for first encounters.
 7. **`PS1FogGate`** — defer until composable pattern's pain is felt.
+
+Primitives 1, 3, 6 are the combat-system core — landing them
+together is enough for a full Elden Ring–style boss encounter
+authored entirely in Lua. Primitive 4 (Camera.LockOn) is the
+remaining engine-side work for souls-like camera feel; everything
+else is incremental.
 
 Stop at any step. The combat-patterns recipe page documents how
 to do the things this RFC adds without these primitives — so

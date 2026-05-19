@@ -94,6 +94,22 @@ class SceneManager {
     int16_t setStatHP      (uint16_t i, int v);
     int16_t setStatStamina (uint16_t i, int v);
     int16_t setStatMana    (uint16_t i, int v);
+
+    // ---- v33+: per-entity i-frame counter (dodge / roll). ---------------
+    // Decremented once per GameTick frame; while > 0, Stats.DealDamage
+    // treats the entity as invulnerable and returns 0 applied damage.
+    uint16_t getIFrames(uint16_t i) const { return i < m_iframes.size() ? m_iframes[i] : 0; }
+    bool     isInvulnerable(uint16_t i) const { return getIFrames(i) > 0; }
+    void     startIFrames(uint16_t i, uint16_t frames) {
+        if (i < m_iframes.size()) m_iframes[i] = frames;
+    }
+
+    // ---- v33+: central damage entry point (Stats.DealDamage in Lua). ----
+    // Returns the damage that actually landed. 0 if target has no
+    // stats, has i-frames active, or HP was already 0. Fires the
+    // target's onDamage(self, applied, source) Lua callback after the
+    // HP debit lands. Source can be a nullptr (environmental damage).
+    int dealDamage(uint16_t targetIndex, int amount, GameObject* source);
     
     // Get object name by index (returns nullptr if no name table or out of range)
     const char* getObjectName(uint16_t index) const {
@@ -270,6 +286,10 @@ class SceneManager {
         int16_t maxMana;
     };
     eastl::vector<RuntimeStats> m_entityStats;
+
+    // v33+: parallel per-entity i-frame counters. Decrements each
+    // GameTick. Cleared to 0 on scene init.
+    eastl::vector<uint16_t> m_iframes;
     
     // Object name table (v9+): parallel to m_gameObjects, points into splashpack data
     eastl::vector<const char*> m_objectNames;

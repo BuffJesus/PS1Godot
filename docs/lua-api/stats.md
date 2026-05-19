@@ -4,7 +4,7 @@
 !!! info "Generated"
     This page is auto-generated from `psxsplash-main/src/luaapi.hh` by `scripts/py/gen_lua_api_docs.py`. Edits won't survive the next build — fix the source comments instead.
 
-9 entries, 0 with worked examples mined from `godot-ps1/demo/scripts/` and the bundled templates.
+10 entries, 0 with worked examples mined from `godot-ps1/demo/scripts/` and the bundled templates.
 
 ## Methods
 
@@ -46,3 +46,13 @@ Clamps to [0, MaxMana]. Returns stored value.
 ### `Stats.GetMaxMana(object) -> int` { #stats-getmaxmana }
 
 *No description.*
+
+### `Stats.DealDamage(target, amount, source?) -> int` { #stats-dealdamage }
+
+Central damage entry point. Skips silently when target has
+i-frames active (returns 0). Otherwise debits HP (clamped to 0)
+and fires the target's onDamage(self, applied, source) Lua
+callback if defined. `source` is optional — pass nil for
+environmental damage (fall, poison, world hazards). Returns the
+damage that actually landed; 0 when blocked by i-frames, no
+stats, or already-dead target.
