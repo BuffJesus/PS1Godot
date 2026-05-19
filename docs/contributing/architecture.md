@@ -9,7 +9,7 @@ constraints are non-negotiable.
 ```mermaid
 flowchart LR
     A["<b>Godot editor</b><br/>+ PS1Godot plugin<br/>C# / .NET<br/><i>you author here</i>"]
-    B["<b>psxsplash runtime</b><br/>C++ on psyqo<br/><i>vendored as-is</i>"]
+    B["<b>psxsplash runtime</b><br/>C++ on psyqo<br/><i>forked + heavily extended</i>"]
     C["<b>PCSX-Redux</b><br/>or real PS1"]
     A -->|splashpack .bin<br/>(binary scene)| B
     B -->|MIPS ELF| C
@@ -25,8 +25,9 @@ Three independent pieces:
 - **The runtime** (`psxsplash-main/`) — C++ on top of
   [psyqo](https://github.com/grumpycoders/pcsx-redux/tree/main/src/mips/psyqo),
   cross-compiled to MIPS. Loads a splashpack binary and plays the
-  game. Vendored from upstream with our patches applied; we don't
-  fork unless we have to.
+  game. **Forked-in-practice from upstream
+  [psxsplash](https://github.com/psxsplash/psxsplash) and heavily
+  extended** — see [the divergence section below](#how-much-weve-diverged-from-upstream-psxsplash).
 - **The emulator** (PCSX-Redux) — standard PS1 emulator with the
   PCdrv backend, which lets the runtime read files from the host
   filesystem during iteration. For ISO / real-hardware builds, the
@@ -79,9 +80,9 @@ byte counts.
 ```
 godot-master/             vendored Godot 4.x source — reference only,
                           day-to-day work uses prebuilt Godot Mono editor
-pcsx-redux-main/          PCSX-Redux + psyqo + MIPS tooling
-psxsplash-main/           PS1-side C++ runtime — consumed as-is, our patches live here
-splashedit-main/          Original Unity plugin — what we are replacing
+pcsx-redux-main/          PCSX-Redux + psyqo + MIPS tooling — read-only reference
+psxsplash-main/           PS1-side C++ runtime — FORK, heavily extended past upstream
+splashedit-main/          Original Unity plugin — read-only reference, what we are replacing
 godot-ps1/                THIS IS THE PROJECT — Godot 4 .NET project
   addons/ps1godot/        plugin C# code (exporter, nodes, docks, tools)
   addons/ps1godot/
@@ -93,11 +94,13 @@ scripts/                  Python launchers (run.py + .cmd/.sh shims)
                           and build helpers (build-release.py, etc.)
 ```
 
-Vendored trees (`godot-master`, `pcsx-redux-main`, `splashedit-main`)
-are read-only references. `psxsplash-main` is tracked because we
-carry local patches there — when upstream fixes our changes, we drop
-the local diff. Future plan: move our patches into `patches/` and
-apply at build time.
+Reference trees (`godot-master`, `pcsx-redux-main`, `splashedit-main`)
+are read-only — kept around for browsing source, not modified.
+
+`psxsplash-main` started as a vendor of upstream `psxsplash` but
+has diverged enough to qualify as a fork in practice. We extend it
+freely; upstream-compatibility isn't a goal. See the "divergence"
+section at the bottom of this page for what changed.
 
 ## Language and tooling decisions
 
@@ -156,9 +159,10 @@ export-block at worst.
 
 ## Conventions
 
-- **Don't edit the vendored trees.** If a fix is needed, prefer
-  upstreaming. If that's not viable, the change goes in `patches/`
-  and gets applied at build time.
+- **Don't edit the read-only reference trees** (`godot-master`,
+  `pcsx-redux-main`, `splashedit-main`). They're there to browse
+  source, not to fork. `psxsplash-main` is the exception — that
+  one's our fork and edits land directly.
 - **Splashpack format is the contract.** Any change to the writer
   requires a matching reader change (or a version bump + compat
   branch in the loader). Bake the struct sizes into the C# tests.
@@ -209,3 +213,71 @@ The live source of truth is
 [`ROADMAP.md`](https://github.com/BuffJesus/PS1Godot/blob/main/ROADMAP.md){ target="_blank" };
 this page intentionally summarizes rather than tracks day-to-day
 status.
+
+## How much we've diverged from upstream psxsplash
+
+The directory's still called `psxsplash-main/` but the codebase is
+a meaningful fork. Highlights of what's here that isn't upstream:
+
+### Splashpack format
+
+- Upstream still emits **v20**. We're at **v32** — twelve format
+  bumps between 2026-04-20 and 2026-04-27 alone. We're the sole
+  consumer of v21+.
+- v21 split the export into three files (`scene.splashpack` +
+  `.vram` + `.spu`) so the runtime can DMA each blob into the
+  right hardware without parsing.
+- v22–v32 layered: sequenced music + per-channel pitch shifting,
+  UI 3D-model HUD widgets, audio routing (SPU / XA / CDDA / PS2M),
+  XA sidecar table, scene-wide instrument banks, sound macros +
+  sound families, quaternion-encoded skin animation poses (v30
+  saved ~42% on the skin section), vertex-pool MeshBlob (v31 saved
+  ~50% on static meshes), separated background tone + explicit fog
+  near/far in GTE-Z space (v32).
+
+### Runtime features
+
+Net new beyond upstream:
+
+- **Lua scripting** integrated through `psyqo-lua`, with the
+  `luaapi.{hh,cpp}` exposing 24 namespaces / 145 entries — Audio,
+  Camera, Dialog, Entity, FSM, Music, Persist, Quest, Scene,
+  SkinnedAnim, UI, etc. None of this is in upstream.
+- **Sequenced music** via the PS2M binary format + a per-channel
+  pitch-shift runtime + voice reservation that keeps dialog from
+  stealing music notes.
+- **Sound macros + sound families** — multi-clip variation
+  dispatch.
+- **Cutscenes** with multi-track camera + object + audio
+  timelines.
+- **Skinned meshes** with per-frame baked poses.
+- **Portal-culled rooms** for interior scenes.
+- **Multi-scene** support via `Scene.Load(N)`.
+- **Audio-aware dialog auto-hide** via `Audio.GetClipDuration`.
+- **CDDA path** end-to-end + XA scaffolding for streaming.
+
+### Editor side
+
+The Godot plugin side has no upstream counterpart at all — it's a
+ground-up rethink of the original SplashEdit Unity plugin. So:
+
+- The whole PS1Graph editor (Dialogue / FSM / Quest / BT).
+- PS1 Doctor validator + the export-gate.
+- VRAM Viewer, Audio Routing, Quest Journal, Lua REPL, Lua API
+  Cheatsheet, Graph Find, References docks.
+- WYSIWYG UI Canvas editor.
+- F5 / Run-on-PSX one-click flow.
+- PS1Lua as a first-class Godot script language via
+  `ScriptLanguageExtension`.
+- ISO build pipeline (`tools/build_iso/build_iso.py`).
+
+### Sync posture
+
+We don't pull from upstream. If they ship something genuinely
+useful (a real-hardware bug fix, a psyqo update), we cherry-pick;
+if not, the divergence keeps growing. There's no formal merge cadence.
+
+Anyone working in `psxsplash-main/` should treat it the same way
+as the editor plugin — direct edits, conventional commits, no
+need to think about upstream compatibility unless the change is
+genuinely a portable bug fix.

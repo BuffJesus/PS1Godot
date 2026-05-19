@@ -130,6 +130,16 @@ PCSX-Redux). You only need to build it from source if you're
 modifying `psxsplash-main/src/` — for everything else, the prebuilt
 ELF in `dist/psxsplash-runtime-*.zip` is fine.
 
+!!! note "This is our fork, not upstream psxsplash"
+    `psxsplash-main/` started as a vendor of
+    [upstream psxsplash](https://github.com/psxsplash/psxsplash)
+    but has diverged significantly — splashpack format v32 vs
+    upstream v20, plus Lua scripting, sequenced music, portal-
+    culled rooms, cutscenes, skinned meshes, and more. Don't worry
+    about upstream compatibility when editing; treat it as
+    first-party code. See
+    [`architecture.md` § divergence](architecture.md#how-much-weve-diverged-from-upstream-psxsplash).
+
 ### Prerequisites
 
 A MIPS cross-compiler:
