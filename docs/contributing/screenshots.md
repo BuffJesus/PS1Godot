@@ -130,25 +130,133 @@ A formal lightbox plugin
 is available if we add many of these; for now the self-link is
 adequate.
 
-## Tier ordering (what to shoot first)
+## Capture punch list
 
-The prior handoff ranks ~50 shots into five tiers; the priority
-ordering for *capture* is:
+Tier 1+2 (~22 shots) lands visible site improvement; Tier 3–5 fills
+in the long tail. Filenames are exact — `--strict` will fail any
+embed that mistypes them.
 
-1. **Tier 1** — landing + getting started (4 shots). Highest
-   per-shot value. The hero shot lands on `index.md` and sets the
-   visual tone for everyone landing fresh.
-2. **Tier 2** — per-dock (16 shots). Unblocks the per-dock guide
-   pages in `docs/docks/` that aren't written yet.
-3. **Tier 3** — graph authoring (7 shots). Pairs with the existing
-   `docs/authoring/graphs/*.md` pages.
-4. **Tier 4** — runtime / PSX-side (7 shots). Needs PCSX-Redux
-   running the demo or a smoke fixture.
-5. **Tier 5** — per-node inspector (13 shots). Mostly mechanical
-   once the rest of the pipeline is in place.
+### Tier 1 — landing + getting started
 
-Tier 1+2 (~20 shots) is enough to ship visible improvement on the
-site. Tier 3–5 can come in over a few iterations.
+The hero + getting-started shots have the highest per-shot value;
+they set the visual tone and unblock `index.md` + the first-scene
+tutorial.
+
+- [ ] **`landing/hero.png`** — Godot editor with PS1Godot dock open,
+      `demo.tscn` (or a smoke scene) loaded in the 3D view,
+      PCSX-Redux running the same scene in a smaller window beside
+      it. Lands on `index.md`.
+- [ ] **`getting-started/plugin-enabled.png`** — Godot with
+      `[PS1Godot] Plugin enabled.` visible in the Output panel.
+      Cropped to Output + a corner of the editor.
+- [ ] **`getting-started/run-button.png`** — close-up of the big
+      red **▶ Run on PSX** button on the right-side dock.
+- [ ] **`getting-started/first-scene-1.png`** — first-scene
+      tutorial mid-author: empty Node3D, just promoted to `PS1Scene`.
+- [ ] **`getting-started/first-scene-2.png`** — same scene with
+      floor + textured cube + PS1 shader applied.
+- [ ] **`getting-started/first-scene-3.png`** — the finished cube
+      booting in PCSX-Redux.
+
+### Tier 2 — per-dock guide
+
+Each shot anchors a future page under `docs/docks/`. The dock-page
+pass is gated on these.
+
+- [ ] **`docks/strip.png`** — the 4-tab bottom-panel strip
+      (PS1 Graph · PS1 Doctor · PS1 Authoring · PS1 Tools). Crop
+      tight to just the tabs.
+- [ ] **`docks/ps1godot-panel.png`** — full right-side dock
+      vertical: scene budgets, Run-on-PSX, Quick Actions, Setup
+      summary, VRAM thumbnail. Expand to full editor height.
+- [ ] **`docks/graph.png`** — `test.tres` loaded showing the
+      dialogue graph with all node kinds visible (Hello + choice +
+      branches + snippet + sub-dialogue).
+- [ ] **`docks/graph-palette.png`** — right-click on the canvas
+      showing the kind palette with tooltips on hover.
+- [ ] **`docks/graph-tints.png`** — three side-by-side nodes from
+      different graph kinds (Dialogue blue, FSM teal, Quest amber).
+      Crop to ~600px wide.
+- [ ] **`docks/doctor.png`** — Doctor dock loaded with the demo
+      scene's warnings, categories expanded.
+- [ ] **`docks/authoring.png`** — PS1 Authoring container opened,
+      sub-tab strip visible.
+- [ ] **`docks/tools.png`** — PS1 Tools container, same shape.
+- [ ] **`docks/ui-canvas.png`** — UI Canvas editor sub-tab,
+      `dialogue_box` canvas loaded, elements visible.
+- [ ] **`docks/vram-viewer.png`** — VRAM Viewer post-F5, showing
+      the demo scene's packed atlases + CLUTs + framebuffer reserves.
+- [ ] **`docks/audio-routing.png`** — Audio Routing clip list with
+      SPU / XA / CDDA badges + sample rate + size.
+- [ ] **`docks/lua-cheatsheet.png`** — PS1 Lua API Cheatsheet
+      mid-search (type `Audio` in the filter).
+- [ ] **`docks/quest-journal.png`** — `village_quest.tres` loaded,
+      mid-progression (`find_npc` completed, `talk_to_npc` active).
+- [ ] **`docks/graph-find.png`** — Graph Find search results for
+      `breathing_low` across the graphs.
+- [ ] **`docks/references.png`** — asset reference list for one of
+      the demo textures.
+- [ ] **`docks/repl.png`** — Lua REPL input + a couple of scrollback
+      lines showing roundtrip.
+
+### Tier 3 — graph authoring per kind
+
+Pairs with the existing pages under `docs/authoring/graphs/`.
+
+- [ ] **`graphs/dialogue-full.png`** — `test.tres` zoomed-to-fit,
+      all nodes visible.
+- [ ] **`graphs/dialogue-inspector.png`** — a Line node selected,
+      side-pane inspector showing payload fields (text, speaker,
+      audio, skippable, notifies, reveal mode, reveal rate).
+- [ ] **`graphs/fsm-full.png`** — `bot_brain.tres`.
+- [ ] **`graphs/fsm-inspector.png`** — a State node selected,
+      side-pane showing on_enter / on_update / on_exit slots.
+- [ ] **`graphs/quest-full.png`** — `village_quest.tres`.
+- [ ] **`graphs/quest-inspector.png`** — an Objective node selected.
+- [ ] **`graphs/bt-full.png`** — small BT (Selector + a couple of
+      Leaves) you build for the doc.
+
+### Tier 4 — runtime / PSX-side captures
+
+PCSX-Redux's `F12` at native 320×240. The site upscales 2×/3× with
+nearest-neighbor.
+
+- [ ] **`runtime/typewriter-mid.png`** — mid-reveal: "Hell" shown,
+      "o" hasn't appeared yet ("Hello" at rate=5).
+- [ ] **`runtime/typewriter-done.png`** — same line, fully revealed.
+- [ ] **`runtime/choice.png`** — the choice node on PSX with 3
+      options visible.
+- [ ] **`runtime/sub-dialogue.png`** — PSX showing the "Heller"
+      line from the `sub_dialogue` smoke fixture.
+- [ ] **`runtime/export-log.png`** — Godot Output panel mid-export
+      showing the auto-recompile + asset reports + LoaderPack
+      written.
+- [ ] **`runtime/toast.png`** — green/amber/red notification panel
+      in the bottom-right after F5.
+- [ ] **`runtime/audio-thumbs.png`** — FileSystem dock showing
+      several `.tres` audio clips with their auto-generated waveforms
+      + route stripes (amber/blue/green). Requires deleting
+      `.godot/imported/` first to refresh the cache.
+
+### Tier 5 — per-node inspector
+
+Mechanical — open the demo scene, select the named node, capture
+the inspector. One per node. Each filename is
+`nodes/<node-slug>-inspector.png`.
+
+- [ ] `nodes/ps1-scene-inspector.png`
+- [ ] `nodes/ps1-mesh-instance-inspector.png`
+- [ ] `nodes/ps1-skinned-mesh-inspector.png`
+- [ ] `nodes/ps1-camera-inspector.png`
+- [ ] `nodes/ps1-player-inspector.png`
+- [ ] `nodes/ps1-animation-inspector.png`
+- [ ] `nodes/ps1-cutscene-inspector.png`
+- [ ] `nodes/ps1-audio-clip-inspector.png`
+- [ ] `nodes/ps1-trigger-box-inspector.png`
+- [ ] `nodes/ps1-ui-canvas-inspector.png`
+- [ ] `nodes/ps1-room-inspector.png`
+- [ ] `nodes/ps1-portal-link-inspector.png`
+- [ ] `nodes/ps1-sky-inspector.png`
 
 ## When you're done with a batch
 
