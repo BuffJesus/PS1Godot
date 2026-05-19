@@ -581,6 +581,7 @@ public partial class PS1GodotPlugin : EditorPlugin
         {
             EditorInterface.Singleton.GetScriptEditor()
                 .UnregisterSyntaxHighlighter(_luaHighlighter);
+            _luaHighlighter.Dispose();
             _luaHighlighter = null;
         }
 
@@ -610,42 +611,57 @@ public partial class PS1GodotPlugin : EditorPlugin
             _dock = null;
         }
 
+        // RefCounted Godot wrappers (gizmo plugins, inspector plugins,
+        // preview generators, syntax highlighters) live on
+        // Godot.DisposablesTracker until we either explicitly call
+        // Dispose() or the editor shuts down. The shutdown path iterates
+        // the tracker and disposes whatever is left — but by then
+        // Godot's native side may already be torn down, and
+        // godotsharp_internal_refcounted_disposed faults with a
+        // 0xc0000005 access violation (task #10, post-_ExitTree crash).
+        // Force the Dispose while Godot's native side is still alive so
+        // the tracker is empty on shutdown.
         foreach (var g in new EditorNode3DGizmoPlugin?[] { _triggerBoxGizmo, _roomGizmo, _portalGizmo, _navRegionGizmo })
         {
             if (g != null) RemoveNode3DGizmoPlugin(g);
         }
-        _triggerBoxGizmo = null;
-        _roomGizmo = null;
-        _portalGizmo = null;
-        _navRegionGizmo = null;
+        _triggerBoxGizmo?.Dispose(); _triggerBoxGizmo = null;
+        _roomGizmo?.Dispose();       _roomGizmo = null;
+        _portalGizmo?.Dispose();     _portalGizmo = null;
+        _navRegionGizmo?.Dispose();  _navRegionGizmo = null;
 
         if (_texturePreviewInspector != null)
         {
             RemoveInspectorPlugin(_texturePreviewInspector);
+            _texturePreviewInspector.Dispose();
             _texturePreviewInspector = null;
         }
 
         if (_inspectorTooltips != null)
         {
             RemoveInspectorPlugin(_inspectorTooltips);
+            _inspectorTooltips.Dispose();
             _inspectorTooltips = null;
         }
 
         if (_clipNameInspector != null)
         {
             RemoveInspectorPlugin(_clipNameInspector);
+            _clipNameInspector.Dispose();
             _clipNameInspector = null;
         }
 
         if (_soundMacroInspector != null)
         {
             RemoveInspectorPlugin(_soundMacroInspector);
+            _soundMacroInspector.Dispose();
             _soundMacroInspector = null;
         }
 
         if (_soundFamilyInspector != null)
         {
             RemoveInspectorPlugin(_soundFamilyInspector);
+            _soundFamilyInspector.Dispose();
             _soundFamilyInspector = null;
         }
 
@@ -750,6 +766,7 @@ public partial class PS1GodotPlugin : EditorPlugin
         {
             GD.Print("[PS1Godot] _ExitTree: free PS1AudioClipPreviewGenerator");
             EditorInterface.Singleton.GetResourcePreviewer().RemovePreviewGenerator(_audioClipPreviewGen);
+            _audioClipPreviewGen.Dispose();
             _audioClipPreviewGen = null;
         }
 
@@ -776,6 +793,19 @@ public partial class PS1GodotPlugin : EditorPlugin
         }
 
         GD.Print("[PS1Godot] _ExitTree: done");
+
+        // Force a GC sweep while Godot's native side is still alive.
+        // Without this, any lingering Godot.Collections.Array (or other
+        // Godot wrapper) on the finalizer queue gets disposed AFTER
+        // shutdown — godotsharp_array_destroy then dereferences a dead
+        // pointer and the editor exits with a 0xc0000005 access
+        // violation (task #10 finale). Two GC.Collect calls bracketing
+        // WaitForPendingFinalizers is the documented .NET incantation
+        // for "drain everything synchronously NOW."
+        System.GC.Collect();
+        System.GC.WaitForPendingFinalizers();
+        System.GC.Collect();
+        GD.Print("[PS1Godot] _ExitTree: GC drained");
         GD.Print("[PS1Godot] Plugin disabled.");
     }
 
