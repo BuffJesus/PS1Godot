@@ -151,6 +151,7 @@ nav:
       - psxsplash improvements: reference/psxsplash-improvements.md
   - Contributing:
       - Architecture: contributing/architecture.md
+      - Building from source: contributing/building.md
       - CI: contributing/ci.md
 
 # Exclude internal planning/handoff/RFC docs from the published site
