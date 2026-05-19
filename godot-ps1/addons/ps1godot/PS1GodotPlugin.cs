@@ -551,12 +551,21 @@ public partial class PS1GodotPlugin : EditorPlugin
         RemoveToolMenuItem("PS1Godot: Build / Launch");
         RemoveToolMenuItem("PS1Godot: Audit");
         RemoveToolMenuItem("PS1Godot: Tests");
-        // Free the PopupMenus we owned. Submenus aren't reparented by
-        // AddToolSubmenuItem on Godot 4.7-dev; we keep references and
-        // QueueFree explicitly.
+        // Free the PopupMenus we owned. Earlier Godot 4.7-dev builds
+        // didn't reparent submenus into the Tools menu, so we held
+        // references and called QueueFree() ourselves. As of 4.7-dev5
+        // (and probably earlier — never F5-verified), RemoveToolMenuItem
+        // above already disposes the submenu's PopupMenu — calling
+        // QueueFree on the dangling reference throws
+        // ObjectDisposedException ('Godot.PopupMenu'), which goes
+        // unhandled and the C# GC finalizer (DisposablesTracker) then
+        // hits a native 0xc0000005 access violation on editor exit.
+        // Guard with IsInstanceValid so the cleanup is a no-op when
+        // Godot already freed the menu, and still works on the older
+        // builds where it didn't.
         foreach (var pm in new[] { _menuBake, _menuMesh, _menuMaterials, _menuBlender, _menuRunBuild, _menuAudit, _menuTests })
         {
-            pm?.QueueFree();
+            if (pm != null && GodotObject.IsInstanceValid(pm)) pm.QueueFree();
         }
         _menuBake = _menuMesh = _menuMaterials = _menuBlender = _menuRunBuild = _menuAudit = _menuTests = null;
         GD.Print("[PS1Godot] _ExitTree: menus removed");
