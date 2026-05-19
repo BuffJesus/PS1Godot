@@ -4,7 +4,7 @@
 !!! info "Generated"
     This page is auto-generated from `psxsplash-main/src/luaapi.hh` by `scripts/py/gen_lua_api_docs.py`. Edits won't survive the next build — fix the source comments instead.
 
-1 entries.
+1 entries, 1 with worked examples mined from `godot-ps1/demo/scripts/` and the bundled templates.
 
 ## Methods
 
@@ -14,3 +14,11 @@ AABB-vs-AABB overlap query against active Solid colliders. Optional
 tag filter (0/nil = no filter). Used for melee swings, area damage,
 pickup proximity. Result table is empty if no hits. Hard-capped at 16
 results to bound the Lua table allocation on PSX RAM.
+
+**Example**
+
+```lua
+local hits = Physics.OverlapBox(minV, maxV, TAG_ENEMY)
+```
+
+_Source: `godot-ps1/demo/scripts/combat_showcase.lua` line 170._

@@ -4,7 +4,7 @@
 !!! info "Generated"
     This page is auto-generated from `psxsplash-main/src/luaapi.hh` by `scripts/py/gen_lua_api_docs.py`. Edits won't survive the next build — fix the source comments instead.
 
-3 entries.
+3 entries, 1 with worked examples mined from `godot-ps1/demo/scripts/` and the bundled templates.
 
 ## Methods
 
@@ -14,6 +14,14 @@ Returns the player's current world position as a Vec3 in PSX
 coords. Use for distance checks, "is the player in this room"
 tests, save-state capture. Output is a fresh Vec3 table —
 mutating it doesn't move the player.
+
+**Example**
+
+```lua
+local p = Player.GetPosition()
+```
+
+_Source: `godot-ps1/demo/scripts/combat_showcase.lua` line 204._
 
 ### `Player.SetRotation({x, y, z})` { #player-setrotation }
 

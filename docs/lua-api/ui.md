@@ -4,7 +4,7 @@
 !!! info "Generated"
     This page is auto-generated from `psxsplash-main/src/luaapi.hh` by `scripts/py/gen_lua_api_docs.py`. Edits won't survive the next build — fix the source comments instead.
 
-22 entries.
+22 entries, 4 with worked examples mined from `godot-ps1/demo/scripts/` and the bundled templates.
 
 ## Methods
 
@@ -15,12 +15,28 @@ or -1 if the name isn't found. Cache the handle in onCreate and
 pass it to every other UI.* call — repeated lookups are wasted
 string scans. Always guard with `>= 0` before use.
 
+**Example**
+
+```lua
+dialogCanvas = UI.FindCanvas("dialog")
+```
+
+_Source: `godot-ps1/demo/scripts/checkered_dialog.lua` line 38._
+
 ### `UI.SetCanvasVisible(canvas, bool)` { #ui-setcanvasvisible }
 
 Show or hide an entire canvas (header bar, pause menu, HUD layer).
 `canvas` accepts either the integer handle from UI.FindCanvas or
 the canvas name as a string. Hidden canvases skip layout and
 draw entirely — cheap to toggle.
+
+**Example**
+
+```lua
+UI.SetCanvasVisible(dialogCanvas, true)
+```
+
+_Source: `godot-ps1/demo/scripts/checkered_dialog.lua` line 55._
 
 ### `UI.IsCanvasVisible(canvas) -> boolean` { #ui-iscanvasvisible }
 
@@ -32,6 +48,14 @@ Returns the integer handle for a named element on a canvas, or
 -1 if not found. `canvas` must be the integer handle (NOT the
 name — the runtime silently returns -1 on string input). Cache
 returned handles in onCreate.
+
+**Example**
+
+```lua
+dialogBodyEl = UI.FindElement(dialogCanvas, "body")
+```
+
+_Source: `godot-ps1/demo/scripts/checkered_dialog.lua` line 40._
 
 ### `UI.SetVisible(element, bool)` { #ui-setvisible }
 
@@ -47,6 +71,14 @@ True if the element will draw this frame.
 Replaces the text on a Text element. Empty string clears it.
 No effect on non-Text elements. Strings are copied — safe to
 pass scratch buffers.
+
+**Example**
+
+```lua
+UI.SetText(sysVoiceText, text)
+```
+
+_Source: `godot-ps1/demo/scripts/test_logger.lua` line 141._
 
 ### `UI.GetText(element) -> string` { #ui-gettext }
 

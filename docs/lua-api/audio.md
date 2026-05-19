@@ -4,13 +4,21 @@
 !!! info "Generated"
     This page is auto-generated from `psxsplash-main/src/luaapi.hh` by `scripts/py/gen_lua_api_docs.py`. Edits won't survive the next build — fix the source comments instead.
 
-15 entries.
+15 entries, 2 with worked examples mined from `godot-ps1/demo/scripts/` and the bundled templates.
 
 ## Methods
 
 ### `Audio.Play(soundId, volume, pan) -> channelId` { #audio-play }
 
 soundId can be a number (clip index) or string (clip name)
+
+**Example**
+
+```lua
+Audio.Play(clip, 100, 64)
+```
+
+_Source: `godot-ps1/demo/scripts/test_logger.lua` line 146._
 
 ### `Audio.Find(name) -> clipIndex or nil` { #audio-find }
 
@@ -38,6 +46,14 @@ Length of a clip in 60 Hz frames. Returns 0 for clips authored as
 looped (no defined end) or for unknown names. Useful for sync'ing
 gameplay events to a one-shot SFX's tail (e.g. "wait for door
 creak to finish before playing dialogue line").
+
+**Example**
+
+```lua
+local dur = Audio.GetClipDuration(line.clip)
+```
+
+_Source: `godot-ps1/demo/scripts/checkered_dialog.lua` line 61._
 
 ### `Audio.PlaySfx(name, volume?, pan?) -> channelId` { #audio-playsfx }
 

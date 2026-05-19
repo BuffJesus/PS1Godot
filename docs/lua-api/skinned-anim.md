@@ -4,7 +4,7 @@
 !!! info "Generated"
     This page is auto-generated from `psxsplash-main/src/luaapi.hh` by `scripts/py/gen_lua_api_docs.py`. Edits won't survive the next build — fix the source comments instead.
 
-5 entries.
+5 entries, 2 with worked examples mined from `godot-ps1/demo/scripts/` and the bundled templates.
 
 ## Methods
 
@@ -17,6 +17,14 @@ that owns the rig; `clipName` is the authored clip on that rig.
 Replaces any clip already playing on that object. Note that
 Mixamo clip names with dots are rewritten to underscores at
 export time — match the exporter output, not the FBX label.
+
+**Example**
+
+```lua
+SkinnedAnim.Play("Player", "mixamo_com", { loop = true })
+```
+
+_Source: `godot-ps1/demo/scripts/test_logger.lua` line 248._
 
 ### `SkinnedAnim.Stop(objectName)` { #skinned-anim-stop }
 
@@ -39,3 +47,12 @@ logic ("if not idle, queue idle").
 Stop any active clip and render the mesh in its bind pose (T-pose)
 with identity bone matrices. Use for idle / title-screen states where
 frame 0 of a walk clip would show a mid-stride pose.
+
+**Example**
+
+```lua
+-- walk-cycle frame, which would leave the character mid-stride.
+SkinnedAnim.BindPose("Player")
+```
+
+_Source: `godot-ps1/demo/scripts/test_logger.lua` line 253._

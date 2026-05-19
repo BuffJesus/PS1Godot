@@ -4,7 +4,7 @@
 !!! info "Generated"
     This page is auto-generated from `psxsplash-main/src/luaapi.hh` by `scripts/py/gen_lua_api_docs.py`. Edits won't survive the next build — fix the source comments instead.
 
-3 entries.
+3 entries, 1 with worked examples mined from `godot-ps1/demo/scripts/` and the bundled templates.
 
 ## Methods
 
@@ -14,6 +14,14 @@ Writes `message` to the PSX debug console (visible in PCSX-Redux's
 log pane via the printf hook). Free-form string; numbers are
 auto-stringified. Strip Debug.Log calls before shipping — they
 cost cycles on real hardware.
+
+**Example**
+
+```lua
+Debug.Log("combat: L2 shot fired")
+```
+
+_Source: `godot-ps1/demo/scripts/combat_showcase.lua` line 113._
 
 ### `Debug.DrawLine(start, end, color)` { #debug-drawline }
 

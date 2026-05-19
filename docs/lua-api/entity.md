@@ -4,7 +4,7 @@
 !!! info "Generated"
     This page is auto-generated from `psxsplash-main/src/luaapi.hh` by `scripts/py/gen_lua_api_docs.py`. Edits won't survive the next build — fix the source comments instead.
 
-17 entries.
+17 entries, 8 with worked examples mined from `godot-ps1/demo/scripts/` and the bundled templates.
 
 ## Methods
 
@@ -15,6 +15,14 @@ Finds first object with matching Lua script file index
 ### `Entity.FindByIndex(index) -> object or nil` { #entity-findbyindex }
 
 Gets object by its array index
+
+**Example**
+
+```lua
+local victim = Entity.FindByIndex(hit.object)
+```
+
+_Source: `godot-ps1/demo/scripts/combat_showcase.lua` line 129._
 
 ### `Entity.Find(name) -> object or nil` { #entity-find }
 
@@ -36,11 +44,27 @@ True if the object is currently active (visible + ticking).
 
 World-space position as a Vec3 table. Components are FixedPoint<12>.
 
+**Example**
+
+```lua
+local cur = Entity.GetPosition(b.handle)
+```
+
+_Source: `godot-ps1/demo/scripts/combat_showcase.lua` line 124._
+
 ### `Entity.SetPosition(object, {x, y, z})` { #entity-setposition }
 
 Teleports the object to the given world-space position. Does NOT
 run any physics resolve — use Physics.Raycast / OverlapBox first
 if you need to avoid clipping into walls.
+
+**Example**
+
+```lua
+Entity.SetPosition(b.handle, Vec3.new(nextX, cur.y, nextZ))
+```
+
+_Source: `godot-ps1/demo/scripts/combat_showcase.lua` line 145._
 
 ### `Entity.GetRotationY(object) -> number` { #entity-getrotationy }
 
@@ -64,10 +88,27 @@ Skips inactive objects so pool reserves are invisible to the loop.
 Returns the gameplay tag (0 = untagged). Tags group objects by
 role for FindByTag / Spawn / FindNearest queries.
 
+**Example**
+
+```lua
+if victim ~= nil and Entity.GetTag(victim) == TAG_ENEMY then
+```
+
+_Source: `godot-ps1/demo/scripts/combat_showcase.lua` line 130._
+
 ### `Entity.SetTag(object, tag)` { #entity-settag }
 
 Reassigns the gameplay tag. Pass 0 to clear. Tag 0 is reserved
 for "untagged" — Entity.Spawn rejects tag 0 lookups.
+
+**Example**
+
+```lua
+-- should return 0 or error; belt-and-braces, just null out.
+Entity.SetTag(lockedEnemy, TAG_ENEMY)
+```
+
+_Source: `godot-ps1/demo/scripts/combat_showcase.lua` line 197._
 
 ### `Entity.FindByTag(tag) -> object or nil` { #entity-findbytag }
 
@@ -87,12 +128,36 @@ StartsInactive=true + matching Tag in the editor; Spawn draws from
 that pool. Per-spawn reset logic should live in the template's
 onEnable hook (not onCreate, which fires once at scene init).
 
+**Example**
+
+```lua
+local bullet = Entity.Spawn(TAG_BULLET, spawnPos)
+```
+
+_Source: `godot-ps1/demo/scripts/combat_showcase.lua` line 104._
+
 ### `Entity.Destroy(object) -> nil` { #entity-destroy }
 
 Deactivates the object (fires onDisable). Lets the pool re-use it on
 the next Entity.Spawn with the same tag.
 
+**Example**
+
+```lua
+Entity.Destroy(victim)
+```
+
+_Source: `godot-ps1/demo/scripts/combat_showcase.lua` line 132._
+
 ### `Entity.FindNearest({x,y,z}, tag) -> object or nil` { #entity-findnearest }
 
 Linear scan of active GameObjects with matching tag, returns the
 closest. For lock-on, "closest enemy" AI queries, etc.
+
+**Example**
+
+```lua
+local nearest = Entity.FindNearest(Vec3.new(p.x, p.y, p.z), TAG_ENEMY)
+```
+
+_Source: `godot-ps1/demo/scripts/combat_showcase.lua` line 205._

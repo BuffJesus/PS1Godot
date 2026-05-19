@@ -4,7 +4,7 @@
 !!! info "Generated"
     This page is auto-generated from `psxsplash-main/src/luaapi.hh` by `scripts/py/gen_lua_api_docs.py`. Edits won't survive the next build — fix the source comments instead.
 
-14 entries.
+14 entries, 2 with worked examples mined from `godot-ps1/demo/scripts/` and the bundled templates.
 
 ## Methods
 
@@ -36,6 +36,14 @@ floor pass a small or negative pitch.
 Returns the camera's forward direction as a unit Vec3 (post-rotation
 local Z). Useful for "shoot from camera" or "project NPC onto camera
 facing" math.
+
+**Example**
+
+```lua
+local f = Camera.GetForward()
+```
+
+_Source: `godot-ps1/demo/scripts/combat_showcase.lua` line 72._
 
 ### `Camera.MoveForward(step)` { #camera-moveforward }
 
@@ -86,3 +94,12 @@ Same as Camera.Shake but takes intensity as a raw FP12 integer
 (4096 = 1.0 world unit). Useful from psxlua scripts that can't
 parse decimal literals like 0.04 — pass 164 to get 164/4096 ≈
 0.04 world units of shake.
+
+**Example**
+
+```lua
+-- was causing perceptible frame dips. Shake alone is the feedback.
+Camera.ShakeRaw(SHAKE_WHIFF, 5)
+```
+
+_Source: `godot-ps1/demo/scripts/combat_showcase.lua` line 185._

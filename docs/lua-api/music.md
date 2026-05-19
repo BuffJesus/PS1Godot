@@ -4,7 +4,7 @@
 !!! info "Generated"
     This page is auto-generated from `psxsplash-main/src/luaapi.hh` by `scripts/py/gen_lua_api_docs.py`. Edits won't survive the next build — fix the source comments instead.
 
-7 entries.
+7 entries, 1 with worked examples mined from `godot-ps1/demo/scripts/` and the bundled templates.
 
 ## Methods
 
@@ -22,6 +22,14 @@ ended).
 
 Master sequencer volume (0..127). Independent from per-instrument
 volumes set in the music bank. Use for fades, ducking, mixer.
+
+**Example**
+
+```lua
+Music.SetVolume(DUCK_VOL)
+```
+
+_Source: `godot-ps1/demo/scripts/checkered_dialog.lua` line 28._
 
 ### `Music.GetBeat() -> integer` { #music-getbeat }
 

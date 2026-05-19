@@ -4,7 +4,7 @@
 !!! info "Generated"
     This page is auto-generated from `psxsplash-main/src/luaapi.hh` by `scripts/py/gen_lua_api_docs.py`. Edits won't survive the next build — fix the source comments instead.
 
-12 entries.
+12 entries, 2 with worked examples mined from `godot-ps1/demo/scripts/` and the bundled templates.
 
 ## Methods
 
@@ -12,6 +12,15 @@
 
 Construct a Vec3 table. Most APIs that take positions / directions
 accept any {x,y,z} table; this is just the canonical builder.
+
+**Example**
+
+```lua
+-- MUZZLE_AHEAD steps past the 3rd-person rig to the player's front.
+local spawnPos = Vec3.new(
+```
+
+_Source: `godot-ps1/demo/scripts/combat_showcase.lua` line 99._
 
 ### `Vec3.add(a, b) -> {x, y, z}` { #vec3-add }
 
@@ -54,6 +63,14 @@ since sqrt is monotonic on non-negative values).
 
 Returns the unit-length vector pointing in the same direction as
 `v`. Returns the zero vector when input length is ~0.
+
+**Example**
+
+```lua
+return Vec3.normalize(Vec3.new(fx, 0, fz))
+```
+
+_Source: `godot-ps1/demo/scripts/combat_showcase.lua` line 78._
 
 ### `Vec3.distance(a, b) -> number` { #vec3-distance }
 
