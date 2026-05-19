@@ -165,7 +165,7 @@ public partial class PS1GraphEditorDock : VBoxContainer
         ["bool_literal"]   = new[] { "value (true/false)" },
         ["comment"]        = new[] { "comment text" },
         ["reroute"]        = new string[0],   // no payloads — passthrough only
-        ["line"]           = new[] { "text", "speaker", "audio clip", "skippable (true/false)", "notifies (frame:lua | ...)" },
+        ["line"]           = new[] { "text", "speaker", "audio clip", "skippable (true/false)", "notifies (frame:lua | ...)", "reveal mode (none / typewriter)", "reveal rate (chars/sec, default 30)" },
         ["choice"]         = new[] { "option 1 text", "option 2 text", "option 3 text" },
         ["set_flag"]       = new[] { "flag name", "value (true/false)" },
         ["condition"]      = new[] { "flag name" },

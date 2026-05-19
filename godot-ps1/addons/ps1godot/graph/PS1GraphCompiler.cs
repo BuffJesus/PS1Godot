@@ -728,6 +728,36 @@ public static class PS1GraphCompiler
         return sb.ToString();
     }
 
+    // Compile the Line node's reveal-mode + rate (Payload[5]/[6]) into
+    // a `, reveal_mode = "typewriter", reveal_rate = 30` fragment. Empty
+    // / "none" mode emits nothing so existing graphs stay byte-identical
+    // and the runtime walker's missing-key default ("none") takes over.
+    // Rate parses as an int (chars per second); anything unparseable
+    // falls back to 30 and notes the issue inline.
+    private static string CompileLineReveal(string? mode, string? rate)
+    {
+        string m = (mode ?? "").Trim().ToLowerInvariant();
+        if (m.Length == 0 || m == "none") return "";
+        // Only the modes the C++ walker actually implements are emitted
+        // verbatim; anything else compiles with a comment so the author
+        // can spot the typo in the .lua diff.
+        bool known = m == "typewriter";
+        string modeOut = known
+            ? EscapeLuaString(m)
+            : $"{EscapeLuaString(m)} --[[unknown reveal mode; walker will fall back]]";
+        int rateInt = 30;
+        string rateNote = "";
+        if (!string.IsNullOrWhiteSpace(rate))
+        {
+            if (!int.TryParse(rate, out rateInt) || rateInt <= 0)
+            {
+                rateInt = 30;
+                rateNote = $" --[[rate '{rate}' not a positive int — using 30]]";
+            }
+        }
+        return $", reveal_mode = {modeOut}, reveal_rate = {rateInt}{rateNote}";
+    }
+
     private static void EmitDialogueNode(StringBuilder sb, Dictionary<int, PS1GraphNode> byId,
                                           Godot.Collections.Array<PS1GraphConnection> conns,
                                           PS1GraphNode n)
@@ -737,16 +767,21 @@ public static class PS1GraphCompiler
             case "line":
             {
                 // Line: { kind="line", speaker=..., text=..., audio=...,
-                //         skippable=..., notifies={...}, next=... }
+                //         skippable=..., notifies={...},
+                //         reveal_mode=..., reveal_rate=..., next=... }
                 //
                 // Payloads:
                 //   [0] text          [1] speaker
                 //   [2] audio clip    [3] "true"/"false" (skippable)
                 //   [4] notifies      — pipe-string "frame:lua | frame:lua"
+                //   [5] reveal mode   — "none" / "typewriter"
+                //   [6] reveal rate   — chars per second (default 30)
                 //
-                // Empty audio / notifies → omitted key (walker treats
-                // missing as none). Skippable defaults to true so
-                // pre-D1h graphs keep the legacy advance behaviour.
+                // Empty audio / notifies / reveal fields → omitted key
+                // (walker treats missing as none). Skippable defaults
+                // to true so pre-D1h graphs keep the legacy advance
+                // behaviour. Reveal mode defaults to "none" so the
+                // typewriter is opt-in per line.
                 string text    = EscapeLuaString(n.GetPayload(0));
                 string speaker = EscapeLuaString(n.GetPayload(1));
                 string audio   = n.GetPayload(2) ?? "";
@@ -756,8 +791,9 @@ public static class PS1GraphCompiler
                 bool skippable = !string.Equals(n.GetPayload(3), "false",
                                                  System.StringComparison.OrdinalIgnoreCase);
                 string notifiesField = CompileLineNotifies(n.GetPayload(4));
+                string revealField = CompileLineReveal(n.GetPayload(5), n.GetPayload(6));
                 string next    = FindNextKey(conns, n.Id, byId: byId, fromPort: 0);
-                sb.AppendLine($"        n{n.Id} = {{ kind = \"line\", speaker = {speaker}, text = {text}{audioField}, skippable = {(skippable ? "true" : "false")}{notifiesField}, next = {next} }},");
+                sb.AppendLine($"        n{n.Id} = {{ kind = \"line\", speaker = {speaker}, text = {text}{audioField}, skippable = {(skippable ? "true" : "false")}{notifiesField}{revealField}, next = {next} }},");
                 break;
             }
             case "set_flag":

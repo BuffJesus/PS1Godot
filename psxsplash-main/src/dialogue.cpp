@@ -132,6 +132,11 @@ void DialogueRunner::stop(lua_State* L) {
     m_numNotifies = 0;
     m_lineFrameCounter = 0;
     m_lineAdvanceLockFrames = 0;
+    m_revealMode = RevealMode::None;
+    m_revealCursor = 0;
+    m_revealTotal = 0;
+    m_revealTickAccum = 0;
+    m_revealFullText[0] = '\0';
     if (m_useCanvas && m_ui && m_canvasIdx >= 0) {
         manageAuxElements(false);
         clearCanvasUI();
@@ -194,11 +199,44 @@ void DialogueRunner::tick(lua_State* L) {
         tickLineNotifies(L);
     }
 
-    // X / Cross button advances. Per-frame edge so holding the button
-    // doesn't chew through the whole graph in one frame. Gated by
-    // the advance lock.
+    // Text reveal (typewriter). Advance the per-frame cursor and
+    // rewrite the canvas text element with the current prefix.
+    // Reveal-in-progress also gates X-advance below: pressing X
+    // during the crawl snaps the cursor to the end rather than
+    // jumping to the next node.
+    bool revealInProgress = false;
+    if (m_revealMode == RevealMode::Typewriter && m_revealCursor < m_revealTotal) {
+        revealInProgress = true;
+        m_revealTickAccum++;
+        if (m_revealTickAccum >= m_revealFramesPerChar) {
+            m_revealTickAccum = 0;
+            m_revealCursor++;
+            if (m_useCanvas && m_ui && m_textHandle >= 0) {
+                char buf[256];
+                int  visible = m_revealCursor;
+                if (visible >= (int)sizeof(buf)) visible = (int)sizeof(buf) - 1;
+                for (int i = 0; i < visible; i++) buf[i] = m_revealFullText[i];
+                buf[visible] = '\0';
+                m_ui->setText(m_textHandle, buf);
+            }
+        }
+    }
+
+    // X / Cross button. Two distinct behaviours depending on reveal
+    // state:
+    //   - reveal still running → snap cursor to end (skip the crawl).
+    //   - reveal complete (or off) → advance to the next node, gated
+    //     by the advance lock as before.
+    // Same edge-trigger guard (`wasButtonPressed`) so holding X
+    // doesn't both skip-to-end AND advance on the same press.
     if (m_controls && m_controls->wasButtonPressed(psyqo::AdvancedPad::Button::Cross)) {
-        if (m_lineAdvanceLockFrames <= 0) {
+        if (revealInProgress) {
+            m_revealCursor = m_revealTotal;
+            m_revealTickAccum = 0;
+            if (m_useCanvas && m_ui && m_textHandle >= 0) {
+                m_ui->setText(m_textHandle, m_revealFullText);
+            }
+        } else if (m_lineAdvanceLockFrames <= 0) {
             advanceFromCurrent(L);
         }
     }
@@ -274,6 +312,42 @@ void DialogueRunner::emitCurrentNode(lua_State* L) {
         m_lineFrameCounter = 0;
         loadLineNotifies(L, -1);
 
+        // Text-reveal mode (typewriter). Reset state every line so a
+        // mode-less line cleanly cancels a prior typewriter run.
+        // reveal_rate is chars/sec; convert to frames/char at 60Hz
+        // (the runtime's frame cadence). Default 30 cps → 2 frames/char.
+        m_revealMode = RevealMode::None;
+        m_revealCursor = 0;
+        m_revealTickAccum = 0;
+        m_revealTotal = 0;
+        m_revealFullText[0] = '\0';
+        char revealModeStr[16] = {};
+        readStringField(L, -1, "reveal_mode", revealModeStr, sizeof(revealModeStr));
+        if (streq(revealModeStr, "typewriter")) {
+            m_revealMode = RevealMode::Typewriter;
+            int rateCps = 30;
+            lua_getfield(L, -1, "reveal_rate");
+            if (lua_isnumber(L, -1)) {
+                int r = (int)lua_tointeger(L, -1);
+                if (r > 0) rateCps = r;
+            }
+            lua_pop(L, 1);
+            int framesPerChar = 60 / rateCps;
+            if (framesPerChar < 1) framesPerChar = 1;
+            m_revealFramesPerChar = framesPerChar;
+            // Copy the line text into the reveal buffer so the
+            // per-frame cursor can slice prefixes; the stack `text`
+            // local lives on the function stack and goes out of
+            // scope on emit return.
+            size_t n = 0;
+            while (n + 1 < sizeof(m_revealFullText) && text[n]) {
+                m_revealFullText[n] = text[n];
+                n++;
+            }
+            m_revealFullText[n] = '\0';
+            m_revealTotal = (int)n;
+        }
+
         if (m_useCanvas && m_ui) {
             // Populate AND make visible: authors keep VisibleOnLoad=false
             // on dialogue elements (so they don't flash at scene start)
@@ -283,15 +357,20 @@ void DialogueRunner::emitCurrentNode(lua_State* L) {
                 m_ui->setElementVisible(m_speakerHandle, true);
             }
             if (m_textHandle >= 0) {
-                m_ui->setText(m_textHandle, text);
+                // When typewriter is active, start with an empty body
+                // so the per-frame tick reveals characters one at a
+                // time. Otherwise show the full text immediately.
+                const char* initialText = (m_revealMode == RevealMode::Typewriter) ? "" : text;
+                m_ui->setText(m_textHandle, initialText);
                 m_ui->setElementVisible(m_textHandle, true);
             }
             // Mirror to console so we can confirm the line content
             // even when the canvas is on — useful when the on-screen
             // text doesn't appear (color/coords/sortOrder issues).
-            printf("[Dialog] line emit: speaker='%s' text='%s' (canvas)\n",
+            printf("[Dialog] line emit: speaker='%s' text='%s' (canvas%s)\n",
                    speaker[0] ? speaker : "(none)",
-                   text[0]    ? text    : "(empty)");
+                   text[0]    ? text    : "(empty)",
+                   m_revealMode == RevealMode::Typewriter ? ", typewriter" : "");
         } else {
             printf("[Dialog] %s: %s  (press X to advance)\n",
                    speaker[0] ? speaker : "(none)",

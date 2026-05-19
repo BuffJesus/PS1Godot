@@ -109,6 +109,23 @@ private:
     bool m_notifyFired[kMaxNotifies] = {};
     char m_notifyLua[kMaxNotifies][96] = {};
 
+    // Text-reveal state (typewriter). When a line carries
+    // `reveal_mode = "typewriter"`, the canvas text starts empty and a
+    // per-frame cursor uncovers one character at a time at the rate
+    // the author requested (chars/sec, default 30 → ~2 frames/char at
+    // 60Hz). X-press during reveal snaps to the end rather than
+    // advancing the dialogue — same "press X to skip the crawl"
+    // pattern as classic JRPGs. Reveal completion also gates the
+    // X-advance: holding X through a slow typewriter doesn't skip
+    // ahead to the next node until the current line is fully shown.
+    enum class RevealMode { None = 0, Typewriter = 1 };
+    RevealMode m_revealMode = RevealMode::None;
+    int  m_revealFramesPerChar = 1;
+    int  m_revealCursor = 0;
+    int  m_revealTotal = 0;
+    int  m_revealTickAccum = 0;
+    char m_revealFullText[256] = {};
+
     // Subgraph call stack (slice D1j). `sub_dialogue` nodes pause the
     // current dialogue, push (parent_table_ref, parent_resume_id)
     // onto this stack, and replace the live table with a reference to
