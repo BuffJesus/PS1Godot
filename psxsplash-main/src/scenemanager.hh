@@ -110,6 +110,19 @@ class SceneManager {
     // target's onDamage(self, applied, source) Lua callback after the
     // HP debit lands. Source can be a nullptr (environmental damage).
     int dealDamage(uint16_t targetIndex, int amount, GameObject* source);
+
+    // ---- v33+: lock-on camera (Camera.LockOn / LockOff in Lua). ----------
+    // When locked, the GameTick computes the yaw from player→target each
+    // frame and overrides playerRotationY before AND after HandleControls,
+    // so the camera tracks the target and stick input automatically
+    // becomes target-relative (forward = toward target, strafe =
+    // orthogonal). Right-stick yaw + L1/R1 rotation are visually
+    // suppressed (their changes get overwritten by the per-frame snap).
+    // 0xFFFF = unlocked sentinel.
+    void setLockTarget(uint16_t entityIndex) { m_lockTargetIndex = entityIndex; }
+    void clearLockTarget()                   { m_lockTargetIndex = 0xFFFF; }
+    bool isLocked() const                    { return m_lockTargetIndex != 0xFFFF; }
+    uint16_t getLockTarget() const           { return m_lockTargetIndex; }
     
     // Get object name by index (returns nullptr if no name table or out of range)
     const char* getObjectName(uint16_t index) const {
@@ -290,6 +303,12 @@ class SceneManager {
     // v33+: parallel per-entity i-frame counters. Decrements each
     // GameTick. Cleared to 0 on scene init.
     eastl::vector<uint16_t> m_iframes;
+
+    // v33+: lock-on target entity index (0xFFFF = unlocked). Per-frame
+    // GameTick logic snaps playerRotationY to face this entity when
+    // locked, making the camera track + input become target-relative.
+    // Auto-clears when the target is destroyed or deactivates.
+    uint16_t m_lockTargetIndex = 0xFFFF;
     
     // Object name table (v9+): parallel to m_gameObjects, points into splashpack data
     eastl::vector<const char*> m_objectNames;

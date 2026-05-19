@@ -4,7 +4,7 @@
 !!! info "Generated"
     This page is auto-generated from `psxsplash-main/src/luaapi.hh` by `scripts/py/gen_lua_api_docs.py`. Edits won't survive the next build — fix the source comments instead.
 
-15 entries, 3 with worked examples mined from `godot-ps1/demo/scripts/` and the bundled templates.
+19 entries, 3 with worked examples mined from `godot-ps1/demo/scripts/` and the bundled templates.
 
 ## Methods
 
@@ -116,3 +116,27 @@ Camera.ShakeRaw(SHAKE_WHIFF, 5)
 ```
 
 _Source: `godot-ps1/demo/scripts/combat_showcase.lua` line 185._
+
+### `Camera.LockOn(target) -> nil` { #camera-lockon }
+
+Engage soft-lock on the given entity. Each frame the runtime
+overrides player yaw to face the target, so the third-person
+camera tracks it and stick input becomes target-relative
+(left-stick X strafes orthogonal to player→target instead of
+camera-forward). Right-stick yaw + L1/R1 rotation are visually
+suppressed while locked. Auto-unlocks if the target gets
+destroyed or deactivated.
+
+### `Camera.LockOff() -> nil` { #camera-lockoff }
+
+Drop lock-on. Camera + input return to default behavior on
+the next frame.
+
+### `Camera.IsLocked() -> boolean` { #camera-islocked }
+
+True while a lock target is active.
+
+### `Camera.GetLockTarget() -> object or nil` { #camera-getlocktarget }
+
+Returns the currently-locked entity handle, or nil when
+unlocked.

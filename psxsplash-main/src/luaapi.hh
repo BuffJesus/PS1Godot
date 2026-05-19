@@ -411,6 +411,30 @@ private:
     // parse decimal literals like 0.04 — pass 164 to get 164/4096 ≈
     // 0.04 world units of shake.
     static int Camera_ShakeRaw(lua_State* L);
+
+    // Camera.LockOn(target) -> nil
+    // Engage soft-lock on the given entity. Each frame the runtime
+    // overrides player yaw to face the target, so the third-person
+    // camera tracks it and stick input becomes target-relative
+    // (left-stick X strafes orthogonal to player→target instead of
+    // camera-forward). Right-stick yaw + L1/R1 rotation are visually
+    // suppressed while locked. Auto-unlocks if the target gets
+    // destroyed or deactivated.
+    static int Camera_LockOn(lua_State* L);
+
+    // Camera.LockOff() -> nil
+    // Drop lock-on. Camera + input return to default behavior on
+    // the next frame.
+    static int Camera_LockOff(lua_State* L);
+
+    // Camera.IsLocked() -> boolean
+    // True while a lock target is active.
+    static int Camera_IsLocked(lua_State* L);
+
+    // Camera.GetLockTarget() -> object or nil
+    // Returns the currently-locked entity handle, or nil when
+    // unlocked.
+    static int Camera_GetLockTarget(lua_State* L);
     
     // ========================================================================
     // AUDIO API - Sound playback (placeholder for SPU)

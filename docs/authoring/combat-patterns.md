@@ -174,48 +174,81 @@ That decoupling is what the lock-on primitive
 delivers — it's the missing piece for souls-like feel, not
 twin-stick itself.
 
-## Lock-on (current pattern)
+## Lock-on (Camera.LockOn)
 
-The showcase's R3 path. Tag-based, not engine-supported. Toggles
-the locked enemy's tag to a sentinel value (visible to the
-exporter for a marker overlay).
+The runtime ships engine-side soft-lock. Call
+[`Camera.LockOn(target)`](../lua-api/camera.md#camera-lockon) on
+an entity handle; each frame the runtime computes the yaw from
+player→target and overrides `playerRotationY` with it. The
+third-person rig follows automatically, so the camera tracks the
+target. Side-effects:
+
+- **Camera tracks**, the player can't manually rotate away while
+  locked — right-stick yaw and L1/R1 rotation are visually
+  suppressed (their changes get overwritten by the per-frame
+  snap).
+- **Stick input becomes target-relative.** Forward = toward
+  target, left-stick X = strafe orthogonal. This falls out of
+  the lock-on yaw being used as `movementHeading` in
+  `Controls::HandleControls`; no separate strafe-mode logic
+  needed.
+- **Auto-unlock** if the target is destroyed or
+  `Entity.SetActive(target, false)`. Re-engage by calling
+  `Camera.LockOn` again with a valid target.
+
+Toggle pattern:
 
 ```lua
-local TAG_LOCKED = 9
-local lockedEnemy = nil
+local TAG_ENEMY = 2
 
-local function toggleLock()
-    if lockedEnemy then
-        Entity.SetTag(lockedEnemy, TAG_ENEMY)  -- restore
-        lockedEnemy = nil
-        return
-    end
-    local player = Camera.GetPosition()
-    lockedEnemy = Entity.FindNearest(player, TAG_ENEMY)
-    if lockedEnemy then
-        Entity.SetTag(lockedEnemy, TAG_LOCKED)
-        Camera.ShakeRaw(82, 4)  -- subtle confirm
+function onUpdate(self, dt)
+    -- R3 toggles lock-on (showcase convention: R3 is free on both
+    -- digital and analog pads)
+    if Input.IsPressed(Input.R3) then
+        if Camera.IsLocked() then
+            Camera.LockOff()
+            Camera.ShakeRaw(82, 4)  -- subtle confirm
+        else
+            local p = Camera.GetPosition()
+            local target = Entity.FindNearest(p, TAG_ENEMY)
+            if target then
+                Camera.LockOn(target)
+                Camera.ShakeRaw(82, 4)
+            end
+        end
     end
 end
 ```
 
-What this **doesn't** do that you'd want for Elden Ring–style
-encounters:
+### Reticle (still a Lua pattern)
 
-- Auto-yaw the camera to keep the locked target on screen.
-- Strafe-style player movement (left-stick goes orthogonal to
-  player→target vector instead of camera-forward-relative).
-- Visual reticle on the locked target.
+A visual reticle floating over the locked target isn't built-in.
+The simplest approach today: tag the locked entity with a
+sentinel value (e.g. `9`) on lock and revert on unlock, then
+have your scene's render-side authoring (a small overlay sprite
+parented to the locked entity) key off that tag. Or animate a UI
+canvas to follow the entity's screen-space position in `onUpdate`
+using `Entity.GetPosition` + a 3D-to-2D projection helper.
 
-The auto-yaw piece is achievable today by recomputing
-`Camera.SetH(yawToTarget)` each frame in `onUpdate` — see the
-[Camera Lua API](../lua-api/camera.md). Strafe movement requires
-custom player movement (the runtime's default rig uses
-camera-forward); the runtime would need a "lock-on movement mode."
+Engine-side reticle support (a sprite that follows the locked
+entity in screen space automatically) is on the queue but not
+critical — the gameplay loop works fine without it for v1.
 
-A first-class `Camera.LockOn(target)` / `Camera.LockOff()` is
-proposed in
-[`internal/rfc/boss-encounter-primitives.md`](https://github.com/BuffJesus/PS1Godot/blob/main/docs/internal/rfc/boss-encounter-primitives.md){ target="_blank" }.
+### What still needs Lua
+
+The runtime handles the camera + movement coupling. **What it
+doesn't do:**
+
+- **Lock-on targeting heuristic** — the runtime takes whatever
+  entity you pass. Picking the right one (nearest? in front of
+  player? most-threatening?) is a per-game policy your Lua
+  decides.
+- **Lock-switch** (cycle to next enemy while locked) — read
+  right-stick X and call `Camera.LockOn(nextTarget)` when it
+  passes a threshold.
+- **Lock-break on distance** — call `Camera.LockOff()` from
+  `onUpdate` when `Player.GetPosition` is too far from
+  `Camera.GetLockTarget`. Souls usually breaks lock at ~25 m.
 
 ## Boss HP
 

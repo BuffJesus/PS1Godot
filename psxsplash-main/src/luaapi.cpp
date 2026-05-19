@@ -30,6 +30,10 @@ DialogueRunner* LuaAPI::s_dialogueRunner = nullptr;
 // Lua scripts work in world-space units (1 = one unit), so we convert.
 static constexpr lua_Number kFixedScale = 4096;
 
+// Forward decl — defined further down with the Stats API. Used by
+// Camera.LockOn and others that take an entity-handle Lua arg.
+static uint16_t StatsResolveIndex(psyqo::Lua& lua, int luaArgIdx);
+
 // Read a FixedPoint<12> from the stack, accepting either a FixedPoint object
 // or a plain integer (which gets scaled by 4096 to become fp12).
 static psyqo::FixedPoint<12> readFP(psyqo::Lua& L, int idx) {
@@ -283,6 +287,18 @@ void LuaAPI::RegisterAll(psyqo::Lua& L, SceneManager* scene, CutscenePlayer* cut
 
     L.push(Camera_ShakeRaw);
     L.setField(-2, "ShakeRaw");
+
+    L.push(Camera_LockOn);
+    L.setField(-2, "LockOn");
+
+    L.push(Camera_LockOff);
+    L.setField(-2, "LockOff");
+
+    L.push(Camera_IsLocked);
+    L.setField(-2, "IsLocked");
+
+    L.push(Camera_GetLockTarget);
+    L.setField(-2, "GetLockTarget");
 
     L.setGlobal("Camera");
     
@@ -2069,6 +2085,42 @@ int LuaAPI::Camera_ShakeRaw(lua_State* L) {
     int frames = static_cast<int>(lua.toNumber(2));
     s_sceneManager->getCamera().Shake(intensity, frames);
     return 0;
+}
+
+int LuaAPI::Camera_LockOn(lua_State* L) {
+    psyqo::Lua lua(L);
+    if (!s_sceneManager) return 0;
+    uint16_t idx = StatsResolveIndex(lua, 1);
+    if (idx == 0xFFFF) return 0;
+    GameObject* go = s_sceneManager->getGameObject(idx);
+    if (!go || !go->isActive()) return 0;
+    s_sceneManager->setLockTarget(idx);
+    return 0;
+}
+
+int LuaAPI::Camera_LockOff(lua_State* L) {
+    if (!s_sceneManager) return 0;
+    s_sceneManager->clearLockTarget();
+    return 0;
+}
+
+int LuaAPI::Camera_IsLocked(lua_State* L) {
+    psyqo::Lua lua(L);
+    lua.push(s_sceneManager && s_sceneManager->isLocked());
+    return 1;
+}
+
+int LuaAPI::Camera_GetLockTarget(lua_State* L) {
+    psyqo::Lua lua(L);
+    if (!s_sceneManager || !s_sceneManager->isLocked()) {
+        lua.push();
+        return 1;
+    }
+    uint16_t idx = s_sceneManager->getLockTarget();
+    GameObject* go = s_sceneManager->getGameObject(idx);
+    if (!go) { lua.push(); return 1; }
+    PushGameObjectHandle(lua, go);
+    return 1;
 }
 
 // ============================================================================

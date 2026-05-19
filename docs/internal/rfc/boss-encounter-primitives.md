@@ -26,8 +26,12 @@ Six patterns where current authoring is awkward (or impossible):
    central entry point; onDamage(self, applied, source) callback
    fires after the HP debit. Runs alongside primitive 6's i-frame
    check.
-4. **Lock-on camera** — currently a tag-based marker; no auto-yaw
-   or strafe-relative movement.
+4. **Lock-on camera** — ✅ landed 2026-05-19. Engine-side soft
+   lock. Camera.LockOn / LockOff / IsLocked / GetLockTarget;
+   runtime overrides player yaw per-frame to face the target,
+   stick input becomes target-relative automatically (forward =
+   toward target, left-stick X = strafe). Auto-unlocks on target
+   destroy / deactivate.
 5. **Twin-stick camera tuning** — twin-stick analog input is
    already wired by default in `Controls::HandleControls`
    (controls.cpp:217–227), but sensitivity, deadzone, and pitch
@@ -248,7 +252,35 @@ end
 **Total: ~1.5 days.** Smallest primitive; gated on `PS1Stats`
 landing first.
 
-## Primitive 4 — `Camera.LockOn` / `Camera.LockOff`
+## Primitive 4 — `Camera.LockOn` / `Camera.LockOff`  ✅ LANDED (2026-05-19)
+
+**Status:** shipped. Engine-side soft lock: when locked, the
+runtime overrides `playerRotationY` each frame to face the target
+(both before and after `HandleControls`), so the existing 3p
+rig's camera follow + the existing `movementHeading` plumbing in
+`Controls::HandleControls` deliver both camera tracking AND
+target-relative stick input with no separate strafe-mode logic.
+
+Auto-unlocks when the target is destroyed or deactivated — no
+risk of "camera pointed at nothing."
+
+Right-stick yaw and L1/R1 rotation are visually suppressed while
+locked (their `playerRotationY` writes get overwritten by the
+per-frame snap; we don't bother filtering them inside
+HandleControls).
+
+Live: [Lua API → Camera.LockOn](https://buffjesus.github.io/PS1Godot/lua-api/camera/#camera-lockon).
+
+**Out of scope for v1:** the visual reticle. RFC originally
+called for a sprite tracking the locked entity in screen space;
+that's render-pass work and the gameplay loop doesn't need it.
+Authors can fake one today by tagging the locked entity (Lua
+side, on lock/unlock) and rendering an overlay keyed off the
+tag. Engine-side reticle could land as a follow-up.
+
+Original surface below for the record.
+
+### Original surface
 
 ### Surface
 
@@ -571,20 +603,20 @@ composable pattern — landing it too early picks the wrong shape.
 Implementation order. Updated as primitives land:
 
 1. **`PS1Stats`** ✅ landed 2026-05-19 (v33).
-2. **`onDamage` callback** ✅ landed 2026-05-19 (alongside dodge).
+2. **`onDamage` callback** ✅ landed 2026-05-19.
 3. **Dodge / roll with i-frames** ✅ landed 2026-05-19.
-4. **`Camera.LockOn` / `Camera.LockOff`** — next big primitive,
-   marquee souls-like feel. ~4 days.
+4. **`Camera.LockOn` / `Camera.LockOff`** ✅ landed 2026-05-19.
 5. **Twin-stick camera tuning** — small win, can land any time.
 6. **`PS1HurtBox`** — incremental refinement; works without it
    for first encounters.
 7. **`PS1FogGate`** — defer until composable pattern's pain is felt.
 
-Primitives 1, 3, 6 are the combat-system core — landing them
-together is enough for a full Elden Ring–style boss encounter
-authored entirely in Lua. Primitive 4 (Camera.LockOn) is the
-remaining engine-side work for souls-like camera feel; everything
-else is incremental.
+**The full souls-like combat surface is shipped.** Stats + onDamage
++ dodge i-frames + lock-on cover everything a first Elden Ring–
+style boss needs at the engine level. Remaining items are quality-
+of-life (lock-on reticle, tuned per-scene camera sensitivity) or
+incremental encounter polish (hurtboxes for crit zones, fog-gate
+helper) — none on the critical path.
 
 Stop at any step. The combat-patterns recipe page documents how
 to do the things this RFC adds without these primitives — so

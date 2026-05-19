@@ -43,6 +43,30 @@ static constexpr int32_t PLAYER_RADIUS = 20;
 static psyqo::Trig<> s_interactTrig;
 static int s_activePromptCanvas = -1;  // Currently shown prompt canvas index (-1 = none)
 
+// v33+: lock-on yaw helper. Returns the heading from (0,0) to (dx, dz)
+// as a psyqo::Angle (FixedPoint<10>, where 1.0 means π radians).
+// Mirrors the fastAtan2 in lua.cpp — same algorithm, scoped here so
+// the lock-on path doesn't reach across translation units. (dx, dz)
+// are raw FixedPoint<12> values; sign matters but the helper's
+// internals divide-and-fold so magnitude scale cancels out.
+static psyqo::Angle scenemanagerYawFromDxDz(int32_t dx, int32_t dz) {
+    psyqo::Angle result;
+    if (dx == 0 && dz == 0) { result.value = 0; return result; }
+
+    int32_t absDx = dx < 0 ? -dx : dx;
+    int32_t absDz = dz < 0 ? -dz : dz;
+    int32_t minV  = absDx < absDz ? absDx : absDz;
+    int32_t maxV  = absDx > absDz ? absDx : absDz;
+    int32_t a     = (minV * 256) / maxV;
+
+    // Octant fold: sin = dx (sideways), cos = dz (forward).
+    if (absDx > absDz) a = 512 - a;
+    if (dz < 0)       a = 1024 - a;
+    if (dx < 0)       a = -a;
+    result.value = a;
+    return result;
+}
+
 void psxsplash::SceneManager::InitializeScene(uint8_t* splashpackData, LoadingScreen* loading) {
     auto& gpu = Renderer::GetInstance().getGPU();
 
@@ -813,6 +837,16 @@ void psxsplash::SceneManager::GameTick(psyqo::GPU &gpu) {
     psyqo::Vec3 oldPlayerPosition = m_playerPosition;
 
     if (m_controlsEnabled) {
+        // v33+: lock-on. Auto-unlock if the target was destroyed or
+        // deactivated (or its index is somehow invalid).
+        if (isLocked()) {
+            if (m_lockTargetIndex >= m_gameObjects.size()
+                || !m_gameObjects[m_lockTargetIndex]
+                || !m_gameObjects[m_lockTargetIndex]->isActive()) {
+                clearLockTarget();
+            }
+        }
+
         // RE-style fixed-camera scenes need camera-relative input — pushing
         // up should always mean "into the screen" even after a camera cut to
         // a 180-rotated angle. For player-following rigs the input stays
@@ -821,7 +855,34 @@ void psxsplash::SceneManager::GameTick(psyqo::GPU &gpu) {
         if (m_cameraMode == PlayerCameraMode::FixedPreRendered) {
             moveHeading.value = m_currentCamera.GetAngleY();
         }
+
+        // v33+: lock-on overrides player yaw + movement heading to the
+        // vector from player → target. The runtime's existing 3p rig
+        // already drives the camera from playerRotationY, so this
+        // single override makes the camera track AND the left-stick
+        // input become target-relative (forward = toward target,
+        // X-axis = strafe orthogonal) — no extra strafe-mode logic
+        // needed in HandleControls.
+        psyqo::Angle lockYaw;
+        bool locked = isLocked();
+        if (locked) {
+            GameObject* target = m_gameObjects[m_lockTargetIndex];
+            psyqo::FixedPoint<12> dxFp = static_cast<psyqo::FixedPoint<12>>(target->position.x)
+                                       - static_cast<psyqo::FixedPoint<12>>(m_playerPosition.x);
+            psyqo::FixedPoint<12> dzFp = static_cast<psyqo::FixedPoint<12>>(target->position.z)
+                                       - static_cast<psyqo::FixedPoint<12>>(m_playerPosition.z);
+            lockYaw = scenemanagerYawFromDxDz(dxFp.raw(), dzFp.raw());
+            playerRotationY = lockYaw;
+            moveHeading = lockYaw;
+        }
+
         m_controls.HandleControls(m_playerPosition, playerRotationX, playerRotationY, playerRotationZ, freecam, m_dt12, moveHeading);
+
+        // Reassert lock-on yaw after HandleControls so the right-stick /
+        // L1/R1 paths can't fight the lock-on.
+        if (locked) {
+            playerRotationY = lockYaw;
+        }
 
         // Jump input: Cross button triggers jump when grounded
         if (m_isGrounded && m_controls.wasButtonPressed(psyqo::AdvancedPad::Button::Cross)) {
