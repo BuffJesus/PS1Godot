@@ -58,16 +58,21 @@ jobs:
       - name: Clone godot-cpp (pinned SHA)
         shell: bash
         env:
-          GODOT_CPP_SHA: d328849e81a5b24e1eb16b250227f3a208a8e654
+          # Upstream godot-cpp master SHA — verified via
+          # api.github.com/repos/godotengine/godot-cpp/commits/<SHA>
+          # before pinning. The local working-tree checkout has a
+          # one-commit private tweak on top (d328849, "Fix formatting
+          # consistency"), but that commit isn't pushed and therefore
+          # not reachable from any clone. CI builds against the merge
+          # base 4862a9d — functionally equivalent for our purposes
+          # (the local tweak is cosmetic). When bumping: get a new SHA
+          # via `curl
+          # https://api.github.com/repos/godotengine/godot-cpp/commits/master
+          # | jq -r .sha` and update here.
+          GODOT_CPP_SHA: 4862a9dcf1471c9ea19680b9faadb5b6a9432092
         run: |
           mkdir -p lib
           if [ ! -d "lib/godot-cpp/.git" ]; then
-            # Default clone — full history of the default branch
-            # (master). The pinned SHA d328849 is reachable from master,
-            # which is what the local-build-known-good checkout uses.
-            # GitHub refuses arbitrary-SHA fetches (no
-            # allowAnySHA1InWant on github.com), so we need the full
-            # branch history, not --depth=1.
             git clone https://github.com/godotengine/godot-cpp.git lib/godot-cpp
           fi
           git -C lib/godot-cpp checkout "$GODOT_CPP_SHA"
@@ -83,7 +88,7 @@ jobs:
           path: |
             godot-ps1/addons/ps1godot/scripting/lib/godot-cpp/bin
             godot-ps1/addons/ps1godot/scripting/lib/godot-cpp/gen
-          key: godot-cpp-${{ matrix.os }}-${{ matrix.target }}-d328849e81a5b24e1eb16b250227f3a208a8e654
+          key: godot-cpp-${{ matrix.os }}-${{ matrix.target }}-4862a9dcf1471c9ea19680b9faadb5b6a9432092
 
       - name: Detect platform name for SCons
         id: platform
