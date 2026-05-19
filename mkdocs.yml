@@ -113,6 +113,13 @@ nav:
       - PS1Godot panel: docks/ps1godot-panel.md
       - PS1 Doctor: docks/doctor.md
       - PS1 Graph: docks/graph.md
+      - VRAM Viewer: docks/vram-viewer.md
+      - Audio Routing: docks/audio-routing.md
+      - Quest Journal: docks/quest-journal.md
+      - Lua API Cheatsheet: docks/lua-cheatsheet.md
+      - Lua REPL: docks/lua-repl.md
+      - Graph Find: docks/graph-find.md
+      - References: docks/references.md
   - Authoring:
       - Fixed cameras: authoring/fixed-cameras.md
       - Graphs:
