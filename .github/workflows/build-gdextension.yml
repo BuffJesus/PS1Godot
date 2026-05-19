@@ -47,38 +47,39 @@ jobs:
         run: pip install --upgrade scons
 
       # godot-cpp is gitignored locally (~1 GB checkout per dev) — clone
-      # it in CI on the branch matching the engine's compatibility_minimum.
-      # If you bump the .gdextension's compatibility_minimum, also bump
-      # GODOT_CPP_BRANCH below.
-      - name: Clone godot-cpp
+      # it in CI pinned to an exact SHA so an upstream breaking change
+      # to the `godot-4.4-stable` branch doesn't silently break every PR.
+      # To bump: update GODOT_CPP_SHA to a new known-good SHA from
+      # https://github.com/godotengine/godot-cpp/commits/godot-4.4-stable
+      # (typically when bumping the .gdextension's compatibility_minimum,
+      # or when chasing a new godot-cpp feature). Match the local
+      # checkout's HEAD if devs are building locally too — `git -C
+      # godot-ps1/addons/ps1godot/scripting/lib/godot-cpp rev-parse HEAD`.
+      - name: Clone godot-cpp (pinned SHA)
         shell: bash
         env:
-          GODOT_CPP_BRANCH: godot-4.4-stable
+          GODOT_CPP_SHA: d328849e81a5b24e1eb16b250227f3a208a8e654
         run: |
           mkdir -p lib
           if [ ! -d "lib/godot-cpp/.git" ]; then
-            git clone --depth=1 --branch "$GODOT_CPP_BRANCH" \
-              https://github.com/godotengine/godot-cpp.git lib/godot-cpp
+            git clone https://github.com/godotengine/godot-cpp.git lib/godot-cpp
           fi
+          git -C lib/godot-cpp fetch origin "$GODOT_CPP_SHA" --depth=1 || \
+            git -C lib/godot-cpp fetch origin --depth=200
+          git -C lib/godot-cpp checkout "$GODOT_CPP_SHA"
 
       # Cache the compiled godot-cpp bindings — building them from
       # scratch on each CI run is the slow part (~10 min vs ~30 s for
-      # our own .cpp). Key on the godot-cpp HEAD SHA so a branch bump
-      # invalidates cleanly.
-      - name: Resolve godot-cpp HEAD SHA
-        id: gcpp_sha
-        shell: bash
-        run: |
-          sha=$(git -C lib/godot-cpp rev-parse HEAD)
-          echo "sha=$sha" >> "$GITHUB_OUTPUT"
-
+      # our own .cpp). Key on the pinned SHA so a bump invalidates
+      # cleanly. (No need to read the live HEAD — the env var IS the
+      # source of truth now.)
       - name: Cache godot-cpp build
         uses: actions/cache@v4
         with:
           path: |
             godot-ps1/addons/ps1godot/scripting/lib/godot-cpp/bin
             godot-ps1/addons/ps1godot/scripting/lib/godot-cpp/gen
-          key: godot-cpp-${{ matrix.os }}-${{ matrix.target }}-${{ steps.gcpp_sha.outputs.sha }}
+          key: godot-cpp-${{ matrix.os }}-${{ matrix.target }}-d328849e81a5b24e1eb16b250227f3a208a8e654
 
       - name: Detect platform name for SCons
         id: platform
@@ -110,8 +111,15 @@ jobs:
           retention-days: 30
 
   # Lightweight check: does the C# plugin compile cleanly on each OS?
-  # Doesn't load Godot — just runs `dotnet build` against the project file
-  # to catch C#-side regressions on platforms we don't usually develop on.
+  # Doesn't load the editor — just runs `dotnet build` to catch C#-side
+  # regressions on platforms we don't usually develop on.
+  #
+  # Wrinkle: PS1Godot.csproj pins `Godot.NET.Sdk/4.7.0-dev.5`, which is a
+  # pre-release SDK NOT published to nuget.org. The SDK only ships inside
+  # the Godot install at `GodotSharp/Tools/nupkgs/`. CI downloads the
+  # matching Godot build, extracts it, and points GODOT_NUPKGS at the
+  # nupkgs folder so the dotnet build can resolve the SDK package. Bump
+  # GODOT_VERSION below when bumping the SDK pin in PS1Godot.csproj.
   plugin-csharp:
     strategy:
       fail-fast: false
@@ -119,6 +127,8 @@ jobs:
         os: [windows-latest, ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     name: C# build / ${{ matrix.os }}
+    env:
+      GODOT_VERSION: "4.7-dev5"
     steps:
       - uses: actions/checkout@v4
 
@@ -127,10 +137,44 @@ jobs:
         with:
           dotnet-version: "8.0.x"
 
-      # The C# project references the Godot SDK from the user's Godot
-      # install via the GODOT_NUPKGS env var. CI doesn't have that, so
-      # fall back to the NuGet feed (NuGet.Config in godot-ps1/ should
-      # already do this) — log the restore to make any drift visible.
+      - name: Cache Godot SDK download
+        id: godot_cache
+        uses: actions/cache@v4
+        with:
+          path: godot-install
+          key: godot-${{ env.GODOT_VERSION }}-${{ matrix.os }}
+
+      - name: Download Godot ${{ env.GODOT_VERSION }} (for .NET SDK nupkgs)
+        if: steps.godot_cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          case "${{ matrix.os }}" in
+            windows-latest) FLAVOR="win64" ;;
+            ubuntu-latest)  FLAVOR="linux_x86_64" ;;
+            macos-latest)   FLAVOR="macos.universal" ;;
+            *) echo "Unknown OS"; exit 1 ;;
+          esac
+          URL="https://github.com/godotengine/godot-builds/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_mono_${FLAVOR}.zip"
+          echo "Downloading $URL"
+          curl -L --fail -o godot.zip "$URL"
+          mkdir -p godot-install
+          unzip -q godot.zip -d godot-install
+
+      - name: Resolve GODOT_NUPKGS path
+        shell: bash
+        run: |
+          NUPKGS=$(find godot-install -type d -name nupkgs | head -1)
+          if [ -z "$NUPKGS" ]; then
+            echo "ERROR: nupkgs folder not found inside Godot download"
+            find godot-install -maxdepth 4 -type d
+            exit 1
+          fi
+          # GitHub Actions: writing to $GITHUB_ENV exports for subsequent steps.
+          # Use absolute path so dotnet restore can find it from any cwd.
+          NUPKGS_ABS=$(cd "$NUPKGS" && pwd)
+          echo "GODOT_NUPKGS=$NUPKGS_ABS" >> "$GITHUB_ENV"
+          echo "Found nupkgs at: $NUPKGS_ABS"
+
       - name: dotnet restore
         working-directory: godot-ps1
         run: dotnet restore --verbosity normal
