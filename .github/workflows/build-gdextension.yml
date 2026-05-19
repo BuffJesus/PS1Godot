@@ -58,14 +58,17 @@ jobs:
       - name: Clone godot-cpp (pinned SHA)
         shell: bash
         env:
+          GODOT_CPP_BRANCH: godot-4.4-stable
           GODOT_CPP_SHA: d328849e81a5b24e1eb16b250227f3a208a8e654
         run: |
           mkdir -p lib
           if [ ! -d "lib/godot-cpp/.git" ]; then
-            git clone https://github.com/godotengine/godot-cpp.git lib/godot-cpp
+            # Clone the branch the pinned SHA lives on so the SHA is
+            # reachable. GitHub refuses to fetch arbitrary SHAs that
+            # aren't a tip-of-ref unless the server has uploadpack
+            # `allowAnySHA1InWant` enabled — which github.com does NOT.
+            git clone --branch "$GODOT_CPP_BRANCH" https://github.com/godotengine/godot-cpp.git lib/godot-cpp
           fi
-          git -C lib/godot-cpp fetch origin "$GODOT_CPP_SHA" --depth=1 || \
-            git -C lib/godot-cpp fetch origin --depth=200
           git -C lib/godot-cpp checkout "$GODOT_CPP_SHA"
 
       # Cache the compiled godot-cpp bindings — building them from
@@ -169,9 +172,16 @@ jobs:
             find godot-install -maxdepth 4 -type d
             exit 1
           fi
-          # GitHub Actions: writing to $GITHUB_ENV exports for subsequent steps.
-          # Use absolute path so dotnet restore can find it from any cwd.
-          NUPKGS_ABS=$(cd "$NUPKGS" && pwd)
+          # Need a native-format absolute path. On Linux/macOS `pwd`
+          # gives `/path/...` which NuGet understands. On Windows bash
+          # is Git Bash / MSYS — plain `pwd` returns the POSIX form
+          # `/c/Users/...` which Windows NuGet does NOT accept; use
+          # `pwd -W` for the `C:\Users\...` translation.
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            NUPKGS_ABS=$(cd "$NUPKGS" && pwd -W)
+          else
+            NUPKGS_ABS=$(cd "$NUPKGS" && pwd)
+          fi
           echo "GODOT_NUPKGS=$NUPKGS_ABS" >> "$GITHUB_ENV"
           echo "Found nupkgs at: $NUPKGS_ABS"
 
