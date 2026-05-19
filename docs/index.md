@@ -31,9 +31,12 @@ format, different editor, deliberately better UX.
 - **PS1 Graphs** — [Dialogue](authoring/graphs/dialogue.md) ·
   [FSM](authoring/graphs/fsm.md) · [Quest](authoring/graphs/quest.md) ·
   [Behavior Tree](authoring/graphs/behavior-tree.md)
+- **Lua API** — [Overview](lua-api/index.md) (24 namespaces, 145 entries,
+  auto-generated from `psxsplash-main/src/luaapi.hh`)
 - **Reference** — [Splashpack format](reference/splashpack-format.md) ·
   [API showcase](reference/api-showcase.md) ·
   [Lua cheatsheet](reference/lua-cheatsheet.md) ·
+  [Lua editor setup](reference/lua-editor-setup.md) ·
   [psxsplash improvements](reference/psxsplash-improvements.md)
 
 ## Releases
@@ -48,8 +51,8 @@ bundled in the plugin zip (Windows already was). Drop into your project's
 ---
 
 !!! note "Docs site is still filling in"
-    Nav skeleton (Getting started · Authoring · Reference) is in place;
-    per-node guides, per-dock pages, and the Lua API reference are
-    being written in follow-up passes. Internal planning docs live in
+    Getting started, Authoring, Lua API, and Reference are in place.
+    Per-node guides and per-dock pages are being written in follow-up
+    passes. Internal planning docs live in
     [`docs/internal/`](https://github.com/BuffJesus/PS1Godot/tree/main/docs/internal){ target="_blank" }
     and aren't published here.
