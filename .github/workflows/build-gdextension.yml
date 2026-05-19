@@ -1,0 +1,140 @@
+name: Build GDExtension (Windows / Linux / macOS)
+
+# Per RFC docs/rfc/linux-support.md Stage 3: build the PS1Lua GDExtension
+# across the three desktop platforms so Linux + macOS users don't have to
+# clone the repo + install SCons just to get syntax highlighting. The
+# resulting per-OS / per-target artifacts get hand-attached to a release
+# (or, eventually, autobundled into the plugin zip via build-release.py).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "godot-ps1/addons/ps1godot/scripting/**"
+      - ".github/workflows/build-gdextension.yml"
+    tags: ['v*']
+  pull_request:
+    paths:
+      - "godot-ps1/addons/ps1godot/scripting/**"
+      - ".github/workflows/build-gdextension.yml"
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os:     [windows-latest, ubuntu-latest, macos-latest]
+        target: [editor, template_debug, template_release]
+    runs-on: ${{ matrix.os }}
+    name: ${{ matrix.os }} / ${{ matrix.target }}
+    defaults:
+      run:
+        working-directory: godot-ps1/addons/ps1godot/scripting
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install SCons
+        run: pip install --upgrade scons
+
+      # godot-cpp is gitignored locally (~1 GB checkout per dev) — clone
+      # it in CI on the branch matching the engine's compatibility_minimum.
+      # If you bump the .gdextension's compatibility_minimum, also bump
+      # GODOT_CPP_BRANCH below.
+      - name: Clone godot-cpp
+        shell: bash
+        env:
+          GODOT_CPP_BRANCH: godot-4.4-stable
+        run: |
+          mkdir -p lib
+          if [ ! -d "lib/godot-cpp/.git" ]; then
+            git clone --depth=1 --branch "$GODOT_CPP_BRANCH" \
+              https://github.com/godotengine/godot-cpp.git lib/godot-cpp
+          fi
+
+      # Cache the compiled godot-cpp bindings — building them from
+      # scratch on each CI run is the slow part (~10 min vs ~30 s for
+      # our own .cpp). Key on the godot-cpp HEAD SHA so a branch bump
+      # invalidates cleanly.
+      - name: Resolve godot-cpp HEAD SHA
+        id: gcpp_sha
+        shell: bash
+        run: |
+          sha=$(git -C lib/godot-cpp rev-parse HEAD)
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      - name: Cache godot-cpp build
+        uses: actions/cache@v4
+        with:
+          path: |
+            godot-ps1/addons/ps1godot/scripting/lib/godot-cpp/bin
+            godot-ps1/addons/ps1godot/scripting/lib/godot-cpp/gen
+          key: godot-cpp-${{ matrix.os }}-${{ matrix.target }}-${{ steps.gcpp_sha.outputs.sha }}
+
+      - name: Detect platform name for SCons
+        id: platform
+        shell: bash
+        run: |
+          case "${{ matrix.os }}" in
+            windows-latest) echo "name=windows" >> "$GITHUB_OUTPUT" ;;
+            ubuntu-latest)  echo "name=linux"   >> "$GITHUB_OUTPUT" ;;
+            macos-latest)   echo "name=macos"   >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - name: Build GDExtension
+        run: scons platform=${{ steps.platform.outputs.name }} target=${{ matrix.target }} -j2
+
+      - name: List build artifacts
+        shell: bash
+        run: ls -la build/ || true
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ps1lua-${{ steps.platform.outputs.name }}-${{ matrix.target }}
+          path: |
+            godot-ps1/addons/ps1godot/scripting/build/*.dll
+            godot-ps1/addons/ps1godot/scripting/build/*.so
+            godot-ps1/addons/ps1godot/scripting/build/*.dylib
+            godot-ps1/addons/ps1godot/scripting/build/*.framework
+          if-no-files-found: error
+          retention-days: 30
+
+  # Lightweight check: does the C# plugin compile cleanly on each OS?
+  # Doesn't load Godot — just runs `dotnet build` against the project file
+  # to catch C#-side regressions on platforms we don't usually develop on.
+  plugin-csharp:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    name: C# build / ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      # The C# project references the Godot SDK from the user's Godot
+      # install via the GODOT_NUPKGS env var. CI doesn't have that, so
+      # fall back to the NuGet feed (NuGet.Config in godot-ps1/ should
+      # already do this) — log the restore to make any drift visible.
+      - name: dotnet restore
+        working-directory: godot-ps1
+        run: dotnet restore --verbosity normal
+
+      - name: dotnet build
+        working-directory: godot-ps1
+        run: dotnet build --no-restore --nologo --verbosity minimal
