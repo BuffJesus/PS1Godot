@@ -420,6 +420,19 @@ public partial class PS1GodotPlugin : EditorPlugin
         _luaHotSwapWatcher = new LuaHotSwapWatcher { Name = "PS1GodotLuaHotSwap" };
         AddChild(_luaHotSwapWatcher);
 
+        // PS1Graph .tres-to-.lua live sync. The graph editor's Save button
+        // and the F5 export path both recompile the sibling .lua, but the
+        // .tres can also be saved via Ctrl+S, the inspector, or any of
+        // Godot's other internal save paths — none of which run our
+        // WriteCompiledLuaSibling. Result: .tres on disk has the new
+        // state, .lua stays at the prior state, every downstream consumer
+        // (runtime, exporter, F5 auto-recompile) sees stale Lua and the
+        // author concludes "Compile is broken." Subscribe to the
+        // editor's filesystem-changed signal and walk the active scene's
+        // UserScripts, regenerating any sibling .lua whose .tres has a
+        // newer mtime. Mtime gate keeps the per-signal cost down.
+        EditorInterface.Singleton.GetResourceFilesystem().FilesystemChanged += OnFilesystemChanged;
+
         GD.Print("[PS1Godot] Plugin enabled. F5 = Run on PSX (export + build + launch).");
 
         // First-run panel — shows once per project when SetupDetector
@@ -538,6 +551,7 @@ public partial class PS1GodotPlugin : EditorPlugin
 
         SceneChanged -= OnSceneChanged;
         EditorInterface.Singleton.GetSelection().SelectionChanged -= OnEditorSelectionChanged;
+        EditorInterface.Singleton.GetResourceFilesystem().FilesystemChanged -= OnFilesystemChanged;
 
         var fs = EditorInterface.Singleton.GetResourceFilesystem();
         if (fs != null) fs.ResourcesReimported -= OnResourcesReimported;
@@ -1342,6 +1356,33 @@ public partial class PS1GodotPlugin : EditorPlugin
                 if (found != null) return found;
             }
         return null;
+    }
+
+    // Editor-filesystem watcher → keep PS1Graph sibling .lua in sync
+    // with their .tres after non-Graph-dock saves (Ctrl+S, inspector
+    // commit, etc.). Walks the active scene's UserScripts; for each
+    // .lua, if a sibling .tres exists and has a newer mtime, recompile.
+    // FilesystemChanged fires on most editor saves, so this is the
+    // catch-net for anything that bypasses PS1GraphEditorDock.OnSavePressed.
+    private void OnFilesystemChanged()
+    {
+        var root = EditorInterface.Singleton.GetEditedSceneRoot();
+        if (root == null) return;
+        var scene = FindPS1SceneNode(root);
+        if (scene == null || scene.UserScripts == null) return;
+        for (int i = 0; i < scene.UserScripts.Count; i++)
+        {
+            string luaPath = scene.UserScripts[i];
+            if (string.IsNullOrEmpty(luaPath)) continue;
+            if (PS1Godot.Exporter.SceneCollector.RecompileSiblingGraphIfStale(luaPath))
+            {
+                // FilesystemChanged will fire again because we just
+                // wrote a file — Godot is re-entrant on this signal.
+                // The mtime gate above breaks the loop on the next
+                // pass (lua now newer than tres), so no extra guard
+                // needed here.
+            }
+        }
     }
 
     // Dock thumbnail / "Open VRAM Viewer" button → switch the bottom

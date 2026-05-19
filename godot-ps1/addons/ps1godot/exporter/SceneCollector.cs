@@ -4185,6 +4185,27 @@ public static class SceneCollector
         }
     }
 
+    // Skip the compile when the sibling .lua is already at-or-newer
+    // than its .tres — saves a load+compile+write per UserScript on
+    // every filesystem signal. Returns true when a recompile actually
+    // happened, so callers can short-circuit further work.
+    internal static bool RecompileSiblingGraphIfStale(string luaPath)
+    {
+        if (string.IsNullOrEmpty(luaPath)) return false;
+        if (!luaPath.EndsWith(".lua", StringComparison.OrdinalIgnoreCase)) return false;
+        string tresPath = luaPath.Substring(0, luaPath.Length - 4) + ".tres";
+        if (!Godot.FileAccess.FileExists(tresPath)) return false;
+
+        ulong tresMtime = Godot.FileAccess.GetModifiedTime(tresPath);
+        ulong luaMtime  = Godot.FileAccess.FileExists(luaPath)
+            ? Godot.FileAccess.GetModifiedTime(luaPath)
+            : 0;
+        if (tresMtime <= luaMtime) return false;
+
+        RecompileSiblingGraphIfPresent(luaPath);
+        return true;
+    }
+
     // Look for a PS1GraphResource sibling next to the given UserScript
     // .lua path (same basename, .tres extension). If one exists and
     // loads, run the compiler and overwrite the .lua on disk. No-op if
@@ -4195,7 +4216,7 @@ public static class SceneCollector
     // explicitly saves the graph in the PS1Graph dock — meaning compiler
     // fixes, hot-reloaded edits, or graph-Resource changes made via the
     // FileSystem dock all ship stale until the next manual Save.
-    private static void RecompileSiblingGraphIfPresent(string luaPath)
+    internal static void RecompileSiblingGraphIfPresent(string luaPath)
     {
         if (string.IsNullOrEmpty(luaPath)) return;
         if (!luaPath.EndsWith(".lua", StringComparison.OrdinalIgnoreCase)) return;
