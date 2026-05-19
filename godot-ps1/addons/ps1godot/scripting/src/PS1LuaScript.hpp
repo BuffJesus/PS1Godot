@@ -46,6 +46,16 @@ public:
 	// New required virtual in Godot 4.7 — empty docs table is fine; psxsplash
 	// runs Lua on-device, Godot doesn't introspect it.
 	TypedArray<Dictionary> _get_documentation() const override { return TypedArray<Dictionary>(); }
+
+	// Also new in Godot 4.7: editor pings this to ask whether changes to
+	// the .lua on disk should trigger a Godot-side script reload. We say
+	// false because the real Lua runs on the PSX via psxsplash's
+	// PCdrv-watched hot-swap path — Godot reloading the stub resource
+	// adds nothing and just spams "Another resource is loaded from path
+	// X" warnings during F5 (see task #14). Without this override the
+	// engine prints a "Required virtual method ... must be overridden"
+	// error on every Run-on-PSX.
+	bool _editor_can_reload_from_file() override { return false; }
 	Dictionary _get_constants() const override { return Dictionary(); }
 	TypedArray<StringName> _get_members() const override { return TypedArray<StringName>(); }
 	Variant _get_rpc_config() const override { return Variant(); }
