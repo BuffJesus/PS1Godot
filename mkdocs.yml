@@ -108,6 +108,11 @@ nav:
       - Install: getting-started/installation.md
       - Quickstart: getting-started/quickstart.md
       - Your first scene: getting-started/first-scene.md
+  - Docks:
+      - Overview: docks/overview.md
+      - PS1Godot panel: docks/ps1godot-panel.md
+      - PS1 Doctor: docks/doctor.md
+      - PS1 Graph: docks/graph.md
   - Authoring:
       - Fixed cameras: authoring/fixed-cameras.md
       - Graphs:
