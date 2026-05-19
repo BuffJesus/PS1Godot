@@ -35,5 +35,17 @@ if errorlevel 1 (
 popd
 :skip_build
 
-"%GODOT%" --editor --path "%~dp0..\godot-ps1"
+REM Tee Godot's stdout+stderr to a log file so a crash that closes the
+REM cmd window before we can copy still leaves a trail on disk. PowerShell
+REM Tee-Object preserves the live console output too. Path is alongside
+REM the project so it's easy to find.
+set "LOGFILE=%~dp0..\godot-ps1\.editor.log"
+echo [launch-editor] Logging to "%LOGFILE%"
+powershell -NoProfile -Command "& '%GODOT%' --editor --path '%~dp0..\godot-ps1' 2>&1 | Tee-Object -FilePath '%LOGFILE%'"
+
+REM Keep the cmd window open if Godot exited abnormally so the author
+REM can scroll back through the log. Press any key to dismiss.
+echo.
+echo [launch-editor] Godot exited (code %ERRORLEVEL%). Log saved to "%LOGFILE%".
+pause
 endlocal
