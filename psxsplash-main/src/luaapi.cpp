@@ -1543,9 +1543,18 @@ void LuaAPI::RegisterInputConstants(psyqo::Lua& L) {
     
     L.pushNumber(static_cast<lua_Number>(psyqo::AdvancedPad::Button::L3));
     L.setField(-2, "L3");
-    
+
     L.pushNumber(static_cast<lua_Number>(psyqo::AdvancedPad::Button::R3));
     L.setField(-2, "R3");
+
+    // Analog stick constants — used as the argument to
+    // Input.GetAnalog(stick). 0 = left stick, 1 = right stick.
+    // These match the stick==1 check in Input_GetAnalog below.
+    L.pushNumber(0);
+    L.setField(-2, "LEFT_STICK");
+
+    L.pushNumber(1);
+    L.setField(-2, "RIGHT_STICK");
 }
 
 int LuaAPI::Input_IsPressed(lua_State* L) {

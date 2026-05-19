@@ -31,4 +31,11 @@ True while the button is held down
 
 ### `Input.GetAnalog(stick) -> x, y` { #input-getanalog }
 
-Returns analog stick values (-128 to 127)
+Returns analog stick values for the requested stick.
+`stick` accepts the named constants `Input.LEFT_STICK` (0,
+default) or `Input.RIGHT_STICK` (1). x and y are
+FixedPoint<12> in the range [-1.0, 1.0]; multiply by your
+sensitivity factor before applying to camera/movement state.
+Common pattern (twin-stick camera):
+local rx, ry = Input.GetAnalog(Input.RIGHT_STICK)
+Camera.SetH(Camera.GetH() + rx / 8)

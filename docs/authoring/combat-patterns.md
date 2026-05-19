@@ -113,6 +113,103 @@ Two notes:
 - **Whiff feedback matters.** Even a missed swing benefits from a
   tiny camera shake — confirms input was received.
 
+## Twin-stick camera
+
+Modern action games (Devil May Cry, Bayonetta, Elden Ring with
+lock-off mode) use the right stick for free camera control. The
+runtime ships the API but doesn't wire the default rig — author
+it in your scene's `onUpdate`:
+
+```lua
+local YAW_SENSITIVITY   = 8     -- larger = slower camera
+local PITCH_SENSITIVITY = 12    -- pitch typically slower than yaw
+
+function onUpdate(self, dt)
+    -- Read the right stick (returns FixedPoint<12> in [-1.0, 1.0])
+    local rx, ry = Input.GetAnalog(Input.RIGHT_STICK)
+
+    -- Apply yaw (horizontal)
+    if rx ~= 0 then
+        Camera.SetH(Camera.GetH() + rx / YAW_SENSITIVITY)
+    end
+
+    -- Pitch (vertical) — third-person pitches the camera relative
+    -- to the player; use Camera.SetRotation for full 3-axis control.
+    if ry ~= 0 then
+        local r = Camera.GetRotation()
+        Camera.SetRotation(r.x + ry / PITCH_SENSITIVITY, r.y, r.z)
+    end
+end
+```
+
+**Two named constants** make this read clean: `Input.LEFT_STICK`
+(`0`) and `Input.RIGHT_STICK` (`1`). Both ship as standard
+Lua-registered constants alongside `Input.CROSS`, `Input.L1`,
+etc.
+
+### Deadzone
+
+Stick values near zero from sloppy pad calibration cause the
+camera to drift. Cheap fix:
+
+```lua
+local function deadzone(v, threshold)
+    if v > threshold or v < -threshold then return v end
+    return 0
+end
+
+-- In onUpdate
+local rx, ry = Input.GetAnalog(Input.RIGHT_STICK)
+rx = deadzone(rx, 256)  -- ~0.06 of range; tune per pad
+ry = deadzone(ry, 256)
+-- ... apply as before
+```
+
+Most analog pads with worn pots want at least a 200-bit deadzone
+on the right stick. A virtual reference pad doesn't need any.
+
+### When lock-on is active
+
+The twin-stick pattern only applies when **not** locked on. When
+the player has locked a target (see the lock-on section below),
+yaw is driven by the player→target vector, not by right-stick
+input. The standard wrap:
+
+```lua
+function onUpdate(self, dt)
+    if lockedEnemy then
+        -- yaw camera toward locked target
+        local targetPos = Entity.GetPosition(lockedEnemy)
+        local playerPos = Player.GetPosition()
+        Camera.SetH(yawFromVector(targetPos.x - playerPos.x,
+                                  targetPos.z - playerPos.z))
+    else
+        -- free twin-stick control
+        local rx, ry = Input.GetAnalog(Input.RIGHT_STICK)
+        if rx ~= 0 then
+            Camera.SetH(Camera.GetH() + rx / YAW_SENSITIVITY)
+        end
+    end
+end
+```
+
+`yawFromVector(dx, dz)` is a helper — `math.atan2(dx, dz)`
+converted to the runtime's pi-fraction convention (pi-fraction =
+radians / π, so 90° = 0.5).
+
+### Runtime gap
+
+There's no runtime-side "right-stick drives camera" mode on
+`PS1Player` today — the rig only knows L1 / R1 button-driven yaw
+and the camera-forward player movement. The twin-stick recipe
+above runs in Lua at scene scope, so every scene that wants this
+feel copy-pastes the snippet.
+
+A `CameraControl = ButtonsLR | RightStick | LockedOn` setting on
+`PS1Player` would consolidate this — see
+[`internal/rfc/boss-encounter-primitives.md`](https://github.com/BuffJesus/PS1Godot/blob/main/docs/internal/rfc/boss-encounter-primitives.md){ target="_blank" }
+primitive 5.
+
 ## Lock-on (current pattern)
 
 The showcase's R3 path. Tag-based, not engine-supported. Toggles
