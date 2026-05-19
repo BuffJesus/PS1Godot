@@ -34,7 +34,14 @@ Variant PS1LuaResourceFormatLoader::_load(const String &p_path, const String &p_
 	Ref<PS1LuaScript> s;
 	s.instantiate();
 	s->_set_source_code(src);
-	s->set_path(p_original_path);
+	// take_over_path replaces any prior cached instance at this path
+	// instead of emitting "Another resource is loaded from path
+	// 'res://X.lua' (possible cyclic resource inclusion)". The
+	// filesystem watcher re-invokes the loader every time our export
+	// pipeline rewrites a graph-compiled .lua; without take_over the
+	// previous cached PS1LuaScript would still claim the path and
+	// every F5 produced two stack-trace dumps in the Output panel.
+	s->take_over_path(p_original_path);
 	return s;
 }
 
