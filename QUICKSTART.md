@@ -20,24 +20,33 @@ for what's shipped vs. pending.
 
 ## Try it in ~15 minutes
 
-You'll need Windows 10/11 for the 1-click path. (Linux/macOS is viable —
-all the parts are cross-platform — but the launcher scripts are `.cmd`
-files. Contributions welcome.)
+Works on **Windows, Linux, and macOS**. The launcher (`scripts/run.py`)
+is Python-based; the `.cmd` and `.sh` shims in the same directory wrap
+it so muscle memory keeps working on whichever shell you prefer.
 
 ### 1. Install the four tools
 
 - **[Godot 4.7.x .NET build](https://godotengine.org/download/)** (the C#
-  / Mono variant, not the default). Extract to `D:\Programs\Godot\` or
-  wherever — you'll point the launcher at it in step 3.
+  / Mono variant, not the default). You'll point `GODOT_EXE` at it in
+  step 3.
 - **[.NET 8 SDK](https://dotnet.microsoft.com/download)**. Verify with
   `dotnet --version`.
-- **MIPS toolchain** (cross-compiler for the PS1):
-  ```powershell
-  powershell -c "& { iwr -UseBasicParsing https://bit.ly/mips-ps1 | iex }"
-  ```
-  Then in a **new** terminal: `mips install 15.2.0`.
-- **[PCSX-Redux](https://distrib.app/pub/org/pcsx-redux/project/dev-win-x64)**.
-  Extract to `C:\tools\pcsx-redux\`.
+- **MIPS cross-compiler** for the PS1:
+  - **Windows / macOS:** PCSX-Redux's mips helper installs the
+    `mipsel-none-elf-gcc` toolchain. From PowerShell (Windows) or a
+    Homebrew shell (macOS):
+    ```powershell
+    powershell -c "& { iwr -UseBasicParsing https://bit.ly/mips-ps1 | iex }"
+    ```
+    Then in a **new** terminal: `mips install 15.2.0`.
+  - **Linux (Debian / Ubuntu):** the apt-distributed toolchain works
+    out of the box (run.py auto-detects either prefix):
+    ```bash
+    sudo apt install gcc-mipsel-linux-gnu binutils-mipsel-linux-gnu build-essential
+    ```
+- **[PCSX-Redux](https://github.com/grumpycoders/pcsx-redux/releases)**
+  for emulation. Windows users grab the dev-win-x64 zip; Linux uses
+  the AppImage / `.deb`; macOS uses the `.dmg`.
 
 ### 2. Get the code
 
@@ -70,30 +79,38 @@ cd PS1Godot
 
 ### 3. Wire up environment variables
 
-From the repo root:
+From the repo root, check what the launcher currently sees:
 
-```bat
-scripts\bootstrap-env.cmd
+```bash
+python scripts/run.py bootstrap-env
 ```
 
-This sets `GODOT_EXE`, `GODOT_NUPKGS`, and `PCSX_REDUX_EXE`. Close and
-reopen terminals so `setx` values take effect. If your install paths
-differ from the defaults, edit the script or set the three vars yourself
-(see [`SETUP.md`](SETUP.md)).
+That prints the resolved `GODOT_EXE`, `PCSX_REDUX_EXE`, MIPS toolchain,
+and `dotnet` paths. Anything labeled `(not found)` needs an export:
+
+- **Windows:** `setx GODOT_EXE "C:\path\to\Godot.exe"` (then reopen terminals).
+- **Linux / macOS:** `export GODOT_EXE=/path/to/godot` in `~/.bashrc` /
+  `~/.zshrc`.
 
 ### 4. Build the PS1 runtime
 
-```bat
-scripts\build-psxsplash.cmd
+```bash
+# All three platforms:
+python scripts/run.py build-psxsplash
+
+# Or the platform-native shim if you prefer typing the bare name:
+scripts\build-psxsplash.cmd      # Windows
+./scripts/build-psxsplash.sh     # Linux / macOS
 ```
 
 Cross-compiles the C++ runtime with the MIPS toolchain and drops the
-binary at `godot-ps1\build\psxsplash.ps-exe`. Takes 30–60s on first run.
+binary at `godot-ps1/build/psxsplash.ps-exe`. Takes 30–60s on first run.
 
 ### 5. Open Godot, export the demo, see it running
 
-```bat
-scripts\launch-editor.cmd
+```bash
+python scripts/run.py launch-editor
+# or: scripts\launch-editor.cmd  (Windows)  /  ./scripts/launch-editor.sh
 ```
 
 First open takes ~60s (C# assembly build + asset import). When the

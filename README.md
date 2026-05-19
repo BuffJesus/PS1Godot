@@ -2,6 +2,9 @@
 
 Author PlayStation 1 games in Godot.
 
+**Platforms:** Windows ✓ · Linux ✓ · macOS ✓ (CI-built GDExtension lands per
+release; runtime + plugin build from source on all three.)
+
 PS1Godot is a Godot 4.x editor plugin (C# / .NET) that lets you design PS1
 scenes in Godot and export them to the [psxsplash](https://github.com/psxsplash/psxsplash)
 runtime, which runs on real PS1 hardware and in
@@ -105,7 +108,7 @@ PS1Godot/
 │  ├─ addons/ps1godot/     ← plugin: nodes, shaders, exporter, PS1Lua GDExtension
 │  └─ demo/                ← sample scene exercising the pipeline end-to-end
 ├─ psxsplash-main/         ← vendored PS1 runtime + our local patches
-├─ scripts/                ← launch / build helpers (.cmd)
+├─ scripts/                ← launch / build helpers (Python `run.py` + .cmd / .sh shims)
 ├─ docs/                   ← format reference, tutorials, upstream-improvement tracker
 ├─ CLAUDE.md               ← architecture + conventions (also loaded by Claude Code)
 ├─ GLOSSARY.md             ← PS1 / PSYQo / splashpack vocabulary
