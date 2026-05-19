@@ -25,6 +25,17 @@ public partial class PS1AudioClipPreviewGenerator : EditorResourcePreviewGenerat
 {
     public override bool _Handles(string type) => type == nameof(PS1AudioClip);
 
+    // FileSystem dock thumbnails are SMALL previews (64×64 typically).
+    // Without these overrides, Godot 4.7-dev5 falls back to the
+    // anonymous Resource icon for every PS1AudioClip — our _Generate
+    // is only queried for large previews (Inspector / asset browser).
+    // _CanGenerateSmallPreview makes the dock query us for small
+    // sizes; _GenerateSmallPreviewAutomatically tells Godot to reuse
+    // our _Generate output and downscale it (the waveform reads fine
+    // at 64×64 once antialiasing kicks in).
+    public override bool _CanGenerateSmallPreview() => true;
+    public override bool _GenerateSmallPreviewAutomatically() => true;
+
     public override Texture2D? _Generate(Resource resource, Vector2I size,
                                           Godot.Collections.Dictionary metadata)
     {
