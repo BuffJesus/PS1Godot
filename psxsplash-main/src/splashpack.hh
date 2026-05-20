@@ -39,6 +39,20 @@ struct StatsTableEntry {
 };
 static_assert(sizeof(StatsTableEntry) == 16, "StatsTableEntry must be 16 bytes");
 
+// v34+: on-disk per-entity hurtbox record. One per PS1HurtBox child of
+// a PS1MeshInstance. Multiple records can share an entityIndex (an
+// entity with multiple weak-point zones). World AABB at query time =
+// entity position + (offset±size). Offsets + sizes are FP12 raw ints
+// (4096 = 1.0 world unit).
+struct HurtBoxTableEntry {
+    uint16_t entityIndex;
+    int16_t  offsetX, offsetY, offsetZ;  // local space, FP12
+    int16_t  sizeX,   sizeY,   sizeZ;    // half-extents, FP12
+    int16_t  multiplier;                  // 100 = 1× baseline damage
+    uint16_t reserved;                    // future: hurtbox tag / state bits
+};
+static_assert(sizeof(HurtBoxTableEntry) == 20, "HurtBoxTableEntry must be 20 bytes");
+
 // v23+: per-PS1UIModel mutable runtime state (Lua mutates via SceneManager;
 // renderer reads each frame). Static layout authored in the splashpack
 // (canvas index, screen rect, projection H, name) lives in
@@ -307,6 +321,15 @@ struct SplashpackSceneSetup {
     // consumes them.
     const StatsTableEntry* statsTable = nullptr;
     uint16_t statsCount = 0;
+
+    // v34+: per-entity hurtbox table. Sparse — entities without
+    // PS1HurtBox children contribute nothing. SceneManager walks the
+    // table at query time; not expanded into a dense per-entity
+    // structure because most entities have 0 hurtboxes (overhead would
+    // dominate). Linear scan is fine — the table is tiny (boss +
+    // maybe a few minibosses per scene).
+    const HurtBoxTableEntry* hurtBoxTable = nullptr;
+    uint16_t hurtBoxCount = 0;
 
     const RoomData* rooms = nullptr;
     uint16_t roomCount = 0;

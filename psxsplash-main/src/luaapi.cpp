@@ -588,6 +588,9 @@ void LuaAPI::RegisterAll(psyqo::Lua& L, SceneManager* scene, CutscenePlayer* cut
     L.push(Physics_OverlapBox);
     L.setField(-2, "OverlapBox");
 
+    L.push(Physics_OverlapBoxDetailed);
+    L.setField(-2, "OverlapBoxDetailed");
+
     L.setGlobal("Physics");
 
     // ========================================================================
@@ -3771,6 +3774,38 @@ int LuaAPI::Physics_OverlapBox(lua_State* L) {
         if (hasTagFilter && go->tag != tagFilter) continue;
         PushGameObjectHandle(lua, go);
         lua.rawSetI(-2, outIdx++);
+    }
+    return 1;
+}
+
+int LuaAPI::Physics_OverlapBoxDetailed(lua_State* L) {
+    psyqo::Lua lua(L);
+    if (!s_sceneManager || !lua.isTable(1) || !lua.isTable(2)) {
+        lua.newTable();
+        return 1;
+    }
+
+    AABB query;
+    ReadVec3(lua, 1, query.min.x, query.min.y, query.min.z);
+    ReadVec3(lua, 2, query.max.x, query.max.y, query.max.z);
+
+    SceneManager::HurtBoxHit hits[SceneManager::MAX_HURTBOX_RESULTS];
+    int hitCount = s_sceneManager->overlapHurtBoxes(
+        query.min.x.raw(), query.min.y.raw(), query.min.z.raw(),
+        query.max.x.raw(), query.max.y.raw(), query.max.z.raw(),
+        hits, SceneManager::MAX_HURTBOX_RESULTS);
+
+    lua.newTable();
+    for (int i = 0; i < hitCount; ++i) {
+        auto* go = s_sceneManager->getGameObject(hits[i].entityIndex);
+        if (!go) continue;
+        // Each result is { object = <handle>, multiplier = <percent> }.
+        lua.newTable();
+        PushGameObjectHandle(lua, go);
+        lua.setField(-2, "object");
+        lua.pushNumber(hits[i].multiplier);
+        lua.setField(-2, "multiplier");
+        lua.rawSetI(-2, i + 1);
     }
     return 1;
 }

@@ -561,6 +561,7 @@ public static class SceneCollector
             EmitCollisionFor(pmi, objectIndex, data);
             EmitInteractableFor(pmi, objectIndex, data);
             EmitStatsFor(pmi, objectIndex, data);
+            EmitHurtBoxesFor(pmi, objectIndex, data);
 
             // Stage 1 skinned-mesh export: if this is a PS1SkinnedMesh,
             // resolve its skeleton, compute per-triangle bone indices from
@@ -1952,6 +1953,36 @@ public static class SceneCollector
             LuaFileIndex = (short)luaIdx,
         });
         GD.Print($"[PS1Godot] Trigger '{tb.Name}': AABB=[{wMin}..{wMax}] luaIdx={luaIdx}");
+    }
+
+    // v34+: emit hurtbox records for each PS1HurtBox child of a
+    // PS1MeshInstance. Multiple children → multiple records, all
+    // keyed to the same entity index. Local position becomes the
+    // offset from the entity origin; Size is the AABB half-extents.
+    // Skip the entity entirely if it has no PS1HurtBox children —
+    // common case (most enemies don't have weak-point zones).
+    private static void EmitHurtBoxesFor(PS1MeshInstance pmi, ushort objectIndex, SceneData data)
+    {
+        foreach (var child in pmi.GetChildren())
+        {
+            if (child is not PS1HurtBox hb) continue;
+
+            // Local position relative to the entity, in Godot units →
+            // PSX fp12 (×4096). Y is INVERTED at export across the
+            // engine; mirror that here so hurtbox offsets land in the
+            // same coordinate system as Entity.GetPosition.
+            data.HurtBoxes.Add(new HurtBoxRecord
+            {
+                EntityIndex = objectIndex,
+                OffsetXFp12 = (int)(hb.Position.X * 4096f),
+                OffsetYFp12 = (int)(-hb.Position.Y * 4096f),  // PSX Y is down
+                OffsetZFp12 = (int)(hb.Position.Z * 4096f),
+                SizeXFp12   = (int)(hb.Size.X * 4096f),
+                SizeYFp12   = (int)(hb.Size.Y * 4096f),
+                SizeZFp12   = (int)(hb.Size.Z * 4096f),
+                Multiplier  = Mathf.Clamp(hb.DamageMultiplier, 0, 32767),
+            });
+        }
     }
 
     // v33+: emit a Stats record for a PS1MeshInstance with an authored

@@ -877,6 +877,16 @@ private:
     // results to bound the Lua table allocation on PSX RAM.
     static int Physics_OverlapBox(lua_State* L);
 
+    // Physics.OverlapBoxDetailed({x,y,z}, {x,y,z}) -> array of { object, multiplier }
+    // AABB query against per-entity PS1HurtBox AABBs (v34+). Returns
+    // one hit per entity — when multiple hurtboxes on the same entity
+    // overlap, the HIGHEST multiplier wins (best-hit-wins for
+    // authoring "head + body" zones with descending crits). Each hit
+    // is a table { object = <handle>, multiplier = <percent> } where
+    // multiplier is 100 for default, 200 for 2× crit, etc. Capped at
+    // 16 results.
+    static int Physics_OverlapBoxDetailed(lua_State* L);
+
     // ========================================================================
     // STATS API — per-entity HP / Stamina / Mana (v33+).
     // Backed by PS1Stats resources attached to PS1MeshInstance.Stats slots.

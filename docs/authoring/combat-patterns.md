@@ -302,6 +302,59 @@ Scene (PS1Scene)
 Show on encounter start: `UI.SetCanvasVisible(canvas, true)`. Hide
 on boss death.
 
+## Hurtboxes (weak-point crits)
+
+Author `PS1HurtBox` children under a `PS1MeshInstance` to give the
+entity weak-point zones with per-zone damage multipliers. Classic
+use case: boss head = 2× crit, body = 1×, armored legs = 0.5×.
+
+```
+Margit (PS1MeshInstance, Stats = margit_stats.tres)
+├── PS1HurtBox (head, Size = (0.4, 0.3, 0.4), Multiplier = 200)
+├── PS1HurtBox (body, Size = (0.8, 1.2, 0.5), Multiplier = 100)
+└── PS1HurtBox (legs, Size = (0.6, 0.8, 0.5), Multiplier =  50)
+```
+
+At hit-detection time, swap `Physics.OverlapBox` for
+[`Physics.OverlapBoxDetailed`](../lua-api/physics.md#physics-overlapboxdetailed):
+
+```lua
+local BASE_DAMAGE = 10
+
+local function meleeSwing()
+    local minV, maxV = ... -- as before
+    local hits = Physics.OverlapBoxDetailed(minV, maxV)
+    for i = 1, #hits do
+        local hit = hits[i]
+        -- multiplier is a percent: 100 = 1×, 200 = 2×.
+        local damage = (BASE_DAMAGE * hit.multiplier) // 100
+        Stats.DealDamage(hit.object, damage, self)
+    end
+end
+```
+
+When multiple hurtboxes on the same entity overlap the query box,
+the runtime returns the **highest multiplier** for that entity —
+authoring head + body + legs with descending multipliers gives a
+clean "best zone wins" feel without per-call Lua dedup.
+
+Entities without any `PS1HurtBox` children don't appear in
+`OverlapBoxDetailed` results at all. Use `Physics.OverlapBox` for
+the "is anything here?" query — `OverlapBoxDetailed` is
+specifically the hurtbox-zone query.
+
+### Hurtbox limitations
+
+- **Axis-aligned only.** Hurtboxes ignore the entity's rotation;
+  the AABB is `entity.pos + offset ± size` in world space. For a
+  rotating boss the head zone effectively wobbles around its true
+  position. Good enough for v1; rotated-box queries are future
+  work.
+- **No state.** Can't toggle a hurtbox "on" only during certain
+  animations. For a "guard break leaves you vulnerable" pattern,
+  author one hurtbox for the body normally and toggle the entity's
+  `Controls.StartIFrames` count instead to gate the whole entity.
+
 ## Damage dispatch (Stats.DealDamage)
 
 Once you have [`PS1Stats`](nodes/ps1-mesh-instance.md) authored,

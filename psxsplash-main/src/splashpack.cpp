@@ -174,8 +174,16 @@ struct SPLASHPACKFileHeader {
     uint16_t statsCount;
     uint16_t pad_stats;
     uint32_t statsTableOffset;
+    // v34+: per-entity hurtbox (weak-point AABB) sparse table. Each
+    // entry is 20 bytes (see HurtBoxTableEntry). Multiple hurtboxes
+    // per entity = multiple entries with the same entityIndex.
+    // hurtBoxCount == 0 → no entity authored hurtboxes;
+    // Physics.OverlapBoxDetailed returns empty.
+    uint16_t hurtBoxCount;
+    uint16_t pad_hurtbox;
+    uint32_t hurtBoxTableOffset;
 };
-static_assert(sizeof(SPLASHPACKFileHeader) == 240, "SPLASHPACKFileHeader must be 240 bytes");
+static_assert(sizeof(SPLASHPACKFileHeader) == 248, "SPLASHPACKFileHeader must be 248 bytes");
 
 // StatsTableEntry is the on-disk record; the same layout is exposed
 // at file scope in splashpack.hh so SceneManager / Lua can walk it.
@@ -208,7 +216,7 @@ void SplashPackLoader::LoadSplashpack(uint8_t *data, SplashpackSceneSetup &setup
     psyqo::Kernel::assert(data != nullptr, "Splashpack loading data pointer is null");
     psxsplash::SPLASHPACKFileHeader *header = reinterpret_cast<psxsplash::SPLASHPACKFileHeader *>(data);
     psyqo::Kernel::assert(__builtin_memcmp(header->magic, "SP", 2) == 0, "Splashpack has incorrect magic");
-    psyqo::Kernel::assert(header->version >= 33, "Splashpack version too old (need v33+): re-export from PS1Godot");
+    psyqo::Kernel::assert(header->version >= 34, "Splashpack version too old (need v34+): re-export from PS1Godot");
 
     setup.playerStartPosition = header->playerStartPos;
     setup.playerStartRotation = header->playerStartRot;
@@ -515,6 +523,18 @@ void SplashPackLoader::LoadSplashpack(uint8_t *data, SplashpackSceneSetup &setup
         setup.statsCount = header->statsCount;
         setup.statsTable = reinterpret_cast<const StatsTableEntry *>(
             data + header->statsTableOffset);
+    }
+
+    // v34+: per-entity hurtbox table. Sparse — multiple entries per
+    // entity (one per PS1HurtBox child) all with the same entityIndex.
+    // Physics.OverlapBoxDetailed walks the table at query time and
+    // returns the highest-multiplier match per entity.
+    setup.hurtBoxCount = 0;
+    setup.hurtBoxTable = nullptr;
+    if (header->hurtBoxCount > 0 && header->hurtBoxTableOffset != 0) {
+        setup.hurtBoxCount = header->hurtBoxCount;
+        setup.hurtBoxTable = reinterpret_cast<const HurtBoxTableEntry *>(
+            data + header->hurtBoxTableOffset);
     }
 
     // v22+: sequenced music table. Entries live at

@@ -29,11 +29,11 @@ namespace PS1Godot.Exporter;
 //                  Name table — referenced by header.nameTableOffset.
 public static class SplashpackWriter
 {
-    public const ushort SplashpackVersion = 33;
+    public const ushort SplashpackVersion = 34;
     // Header layout grew by 16 bytes in v24 (sky struct: tpage + clut + UVs
     // + bitDepth + tint + enabled flag, mirroring the UI Image typeData
     // union slot). See WriteHeader and the runtime's SPLASHPACKFileHeader.
-    public const int HeaderSize = 240;
+    public const int HeaderSize = 248;
     public const int GameObjectSize = 92;
     public const int TriSize = 52;
     public const int LuaFileSize = 8; // luaCodeOffset (u32) + length (u32)
@@ -440,6 +440,45 @@ public static class SplashpackWriter
         if (scene.Stats.Count > 0)
         {
             WriteStatsSection(w, scene, headerOffsets);
+        }
+
+        // v34+: per-entity hurtboxes. Sparse — entities without any
+        // PS1HurtBox children contribute nothing. Empty list →
+        // Physics.OverlapBoxDetailed returns the entity with multiplier
+        // 100 (default) if it has any solid collider in the box;
+        // entities with hurtboxes use the matched hurtbox's multiplier.
+        if (scene.HurtBoxes.Count > 0)
+        {
+            WriteHurtBoxSection(w, scene, headerOffsets);
+        }
+    }
+
+    // ─── Per-entity hurtbox section (v34+) ─────────────────────────────
+    //
+    // 20-byte HurtBoxTableEntry × N. Each entry carries entityIndex +
+    // local offset (fp12 xyz) + half-extents (fp12 xyz) + multiplier
+    // (i16 percent) + 2 bytes reserved for future fields. Runtime
+    // computes world-space AABB at query time as
+    //   min = entity.pos + offset - size
+    //   max = entity.pos + offset + size
+    private static void WriteHurtBoxSection(BinaryWriter w, SceneData scene, HeaderOffsets headerOffsets)
+    {
+        AlignTo4(w);
+        long tableStart = w.BaseStream.Position;
+        BackfillUInt16(w, headerOffsets.HurtBoxCountPos, (ushort)scene.HurtBoxes.Count);
+        BackfillUInt32(w, headerOffsets.HurtBoxTableOffsetPos, (uint)tableStart);
+
+        foreach (var hb in scene.HurtBoxes)
+        {
+            w.Write((ushort)hb.EntityIndex);
+            w.Write((short)Mathf.Clamp(hb.OffsetXFp12, short.MinValue, short.MaxValue));
+            w.Write((short)Mathf.Clamp(hb.OffsetYFp12, short.MinValue, short.MaxValue));
+            w.Write((short)Mathf.Clamp(hb.OffsetZFp12, short.MinValue, short.MaxValue));
+            w.Write((short)Mathf.Clamp(hb.SizeXFp12, 0, short.MaxValue));
+            w.Write((short)Mathf.Clamp(hb.SizeYFp12, 0, short.MaxValue));
+            w.Write((short)Mathf.Clamp(hb.SizeZFp12, 0, short.MaxValue));
+            w.Write((short)Mathf.Clamp(hb.Multiplier, 0, short.MaxValue));
+            w.Write((ushort)0);  // reserved
         }
     }
 
@@ -1469,6 +1508,9 @@ public static class SplashpackWriter
         // v33+: per-entity stats backfill positions.
         public long StatsCountPos;
         public long StatsTableOffsetPos;
+        // v34+: per-entity hurtbox backfill positions.
+        public long HurtBoxCountPos;
+        public long HurtBoxTableOffsetPos;
     }
 
     private static HeaderOffsets WriteHeader(BinaryWriter w, SceneData scene, int atlasCount, int clutCount, int colliderCount,
@@ -1718,6 +1760,14 @@ public static class SplashpackWriter
         w.Write((ushort)0);    // pad_stats
         offsets.StatsTableOffsetPos = w.BaseStream.Position;
         w.Write((uint)0);      // statsTableOffset (backfilled)
+
+        // v34+: per-entity hurtboxes. Same shape as stats — sparse
+        // count + table-offset, backfilled by WriteHurtBoxSection.
+        offsets.HurtBoxCountPos = w.BaseStream.Position;
+        w.Write((ushort)0);    // hurtBoxCount (backfilled)
+        w.Write((ushort)0);    // pad_hurtbox
+        offsets.HurtBoxTableOffsetPos = w.BaseStream.Position;
+        w.Write((uint)0);      // hurtBoxTableOffset (backfilled)
 
         long written = w.BaseStream.Position - headerStart;
         if (written != HeaderSize)

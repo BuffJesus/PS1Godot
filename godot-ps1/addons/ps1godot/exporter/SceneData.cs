@@ -156,6 +156,23 @@ public sealed class StatsRecord
     public required int InitialMana { get; init; }
 }
 
+// v34+: per-entity weak-point AABB. One record per PS1HurtBox child
+// of a PS1MeshInstance. Offset + size are FP12 raw ints (Godot-side
+// floats × 4096) in the entity's local space. World AABB at query
+// time = entity position + offset ± size. Multiplier is a percentage
+// (100 = 1× baseline).
+public sealed class HurtBoxRecord
+{
+    public required int EntityIndex { get; init; }
+    public required int OffsetXFp12 { get; init; }
+    public required int OffsetYFp12 { get; init; }
+    public required int OffsetZFp12 { get; init; }
+    public required int SizeXFp12 { get; init; }
+    public required int SizeYFp12 { get; init; }
+    public required int SizeZFp12 { get; init; }
+    public required int Multiplier { get; init; }
+}
+
 // v28+: scene-wide instrument bank record (16 bytes on disk). Maps to
 // SPLASHPACKInstrumentRecord in psxsplash-main/src/splashpack.hh.
 public sealed class InstrumentBankRecord
@@ -661,6 +678,12 @@ public sealed class SceneData
     // under the v33 stats section; runtime expands into a dense
     // per-entity array at scene init.
     public List<StatsRecord> Stats { get; } = new();
+
+    // v34+: per-entity hurtboxes (weak-point AABBs). One record per
+    // PS1HurtBox child of a PS1MeshInstance. Writer emits as a v34
+    // splashpack section; runtime indexes by entityIndex at query
+    // time to apply per-zone damage multipliers.
+    public List<HurtBoxRecord> HurtBoxes { get; } = new();
 
     // v28+: scene-wide instrument bank. Each Instruments entry owns a
     // contiguous slice of Regions (firstRegionIndex / regionCount).

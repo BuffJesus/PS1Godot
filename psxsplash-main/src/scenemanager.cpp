@@ -156,6 +156,12 @@ void psxsplash::SceneManager::InitializeScene(uint8_t* splashpackData, LoadingSc
     m_entityStats.resize(m_gameObjects.size());
     m_iframes.clear();
     m_iframes.resize(m_gameObjects.size(), 0);
+    m_lockTargetIndex = 0xFFFF;  // always start scenes unlocked
+
+    // v34+: hurtbox table — store pointers as-is. Linear-scanned at
+    // query time (table is sparse; typical scene has 0–10 entries).
+    m_hurtBoxTable = sceneSetup.hurtBoxTable;
+    m_hurtBoxCount = sceneSetup.hurtBoxCount;
     if (sceneSetup.statsTable && sceneSetup.statsCount > 0) {
         for (uint16_t i = 0; i < sceneSetup.statsCount; ++i) {
             const StatsTableEntry& src = sceneSetup.statsTable[i];
@@ -1743,4 +1749,55 @@ int psxsplash::SceneManager::dealDamage(uint16_t targetIndex, int amount, GameOb
     if (target) L.OnDamage(target, applied, source);
 
     return applied;
+}
+
+int psxsplash::SceneManager::overlapHurtBoxes(int32_t minX, int32_t minY, int32_t minZ,
+                                              int32_t maxX, int32_t maxY, int32_t maxZ,
+                                              HurtBoxHit* out, int outCap) const {
+    if (!m_hurtBoxTable || m_hurtBoxCount == 0 || outCap <= 0) return 0;
+
+    int count = 0;
+    for (uint16_t i = 0; i < m_hurtBoxCount; ++i) {
+        const HurtBoxTableEntry& hb = m_hurtBoxTable[i];
+        if (hb.entityIndex >= m_gameObjects.size()) continue;
+        const GameObject* go = m_gameObjects[hb.entityIndex];
+        if (!go || !go->isActive()) continue;
+
+        // World AABB = entity position + offset ± size. Position is
+        // FP12 raw, offset / size also FP12 raw, so the math stays
+        // in 20.12 ints.
+        int32_t cx = go->position.x.raw() + hb.offsetX;
+        int32_t cy = go->position.y.raw() + hb.offsetY;
+        int32_t cz = go->position.z.raw() + hb.offsetZ;
+        int32_t hbMinX = cx - hb.sizeX;
+        int32_t hbMinY = cy - hb.sizeY;
+        int32_t hbMinZ = cz - hb.sizeZ;
+        int32_t hbMaxX = cx + hb.sizeX;
+        int32_t hbMaxY = cy + hb.sizeY;
+        int32_t hbMaxZ = cz + hb.sizeZ;
+
+        // AABB-vs-AABB overlap test.
+        if (maxX < hbMinX || minX > hbMaxX) continue;
+        if (maxY < hbMinY || minY > hbMaxY) continue;
+        if (maxZ < hbMinZ || minZ > hbMaxZ) continue;
+
+        // Dedup against existing results — keep highest multiplier
+        // per entity. Linear scan over the small `out` array is fine.
+        bool merged = false;
+        for (int j = 0; j < count; ++j) {
+            if (out[j].entityIndex == hb.entityIndex) {
+                if (hb.multiplier > out[j].multiplier) {
+                    out[j].multiplier = hb.multiplier;
+                }
+                merged = true;
+                break;
+            }
+        }
+        if (!merged && count < outCap) {
+            out[count].entityIndex = hb.entityIndex;
+            out[count].multiplier  = hb.multiplier;
+            ++count;
+        }
+    }
+    return count;
 }

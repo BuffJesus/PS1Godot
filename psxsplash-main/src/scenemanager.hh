@@ -123,6 +123,22 @@ class SceneManager {
     void clearLockTarget()                   { m_lockTargetIndex = 0xFFFF; }
     bool isLocked() const                    { return m_lockTargetIndex != 0xFFFF; }
     uint16_t getLockTarget() const           { return m_lockTargetIndex; }
+
+    // ---- v34+: hurtbox query. ------------------------------------------
+    // Iterates m_hurtBoxTable, tests each entry's world-space AABB
+    // (entity position + offset ± size) against the query box. Per
+    // entity, returns the HIGHEST multiplier among hits — authoring
+    // "head + body" with descending crits gives "best hit wins" without
+    // per-call Lua dedup. Capped at MAX_HURTBOX_RESULTS = 16 to bound
+    // the Lua table allocation.
+    struct HurtBoxHit {
+        uint16_t entityIndex;
+        int16_t  multiplier;
+    };
+    static constexpr int MAX_HURTBOX_RESULTS = 16;
+    int overlapHurtBoxes(int32_t minXFp12, int32_t minYFp12, int32_t minZFp12,
+                         int32_t maxXFp12, int32_t maxYFp12, int32_t maxZFp12,
+                         HurtBoxHit* out, int outCap) const;
     
     // Get object name by index (returns nullptr if no name table or out of range)
     const char* getObjectName(uint16_t index) const {
@@ -309,6 +325,12 @@ class SceneManager {
     // locked, making the camera track + input become target-relative.
     // Auto-clears when the target is destroyed or deactivates.
     uint16_t m_lockTargetIndex = 0xFFFF;
+
+    // v34+: per-entity hurtbox table pointer + count. Stored as-is
+    // from the splashpack; Lua's Physics.OverlapBoxDetailed walks the
+    // list at query time. nullptr/0 = no entity authored hurtboxes.
+    const HurtBoxTableEntry* m_hurtBoxTable = nullptr;
+    uint16_t m_hurtBoxCount = 0;
     
     // Object name table (v9+): parallel to m_gameObjects, points into splashpack data
     eastl::vector<const char*> m_objectNames;

@@ -4,7 +4,7 @@
 !!! info "Generated"
     This page is auto-generated from `psxsplash-main/src/luaapi.hh` by `scripts/py/gen_lua_api_docs.py`. Edits won't survive the next build — fix the source comments instead.
 
-2 entries, 2 with worked examples mined from `godot-ps1/demo/scripts/` and the bundled templates.
+3 entries, 2 with worked examples mined from `godot-ps1/demo/scripts/` and the bundled templates.
 
 ## Methods
 
@@ -36,3 +36,13 @@ local hits = Physics.OverlapBox(minV, maxV, TAG_ENEMY)
 ```
 
 _Source: `godot-ps1/demo/scripts/combat_showcase.lua` line 170._
+
+### `Physics.OverlapBoxDetailed({x,y,z}, {x,y,z}) -> array of { object, multiplier }` { #physics-overlapboxdetailed }
+
+AABB query against per-entity PS1HurtBox AABBs (v34+). Returns
+one hit per entity — when multiple hurtboxes on the same entity
+overlap, the HIGHEST multiplier wins (best-hit-wins for
+authoring "head + body" zones with descending crits). Each hit
+is a table { object = <handle>, multiplier = <percent> } where
+multiplier is 100 for default, 200 for 2× crit, etc. Capped at
+16 results.

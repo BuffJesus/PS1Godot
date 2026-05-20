@@ -20,8 +20,11 @@ Six patterns where current authoring is awkward (or impossible):
 1. **Boss HP / stats** — ✅ landed 2026-05-19. PS1Stats Resource
    carries HP / Stamina / Mana on PS1MeshInstance; Lua's Stats.*
    API queries + mutates.
-2. **Hitbox / hurtbox distinction** — currently every `OverlapBox`
-   tag is the same.
+2. **Hitbox / hurtbox distinction** — ✅ landed 2026-05-19.
+   PS1HurtBox node attached to PS1MeshInstance children; splashpack
+   v34 carries per-entity hurtbox records;
+   `Physics.OverlapBoxDetailed` returns `{object, multiplier}` with
+   best-hit-wins dedup.
 3. **Damage events** — ✅ landed 2026-05-19. Stats.DealDamage
    central entry point; onDamage(self, applied, source) callback
    fires after the HP debit. Runs alongside primitive 6's i-frame
@@ -131,7 +134,31 @@ gets/sets read/write the array directly.
 
 **Total: ~3 days.** Highest-leverage primitive.
 
-## Primitive 2 — `PS1HurtBox`
+## Primitive 2 — `PS1HurtBox`  ✅ LANDED (2026-05-19)
+
+**Status:** shipped. Splashpack v34. `PS1HurtBox.cs` Node3D child of
+`PS1MeshInstance`; exporter emits one 20-B record per child under
+the v34 hurtbox section; runtime stores the table pointer and
+linear-scans at query time (table is sparse — typical scene has
+0–10 entries, linear scan beats a per-entity hash for memory).
+
+`Physics.OverlapBoxDetailed({x,y,z}, {x,y,z}) -> array of {object,
+multiplier}` queries against per-entity hurtbox AABBs (world =
+entity position + local offset ± size, axis-aligned for v1).
+Multiple hurtboxes per entity → one result per entity with the
+HIGHEST multiplier, so authoring head + body + legs with
+descending crits gives clean "best zone wins" without Lua dedup.
+
+Live: [Lua API → Physics.OverlapBoxDetailed](https://buffjesus.github.io/PS1Godot/lua-api/physics/#physics-overlapboxdetailed).
+
+**Out of scope for v1:** rotation-aware queries (boss rotates →
+hurtbox AABB wobbles; acceptable for first encounter) and
+animation-state-gated hurtboxes (guard break exposes the body;
+use `Controls.StartIFrames` toggling on the whole entity for now).
+
+Original surface below for the record.
+
+### Original surface
 
 ### Surface
 
@@ -588,35 +615,136 @@ end
 this RFC — the rest of dodge is Lua-side recipe that doesn't
 need engine support.
 
-## Primitive 7 (deferred) — fog-gate trigger
+## Primitive 7 (cancelled) — PS1FogGate
 
-Not strictly necessary; the combat-patterns recipe shows how to
-compose one. But if a soul-like is a primary use case, a
-single-node `PS1FogGate` that bundles the trigger + fade-canvas +
-input-freeze + persist-flag would save 30 lines of Lua per gate.
+**Status:** rejected in favor of composition + a small
+`PS1MeshInstance.UVScrollSpeed` feature (see primitive 8 below).
 
-Defer until at least 3 encounters have been authored with the
-composable pattern — landing it too early picks the wrong shape.
+The fog gate in Elden Ring is a textured quad with a scrolling
+fog texture, plus an encounter-gating trigger in front of it.
+That decomposes cleanly:
+
+- **Visual** — a `PS1MeshInstance` with a fog texture, translucent
+  material, and **scrolling UVs** (the only new engine bit).
+- **Audio** — `PS1AudioClip` whoosh fired on the pass.
+- **Behavior** — a `PS1TriggerBox` calling
+  `Cutscene.Play("boss_intro")` + `Camera.LockOn(boss)` +
+  `Persist.Set("boss_gate_crossed", 1)` on overlap, no-op when
+  the persist flag is already set.
+
+Composition wins over a `PS1FogGate` mega-component because:
+
+- The visual is reusable for waterfalls, lava, portals,
+  scrolling text overlays — any application of moving UVs.
+- The encounter-gating logic is already three other primitives
+  the project has; bundling them into one node would just hide
+  the wiring.
+
+Promoted: see primitive 8.
+
+## Primitive 8 — `PS1MeshInstance.UVScrollSpeed`
+
+### Context
+
+Replaces the cancelled `PS1FogGate` primitive. A small
+`[Export] public Vector2 UVScrollSpeed` field on
+`PS1MeshInstance`. At export time the value gets stored on the
+mesh record; at runtime, before submitting each primitive to the
+GPU, the renderer adds `(time * scrollSpeed)` to the U and V
+coordinates.
+
+PSX has no shader stage — the GPU's UVs come from the primitive
+packet itself. UV scrolling means recomputing UVs per frame on
+the CPU side, then submitting normally. Cheap because UVs are
+small ints, the math is a single add per vertex of the affected
+primitives.
+
+### Proposed surface
+
+```cs
+[ExportGroup("Animation")]
+[Export] public Vector2 UVScrollSpeed { get; set; } = Vector2.Zero;
+```
+
+Default `(0, 0)` = no scrolling (every existing mesh unaffected).
+
+### Use cases
+
+- **Fog gates** — translucent plane with a fog texture, UV scroll
+  diagonally → flowing fog wall.
+- **Waterfalls** — vertical strip mesh with a water texture, UV
+  scroll vertically.
+- **Lava / poison surfaces** — same, slower scroll.
+- **Conveyor belts** — UV scroll horizontally.
+- **Spell circles / portals** — slow rotation effect using both
+  axes.
+
+### Implementation cost
+
+- C# inspector field on PS1MeshInstance: 5 minutes.
+- Splashpack v35 bump: append 2 × int16 (or fp8 — 1-byte each)
+  per mesh record. ~half day.
+- Exporter wiring: write the bytes. ~half day.
+- Runtime: per-frame UV offset accumulator + apply during
+  primitive submission. ~half to 1 day depending on where in the
+  render pipeline it lands cleanly. Need a per-mesh "current UV
+  offset" runtime state.
+- Doctor warning when authoring a UVScrollSpeed on an opaque
+  material (silently does nothing without translucency): trivial.
+
+**Total: ~1.5 days.** Smallest remaining primitive on the queue,
+biggest visual diversity per dollar.
+
+### Authoring recipe (combat-patterns follow-up)
+
+```
+FogGateMesh (PS1MeshInstance)
+  Mesh: PlaneMesh (4 × 6 units, scaled to the doorway)
+  Material: PS1Material with FogWall.png texture + AlphaMode.Translucent
+  UVScrollSpeed: (0.05, 0.1)  -- gentle diagonal flow
+
+FogGateTrigger (PS1TriggerBox)
+  Size: matches the doorway
+  ScriptFile: fog_gate.lua
+```
+
+```lua
+-- fog_gate.lua
+function onTriggerEnter(self, index)
+    if Persist.Get("godrick_gate_crossed") then return end
+    Persist.Set("godrick_gate_crossed", 1)
+    Audio.PlaySfx("fog_gate_whoosh")
+    Cutscene.Play("godrick_intro")
+    -- Camera.LockOn(godrick) fires from the cutscene's OnFinishLua
+end
+```
+
+Zero new authoring primitives needed. The UV-scroll mesh feature
+plus existing trigger/cutscene/persist primitives compose into a
+fog gate.
 
 ## Ordering
 
 Implementation order. Updated as primitives land:
 
 1. **`PS1Stats`** ✅ landed 2026-05-19 (v33).
-2. **`onDamage` callback** ✅ landed 2026-05-19.
-3. **Dodge / roll with i-frames** ✅ landed 2026-05-19.
+2. **`PS1HurtBox`** ✅ landed 2026-05-19 (v34).
+3. **`onDamage` callback** ✅ landed 2026-05-19.
 4. **`Camera.LockOn` / `Camera.LockOff`** ✅ landed 2026-05-19.
 5. **Twin-stick camera tuning** — small win, can land any time.
-6. **`PS1HurtBox`** — incremental refinement; works without it
-   for first encounters.
-7. **`PS1FogGate`** — defer until composable pattern's pain is felt.
+6. **Dodge / roll with i-frames** ✅ landed 2026-05-19.
+7. **PS1FogGate** ❌ cancelled — composition wins. Replaced by
+   primitive 8.
+8. **`PS1MeshInstance.UVScrollSpeed`** — small mesh feature
+   (~1.5 days) unlocking fog gates + waterfalls + lava +
+   conveyors via composition. Pending.
 
-**The full souls-like combat surface is shipped.** Stats + onDamage
-+ dodge i-frames + lock-on cover everything a first Elden Ring–
-style boss needs at the engine level. Remaining items are quality-
-of-life (lock-on reticle, tuned per-scene camera sensitivity) or
-incremental encounter polish (hurtboxes for crit zones, fog-gate
-helper) — none on the critical path.
+**The full souls-like combat surface is shipped.** Stats +
+hurtboxes + onDamage + lock-on + dodge i-frames cover everything
+the first Elden Ring–style boss needs at the engine level.
+Remaining items are quality-of-life (lock-on reticle, twin-stick
+tuning) or visual variety (UV-scroll for fog gates / waterfalls /
+lava).
 
 Stop at any step. The combat-patterns recipe page documents how
 to do the things this RFC adds without these primitives — so
