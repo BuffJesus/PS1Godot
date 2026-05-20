@@ -1,4 +1,4 @@
-[gd_resource type="ShaderMaterial" load_steps=2 format=3 uid="uid://boss_smoke_preview_dim"]
+[gd_resource type="ShaderMaterial" load_steps=2 format=3]
 
 ; Editor-side preview material for the boss_smoke scene.
 ;
@@ -16,7 +16,7 @@
 ; Material overrides here only steer the Godot viewport, not what
 ; ships on disc.
 
-[ext_resource type="Shader" path="res://addons/ps1godot/shaders/ps1.gdshader" id="1"]
+[ext_resource type="Shader" uid="uid://lnrxmrercuvn" path="res://addons/ps1godot/shaders/ps1.gdshader" id="1"]
 
 [resource]
 render_priority = 0

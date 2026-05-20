@@ -1,4 +1,4 @@
-[gd_scene load_steps=18 format=3 uid="uid://bossSmokeScene01"]
+[gd_scene load_steps=18 format=3]
 
 ; Boss-encounter smoke scene. Exercises every combat primitive landed
 ; in the 2026-05-19 RFC arc:
@@ -12,13 +12,13 @@
 ; no textures, no music. The scene tree + scripts are the demo; visuals
 ; are something to swap in later.
 
-[ext_resource type="Script" path="res://addons/ps1godot/nodes/PS1Scene.cs" id="1_scene"]
-[ext_resource type="Script" path="res://addons/ps1godot/nodes/PS1MeshInstance.cs" id="2_mesh"]
-[ext_resource type="Script" path="res://addons/ps1godot/nodes/PS1Player.cs" id="3_player"]
-[ext_resource type="Script" path="res://addons/ps1godot/nodes/PS1TriggerBox.cs" id="4_trigger"]
-[ext_resource type="Script" path="res://addons/ps1godot/nodes/PS1UICanvas.cs" id="5_uican"]
-[ext_resource type="Script" path="res://addons/ps1godot/nodes/PS1UIElement.cs" id="6_uiel"]
-[ext_resource type="Script" path="res://addons/ps1godot/nodes/PS1HurtBox.cs" id="7_hurt"]
+[ext_resource type="Script" uid="uid://b8ogc8krip2k" path="res://addons/ps1godot/nodes/PS1Scene.cs" id="1_scene"]
+[ext_resource type="Script" uid="uid://dng0iofdw3dk7" path="res://addons/ps1godot/nodes/PS1MeshInstance.cs" id="2_mesh"]
+[ext_resource type="Script" uid="uid://cfdlp12g2rtct" path="res://addons/ps1godot/nodes/PS1Player.cs" id="3_player"]
+[ext_resource type="Script" uid="uid://bbl6b0g2qjisp" path="res://addons/ps1godot/nodes/PS1TriggerBox.cs" id="4_trigger"]
+[ext_resource type="Script" uid="uid://bp1p1kqop2wwy" path="res://addons/ps1godot/nodes/PS1UICanvas.cs" id="5_uican"]
+[ext_resource type="Script" uid="uid://c01mt2tth0oll" path="res://addons/ps1godot/nodes/PS1UIElement.cs" id="6_uiel"]
+[ext_resource type="Script" uid="uid://dy1f8ojji0fj" path="res://addons/ps1godot/nodes/PS1HurtBox.cs" id="7_hurt"]
 [ext_resource type="Resource" path="res://demo/boss_smoke/boss_stats.tres" id="8_boss_stats"]
 [ext_resource type="Resource" path="res://demo/boss_smoke/player_stats.tres" id="9_player_stats"]
 [ext_resource type="Material" path="res://demo/boss_smoke/preview_dim.tres" id="10_preview_mat"]

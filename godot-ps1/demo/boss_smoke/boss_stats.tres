@@ -1,6 +1,6 @@
-[gd_resource type="Resource" script_class="PS1Stats" load_steps=2 format=3 uid="uid://boss_smoke_stats_b"]
+[gd_resource type="Resource" script_class="PS1Stats" load_steps=2 format=3]
 
-[ext_resource type="Script" path="res://addons/ps1godot/nodes/PS1Stats.cs" id="1_stats"]
+[ext_resource type="Script" uid="uid://wwphoi0hfukd" path="res://addons/ps1godot/nodes/PS1Stats.cs" id="1_stats"]
 
 [resource]
 script = ExtResource("1_stats")
@@ -10,4 +10,4 @@ MaxStamina = 0
 StartingStamina = -1
 MaxMana = 0
 StartingMana = -1
-metadata/_custom_type_script = "uid://__placeholder_ps1stats__"
+metadata/_custom_type_script = "uid://wwphoi0hfukd"
