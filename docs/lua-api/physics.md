@@ -4,7 +4,7 @@
 !!! info "Generated"
     This page is auto-generated from `psxsplash-main/src/luaapi.hh` by `scripts/py/gen_lua_api_docs.py`. Edits won't survive the next build — fix the source comments instead.
 
-3 entries, 2 with worked examples mined from `godot-ps1/demo/scripts/` and the bundled templates.
+3 entries, 3 with worked examples mined from `godot-ps1/demo/scripts/` and the bundled templates.
 
 ## Methods
 
@@ -46,3 +46,11 @@ authoring "head + body" zones with descending crits). Each hit
 is a table { object = <handle>, multiplier = <percent> } where
 multiplier is 100 for default, 200 for 2× crit, etc. Capped at
 16 results.
+
+**Example**
+
+```lua
+local hits = Physics.OverlapBoxDetailed(minV, maxV)
+```
+
+_Source: `godot-ps1/demo/scripts/boss_smoke_brain.lua` line 59._

@@ -4,7 +4,7 @@
 !!! info "Generated"
     This page is auto-generated from `psxsplash-main/src/luaapi.hh` by `scripts/py/gen_lua_api_docs.py`. Edits won't survive the next build — fix the source comments instead.
 
-19 entries, 3 with worked examples mined from `godot-ps1/demo/scripts/` and the bundled templates.
+19 entries, 6 with worked examples mined from `godot-ps1/demo/scripts/` and the bundled templates.
 
 ## Methods
 
@@ -40,10 +40,11 @@ facing" math.
 **Example**
 
 ```lua
+-- since the player facing matches camera in 3p mode.
 local f = Camera.GetForward()
 ```
 
-_Source: `godot-ps1/demo/scripts/combat_showcase.lua` line 72._
+_Source: `godot-ps1/demo/scripts/boss_smoke_player.lua` line 69._
 
 ### `Camera.MoveForward(step)` { #camera-moveforward }
 
@@ -127,14 +128,38 @@ camera-forward). Right-stick yaw + L1/R1 rotation are visually
 suppressed while locked. Auto-unlocks if the target gets
 destroyed or deactivated.
 
+**Example**
+
+```lua
+Camera.LockOn(boss)
+```
+
+_Source: `godot-ps1/demo/scripts/boss_smoke_fog_gate.lua` line 21._
+
 ### `Camera.LockOff() -> nil` { #camera-lockoff }
 
 Drop lock-on. Camera + input return to default behavior on
 the next frame.
 
+**Example**
+
+```lua
+Camera.LockOff()
+```
+
+_Source: `godot-ps1/demo/scripts/boss_smoke_brain.lua` line 154._
+
 ### `Camera.IsLocked() -> boolean` { #camera-islocked }
 
 True while a lock target is active.
+
+**Example**
+
+```lua
+if Camera.IsLocked() then
+```
+
+_Source: `godot-ps1/demo/scripts/boss_smoke_player.lua` line 47._
 
 ### `Camera.GetLockTarget() -> object or nil` { #camera-getlocktarget }
 

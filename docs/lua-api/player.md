@@ -4,9 +4,28 @@
 !!! info "Generated"
     This page is auto-generated from `psxsplash-main/src/luaapi.hh` by `scripts/py/gen_lua_api_docs.py`. Edits won't survive the next build — fix the source comments instead.
 
-3 entries, 1 with worked examples mined from `godot-ps1/demo/scripts/` and the bundled templates.
+4 entries, 2 with worked examples mined from `godot-ps1/demo/scripts/` and the bundled templates.
 
 ## Methods
+
+### `Player.SetPosition(pos) -> nil` { #player-setposition }
+
+Teleports the player pawn to PSX-runtime world coords. `pos`
+is either a Vec3 table OR three raw fp12 numbers — the runtime
+accepts both forms in the same call slot.
+NOTE: coords are PSX-frame (post-export Y/Z flip and
+/gteScaling), NOT Godot units. Convert from Godot:
+x_psx = x_godot/4, y_psx = -y_godot/4, z_psx = -z_godot/4.
+Use for spawn-points, scene-load placement, dodge / dash
+motion overrides, cutscene blocking, debug warps.
+
+**Example**
+
+```lua
+Player.SetPosition(Vec3.new(p.x + stepX, p.y, p.z + stepZ))
+```
+
+_Source: `godot-ps1/demo/scripts/boss_smoke_player.lua` line 145._
 
 ### `Player.GetPosition() -> Vec3` { #player-getposition }
 
@@ -18,10 +37,11 @@ mutating it doesn't move the player.
 **Example**
 
 ```lua
+-- input automatically.
 local p = Player.GetPosition()
 ```
 
-_Source: `godot-ps1/demo/scripts/combat_showcase.lua` line 204._
+_Source: `godot-ps1/demo/scripts/boss_smoke_fog_gate.lua` line 18._
 
 ### `Player.SetRotation({x, y, z})` { #player-setrotation }
 

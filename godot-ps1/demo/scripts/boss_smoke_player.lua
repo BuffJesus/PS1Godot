@@ -133,16 +133,16 @@ function onUpdate(self, dt)
     if Input.IsPressed(Input.CIRCLE) then tryDodge(self) end
     if Input.IsPressed(Input.R2) then tryMelee(self) end
 
-    -- Active dodge — manual position override during the window
+    -- Active dodge — manual position override during the window.
+    -- DODGE_SPEED is fp12 raw (4096 = 1.0 world unit/frame). Direction
+    -- vector came from the left stick at dodge-start; multiply by
+    -- DODGE_SPEED, scale by stick magnitude (already in fp12 from
+    -- GetAnalog), divide by 4096 to land in fp12.
     if dodgeFrames > 0 then
         local p = Player.GetPosition()
-        Player.SetRotation({ x = 0, y = 0, z = 0 })  -- can't rotate during dodge
-        -- Position write via Entity.SetPosition on the player handle —
-        -- runtime uses player position from Player.GetPosition, but
-        -- since the player is also a GameObject we can move it that way.
-        -- (For dodging the actual player rig, Player.SetPosition is the
-        -- right API — Player.SetPosition doesn't exist yet, so this is
-        -- the limitation surfaced.)
+        local stepX = (dodgeDirX * DODGE_SPEED) // 4096
+        local stepZ = (dodgeDirZ * DODGE_SPEED) // 4096
+        Player.SetPosition(Vec3.new(p.x + stepX, p.y, p.z + stepZ))
         dodgeFrames = dodgeFrames - 1
     end
 

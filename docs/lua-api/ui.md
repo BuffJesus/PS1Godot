@@ -50,10 +50,10 @@ draw entirely — cheap to toggle.
 **Example**
 
 ```lua
-UI.SetCanvasVisible(dialogCanvas, true)
+UI.SetCanvasVisible(canvas, true)
 ```
 
-_Source: `godot-ps1/demo/scripts/checkered_dialog.lua` line 55._
+_Source: `godot-ps1/demo/scripts/boss_smoke_brain.lua` line 42._
 
 ### `UI.IsCanvasVisible(canvas) -> boolean` { #ui-iscanvasvisible }
 
@@ -69,10 +69,10 @@ returned handles in onCreate.
 **Example**
 
 ```lua
-dialogBodyEl = UI.FindElement(dialogCanvas, "body")
+local bar = UI.FindElement(canvas, "fill")
 ```
 
-_Source: `godot-ps1/demo/scripts/checkered_dialog.lua` line 40._
+_Source: `godot-ps1/demo/scripts/boss_smoke_brain.lua` line 45._
 
 ### `UI.SetVisible(element, bool)` { #ui-setvisible }
 

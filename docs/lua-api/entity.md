@@ -4,7 +4,7 @@
 !!! info "Generated"
     This page is auto-generated from `psxsplash-main/src/luaapi.hh` by `scripts/py/gen_lua_api_docs.py`. Edits won't survive the next build — fix the source comments instead.
 
-17 entries, 8 with worked examples mined from `godot-ps1/demo/scripts/` and the bundled templates.
+17 entries, 9 with worked examples mined from `godot-ps1/demo/scripts/` and the bundled templates.
 
 ## Methods
 
@@ -36,6 +36,14 @@ Returns total number of game objects
 
 Sets object active state (fires onEnable/onDisable)
 
+**Example**
+
+```lua
+Entity.SetActive(self, false)
+```
+
+_Source: `godot-ps1/demo/scripts/boss_smoke_brain.lua` line 157._
+
 ### `Entity.IsActive(object) -> boolean` { #entity-isactive }
 
 True if the object is currently active (visible + ticking).
@@ -47,10 +55,11 @@ World-space position as a Vec3 table. Components are FixedPoint<12>.
 **Example**
 
 ```lua
-local cur = Entity.GetPosition(b.handle)
+-- Simple chase — Entity.SetPosition stepping toward player.
+local b = Entity.GetPosition(self)
 ```
 
-_Source: `godot-ps1/demo/scripts/combat_showcase.lua` line 124._
+_Source: `godot-ps1/demo/scripts/boss_smoke_brain.lua` line 86._
 
 ### `Entity.SetPosition(object, {x, y, z})` { #entity-setposition }
 
@@ -61,10 +70,10 @@ if you need to avoid clipping into walls.
 **Example**
 
 ```lua
-Entity.SetPosition(b.handle, Vec3.new(nextX, cur.y, nextZ))
+Entity.SetPosition(self, Vec3.new(
 ```
 
-_Source: `godot-ps1/demo/scripts/combat_showcase.lua` line 145._
+_Source: `godot-ps1/demo/scripts/boss_smoke_brain.lua` line 93._
 
 ### `Entity.GetRotationY(object) -> number` { #entity-getrotationy }
 
@@ -157,7 +166,7 @@ closest. For lock-on, "closest enemy" AI queries, etc.
 **Example**
 
 ```lua
-local nearest = Entity.FindNearest(Vec3.new(p.x, p.y, p.z), TAG_ENEMY)
+local boss = Entity.FindNearest(p, TAG_BOSS)
 ```
 
-_Source: `godot-ps1/demo/scripts/combat_showcase.lua` line 205._
+_Source: `godot-ps1/demo/scripts/boss_smoke_player.lua` line 53._

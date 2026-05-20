@@ -4,7 +4,7 @@
 !!! info "Generated"
     This page is auto-generated from `psxsplash-main/src/luaapi.hh` by `scripts/py/gen_lua_api_docs.py`. Edits won't survive the next build — fix the source comments instead.
 
-4 entries, 1 with worked examples mined from `godot-ps1/demo/scripts/` and the bundled templates.
+4 entries, 2 with worked examples mined from `godot-ps1/demo/scripts/` and the bundled templates.
 
 ## Methods
 
@@ -39,3 +39,12 @@ sensitivity factor before applying to camera/movement state.
 Common pattern (twin-stick camera):
 local rx, ry = Input.GetAnalog(Input.RIGHT_STICK)
 Camera.SetH(Camera.GetH() + rx / 8)
+
+**Example**
+
+```lua
+-- Direction: left stick if held; otherwise backstep from facing.
+local lx, ly = Input.GetAnalog(Input.LEFT_STICK)
+```
+
+_Source: `godot-ps1/demo/scripts/boss_smoke_player.lua` line 65._

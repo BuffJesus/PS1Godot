@@ -89,6 +89,28 @@ static int <Namespace>_<MethodName>(lua_State* L);
 - **Description lines** — plain English, no Markdown. Anything
   after the first non-`//` line ends the doc block.
 
+### Signature parser gotchas
+
+The signature regex in `gen_lua_api_docs.py` accepts exactly three
+forms after `(args)`: end-of-line, `-> retval`, or `— description`.
+Things that look fine but **silently drop the binding from the
+docs**:
+
+- `// X(a) or X(a, b)` — multiple signature forms on one line.
+  Pick one, mention the other form in the doc body.
+- `// X(a) — explanation example: X(1, 2)` — a literal call inside
+  a doc line that *looks* like a signature gets picked up as a
+  second (duplicate) signature. Indent example calls so they don't
+  start with `//` + namespace + `.`.
+- `// X(a) ->` with retval on the next comment line — works (the
+  parser pulls the next doc line as retval), but multi-line returns
+  with `or` in them break.
+
+Don't write example code in `//` doc bodies that resembles a
+signature. The Lua-API docs site cross-references the bindings
+into rendered call sites already (combat-patterns, the dock
+cheatsheet); examples live there.
+
 Match the existing patterns above neighbors. The regex lives in
 `gen_api_data.py` and is duplicated in `gen_lua_api_docs.py` —
 see the

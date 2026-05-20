@@ -4,7 +4,7 @@
 !!! info "Generated"
     This page is auto-generated from `psxsplash-main/src/luaapi.hh` by `scripts/py/gen_lua_api_docs.py`. Edits won't survive the next build — fix the source comments instead.
 
-4 entries, 1 with worked examples mined from `godot-ps1/demo/scripts/` and the bundled templates.
+4 entries, 2 with worked examples mined from `godot-ps1/demo/scripts/` and the bundled templates.
 
 ## Methods
 
@@ -14,6 +14,15 @@ Set the target's invulnerability window to `frames`. Counts
 down at 60 Hz inside the SceneManager game tick. While > 0,
 Stats.DealDamage skips this entity. Calling again before the
 window expires OVERWRITES (not adds to) the remaining frames.
+
+**Example**
+
+```lua
+-- Brief invuln so a flurry of hits can't insta-trigger phase 2
+Controls.StartIFrames(self, 6)
+```
+
+_Source: `godot-ps1/demo/scripts/boss_smoke_brain.lua` line 145._
 
 ### `Controls.IsInvulnerable(target) -> boolean` { #controls-isinvulnerable }
 

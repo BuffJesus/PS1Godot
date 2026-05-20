@@ -18,10 +18,11 @@ cost cycles on real hardware.
 **Example**
 
 ```lua
-Debug.Log("combat: L2 shot fired")
+-- a "you died" sequence here.
+Debug.Log("player died")
 ```
 
-_Source: `godot-ps1/demo/scripts/combat_showcase.lua` line 113._
+_Source: `godot-ps1/demo/scripts/boss_smoke_player.lua` line 162._
 
 ### `Debug.DrawLine(start, end, color)` { #debug-drawline }
 

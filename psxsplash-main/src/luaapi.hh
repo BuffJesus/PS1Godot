@@ -1120,12 +1120,15 @@ private:
     // PLAYER API - Controlling the PsxPlayer
     // ========================================================================
     
-    // Player.SetPosition({x, y, z})  or  Player.SetPosition(x, y, z)
-    // Teleports the player pawn to PSX-runtime world coords. Pass either
-    // a Vec3 table or three raw fp12 numbers. NOTE: coords are PSX-frame
-    // (post-export Y/Z flip and /gteScaling), NOT Godot units. Convert
-    // from Godot: x_psx = x_godot/4, y_psx = -y_godot/4, z_psx = -z_godot/4.
-    // Use for spawn-points, scene-load placement, debug warps.
+    // Player.SetPosition(pos) -> nil
+    // Teleports the player pawn to PSX-runtime world coords. `pos`
+    // is either a Vec3 table OR three raw fp12 numbers — the runtime
+    // accepts both forms in the same call slot.
+    // NOTE: coords are PSX-frame (post-export Y/Z flip and
+    // /gteScaling), NOT Godot units. Convert from Godot:
+    // x_psx = x_godot/4, y_psx = -y_godot/4, z_psx = -z_godot/4.
+    // Use for spawn-points, scene-load placement, dodge / dash
+    // motion overrides, cutscene blocking, debug warps.
     static int Player_SetPosition(lua_State* L);
 
     // Player.GetPosition() -> Vec3

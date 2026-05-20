@@ -38,4 +38,4 @@ Hades-style impact crunch. Stacks via max(remaining, requested).
 Scene.PauseFor(4)
 ```
 
-_Source: `godot-ps1/demo/scripts/combat_showcase.lua` line 134._
+_Source: `godot-ps1/demo/scripts/boss_smoke_brain.lua` line 64._

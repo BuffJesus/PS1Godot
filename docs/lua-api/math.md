@@ -4,7 +4,7 @@
 !!! info "Generated"
     This page is auto-generated from `psxsplash-main/src/luaapi.hh` by `scripts/py/gen_lua_api_docs.py`. Edits won't survive the next build — fix the source comments instead.
 
-11 entries, 0 with worked examples mined from `godot-ps1/demo/scripts/` and the bundled templates.
+11 entries, 1 with worked examples mined from `godot-ps1/demo/scripts/` and the bundled templates.
 
 ## Methods
 
@@ -25,6 +25,14 @@ flipping facing direction or "which way to step" decisions.
 ### `Math.Abs(value) -> number` { #math-abs }
 
 Absolute value. Works on both integers and FixedPoint<12>.
+
+**Example**
+
+```lua
+if Math.Abs(lx) < 200 and Math.Abs(ly) < 200 then
+```
+
+_Source: `godot-ps1/demo/scripts/boss_smoke_player.lua` line 66._
 
 ### `Math.Min(a, b) -> number` { #math-min }
 

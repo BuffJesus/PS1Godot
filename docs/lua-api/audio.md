@@ -4,7 +4,7 @@
 !!! info "Generated"
     This page is auto-generated from `psxsplash-main/src/luaapi.hh` by `scripts/py/gen_lua_api_docs.py`. Edits won't survive the next build — fix the source comments instead.
 
-15 entries, 2 with worked examples mined from `godot-ps1/demo/scripts/` and the bundled templates.
+15 entries, 3 with worked examples mined from `godot-ps1/demo/scripts/` and the bundled templates.
 
 ## Methods
 
@@ -59,6 +59,14 @@ _Source: `godot-ps1/demo/scripts/checkered_dialog.lua` line 61._
 
 Plays SPU-routed clips. Logs a warning if `name` was authored
 as XA/CDDA — call PlayMusic for those instead.
+
+**Example**
+
+```lua
+Audio.PlaySfx("fog_gate_whoosh")
+```
+
+_Source: `godot-ps1/demo/scripts/boss_smoke_fog_gate.lua` line 13._
 
 ### `Audio.PlayMusic(name) -> 0 on success, -1 on failure` { #audio-playmusic }
 
