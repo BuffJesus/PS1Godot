@@ -80,10 +80,17 @@ local function fireAttack(self)
     local maxV = Vec3.new(p.x + 1, p.y + 2, p.z + 1)
     local hits = Physics.OverlapBoxDetailed(minV, maxV)
     for i = 1, #hits do
-        local applied = Stats.DealDamage(hits[i].object, SWING_DAMAGE, self)
-        if applied > 0 then
-            Camera.ShakeRaw(614, 14)
-            Scene.PauseFor(4)
+        -- Skip self: the swing box is centered on the player, and the
+        -- chase loop stops the boss at ATTACK_RADIUS = 2 units, but
+        -- the boss AABB is 2 units wide so it still overlaps its own
+        -- attack box. Without this guard, every swing rolls SWING_DAMAGE
+        -- into the boss's own HP — boss kills itself in ~11 cycles.
+        if hits[i].object ~= self then
+            local applied = Stats.DealDamage(hits[i].object, SWING_DAMAGE, self)
+            if applied > 0 then
+                Camera.ShakeRaw(614, 14)
+                Scene.PauseFor(4)
+            end
         end
     end
 end
