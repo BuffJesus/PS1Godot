@@ -298,6 +298,37 @@ bool CollisionSystem::testAABB(const AABB& a, const AABB& b,
     const FP one(1);
     const FP negOne(-1);
 
+    // Floor-mode check. A collider whose Y dimension is much smaller than
+    // its XZ footprint is treated as a horizontal slab (floor / platform /
+    // step) — when the player is sunk into it from above, lift them out
+    // along -Y rather than ejecting sideways. Without this, a floor's
+    // 30 m × 0 m × 30 m AABB pushes the player toward whichever XZ edge
+    // is nearest and nav-clamp pins them to the floor's perimeter.
+    //
+    // Heuristic: collider Y range * 8 < max(xRange, zRange). A floor with
+    // zero or near-zero Y thickness trivially clears this. Props (barrels,
+    // chests, brazier, NPCs) all have comparable XYZ extents and stay on
+    // the legacy XZ-only push-out path so designers don't see players
+    // hopping onto chest-high obstacles by walking into them.
+    //
+    // Direction guard: only lift up (PSX -Y) if the player's head is
+    // above the collider top (a.min.y < b.min.y in Y-down PSX). Ceilings
+    // (collider above the player) fall through to the XZ path so the
+    // player doesn't get jammed into them.
+    auto yRangeB = b.max.y - b.min.y;
+    auto xRangeB = b.max.x - b.min.x;
+    auto zRangeB = b.max.z - b.min.z;
+    auto xzMaxB  = (xRangeB > zRangeB) ? xRangeB : zRangeB;
+    const FP eight(8);
+    if (yRangeB * eight < xzMaxB && a.min.y < b.min.y) {
+        // Player feet (a.max.y) are below floor top (b.min.y) → sunk in.
+        // Push -Y by that overlap so feet land on the floor surface.
+        auto sinkDepth = a.max.y - b.min.y;
+        penetration = sinkDepth;
+        normal = psyqo::Vec3{zero, negOne, zero};
+        return true;
+    }
+
     // Pick push-out axis on the XZ plane only. The Y axis is intentionally
     // ignored: gravity + nav-region floor handle vertical, and short props
     // (barrels, brazier, chest, chairs) have a smaller Y overlap with the
