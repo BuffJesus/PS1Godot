@@ -25,6 +25,7 @@ public static class CombatValidationReport
     {
         int warnings = 0;
         warnings += CheckStatsWithoutHurtBox(data, sceneIndex, offenderSink);
+        warnings += CheckHurtBoxWithoutStats(data, sceneIndex, offenderSink);
         return warnings;
     }
 
@@ -78,9 +79,49 @@ public static class CombatValidationReport
         {
             GD.Print($"[PS1Godot]   Combat lint scene[{sceneIndex}]: {warnings} entity(ies) have PS1Stats but no PS1HurtBox.");
         }
-        else
+        return warnings;
+    }
+
+    // Symmetric to CheckStatsWithoutHurtBox. A PS1HurtBox attached
+    // to an entity that has no PS1Stats is dead weight — the box
+    // shows up in Physics.OverlapBoxDetailed hits, but
+    // Stats.DealDamage on a no-stats entity returns 0 applied damage
+    // (StatsResolveIndex returns 0xFFFF; runtime skips the debit).
+    // Author either (a) forgot to add Stats, or (b) the hurtbox is
+    // there for a non-combat purpose (region detection?) and should
+    // be a PS1TriggerBox instead.
+    //
+    // Multiple hurtboxes per entity (head/body/legs) are common, so
+    // emit ONE warning per entity-without-stats, not per hurtbox.
+    private static int CheckHurtBoxWithoutStats(
+        SceneData data, int sceneIndex,
+        List<(string Name, string Reason)>? offenderSink)
+    {
+        var hasStats = new HashSet<int>();
+        foreach (var s in data.Stats)
+            hasStats.Add(s.EntityIndex);
+
+        var alreadyWarned = new HashSet<int>();
+        int warnings = 0;
+        foreach (var hb in data.HurtBoxes)
         {
-            GD.Print($"[PS1Godot]   Combat lint scene[{sceneIndex}]: clean.");
+            if (hasStats.Contains(hb.EntityIndex)) continue;
+            if (!alreadyWarned.Add(hb.EntityIndex)) continue;
+
+            string entName = (hb.EntityIndex >= 0 &&
+                              hb.EntityIndex < data.Objects.Count)
+                ? (string)data.Objects[hb.EntityIndex].Node.Name
+                : $"entity[{hb.EntityIndex}]";
+
+            string msg = "has PS1HurtBox children but no PS1Stats — Stats.DealDamage will no-op on hits, hurtbox is dead weight";
+            GD.PushWarning($"[CombatLint] scene_{sceneIndex} {entName}: {msg}");
+            offenderSink?.Add((entName, "PS1HurtBox without PS1Stats — hits won't register damage"));
+            warnings++;
+        }
+
+        if (warnings > 0)
+        {
+            GD.Print($"[PS1Godot]   Combat lint scene[{sceneIndex}]: {warnings} entity(ies) have PS1HurtBox but no PS1Stats.");
         }
         return warnings;
     }
