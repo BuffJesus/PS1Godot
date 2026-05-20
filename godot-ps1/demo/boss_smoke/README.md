@@ -56,18 +56,32 @@ godot-ps1/
 
 ## If everything renders pure white
 
-The PS1 shader multiplies vertex color by 2× to recover full
-brightness from PSX's midpoint-encoded format (vertex value 128 ≈
-neutral). Meshes without authored vertex colors default to
-Godot's `(1, 1, 1)`, get doubled to `(2, 2, 2)`, and clamp to
-white. The fix is to give each `PS1MeshInstance` a `FlatColor`
-in roughly `[0, 0.5]` so the 2× multiply lands in the visible
-range — the colors in this scene's `.tscn` are set that way
-(boss red, floor dark blue-grey, player avatar green, fog wall
-muted purple). If you re-author the scene with stock cubes and
-hit the same blowout, set `VertexColorMode = FlatColor` +
-`FlatColor = Color(0.2, 0.2, 0.2, 1)` (or similar) on each new
-mesh.
+Two separate sources, depending on whether you're in the editor
+or running on PSX:
+
+**Editor preview** — the PS1 shader's default
+(`addons/ps1godot/shaders/ps1_default.tres`) uses
+`modulate_scale = 2.0`, designed to recover full brightness from
+PSX's midpoint-encoded vertex colors (byte 128 ≈ neutral). In
+the editor, Godot feeds stock meshes a `(1, 1, 1)` vertex color,
+so the 2× multiply clamps to pure white. Fix: every
+`PS1MeshInstance` in this scene has `material_override` set to
+`preview_dim.tres` (sibling file), which has `modulate_scale=1`
+and a dim tint so the editor renders the meshes legibly. Runtime
+ignores material overrides entirely — the PSX side doesn't run
+Godot shaders, only the exported FlatColor-as-vertex-color data.
+
+**Runtime on PSX** — the export bakes each
+`PS1MeshInstance.FlatColor` into vertex colors at byte 128×color.
+If a mesh lacks `VertexColorMode = FlatColor` + a non-white
+`FlatColor`, the byte 255 → 2× → clamp = white on PSX too. The
+meshes in this scene have FlatColors set: boss red, floor dark
+blue-grey, player avatar green, fog wall muted purple.
+
+When re-authoring with stock cubes, set BOTH on each new
+`PS1MeshInstance`: `material_override = preview_dim.tres` for the
+editor, `FlatColor = Color(0.2, 0.2, 0.2, 1)` (or any value
+≤ 0.5) for runtime.
 
 ## Known limitations
 

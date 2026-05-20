@@ -21,6 +21,7 @@
 [ext_resource type="Script" path="res://addons/ps1godot/nodes/PS1HurtBox.cs" id="7_hurt"]
 [ext_resource type="Resource" path="res://demo/boss_smoke/boss_stats.tres" id="8_boss_stats"]
 [ext_resource type="Resource" path="res://demo/boss_smoke/player_stats.tres" id="9_player_stats"]
+[ext_resource type="Material" path="res://demo/boss_smoke/preview_dim.tres" id="10_preview_mat"]
 
 [sub_resource type="PlaneMesh" id="floor_mesh"]
 size = Vector2(30, 30)
@@ -54,6 +55,7 @@ Gravity = 20
 
 [node name="Floor" type="MeshInstance3D" parent="."]
 mesh = SubResource("floor_mesh")
+material_override = ExtResource("10_preview_mat")
 script = ExtResource("2_mesh")
 Collision = 1
 Tag = 0
@@ -75,6 +77,7 @@ far = 60.0
 
 [node name="Avatar" type="MeshInstance3D" parent="Player"]
 mesh = SubResource("cube_player")
+material_override = ExtResource("10_preview_mat")
 script = ExtResource("2_mesh")
 Collision = 0
 Tag = 0
@@ -88,6 +91,7 @@ ScriptFile = "res://demo/scripts/boss_smoke_player.lua"
 [node name="Boss" type="MeshInstance3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, -6)
 mesh = SubResource("cube_2")
+material_override = ExtResource("10_preview_mat")
 script = ExtResource("2_mesh")
 Collision = 1
 Tag = 7
@@ -119,6 +123,7 @@ DamageMultiplier = 50
 [node name="FogWall" type="MeshInstance3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 2)
 mesh = SubResource("fog_plane")
+material_override = ExtResource("10_preview_mat")
 script = ExtResource("2_mesh")
 Collision = 0
 Tag = 0

@@ -1,0 +1,33 @@
+[gd_resource type="ShaderMaterial" load_steps=2 format=3 uid="uid://boss_smoke_preview_dim"]
+
+; Editor-side preview material for the boss_smoke scene.
+;
+; The default ps1_default.tres uses modulate_scale=2.0 so PSX
+; runtime vertex colors (which top out at byte 128 = "neutral")
+; get doubled back to full brightness. In the EDITOR, Godot feeds
+; stock meshes a vertex color of (1, 1, 1), so the 2x multiply
+; clamps to pure white — every surface blinding.
+;
+; This override sets modulate_scale=1.0 and a dim tint so the
+; editor preview is readable. The runtime is unaffected: PSX is
+; not a Godot shader runtime; it reads exported per-vertex colors
+; from the splashpack (baked from each PS1MeshInstance's FlatColor)
+; and combines them with texture data in fixed-function GPU ops.
+; Material overrides here only steer the Godot viewport, not what
+; ships on disc.
+
+[ext_resource type="Shader" path="res://addons/ps1godot/shaders/ps1.gdshader" id="1"]
+
+[resource]
+render_priority = 0
+shader = ExtResource("1")
+shader_parameter/tint_color = Color(0.55, 0.55, 0.60, 1)
+shader_parameter/snap_enabled = true
+shader_parameter/snap_resolution = Vector2(320, 240)
+shader_parameter/modulate_scale = 1.0
+shader_parameter/fog_enabled = false
+shader_parameter/fog_color = Color(0.35, 0.20, 0.30, 1)
+shader_parameter/fog_near = 6.0
+shader_parameter/fog_far = 30.0
+shader_parameter/preview_quantize_bits = 5
+shader_parameter/preview_dither_enabled = true
