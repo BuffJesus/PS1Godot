@@ -482,7 +482,16 @@ void UISystem::renderOT(psyqo::GPU& gpu,
         uint32_t otDepth = (cv.sortOrder >= 128)
                          ? (Renderer::ORDERING_TABLE_SIZE - 4)
                          : 0;
-        for (int j = 0; j < cv.elementCount; j++) {
+        // Walk elements in reverse so painter-algorithm order matches
+        // Godot's "later child draws on top" convention. ot.insert is
+        // LIFO at each depth: last-inserted lands at the HEAD and is
+        // drawn FIRST; first-inserted lands at the TAIL and is drawn
+        // LAST (= on top). So insert elements[N-1] first, elements[0]
+        // last — that way elements[0] (= the first child, e.g. an HP
+        // bar BG) ends up at the back and the fill rect on top of it
+        // is actually visible. Before this fix, BG was inserted first,
+        // ended up drawn last, and buried the fill underneath itself.
+        for (int j = cv.elementCount - 1; j >= 0; j--) {
             UIElement& el = cv.elements[j];
             if (!el.visible) continue;
             renderElement(el, ot, balloc, otDepth);
