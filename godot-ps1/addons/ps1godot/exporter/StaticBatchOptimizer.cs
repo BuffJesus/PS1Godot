@@ -107,6 +107,26 @@ public static class StaticBatchOptimizer
             list.Add(obj);
         }
 
+        // If no bucket has 2+ members, no actual batching will happen.
+        // Skip the reorder — otherwise pinned objects float to the front
+        // of data.Objects, which shifts the indices that Collider/Stats/
+        // HurtBox/UVScroll records captured at scene-walk time and breaks
+        // every cross-reference. See bug history 2026-05-19: boss_smoke
+        // had Stats records emitted with entityIndex=1 (Avatar) and
+        // entityIndex=2 (Boss); after the no-op reorder put Avatar at
+        // index 0 and Boss at index 1, those stat entries landed on the
+        // wrong runtime slots.
+        //
+        // Real batching (members.Count > 1 in any bucket) still
+        // reorders + remaps; the cross-reference fix-up for that path
+        // is outside this guard.
+        bool anyRealBatch = false;
+        foreach (var members in buckets.Values)
+        {
+            if (members.Count > 1) { anyRealBatch = true; break; }
+        }
+        if (!anyRealBatch) return;
+
         var result = new List<SceneObject>(pinned);
         int batchesCreated = 0;
         int meshesAbsorbed = 0;
