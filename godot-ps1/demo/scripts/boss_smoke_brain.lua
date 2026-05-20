@@ -20,6 +20,14 @@ local STATE_DEAD        = 5
 -- "in range?" checks since we never need the actual distance value.
 -- 8 world units → 8 * 4096 = 32768 fp12 → squared = 1073741824.
 -- 2 world units → 2 * 4096 = 8192 fp12 → squared = 67108864.
+-- Aggro/attack range thresholds. distSq comes back as a FixedPoint
+-- whose `_raw` field is the squared fp12 distance (units = fp12²).
+-- We read `_raw` as a plain table field — psyqo-lua's FixedPoint
+-- metatable defines :raw() but never sets __index, so the method-
+-- call form `distSq:raw()` returns nil. Direct field access works
+-- because FixedPoint userdata is just `{_raw = value}` with a
+-- metatable. Using the raw int comparison also skips the automatic
+-- shift in FixedPoint.__lt that would multiply by 4096 and overflow.
 local AGGRO_RADIUS_SQ  = 1073741824
 local ATTACK_RADIUS_SQ = 67108864
 local TELL_FRAMES   = 30      -- pre-attack windup (0.5 s)
@@ -60,10 +68,10 @@ local function updateHPBar(self)
         hpBarShown = true
     end
     local bar = UI.FindElement(canvas, "fill")
-    local hp = Stats.GetHP(self)
     local maxHP = Stats.GetMaxHP(self)
-    local fillW = (hp * 280) // maxHP  -- 280 = authored bar width
-    UI.SetElementW(bar, fillW)
+    if maxHP > 0 then
+        UI.SetSize(bar, (Stats.GetHP(self) * 280) / maxHP, 4)  -- 280 = authored bar width, 4 = bar H
+    end
 end
 
 -- Boss attacks: melee swing in front of facing direction. With the
@@ -102,24 +110,25 @@ function onUpdate(self, dt)
         faceToward(self, dx, dz)
     end
 
+    local distSqRaw = distSq._raw
     if state == STATE_IDLE then
-        if distSq < AGGRO_RADIUS_SQ then
+        if distSqRaw < AGGRO_RADIUS_SQ then
             state = STATE_AGGRO
             stateTimer = 0
         end
 
     elseif state == STATE_AGGRO then
-        if distSq > ATTACK_RADIUS_SQ then
+        if distSqRaw > ATTACK_RADIUS_SQ then
             -- Step toward player. Normalize the (dx, dz) heading by
             -- the FP12 magnitude so the step is constant speed
             -- regardless of distance. Math.Atan2 + sin/cos would be
             -- cleaner but we already have dx/dz handy.
             local b = Entity.GetPosition(self)
-            local step = 4096 // 32  -- ~0.03 units/frame, slow boss
+            local step = 4096 / 32  -- ~0.03 units/frame, slow boss
             Entity.SetPosition(self, Vec3.new(
-                b.x + (dx * step) // 4096,
+                b.x + (dx * step) / 4096,
                 b.y,
-                b.z + (dz * step) // 4096))
+                b.z + (dz * step) / 4096))
         else
             state = STATE_ATTACK_TELL
             stateTimer = TELL_FRAMES
@@ -145,16 +154,16 @@ function onUpdate(self, dt)
 
     elseif state == STATE_PHASE2 then
         -- Faster + harder phase 2. Same chase shape, shorter tell.
-        if distSq > ATTACK_RADIUS_SQ then
+        if distSqRaw > ATTACK_RADIUS_SQ then
             local b = Entity.GetPosition(self)
-            local step = 4096 // 20  -- faster than phase 1
+            local step = 4096 / 20  -- faster than phase 1
             Entity.SetPosition(self, Vec3.new(
-                b.x + (dx * step) // 4096,
+                b.x + (dx * step) / 4096,
                 b.y,
-                b.z + (dz * step) // 4096))
+                b.z + (dz * step) / 4096))
         else
             state = STATE_ATTACK_TELL
-            stateTimer = TELL_FRAMES // 2
+            stateTimer = TELL_FRAMES / 2
         end
     end
 end
@@ -179,7 +188,7 @@ function onDamage(self, applied, source)
         return
     end
 
-    if hp < maxHP // 2 and not phase2Triggered then
+    if hp < maxHP / 2 and not phase2Triggered then
         phase2Triggered = true
         state = STATE_PHASE2
         Controls.StartIFrames(self, 60)  -- invuln during the transition shake

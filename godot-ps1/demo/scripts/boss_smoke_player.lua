@@ -15,7 +15,7 @@ local IFRAME_WINDOW  = 12
 local DODGE_COOLDOWN = 30
 local DODGE_STAMINA  = 25
 local DODGE_SPEED    = 800  -- raw fp12 per frame (~0.2 world units)
-local STAMINA_REGEN  = 4096 // 30  -- 1 unit / 30 frames
+local STAMINA_REGEN  = 4096 / 30  -- 1 unit / 30 frames
 
 local MELEE_DAMAGE   = 12
 local MELEE_COOLDOWN = 20
@@ -33,13 +33,15 @@ local function updateBars(self)
     local hpBar = UI.FindElement(hpCanvas, "hp_fill")
     local stBar = UI.FindElement(hpCanvas, "stamina_fill")
 
-    local hpFill = (Stats.GetHP(self) * 100) // Stats.GetMaxHP(self)
-    UI.SetElementW(hpBar, hpFill)
+    local maxHP = Stats.GetMaxHP(self)
+    if maxHP > 0 then
+        UI.SetSize(hpBar, (Stats.GetHP(self) * 100) / maxHP, 4)  -- authored bar w=100 h=4
+    end
 
     local maxStamina = Stats.GetMaxStamina(self)
     if maxStamina > 0 then
-        local stFill = (Stats.GetStamina(self) * 100) // maxStamina
-        UI.SetElementW(stBar, stFill)
+        local stFill = (Stats.GetStamina(self) * 100) / maxStamina
+        UI.SetSize(stBar, stFill, 4)
     end
 end
 
@@ -90,8 +92,8 @@ local function tryMelee(self)
     local p = Player.GetPosition()
     local f = Camera.GetForward()
     -- AABB 2 units in front of the player, 1.5 wide
-    local cx = p.x + f.x * 8192 // 4096  -- 2 units forward
-    local cz = p.z + f.z * 8192 // 4096
+    local cx = p.x + f.x * 8192 / 4096  -- 2 units forward
+    local cz = p.z + f.z * 8192 / 4096
     local minV = Vec3.new(cx - 1, p.y - 1, cz - 1)
     local maxV = Vec3.new(cx + 1, p.y + 2, cz + 1)
     local hits = Physics.OverlapBoxDetailed(minV, maxV)
@@ -99,7 +101,7 @@ local function tryMelee(self)
         for i = 1, #hits do
             local hit = hits[i]
             -- hurtbox multiplier: 100 = 1x baseline; head 2x, body 1x, legs 0.5x
-            local dmg = (MELEE_DAMAGE * hit.multiplier) // 100
+            local dmg = (MELEE_DAMAGE * hit.multiplier) / 100
             Stats.DealDamage(hit.object, dmg, self)
         end
         Camera.ShakeRaw(491 + 164 * #hits, 8 + #hits)
@@ -140,8 +142,8 @@ function onUpdate(self, dt)
     -- GetAnalog), divide by 4096 to land in fp12.
     if dodgeFrames > 0 then
         local p = Player.GetPosition()
-        local stepX = (dodgeDirX * DODGE_SPEED) // 4096
-        local stepZ = (dodgeDirZ * DODGE_SPEED) // 4096
+        local stepX = (dodgeDirX * DODGE_SPEED) / 4096
+        local stepZ = (dodgeDirZ * DODGE_SPEED) / 4096
         Player.SetPosition(Vec3.new(p.x + stepX, p.y, p.z + stepZ))
         dodgeFrames = dodgeFrames - 1
     end
