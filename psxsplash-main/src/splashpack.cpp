@@ -175,7 +175,7 @@ struct SPLASHPACKFileHeader {
     uint16_t pad_stats;
     uint32_t statsTableOffset;
     // v34+: per-entity hurtbox (weak-point AABB) sparse table. Each
-    // entry is 20 bytes (see HurtBoxTableEntry). Multiple hurtboxes
+    // entry is 18 bytes (see HurtBoxTableEntry). Multiple hurtboxes
     // per entity = multiple entries with the same entityIndex.
     // hurtBoxCount == 0 → no entity authored hurtboxes;
     // Physics.OverlapBoxDetailed returns empty.

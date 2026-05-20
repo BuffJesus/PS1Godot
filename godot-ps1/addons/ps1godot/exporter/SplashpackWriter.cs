@@ -483,7 +483,7 @@ public static class SplashpackWriter
 
     // ─── Per-entity hurtbox section (v34+) ─────────────────────────────
     //
-    // 20-byte HurtBoxTableEntry × N. Each entry carries entityIndex +
+    // 18-byte HurtBoxTableEntry × N. Each entry carries entityIndex +
     // local offset (fp12 xyz) + half-extents (fp12 xyz) + multiplier
     // (i16 percent) + 2 bytes reserved for future fields. Runtime
     // computes world-space AABB at query time as

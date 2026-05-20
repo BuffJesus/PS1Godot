@@ -51,7 +51,7 @@ struct HurtBoxTableEntry {
     int16_t  multiplier;                  // 100 = 1× baseline damage
     uint16_t reserved;                    // future: hurtbox tag / state bits
 };
-static_assert(sizeof(HurtBoxTableEntry) == 20, "HurtBoxTableEntry must be 20 bytes");
+static_assert(sizeof(HurtBoxTableEntry) == 18, "HurtBoxTableEntry must be 18 bytes");
 
 // v35+: on-disk per-entity UV scroll record. SpeedU/SpeedV in fp8
 // texels-per-second (256 = 1 texel/sec). Runtime maintains a
