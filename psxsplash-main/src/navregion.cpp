@@ -163,20 +163,27 @@ uint16_t NavRegionSystem::findRegionClosest(int32_t x, int32_t y, int32_t z) con
 
     uint16_t best = NAV_NO_REGION;
     int32_t shortestDistance = 0x7FFFFFFF;
-    // DIAG-2026-04-30: per-region pass/fail trace, throttled.
+#ifdef PSXSPLASH_VERBOSE
+    // DIAG-2026-04-30: per-region pass/fail trace, throttled to
+    // ~2 Hz so a stuck player on a polygon edge doesn't flood the
+    // TTY. Gated to keep the per-frame nav check silent in normal
+    // dev runs.
     static int s_diagFrameCounter = 0;
     bool diag = ((s_diagFrameCounter++ & 31) == 0);
     if (diag) {
         ramsyscall_printf("[FRC] x=%d y=%d z=%d  regionCount=%u\n",
                           (int)x, (int)y, (int)z, (unsigned)m_header.regionCount);
     }
+#endif
     for (uint16_t i = 0; i < m_header.regionCount; i++) {
         bool inPoly = pointInRegion(x, z, i);
         int32_t fy = inPoly ? getFloorY(x, z, i) : 0;
+#ifdef PSXSPLASH_VERBOSE
         if (diag) {
             ramsyscall_printf("[FRC]   i=%u inPoly=%d fy=%d (y-32 vs fy: %d > %d ? %d)\n",
                               (unsigned)i, inPoly?1:0, (int)fy, (int)(y-32), (int)fy, (y-32>fy)?1:0);
         }
+#endif
         if (inPoly) {
             // Player below the region so skip
             if(y-32 > fy){
@@ -189,10 +196,12 @@ uint16_t NavRegionSystem::findRegionClosest(int32_t x, int32_t y, int32_t z) con
             }
         }
     }
+#ifdef PSXSPLASH_VERBOSE
     if (diag) {
         ramsyscall_printf("[FRC] best=%u dist=%d (vs ATTACH=%d)\n",
                           (unsigned)best, (int)shortestDistance, (int)NAV_ATTACH_DISTANCE);
     }
+#endif
     if(best >= m_header.regionCount || shortestDistance > NAV_ATTACH_DISTANCE)
     {
         return NAV_NO_REGION;

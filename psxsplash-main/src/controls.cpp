@@ -153,12 +153,12 @@ void psxsplash::Controls::HandleControls(psyqo::Vec3 &playerPosition, psyqo::Ang
                                          int32_t dt12, psyqo::Angle movementHeading) {
     bool digital = isDigitalPad();
 
-    // DIAG: run unconditionally so we can see padType + ADC values
-    // regardless of whether the digital/analog branch is taken. If
-    // padType stays at 0x41 (DigitalPad) the PCSX-Redux pad config
-    // is set to "Digital" instead of "DualShock"/"Analog" — analog
-    // sticks will never produce values. Switching the emulated pad
-    // to DualShock in PCSX-Redux's Configuration > Controls fixes it.
+#ifdef PSXSPLASH_VERBOSE
+    // DIAG: ~1 Hz pad-state dump (per-64-frame throttle). Surfaces
+    // padType so a DigitalPad (0x41) is visible — that means the
+    // PCSX-Redux Configuration > Controls panel has the emulated
+    // pad set to "Digital" instead of "DualShock"/"Analog" and the
+    // analog sticks won't produce values regardless of host input.
     {
         uint8_t padType = m_input.getPadType(psyqo::AdvancedPad::Pad::Pad1a);
         uint8_t rxRaw = m_input.getAdc(psyqo::AdvancedPad::Pad::Pad1a, 0);
@@ -173,6 +173,7 @@ void psxsplash::Controls::HandleControls(psyqo::Vec3 &playerPosition, psyqo::Ang
                               (unsigned)rxRaw, (unsigned)ryRaw);
         }
     }
+#endif
 
     int16_t rightXOffset, rightYOffset, leftXOffset, leftYOffset;
 

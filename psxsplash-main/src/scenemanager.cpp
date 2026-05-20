@@ -769,6 +769,7 @@ void psxsplash::SceneManager::GameTick(psyqo::GPU &gpu) {
     {
         psyqo::FixedPoint<12> zero;
         if (pushBack.x != zero || pushBack.y != zero || pushBack.z != zero) {
+#ifdef PSXSPLASH_VERBOSE
             // DIAG-2026-04-30: log every push-back so we can see which collider
             // is blocking the player. Throttled by a per-second counter so the
             // log doesn't drown the TTY when continuously pressing into a wall.
@@ -784,6 +785,7 @@ void psxsplash::SceneManager::GameTick(psyqo::GPU &gpu) {
                                   (int)playerAABB.min.x.value, (int)playerAABB.max.x.value,
                                   (int)playerAABB.min.z.value, (int)playerAABB.max.z.value);
             }
+#endif
             m_playerPosition.x = m_playerPosition.x + pushBack.x;
             // Apply Y push too — testAABB only writes a Y component when
             // the collider is identified as a horizontal slab (floor /
