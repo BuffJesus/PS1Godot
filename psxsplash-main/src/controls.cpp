@@ -3,6 +3,7 @@
 #include <psyqo/hardware/cpu.hh>
 #include <psyqo/hardware/sio.hh>
 #include <psyqo/vector.hh>
+#include <psyqo/xprintf.h>
 
 namespace {
 
@@ -151,9 +152,30 @@ void psxsplash::Controls::HandleControls(psyqo::Vec3 &playerPosition, psyqo::Ang
                                          psyqo::Angle &playerRotationY, psyqo::Angle &playerRotationZ, bool freecam,
                                          int32_t dt12, psyqo::Angle movementHeading) {
     bool digital = isDigitalPad();
-    
+
+    // DIAG: run unconditionally so we can see padType + ADC values
+    // regardless of whether the digital/analog branch is taken. If
+    // padType stays at 0x41 (DigitalPad) the PCSX-Redux pad config
+    // is set to "Digital" instead of "DualShock"/"Analog" — analog
+    // sticks will never produce values. Switching the emulated pad
+    // to DualShock in PCSX-Redux's Configuration > Controls fixes it.
+    {
+        uint8_t padType = m_input.getPadType(psyqo::AdvancedPad::Pad::Pad1a);
+        uint8_t rxRaw = m_input.getAdc(psyqo::AdvancedPad::Pad::Pad1a, 0);
+        uint8_t ryRaw = m_input.getAdc(psyqo::AdvancedPad::Pad::Pad1a, 1);
+        uint8_t lxRaw = m_input.getAdc(psyqo::AdvancedPad::Pad::Pad1a, 2);
+        uint8_t lyRaw = m_input.getAdc(psyqo::AdvancedPad::Pad::Pad1a, 3);
+        static int s_padDiag = 0;
+        if ((s_padDiag++ & 63) == 0) {
+            ramsyscall_printf("[PadDiag] padType=0x%02x digital=%u L=(%02x,%02x) R=(%02x,%02x)\n",
+                              (unsigned)padType, (unsigned)digital,
+                              (unsigned)lxRaw, (unsigned)lyRaw,
+                              (unsigned)rxRaw, (unsigned)ryRaw);
+        }
+    }
+
     int16_t rightXOffset, rightYOffset, leftXOffset, leftYOffset;
-    
+
     if (digital) {
         // Digital pad: use D-pad for movement, L1/R1 for rotation
         getDpadAxes(leftXOffset, leftYOffset);
@@ -175,7 +197,7 @@ void psxsplash::Controls::HandleControls(psyqo::Vec3 &playerPosition, psyqo::Ang
         rightYOffset = (int16_t)rightY - 0x80;
         leftXOffset = (int16_t)leftX - 0x80;
         leftYOffset = (int16_t)leftY - 0x80;
-        
+
         // On analog pad, also check D-pad as fallback (when sticks are centered)
         if (__builtin_abs(leftXOffset) < m_stickDeadzone && __builtin_abs(leftYOffset) < m_stickDeadzone) {
             int16_t dpadX, dpadY;
