@@ -650,6 +650,86 @@ get awkward and a first-class primitive would help. Listed in the
   the dispatch (`onStagger(self)`) wants to be a runtime callback,
   not a Lua poll.
 
+## Foot-guns observed in production
+
+Authoring a full boss_smoke encounter on the existing primitives
+turned up eleven distinct ways to write subtly wrong code. None
+of these are runtime bugs — they're authoring rules that aren't
+yet enforced. Until the
+[combat framework RFC](https://github.com/BuffJesus/PS1Godot/blob/main/docs/internal/rfc/combat-framework.md){ target="_blank" }
+lands, check your encounter against this list.
+
+**Melee attack volumes**
+
+- **Anchor your swing AABB on the attacker, not the target.** A
+  swing built as `Vec3.new(target.x - 1, ..., target.z + 1)` has
+  *infinite reach* — the target is always at the center of the
+  box. Use the attacker's position so the swing has a physical
+  extent and the target can dodge by moving out of it.
+- **Skip the attacker from its own hit results.** A boss swinging
+  at the player will have its own hurtbox inside the swing box
+  too. Filter `hits[i].object ~= self` or the boss
+  damages itself every cycle.
+
+**Distance and FP math**
+
+- **`dx * dx + dz * dz` is not distance squared in fp12² units.**
+  `FixedPoint.__mul` rescales the result by `/4096` to keep it in
+  fp12. The `*_RADIUS_SQ` thresholds (e.g. `2² * 4096² = 67108864`)
+  are in raw fp12² units, so the FP product is 4096× too small to
+  compare against them. Use `dx._raw * dx._raw + dz._raw * dz._raw`
+  for an int that matches the constants, or use
+  [`Math.LengthApprox`](../lua-api/math.md#math-lengthapprox) and
+  compare against `radius * 4096` directly.
+
+**Encounter lifecycle**
+
+- **The boss script should not own the HP-bar canvas visibility.**
+  Reveal in the encounter trigger (the fog wall's
+  `onTriggerEnter`), hide in the boss's death-path `onDamage`. If
+  the brain reveals it, the bar pops up on frame 1 because the
+  brain runs from frame 1 regardless of player position.
+- **The boss AI must be gated behind encounter activation.**
+  Otherwise the boss aggros on the player at scene-load (player
+  spawn is usually inside the boss's aggro radius). Use a
+  `Persist` flag flipped by the trigger; the brain's `onUpdate`
+  early-returns until the flag is 1. Reset the flag in `onCreate`
+  so respawns don't carry it over.
+- **Block retreat through the fog wall during the fight.** Souls
+  semantics: the wall is solid from the inside until the boss
+  dies. Implement in `onTriggerExit` with a position check (player
+  exited on the spawn side → snap them back to the arena side).
+  See the smoke gate's onTriggerExit for the pattern.
+
+**State machine cadence**
+
+- **`RECOVER_FRAMES` only matters if your `STATE_AGGRO` branch
+  actually uses it.** A common authoring mistake is to set
+  `stateTimer = RECOVER_FRAMES` on HIT→AGGRO transition but then
+  ignore it — the boss immediately checks "in range?" and goes
+  back to TELL. Result: boss never repositions between attacks.
+  Have AGGRO chase while `stateTimer > 0 OR out_of_range`.
+
+**Trigger callbacks**
+
+- **`self` in `onTriggerEnter` / `onTriggerExit` is a number, not
+  an entity handle.** The runtime passes only the trigger
+  *index*. So `Entity.GetPosition(self)` returns nil. Hardcode
+  the trigger's authored position into your script, or query a
+  sibling tagged entity via `Entity.FindByTag`.
+- **`Persist.Get` returns nil for keys that have never been
+  Set.** Default with `or 0` if you're going to concatenate or
+  compare against a number directly. `nil == 1` is just false (no
+  error), so plain branch checks against numbers stay safe.
+
+**Hurtboxes**
+
+- **Combat needs hurtboxes on both sides.** If the player has no
+  `PS1HurtBox` child, the boss's `Physics.OverlapBoxDetailed`
+  returns only the boss itself, and the player is invulnerable
+  by accident. Add at least a body hurtbox to anything you want
+  to be damageable.
+
 ## Related
 
 - [`combat_showcase.lua`](https://github.com/BuffJesus/PS1Godot/blob/main/godot-ps1/demo/scripts/combat_showcase.lua){ target="_blank" }
