@@ -1618,6 +1618,16 @@ public partial class PS1GodotPlugin : EditorPlugin
         // texture-tier validators together.
         textureWarnings += Exporter.DecalValidationReport.EmitForScene(sceneData, sceneIndex, validatorOffenders);
 
+        // Combat lint: WARN on common souls-encounter authoring
+        // oversights that aren't compile errors but produce
+        // silently broken combat (Bug #8 in the boss_smoke arc:
+        // entity with PS1Stats but no PS1HurtBox is invulnerable
+        // by accident because Physics.OverlapBoxDetailed won't
+        // see it). See docs/internal/rfc/combat-framework.md for
+        // the full check roadmap.
+        int combatWarnings = Exporter.CombatValidationReport.EmitForScene(sceneData, sceneIndex, validatorOffenders);
+        animWarnings += combatWarnings;
+
         // Aggregate this scene's results into the run-wide summary the
         // dock reads after OnExportEmptySplashpack returns. Mesh-dedup
         // counts come from sceneData.MeshDedup which the SceneCollector
