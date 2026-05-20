@@ -77,22 +77,24 @@ local function updateHPBar(self)
     end
 end
 
--- Boss attacks: melee swing in front of facing direction. With the
--- yaw-to-player override in onUpdate, the boss's "forward" always
--- points at the player at swing-start. Build the swing box around
--- the player's position to model the boss reaching out — keeps the
--- math one-liner without needing the boss rotation matrix.
+-- Boss attacks: melee swing anchored at the boss's own position, not
+-- the player's. Previous version built the swing box around the
+-- player, which meant the swing had infinite reach — boss could sit
+-- at z=4589 and still hit a player at the floor edge ±15 PSX away,
+-- because the box always teleported to wherever the player stood.
+-- Now the box is a 4×4 PSX cube around the boss (matching the
+-- ATTACK_RADIUS of 2 units), so players outside that physical
+-- volume don't get touched — including players who back away
+-- during the 30-frame TELL windup.
 local function fireAttack(self)
-    local p = Player.GetPosition()
-    local minV = Vec3.new(p.x - 1, p.y - 1, p.z - 1)
-    local maxV = Vec3.new(p.x + 1, p.y + 2, p.z + 1)
+    local b = Entity.GetPosition(self)
+    local minV = Vec3.new(b.x - 2, b.y - 1, b.z - 2)
+    local maxV = Vec3.new(b.x + 2, b.y + 2, b.z + 2)
     local hits = Physics.OverlapBoxDetailed(minV, maxV)
     for i = 1, #hits do
-        -- Skip self: the swing box is centered on the player, and the
-        -- chase loop stops the boss at ATTACK_RADIUS = 2 units, but
-        -- the boss AABB is 2 units wide so it still overlaps its own
-        -- attack box. Without this guard, every swing rolls SWING_DAMAGE
-        -- into the boss's own HP — boss kills itself in ~11 cycles.
+        -- Skip self: the boss's own hurtboxes are inside this AABB.
+        -- Without this guard, every swing rolls SWING_DAMAGE into
+        -- the boss's own HP — boss kills itself in ~11 cycles.
         if hits[i].object ~= self then
             local applied = Stats.DealDamage(hits[i].object, SWING_DAMAGE, self)
             if applied > 0 then
@@ -138,7 +140,24 @@ function onUpdate(self, dt)
         end
 
     elseif state == STATE_AGGRO then
-        if distSqRaw > ATTACK_RADIUS_SQ then
+        -- AGGRO has two responsibilities:
+        --   1. Out-of-range chase: step toward the player until
+        --      distSqRaw drops back under attack range. State stays
+        --      AGGRO for as many frames as it takes.
+        --   2. Post-swing recovery window: when arriving from HIT,
+        --      stateTimer is preloaded to RECOVER_FRAMES. Chase
+        --      during this window even if already in range, so the
+        --      boss visibly tracks the player around the arena
+        --      between attacks instead of camping at exactly the
+        --      attack-range edge.
+        -- Both branches step toward the player; only the transition
+        -- to TELL fires when recovery is done and the player is in
+        -- range.
+        local doStep =
+            stateTimer > 0
+            or distSqRaw > ATTACK_RADIUS_SQ
+        if doStep then
+            if stateTimer > 0 then stateTimer = stateTimer - 1 end
             -- Step toward player. Normalize the (dx, dz) heading by
             -- the FP12 magnitude so the step is constant speed
             -- regardless of distance. Math.Atan2 + sin/cos would be
