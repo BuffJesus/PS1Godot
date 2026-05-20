@@ -35,6 +35,12 @@ public:
     static void ResetFrameCount();
 
 private:
+    // Resolves a Lua entity-handle table (carries __cpp_ptr lightuserdata
+    // → GameObject*) to a SceneManager entity index. Returns 0xFFFF if the
+    // arg isn't a handle table or the pointer isn't in the active scene.
+    // Member rather than free function so it can read s_sceneManager.
+    static uint16_t StatsResolveIndex(psyqo::Lua& lua, int luaArgIdx);
+
     // Store scene manager for API access
     static SceneManager* s_sceneManager;
 

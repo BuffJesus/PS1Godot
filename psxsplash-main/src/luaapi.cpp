@@ -30,10 +30,6 @@ DialogueRunner* LuaAPI::s_dialogueRunner = nullptr;
 // Lua scripts work in world-space units (1 = one unit), so we convert.
 static constexpr lua_Number kFixedScale = 4096;
 
-// Forward decl — defined further down with the Stats API. Used by
-// Camera.LockOn and others that take an entity-handle Lua arg.
-static uint16_t StatsResolveIndex(psyqo::Lua& lua, int luaArgIdx);
-
 // Read a FixedPoint<12> from the stack, accepting either a FixedPoint object
 // or a plain integer (which gets scaled by 4096 to become fp12).
 static psyqo::FixedPoint<12> readFP(psyqo::Lua& L, int idx) {
@@ -3910,15 +3906,15 @@ int LuaAPI::Physics_OverlapBoxDetailed(lua_State* L) {
 // STATS API IMPLEMENTATION (v33+)
 // ============================================================================
 
-// Resolves a Lua-side entity handle (table with .object index) to a
-// SceneManager entity index. Returns 0xFFFF on miss.
-static uint16_t StatsResolveIndex(psyqo::Lua& lua, int luaArgIdx) {
-    if (!lua.isTable(luaArgIdx)) return 0xFFFF;
-    lua.getField(luaArgIdx, "object");
-    int idx = lua.isNumber(-1) ? static_cast<int>(lua.toNumber(-1)) : -1;
+// Resolves a Lua-side entity handle to a SceneManager entity index.
+// Handle tables carry `__cpp_ptr` (lightuserdata → GameObject*); we
+// reverse-look-up that pointer via SceneManager. Returns 0xFFFF on miss.
+uint16_t LuaAPI::StatsResolveIndex(psyqo::Lua& lua, int luaArgIdx) {
+    if (!lua.isTable(luaArgIdx) || !s_sceneManager) return 0xFFFF;
+    lua.getField(luaArgIdx, "__cpp_ptr");
+    auto* go = lua.toUserdata<psxsplash::GameObject>(-1);
     lua.pop(1);
-    if (idx < 0 || idx > 0xFFFE) return 0xFFFF;
-    return static_cast<uint16_t>(idx);
+    return s_sceneManager->findGameObjectIndex(go);
 }
 
 int LuaAPI::Stats_GetHP(lua_State* L) {

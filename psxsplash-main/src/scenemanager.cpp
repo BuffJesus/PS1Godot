@@ -177,8 +177,16 @@ void psxsplash::SceneManager::InitializeScene(uint8_t* splashpackData, LoadingSc
     }
 
     if (sceneSetup.statsTable && sceneSetup.statsCount > 0) {
+        ramsyscall_printf("[StatsDiag] loading %u stats records (m_entityStats=%u, m_gameObjects=%u):\n",
+                          (unsigned)sceneSetup.statsCount,
+                          (unsigned)m_entityStats.size(),
+                          (unsigned)m_gameObjects.size());
         for (uint16_t i = 0; i < sceneSetup.statsCount; ++i) {
             const StatsTableEntry& src = sceneSetup.statsTable[i];
+            ramsyscall_printf("[StatsDiag]   rec[%u]: entIdx=%u maxHP=%u initHP=%u maxSta=%u initSta=%u\n",
+                              (unsigned)i, (unsigned)src.entityIndex,
+                              (unsigned)src.maxHP, (unsigned)src.initialHP,
+                              (unsigned)src.maxStamina, (unsigned)src.initialStamina);
             if (src.entityIndex < m_entityStats.size()) {
                 RuntimeStats& dst = m_entityStats[src.entityIndex];
                 dst.maxHP      = static_cast<int16_t>(src.maxHP);
@@ -188,6 +196,11 @@ void psxsplash::SceneManager::InitializeScene(uint8_t* splashpackData, LoadingSc
                 dst.maxMana    = static_cast<int16_t>(src.maxMana);
                 dst.mana       = static_cast<int16_t>(src.initialMana);
             }
+        }
+        for (size_t i = 0; i < m_entityStats.size(); ++i) {
+            ramsyscall_printf("[StatsDiag]   m_entityStats[%u]: go=%p maxHP=%d hp=%d\n",
+                              (unsigned)i, (void*)m_gameObjects[i],
+                              (int)m_entityStats[i].maxHP, (int)m_entityStats[i].hp);
         }
     }
 

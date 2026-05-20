@@ -74,7 +74,22 @@ class SceneManager {
         if (index < m_gameObjects.size()) return m_gameObjects[index];
         return nullptr;
     }
-    
+
+    // Reverse lookup: pointer → index. Returns 0xFFFF if not in the
+    // scene's object array. Linear scan — call paths (Lua Stats.*,
+    // hurtbox dispatch) all run at most once per script call per
+    // frame, so the N×scripts cost is negligible for the scene sizes
+    // we target. Used by the Lua handle bridge: scripts hold handle
+    // tables with __cpp_ptr lightuserdata; APIs that need an index
+    // (Stats.*, iframes, etc.) translate via this helper.
+    uint16_t findGameObjectIndex(const GameObject* go) const {
+        if (!go) return 0xFFFF;
+        for (size_t i = 0; i < m_gameObjects.size(); ++i) {
+            if (m_gameObjects[i] == go) return static_cast<uint16_t>(i);
+        }
+        return 0xFFFF;
+    }
+
     // Get total object count
     size_t getGameObjectCount() const { return m_gameObjects.size(); }
 
