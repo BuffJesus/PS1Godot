@@ -54,6 +54,21 @@ godot-ps1/
 │       └── boss_smoke_fog_gate.lua ← fog-gate trigger
 ```
 
+## If everything renders pure white
+
+The PS1 shader multiplies vertex color by 2× to recover full
+brightness from PSX's midpoint-encoded format (vertex value 128 ≈
+neutral). Meshes without authored vertex colors default to
+Godot's `(1, 1, 1)`, get doubled to `(2, 2, 2)`, and clamp to
+white. The fix is to give each `PS1MeshInstance` a `FlatColor`
+in roughly `[0, 0.5]` so the 2× multiply lands in the visible
+range — the colors in this scene's `.tscn` are set that way
+(boss red, floor dark blue-grey, player avatar green, fog wall
+muted purple). If you re-author the scene with stock cubes and
+hit the same blowout, set `VertexColorMode = FlatColor` +
+`FlatColor = Color(0.2, 0.2, 0.2, 1)` (or similar) on each new
+mesh.
+
 ## Known limitations
 
 - **No audio clips wired.** `Audio.PlaySfx("fog_gate_whoosh")` and
