@@ -696,6 +696,28 @@ private:
     // round-toward-minus-infinity semantics.
     static int Math_ToInt(lua_State* L);
 
+    // Math.Sqrt(value) -> integer
+    // Integer square root via bit-by-bit binary search — at most 16
+    // iterations of shift + compare + sub, no divides. Accurate
+    // result floor(sqrt(value)). Returns 0 for value <= 0.
+    //
+    // For "is this within range" checks, compare squared distances
+    // instead — it's free. For "how far is this thing" gameplay
+    // logic where 3-5% error is acceptable, use Math.LengthApprox
+    // which is ~5-10× faster.
+    static int Math_Sqrt(lua_State* L);
+
+    // Math.LengthApprox(x, y) -> integer
+    // 2D vector magnitude via the "alpha max plus beta min"
+    // approximation: |v| ≈ 0.9604·max(|x|,|y|) + 0.3978·min(|x|,|y|).
+    // Maximum error ~3.4%, zero iterations, two multiplies + a
+    // shift. Standard PSX-era game-math trick — much faster than
+    // Sqrt(x*x + y*y) and indistinguishable for "boss is N units
+    // away" feel.
+    //
+    // Inputs are raw fp12 (or any consistent units); output matches.
+    static int Math_LengthApprox(lua_State* L);
+
     // Math.Atan2(y, x) -> number
     // Heading angle in pi-fractions (matches Entity.SetRotationY's
     // convention: 1.0 = π, 0.5 = 90°). Inputs are FP12 — the

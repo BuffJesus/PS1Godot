@@ -617,6 +617,24 @@ A first encounter you can ship today, with zero engine changes:
 
 Total scripting: ~150 lines of Lua + the FSM graph + 2 cutscenes.
 
+## A note on math performance
+
+PSX has no hardware square root or trig. Performance order, fastest
+first, for the "how far / what angle / how close" patterns that
+recur throughout combat code:
+
+| Task | Use | Why |
+|---|---|---|
+| "Is target within range?" | Compare squared distances (`dx*dx + dz*dz < radius_sq`) | No sqrt at all. Free. |
+| "How far is the target?" (gameplay feel) | [`Math.LengthApprox(dx, dz)`](../lua-api/math.md#math-lengthapprox) | Alpha-max-plus-beta-min — 3.4% max error, two multiplies, no iteration. PSX-era convention. |
+| "How far is the target?" (exact) | [`Math.Sqrt(dx*dx + dz*dz)`](../lua-api/math.md#math-sqrt) | Bit-by-bit binary search, up to 16 iterations. Don't reach for it in `onUpdate` unless you need the precision. |
+| "What direction to the target?" | [`Math.Atan2(dx, dz)`](../lua-api/math.md#math-atan2) | Octant-fold, no iteration. Returns the pi-fraction `Entity.SetRotationY` consumes directly. |
+
+For dodge cooldowns, AI radius checks, swing hit-detection — all use
+squared. For "draw a distance number on the HUD" or normalizing a
+direction vector — use LengthApprox. Save Math.Sqrt for one-shot
+calculations that genuinely need exactness.
+
 ## What's *not* easy today
 
 If your encounter design needs any of these, the patterns above

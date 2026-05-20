@@ -472,6 +472,12 @@ void LuaAPI::RegisterAll(psyqo::Lua& L, SceneManager* scene, CutscenePlayer* cut
     L.push(Math_Atan2);
     L.setField(-2, "Atan2");
 
+    L.push(Math_Sqrt);
+    L.setField(-2, "Sqrt");
+
+    L.push(Math_LengthApprox);
+    L.setField(-2, "LengthApprox");
+
     // Register the same table under both names. `Math` is the
     // documented name + what authors intuitively reach for; `PSXMath`
     // is kept as an alias for backwards compatibility (referenced
@@ -2759,6 +2765,61 @@ int LuaAPI::Math_ToFixed(lua_State* L) {
     int32_t n = static_cast<int32_t>(lua.toNumber(1));
     psyqo::FixedPoint<12> fp(n << 12, psyqo::FixedPoint<12>::RAW);
     lua.push(fp);
+    return 1;
+}
+
+// Integer square root via bit-by-bit binary search. At most 16
+// iterations of shift + compare + subtract — no divides, no
+// floating point. Returns floor(sqrt(value)). Negative or zero
+// inputs return 0 (defensive — avoids the loop misbehaving on
+// signed-magnitude weirdness).
+int LuaAPI::Math_Sqrt(lua_State* L) {
+    psyqo::Lua lua(L);
+    int32_t v = static_cast<int32_t>(lua.toNumber(1));
+    if (v <= 0) { lua.pushNumber(0); return 1; }
+
+    uint32_t x = static_cast<uint32_t>(v);
+    uint32_t result = 0;
+    // Find the highest power-of-4 that fits in x — that's the
+    // starting bit position. Caps at 1<<30 (max bit for int32).
+    uint32_t bit = 1u << 30;
+    while (bit > x) bit >>= 2;
+    // Bit-by-bit: at each step, test if (result + bit) fits in x;
+    // if so, set the bit and subtract.
+    while (bit != 0) {
+        uint32_t guess = result + bit;
+        if (x >= guess) {
+            x -= guess;
+            result = (result >> 1) + bit;
+        } else {
+            result >>= 1;
+        }
+        bit >>= 2;
+    }
+    lua.pushNumber(static_cast<int32_t>(result));
+    return 1;
+}
+
+// 2D vector magnitude approximation via the "alpha max plus beta
+// min" trick. |v| ≈ 0.9604·max(|x|,|y|) + 0.3978·min(|x|,|y|);
+// integer coefficients (246, 102) / 256 land the same precision
+// in fp8. Max error ~3.4% across all input directions, zero
+// iterations. PSX-era games used this everywhere — AI distance
+// checks, particle lifetimes, anything where "indistinguishable
+// from real sqrt at scroll speed" beats "exact but slow."
+int LuaAPI::Math_LengthApprox(lua_State* L) {
+    psyqo::Lua lua(L);
+    int32_t x = static_cast<int32_t>(lua.toNumber(1));
+    int32_t y = static_cast<int32_t>(lua.toNumber(2));
+    int32_t ax = x < 0 ? -x : x;
+    int32_t ay = y < 0 ? -y : y;
+    int32_t maxV = ax > ay ? ax : ay;
+    int32_t minV = ax < ay ? ax : ay;
+    // Coefficients chosen for minimum max-error: 246/256 ≈ 0.9609
+    // and 102/256 ≈ 0.3984. Per-element 32-bit multiplies stay
+    // within range for FP12 inputs up to ~8.7M raw (huge worlds).
+    int32_t result = (maxV * 246 + minV * 102) >> 8;
+    lua.pushNumber(result);
     return 1;
 }
 

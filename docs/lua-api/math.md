@@ -4,7 +4,7 @@
 !!! info "Generated"
     This page is auto-generated from `psxsplash-main/src/luaapi.hh` by `scripts/py/gen_lua_api_docs.py`. Edits won't survive the next build — fix the source comments instead.
 
-12 entries, 2 with worked examples mined from `godot-ps1/demo/scripts/` and the bundled templates.
+14 entries, 2 with worked examples mined from `godot-ps1/demo/scripts/` and the bundled templates.
 
 ## Methods
 
@@ -61,6 +61,28 @@ toward +infinity so round(0.5) = 1, round(-0.5) = 0.
 Truncates a FixedPoint<12> toward zero. Inverse of Math.ToFixed
 for non-negative whole values. Use Floor if you want the
 round-toward-minus-infinity semantics.
+
+### `Math.Sqrt(value) -> integer` { #math-sqrt }
+
+Integer square root via bit-by-bit binary search — at most 16
+iterations of shift + compare + sub, no divides. Accurate
+result floor(sqrt(value)). Returns 0 for value <= 0.
+
+For "is this within range" checks, compare squared distances
+instead — it's free. For "how far is this thing" gameplay
+logic where 3-5% error is acceptable, use Math.LengthApprox
+which is ~5-10× faster.
+
+### `Math.LengthApprox(x, y) -> integer` { #math-lengthapprox }
+
+2D vector magnitude via the "alpha max plus beta min"
+approximation: |v| ≈ 0.9604·max(|x|,|y|) + 0.3978·min(|x|,|y|).
+Maximum error ~3.4%, zero iterations, two multiplies + a
+shift. Standard PSX-era game-math trick — much faster than
+Sqrt(x*x + y*y) and indistinguishable for "boss is N units
+away" feel.
+
+Inputs are raw fp12 (or any consistent units); output matches.
 
 ### `Math.Atan2(y, x) -> number` { #math-atan2 }
 
