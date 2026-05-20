@@ -20,14 +20,12 @@ local STATE_DEAD        = 5
 -- "in range?" checks since we never need the actual distance value.
 -- 8 world units → 8 * 4096 = 32768 fp12 → squared = 1073741824.
 -- 2 world units → 2 * 4096 = 8192 fp12 → squared = 67108864.
--- Aggro/attack range thresholds. distSq comes back as a FixedPoint
--- whose `_raw` field is the squared fp12 distance (units = fp12²).
--- We read `_raw` as a plain table field — psyqo-lua's FixedPoint
--- metatable defines :raw() but never sets __index, so the method-
--- call form `distSq:raw()` returns nil. Direct field access works
--- because FixedPoint userdata is just `{_raw = value}` with a
--- metatable. Using the raw int comparison also skips the automatic
--- shift in FixedPoint.__lt that would multiply by 4096 and overflow.
+-- distSqRaw below is computed from raw int multiplication of fp12
+-- values, so its units are fp12² to match the constants. NOTE:
+-- FixedPoint.__mul rescales (a.raw * b.raw) / 4096, which would
+-- silently leave distSq 4096× too small vs these thresholds and
+-- collapse aggro/attack ranges to ~0. bossToPlayer routes around
+-- that by multiplying the .raw ints directly.
 local AGGRO_RADIUS_SQ  = 1073741824
 local ATTACK_RADIUS_SQ = 67108864
 local TELL_FRAMES   = 30      -- pre-attack windup (0.5 s)
@@ -39,16 +37,26 @@ local state = STATE_IDLE
 local stateTimer = 0
 local phase2Triggered = false
 
--- Returns (dx, dz, distSq) — caller compares distSq against the
--- precomputed *_RADIUS_SQ constants and uses (dx, dz) for the
--- yaw + chase-step calculations without re-fetching positions.
+-- Returns (dx, dz, distSqRaw) — caller compares distSqRaw (plain
+-- int, units = fp12²) against the *_RADIUS_SQ constants and uses
+-- (dx, dz) for yaw + chase-step calculations.
+--
+-- distSqRaw computed from raw int multiplication so units match
+-- the thresholds. The seemingly more natural `dx*dx + dz*dz` goes
+-- through FixedPoint.__mul which divides by 4096 — that leaves
+-- distSq in fp12 units instead of fp12², 4096× too small vs the
+-- constants, and the boss thinks every range is attack range.
+-- Range stays in int32: max sensible distance is ~46k fp12 (~11
+-- PSX units, well outside this scene), squared = ~2.1G, fits.
 local function bossToPlayer(self)
     local b = Entity.GetPosition(self)
     local p = Player.GetPosition()
     local dx = p.x - b.x
     local dz = p.z - b.z
-    local distSq = dx * dx + dz * dz
-    return dx, dz, distSq
+    local dxRaw = dx._raw
+    local dzRaw = dz._raw
+    local distSqRaw = dxRaw * dxRaw + dzRaw * dzRaw
+    return dx, dz, distSqRaw
 end
 
 -- Snap the boss yaw so its +Z faces the player. Math.Atan2 returns
@@ -104,7 +112,7 @@ function onUpdate(self, dt)
 
     updateHPBar(self)
 
-    local dx, dz, distSq = bossToPlayer(self)
+    local dx, dz, distSqRaw = bossToPlayer(self)
 
     -- Always face the player (except in IDLE — boss hasn't noticed
     -- the player yet, so it stays at its authored facing).
@@ -112,7 +120,6 @@ function onUpdate(self, dt)
         faceToward(self, dx, dz)
     end
 
-    local distSqRaw = distSq._raw
     if state == STATE_IDLE then
         if distSqRaw < AGGRO_RADIUS_SQ then
             state = STATE_AGGRO
