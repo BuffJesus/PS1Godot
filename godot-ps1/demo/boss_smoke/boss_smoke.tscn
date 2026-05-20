@@ -105,6 +105,12 @@ FlatColor = Color(0.15, 0.40, 0.20, 1)
 Stats = ExtResource("9_player_stats")
 ScriptFile = "res://demo/scripts/boss_smoke_player.lua"
 
+[node name="BodyHurtBox" type="Node3D" parent="Player/Avatar"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
+script = ExtResource("7_hurt")
+Size = Vector3(0.8, 1.6, 0.8)
+DamageMultiplier = 100
+
 ; --- Boss + hurtboxes ---
 
 [node name="Boss" type="MeshInstance3D" parent="."]
