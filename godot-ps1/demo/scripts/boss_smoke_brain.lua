@@ -104,11 +104,22 @@ local function fireAttack(self)
 end
 
 function onCreate(self)
+    -- Boss is dormant until the player crosses the fog wall. The
+    -- gate script flips this to 1 on entry; clearing it here makes
+    -- the flag scene-load-local rather than save-game persistent,
+    -- so a respawn after death (or a fresh scene boot) drops the
+    -- boss back to IDLE instead of leaving it pre-aggroed.
+    Persist.Set("smoke_boss_aggro", 0)
     Debug.Log("boss brain ready — HP " .. Stats.GetMaxHP(self))
 end
 
 function onUpdate(self, dt)
     if state == STATE_DEAD then return end
+    -- Encounter gate: stay frozen until the fog wall has been crossed.
+    -- Without this the boss aggros on the player from frame 1 (player
+    -- spawn is inside the 8-unit aggro radius), tell-shake spamming
+    -- before the player has even reached the arena.
+    if Persist.Get("smoke_boss_aggro") ~= 1 then return end
 
     updateHPBar(self)
 

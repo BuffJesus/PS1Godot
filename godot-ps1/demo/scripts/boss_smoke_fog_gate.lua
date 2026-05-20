@@ -21,6 +21,12 @@ function onTriggerEnter(self, index)
         UI.SetCanvasVisible(hpCanvas, true)
     end
 
+    -- Wake the boss. brain.onUpdate gates on this Persist flag and
+    -- stays dormant until it flips to 1 — keeps the boss in IDLE
+    -- (no chase, no tell shake) while the player is still outside
+    -- the arena.
+    Persist.Set("smoke_boss_aggro", 1)
+
     -- Lock-on is opt-in via R3 (see boss_smoke_player.lua:tryLockOn).
     -- Auto-engaging here removed because there's no way to break it
     -- without a pad, and the souls "press to lock" idiom is what the
