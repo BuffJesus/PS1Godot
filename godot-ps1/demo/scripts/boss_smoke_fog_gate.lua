@@ -20,6 +20,14 @@ function onTriggerEnter(self, index)
     if boss then
         Camera.LockOn(boss)
     end
+
+    -- Reveal the boss HP bar now that the encounter has actually
+    -- started. The brain script only resizes the fill — visibility
+    -- is owned here so the bar can't appear before the fog gate.
+    local hpCanvas = UI.FindCanvas("boss_hp")
+    if hpCanvas >= 0 then
+        UI.SetCanvasVisible(hpCanvas, true)
+    end
 end
 
 function onTriggerExit(self, index)

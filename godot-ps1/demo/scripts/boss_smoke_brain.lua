@@ -38,7 +38,6 @@ local SWING_DAMAGE  = 18
 local state = STATE_IDLE
 local stateTimer = 0
 local phase2Triggered = false
-local hpBarShown = false
 
 -- Returns (dx, dz, distSq) — caller compares distSq against the
 -- precomputed *_RADIUS_SQ constants and uses (dx, dz) for the
@@ -63,10 +62,6 @@ end
 local function updateHPBar(self)
     local canvas = UI.FindCanvas("boss_hp")
     if canvas < 0 then return end
-    if not hpBarShown then
-        UI.SetCanvasVisible(canvas, true)
-        hpBarShown = true
-    end
     local bar = UI.FindElement(canvas, "fill")
     local maxHP = Stats.GetMaxHP(self)
     if maxHP > 0 then
