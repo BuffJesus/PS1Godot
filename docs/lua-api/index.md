@@ -12,7 +12,7 @@ consumed three ways:
   parses the structured `// Namespace.Method(...)` comments
   and writes one page per namespace.
 
-**25 namespaces, 170 entries** across the surface.
+**25 namespaces, 172 entries** across the surface.
 
 ## Namespaces
 
@@ -26,11 +26,11 @@ consumed three ways:
 | `Cutscene` | 2 | [`Cutscene`](cutscene.md) |
 | `Debug` | 3 | [`Debug`](debug.md) |
 | `Dialog` | 3 | [`Dialog`](dialog.md) |
-| `Entity` | 17 | [`Entity`](entity.md) |
+| `Entity` | 18 | [`Entity`](entity.md) |
 | `GameState` | 7 | [`GameState`](game-state.md) |
 | `Input` | 4 | [`Input`](input.md) |
 | `Interact` | 2 | [`Interact`](interact.md) |
-| `Math` | 11 | [`Math`](math.md) |
+| `Math` | 12 | [`Math`](math.md) |
 | `Music` | 7 | [`Music`](music.md) |
 | `Persist` | 2 | [`Persist`](persist.md) |
 | `Physics` | 3 | [`Physics`](physics.md) |

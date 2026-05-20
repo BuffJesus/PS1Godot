@@ -53,7 +53,7 @@ draw entirely — cheap to toggle.
 UI.SetCanvasVisible(canvas, true)
 ```
 
-_Source: `godot-ps1/demo/scripts/boss_smoke_brain.lua` line 42._
+_Source: `godot-ps1/demo/scripts/boss_smoke_brain.lua` line 59._
 
 ### `UI.IsCanvasVisible(canvas) -> boolean` { #ui-iscanvasvisible }
 
@@ -72,7 +72,7 @@ returned handles in onCreate.
 local bar = UI.FindElement(canvas, "fill")
 ```
 
-_Source: `godot-ps1/demo/scripts/boss_smoke_brain.lua` line 45._
+_Source: `godot-ps1/demo/scripts/boss_smoke_brain.lua` line 62._
 
 ### `UI.SetVisible(element, bool)` { #ui-setvisible }
 

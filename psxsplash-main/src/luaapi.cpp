@@ -469,6 +469,15 @@ void LuaAPI::RegisterAll(psyqo::Lua& L, SceneManager* scene, CutscenePlayer* cut
     L.push(Math_ToFixed);
     L.setField(-2, "ToFixed");
 
+    L.push(Math_Atan2);
+    L.setField(-2, "Atan2");
+
+    // Register the same table under both names. `Math` is the
+    // documented name + what authors intuitively reach for; `PSXMath`
+    // is kept as an alias for backwards compatibility (referenced
+    // by PS1LuaSyntaxHighlighter and a few internal templates).
+    L.copy(-1);
+    L.setGlobal("Math");
     L.setGlobal("PSXMath");
     
     // ========================================================================
@@ -2750,6 +2759,32 @@ int LuaAPI::Math_ToFixed(lua_State* L) {
     int32_t n = static_cast<int32_t>(lua.toNumber(1));
     psyqo::FixedPoint<12> fp(n << 12, psyqo::FixedPoint<12>::RAW);
     lua.push(fp);
+    return 1;
+}
+
+// Octant-fold atan2 — same algorithm as fastAtan2 in lua.cpp +
+// scenemanagerYawFromDxDz in scenemanager.cpp. Returns angle as
+// FP12 pi-fractions so Entity.SetRotationY can consume it directly.
+// Args are FP12 raw; only the sign + relative magnitude matter, the
+// fold cancels scale.
+int LuaAPI::Math_Atan2(lua_State* L) {
+    psyqo::Lua lua(L);
+    int32_t y = static_cast<int32_t>(lua.toNumber(1));
+    int32_t x = static_cast<int32_t>(lua.toNumber(2));
+    if (x == 0 && y == 0) { lua.pushNumber(0); return 1; }
+
+    int32_t absY = y < 0 ? -y : y;
+    int32_t absX = x < 0 ? -x : x;
+    int32_t minV = absY < absX ? absY : absX;
+    int32_t maxV = absY > absX ? absY : absX;
+    int32_t angle = (minV * 256) / maxV;
+    if (absY > absX) angle = 512 - angle;
+    if (x < 0) angle = 1024 - angle;
+    if (y < 0) angle = -angle;
+
+    // Convert from psyqo::Angle (FP10) to FP12 pi-fractions for
+    // Entity.SetRotationY's input convention (angle << 2).
+    lua.pushNumber(angle << 2);
     return 1;
 }
 

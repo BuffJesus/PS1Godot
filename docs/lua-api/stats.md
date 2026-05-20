@@ -20,7 +20,7 @@ does not auto-destroy — your Lua decides what happens then).
 local hp = Stats.GetHP(self)
 ```
 
-_Source: `godot-ps1/demo/scripts/boss_smoke_brain.lua` line 46._
+_Source: `godot-ps1/demo/scripts/boss_smoke_brain.lua` line 63._
 
 ### `Stats.SetHP(object, value) -> int` { #stats-sethp }
 
@@ -37,7 +37,7 @@ Returns the stored value. No-op on entities without stats.
 local maxHP = Stats.GetMaxHP(self)
 ```
 
-_Source: `godot-ps1/demo/scripts/boss_smoke_brain.lua` line 47._
+_Source: `godot-ps1/demo/scripts/boss_smoke_brain.lua` line 64._
 
 ### `Stats.GetStamina(object) -> int` { #stats-getstamina }
 

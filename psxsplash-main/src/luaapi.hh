@@ -696,6 +696,17 @@ private:
     // round-toward-minus-infinity semantics.
     static int Math_ToInt(lua_State* L);
 
+    // Math.Atan2(y, x) -> number
+    // Heading angle in pi-fractions (matches Entity.SetRotationY's
+    // convention: 1.0 = π, 0.5 = 90°). Inputs are FP12 — the
+    // runtime uses an octant-fold approximation, identical to the
+    // helper feeding lock-on yaw. Common AI pattern:
+    //   local d = Vec3.sub(targetPos, selfPos)
+    //   local heading = Math.Atan2(d.x, d.z)
+    //   Entity.SetRotationY(self, heading)
+    // makes the entity face the target.
+    static int Math_Atan2(lua_State* L);
+
     // Math.ToFixed(integer) -> FixedPoint
     // Promotes a plain integer to a FixedPoint<12>. Equivalent to
     // FixedPoint.new(integer, 0) but shorter.

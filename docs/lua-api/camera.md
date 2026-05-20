@@ -147,7 +147,7 @@ the next frame.
 Camera.LockOff()
 ```
 
-_Source: `godot-ps1/demo/scripts/boss_smoke_brain.lua` line 154._
+_Source: `godot-ps1/demo/scripts/boss_smoke_brain.lua` line 175._
 
 ### `Camera.IsLocked() -> boolean` { #camera-islocked }
 

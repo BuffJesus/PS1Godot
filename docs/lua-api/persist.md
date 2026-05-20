@@ -37,4 +37,4 @@ cutscene-flags, inventory counts). Silently no-ops when the
 Persist.Set("smoke_boss_dead", 1)
 ```
 
-_Source: `godot-ps1/demo/scripts/boss_smoke_brain.lua` line 156._
+_Source: `godot-ps1/demo/scripts/boss_smoke_brain.lua` line 177._

@@ -56,14 +56,6 @@ godot-ps1/
 
 ## Known limitations
 
-- **Boss faces +Z** (toward the player spawn) hard-coded. Real
-  bosses author rotation tracking; this one doesn't yaw to face
-  the player.
-- **Position-write during dodge** uses `Player.SetPosition(Vec3)`
-  — that API was already shipped but a docstring-format bug had
-  it silently dropped from the generated docs (now fixed). The
-  dodge motion correctly overrides the player rig position each
-  frame of the dodge window.
 - **No audio clips wired.** `Audio.PlaySfx("fog_gate_whoosh")` and
   `Music.Play("boss_theme", 100)` are no-ops — author and drop
   PS1AudioClips into the scene's `AudioClips` array to enable.

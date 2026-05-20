@@ -15,8 +15,13 @@ local STATE_ATTACK_HIT  = 3
 local STATE_PHASE2      = 4
 local STATE_DEAD        = 5
 
-local AGGRO_RADIUS  = 8       -- world units; once player within, aggro
-local ATTACK_RADIUS = 2       -- melee range
+-- Radii expressed as squared FP12 to skip a sqrt per frame. The
+-- runtime doesn't ship Math.Sqrt, and distance-squared is fine for
+-- "in range?" checks since we never need the actual distance value.
+-- 8 world units → 8 * 4096 = 32768 fp12 → squared = 1073741824.
+-- 2 world units → 2 * 4096 = 8192 fp12 → squared = 67108864.
+local AGGRO_RADIUS_SQ  = 1073741824
+local ATTACK_RADIUS_SQ = 67108864
 local TELL_FRAMES   = 30      -- pre-attack windup (0.5 s)
 local HIT_FRAMES    = 12      -- swing duration where hurtbox can hit player
 local RECOVER_FRAMES = 30     -- post-swing recovery before next decision
@@ -27,12 +32,24 @@ local stateTimer = 0
 local phase2Triggered = false
 local hpBarShown = false
 
-local function distToPlayer(self)
+-- Returns (dx, dz, distSq) — caller compares distSq against the
+-- precomputed *_RADIUS_SQ constants and uses (dx, dz) for the
+-- yaw + chase-step calculations without re-fetching positions.
+local function bossToPlayer(self)
     local b = Entity.GetPosition(self)
     local p = Player.GetPosition()
-    local dx = b.x - p.x
-    local dz = b.z - p.z
-    return Math.Sqrt(dx * dx + dz * dz)
+    local dx = p.x - b.x
+    local dz = p.z - b.z
+    local distSq = dx * dx + dz * dz
+    return dx, dz, distSq
+end
+
+-- Snap the boss yaw so its +Z faces the player. Math.Atan2 returns
+-- an FP12 pi-fraction (1.0 = π), the same convention Entity.SetRotationY
+-- consumes — no manual scaling needed.
+local function faceToward(self, dx, dz)
+    local heading = Math.Atan2(dx, dz)
+    Entity.SetRotationY(self, heading)
 end
 
 local function updateHPBar(self)
@@ -49,13 +66,15 @@ local function updateHPBar(self)
     UI.SetElementW(bar, fillW)
 end
 
--- Boss attacks: melee swing in front of facing direction.
+-- Boss attacks: melee swing in front of facing direction. With the
+-- yaw-to-player override in onUpdate, the boss's "forward" always
+-- points at the player at swing-start. Build the swing box around
+-- the player's position to model the boss reaching out — keeps the
+-- math one-liner without needing the boss rotation matrix.
 local function fireAttack(self)
-    local b = Entity.GetPosition(self)
-    -- Box in front of the boss (boss faces +Z by default for this
-    -- smoke scene; real authoring would use Entity.GetRotationY).
-    local minV = Vec3.new(b.x - 1, b.y - 1, b.z - 3)
-    local maxV = Vec3.new(b.x + 1, b.y + 1, b.z - 1)
+    local p = Player.GetPosition()
+    local minV = Vec3.new(p.x - 1, p.y - 1, p.z - 1)
+    local maxV = Vec3.new(p.x + 1, p.y + 2, p.z + 1)
     local hits = Physics.OverlapBoxDetailed(minV, maxV)
     for i = 1, #hits do
         local applied = Stats.DealDamage(hits[i].object, SWING_DAMAGE, self)
@@ -75,20 +94,27 @@ function onUpdate(self, dt)
 
     updateHPBar(self)
 
+    local dx, dz, distSq = bossToPlayer(self)
+
+    -- Always face the player (except in IDLE — boss hasn't noticed
+    -- the player yet, so it stays at its authored facing).
+    if state ~= STATE_IDLE then
+        faceToward(self, dx, dz)
+    end
+
     if state == STATE_IDLE then
-        if distToPlayer(self) < AGGRO_RADIUS then
+        if distSq < AGGRO_RADIUS_SQ then
             state = STATE_AGGRO
             stateTimer = 0
         end
 
     elseif state == STATE_AGGRO then
-        -- Simple chase — Entity.SetPosition stepping toward player.
-        local b = Entity.GetPosition(self)
-        local p = Player.GetPosition()
-        local dx = p.x - b.x
-        local dz = p.z - b.z
-        local d = Math.Sqrt(dx * dx + dz * dz)
-        if d > ATTACK_RADIUS then
+        if distSq > ATTACK_RADIUS_SQ then
+            -- Step toward player. Normalize the (dx, dz) heading by
+            -- the FP12 magnitude so the step is constant speed
+            -- regardless of distance. Math.Atan2 + sin/cos would be
+            -- cleaner but we already have dx/dz handy.
+            local b = Entity.GetPosition(self)
             local step = 4096 // 32  -- ~0.03 units/frame, slow boss
             Entity.SetPosition(self, Vec3.new(
                 b.x + (dx * step) // 4096,
@@ -100,7 +126,6 @@ function onUpdate(self, dt)
         end
 
     elseif state == STATE_ATTACK_TELL then
-        -- Telegraph: small camera shake to telegraph the wind-up.
         if stateTimer == TELL_FRAMES then
             Camera.ShakeRaw(82, 4)
         end
@@ -119,13 +144,9 @@ function onUpdate(self, dt)
         end
 
     elseif state == STATE_PHASE2 then
-        -- Identical AI but faster + harder. Real bosses would author
-        -- distinct attack pattern; this just amps numbers.
-        if distToPlayer(self) > ATTACK_RADIUS then
+        -- Faster + harder phase 2. Same chase shape, shorter tell.
+        if distSq > ATTACK_RADIUS_SQ then
             local b = Entity.GetPosition(self)
-            local p = Player.GetPosition()
-            local dx = p.x - b.x
-            local dz = p.z - b.z
             local step = 4096 // 20  -- faster than phase 1
             Entity.SetPosition(self, Vec3.new(
                 b.x + (dx * step) // 4096,
@@ -133,7 +154,7 @@ function onUpdate(self, dt)
                 b.z + (dz * step) // 4096))
         else
             state = STATE_ATTACK_TELL
-            stateTimer = TELL_FRAMES // 2  -- shorter tell — harder
+            stateTimer = TELL_FRAMES // 2
         end
     end
 end

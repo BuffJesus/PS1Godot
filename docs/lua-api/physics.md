@@ -53,4 +53,4 @@ multiplier is 100 for default, 200 for 2× crit, etc. Capped at
 local hits = Physics.OverlapBoxDetailed(minV, maxV)
 ```
 
-_Source: `godot-ps1/demo/scripts/boss_smoke_brain.lua` line 59._
+_Source: `godot-ps1/demo/scripts/boss_smoke_brain.lua` line 78._

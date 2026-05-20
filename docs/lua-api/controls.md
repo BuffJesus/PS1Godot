@@ -22,7 +22,7 @@ window expires OVERWRITES (not adds to) the remaining frames.
 Controls.StartIFrames(self, 6)
 ```
 
-_Source: `godot-ps1/demo/scripts/boss_smoke_brain.lua` line 145._
+_Source: `godot-ps1/demo/scripts/boss_smoke_brain.lua` line 166._
 
 ### `Controls.IsInvulnerable(target) -> boolean` { #controls-isinvulnerable }
 

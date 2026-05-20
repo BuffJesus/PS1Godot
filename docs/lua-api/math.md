@@ -4,7 +4,7 @@
 !!! info "Generated"
     This page is auto-generated from `psxsplash-main/src/luaapi.hh` by `scripts/py/gen_lua_api_docs.py`. Edits won't survive the next build — fix the source comments instead.
 
-11 entries, 1 with worked examples mined from `godot-ps1/demo/scripts/` and the bundled templates.
+12 entries, 2 with worked examples mined from `godot-ps1/demo/scripts/` and the bundled templates.
 
 ## Methods
 
@@ -61,6 +61,23 @@ toward +infinity so round(0.5) = 1, round(-0.5) = 0.
 Truncates a FixedPoint<12> toward zero. Inverse of Math.ToFixed
 for non-negative whole values. Use Floor if you want the
 round-toward-minus-infinity semantics.
+
+### `Math.Atan2(y, x) -> number` { #math-atan2 }
+
+Heading angle in pi-fractions (matches Entity.SetRotationY's
+convention: 1.0 = π, 0.5 = 90°). Inputs are FP12 — the
+runtime uses an octant-fold approximation, identical to the
+helper feeding lock-on yaw. Common AI pattern:
+local d = Vec3.sub(targetPos, selfPos)
+local heading = Math.Atan2(d.x, d.z)
+
+**Example**
+
+```lua
+local heading = Math.Atan2(dx, dz)
+```
+
+_Source: `godot-ps1/demo/scripts/boss_smoke_brain.lua` line 51._
 
 ### `Math.ToFixed(integer) -> FixedPoint` { #math-tofixed }
 

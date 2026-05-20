@@ -4,7 +4,7 @@
 !!! info "Generated"
     This page is auto-generated from `psxsplash-main/src/luaapi.hh` by `scripts/py/gen_lua_api_docs.py`. Edits won't survive the next build — fix the source comments instead.
 
-17 entries, 9 with worked examples mined from `godot-ps1/demo/scripts/` and the bundled templates.
+18 entries, 11 with worked examples mined from `godot-ps1/demo/scripts/` and the bundled templates.
 
 ## Methods
 
@@ -42,7 +42,7 @@ Sets object active state (fires onEnable/onDisable)
 Entity.SetActive(self, false)
 ```
 
-_Source: `godot-ps1/demo/scripts/boss_smoke_brain.lua` line 157._
+_Source: `godot-ps1/demo/scripts/boss_smoke_brain.lua` line 178._
 
 ### `Entity.IsActive(object) -> boolean` { #entity-isactive }
 
@@ -55,11 +55,11 @@ World-space position as a Vec3 table. Components are FixedPoint<12>.
 **Example**
 
 ```lua
--- Simple chase — Entity.SetPosition stepping toward player.
+-- cleaner but we already have dx/dz handy.
 local b = Entity.GetPosition(self)
 ```
 
-_Source: `godot-ps1/demo/scripts/boss_smoke_brain.lua` line 86._
+_Source: `godot-ps1/demo/scripts/boss_smoke_brain.lua` line 117._
 
 ### `Entity.SetPosition(object, {x, y, z})` { #entity-setposition }
 
@@ -73,7 +73,7 @@ if you need to avoid clipping into walls.
 Entity.SetPosition(self, Vec3.new(
 ```
 
-_Source: `godot-ps1/demo/scripts/boss_smoke_brain.lua` line 93._
+_Source: `godot-ps1/demo/scripts/boss_smoke_brain.lua` line 119._
 
 ### `Entity.GetRotationY(object) -> number` { #entity-getrotationy }
 
@@ -85,6 +85,14 @@ Yaw rotation in "pi fractions": 1.0 = π radians = 180°. So 0.5 = 90°,
 Sets yaw rotation in "pi fractions" (1.0 = π, 0.5 = 90°, 0.25 = 45°).
 The PS1Godot runtime uses pi-fraction angles everywhere to dodge
 floating-point conversion overhead on PSX hardware.
+
+**Example**
+
+```lua
+Entity.SetRotationY(self, heading)
+```
+
+_Source: `godot-ps1/demo/scripts/boss_smoke_brain.lua` line 52._
 
 ### `Entity.ForEach(callback) -> nil` { #entity-foreach }
 
@@ -170,3 +178,15 @@ local boss = Entity.FindNearest(p, TAG_BOSS)
 ```
 
 _Source: `godot-ps1/demo/scripts/boss_smoke_player.lua` line 53._
+
+### `Entity.SetRotationY(self, heading)` { #entity-setrotationy }
+
+makes the entity face the target.
+
+**Example**
+
+```lua
+Entity.SetRotationY(self, heading)
+```
+
+_Source: `godot-ps1/demo/scripts/boss_smoke_brain.lua` line 52._
