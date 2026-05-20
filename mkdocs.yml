@@ -138,6 +138,7 @@ nav:
           - PS1Sky: authoring/nodes/ps1-sky.md
       - Fixed cameras: authoring/fixed-cameras.md
       - Combat patterns: authoring/combat-patterns.md
+      - Boss encounters: authoring/boss-encounters.md
       - Graphs:
           - Dialogue: authoring/graphs/dialogue.md
           - FSM: authoring/graphs/fsm.md
