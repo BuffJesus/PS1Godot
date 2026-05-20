@@ -5,10 +5,12 @@ bugs, 14 uncommitted files). Landed the 14 uncommitted edits as
 7 per-area commits, then ran the encounter on real hardware
 (PCSX-Redux with keyboard input) and hit **7 more bugs** in
 sequence — each one revealed the next. All 11 are now fixed and
-committed. The session also produced the framework RFC and a
-user-facing tutorial that should make the *next* boss painless.
+committed. The session also produced the framework RFC, a
+user-facing tutorial that should make the *next* boss painless,
+two PS1Doctor lint checks (first two from the RFC's L5 set),
+and a blind math fix for the deferred Bug #3 camera-pitch.
 
-**HEAD:** `ab8b666`. Everything pushed.
+**HEAD:** `c0619d6`. Working tree clean. Not pushed.
 
 ## What got fixed and shipped
 
@@ -90,31 +92,71 @@ are now clean; pass `-DPSXSPLASH_VERBOSE` to re-enable.
 unconditional — they're one-shot at scene load with high signal-
 to-noise.
 
+## Autonomous work after the initial handoff was written
+
+Three commits landed after the user stepped away to test the
+controller. None require controller verification beyond what's
+explicitly noted.
+
+### `1cd625b` `CombatValidationReport` — Doctor lint #1: Stats without HurtBox
+
+First entry in the RFC's L5 set. Symmetric to the existing
+texture/audio/animation/decal validators — emits warnings into
+the shared `validatorOffenders` sink that the PS1 Doctor dock
+surfaces alongside other reports. Would have caught Bug #8 at
+editor time (player avatar had PS1Stats but no PS1HurtBox →
+combat looked broken because OverlapBoxDetailed silently ignored
+the player).
+
+### `c0619d6` Doctor lint #2: HurtBox without Stats
+
+Symmetric check. Author who adds a PS1HurtBox to an entity that
+has no PS1Stats has dead-weight authoring — the hurtbox shows up
+in hits but Stats.DealDamage no-ops on it. Dedups across multiple
+hurtboxes per entity (head/body/legs is common) so the offender
+list gets one row per entity, not per hurtbox.
+
+dotnet build verified clean for both lints (0 errors, 6 pre-
+existing warnings unchanged).
+
+### `8a922cc` Bug #3 camera pitch math (BLIND — pending controller verify)
+
+Applied the math sketched in the 2026-05-19 handoff: pitch
+(`playerRotationX`) rotates `(Y, Z)` of the rig offset before
+the yaw rotates `(X, Z')`. Camera now arcs around the player's
+head when pitching instead of pivoting the view in place. Pitch
+clamp at `controls.cpp:249` is already `±π/2` so no clamp added.
+
+**Verify when you have a controller.** Right-stick Y to pitch
+up/down. Expect: camera physically arcs over/under the player,
+maintaining roughly constant distance, view stays centered on
+the avatar. If signs feel inverted (e.g. pitching up moves
+camera down), the fix is to negate `sinX` in the two
+`pitchedY/Z` lines — single-line revert.
+
 ## What's still open
 
-### From the original handoff (controller-required)
+### Awaiting controller verification
 
-Both deferred — neither is testable without a pad, and the user
-is on keyboard until at least the OBDX Pro VX arrives (memory:
-`project_obdx_eta` says May 22-25).
+OBDX Pro VX arrives May 22-25 per memory `project_obdx_eta`.
+Until then the user is on keyboard, and these two need a pad.
 
-- **Bug #3 — Camera pitch orbital arc.** Right-stick Y pitches
-  the camera but rotates the world around a fixed point instead
-  of arcing the camera over/under the player's head.
-  Fix sketched in the original handoff (apply pitch to (Y, Z)
-  of the rig offset before yaw rotation, in
-  `scenemanager.cpp:1094-1112`). Math is straightforward; can be
-  written blind, but verifying it requires a right-stick.
+- **Bug #3 — Camera pitch orbital arc.** Math fix is *committed*
+  (`8a922cc`); the user can't drive right-stick Y from keyboard
+  so verification waits. On F5 with controller: pitch should
+  arc the camera around the player, not tilt the view in place.
+  If something's off, see the rollback note in the commit
+  description.
 - **Bug #4 — Framerate dips.** User reports performance drops
   during gameplay. Total geometry budget (188 tris) is well
   within range so it's probably not raw fillrate. Hypotheses
   listed in the original handoff (Lua flood was the cost; UV
-  scroll on fog wall; subdivided floor). Needs `PSXSPLASH_PERFOVERLAY`
-  (already on in current build) breakdown of GTE/CPU/Lua time
-  during dips. Controller needed to actually move around and
-  reproduce.
+  scroll on fog wall; subdivided floor). Needs
+  `PSXSPLASH_PERFOVERLAY` (already on in current build)
+  breakdown of GTE/CPU/Lua time during dips. Controller
+  needed to actually move around and reproduce.
 
-### New, controller-not-required (next-session candidates)
+### Next-session candidates (controller-not-required)
 
 1. **Combat framework Phase 1 implementation** (1–2 days). Per
    the RFC, ship:
@@ -122,25 +164,31 @@ is on keyboard until at least the OBDX Pro VX arrives (memory:
      `InRange`, `MeleeSwing`, `ChaseStep`. Pure Lua helpers.
    - `godot-ps1/lua/lib/ui_bar.lua` — `UpdateStatBar`,
      `BindStatBars`. Pure Lua.
-   - Loading mechanism — biggest design decision. Options:
-     (a) C++ Lua API registration that runs Lua source at
-     startup; (b) per-scene init script using
-     `onSceneCreationStart`; (c) per-script `require`-equivalent
-     (psxlua may not support it). Lean toward (a) for global
-     availability without per-scene plumbing, but (b) is the
-     quickest to ship if (a) hits scope creep.
+   - **Loading mechanism is the only blocker.** Options:
+     (a) C++ Lua API registration that loads embedded Lua
+     source at runtime startup (globally available);
+     (b) per-scene init script using `onSceneCreationStart`
+     (runs before entity onCreates — verified
+     `scenemanager.cpp:597` vs `:606`);
+     (c) per-script `require`-equivalent (psxlua may not
+     support it; not investigated).
+     Lean toward (a) for "no per-scene plumbing." Path (b)
+     ships faster if (a) hits scope creep. **Pick before
+     starting Phase 1** — both code paths diverge from there.
    - Migrate `boss_smoke_player.lua`'s `updateBars` to
      `UI.UpdateStatBar` as the first caller. Verify behavior
-     unchanged.
-2. **PS1Doctor lint checks** (alongside Phase 1). Per the RFC,
-   start with the four highest-signal:
-   - `Stats without HurtBox` (would have caught Bug #8 at
-     editor time).
+     unchanged on keyboard-driven F5.
+2. **More PS1Doctor lint checks** (cheap per-check, no
+   architecture lift). RFC § L5 lists 9 candidates; 2 shipped
+   (`1cd625b`, `c0619d6`). Next four with highest signal:
    - `Bar fill exceeds BG` (geometric sanity).
-   - `Encounter without boss` (broken `PS1Encounter` wiring).
+   - `Encounter without boss` (broken `PS1Encounter` wiring —
+     waits on the composite node existing).
    - `Trigger position not authored` (auto-compute
      `TRIGGER_Z_RAW` from AABB at export, so authors don't have
      to hardcode it).
+   - `Boss attack range > arena extent` (designer hint that
+     the boss will never miss).
 3. **Combat module Phase 2** (1 day, after Phase 1 ships):
    `Combat.MeleeBoss` state machine. This is where the brain
    shrinks ~200 → ~25 lines.
@@ -167,7 +215,8 @@ is on keyboard until at least the OBDX Pro VX arrives (memory:
 
 ## Uncommitted state
 
-None. Working tree is clean.
+None. Working tree is clean (except this handoff edit, which
+will be committed in the same step that updates it).
 
 ```
 $ git -C /d/Documents/JetBrains/PS1Godot status --short --untracked-files=no
@@ -208,11 +257,14 @@ already in the existing memories.
 
 ## Suggested opener for next session
 
-> "HEAD `ab8b666`. boss_smoke arc closed — 11 bugs fixed, three
-> docs landed (RFC, tutorial, foot-gun reference). Framework
-> RFC is `docs/internal/rfc/combat-framework.md`; Phase 1 is
-> the next big lift but blocked on the Lua-lib-loading design
+> "HEAD `c0619d6` (or later after this handoff commit). boss_smoke
+> arc closed — 11 bugs fixed; framework RFC, tutorial, and
+> foot-gun reference docs landed; 2 of 9 Doctor lint checks
+> shipped; Bug #3 camera pitch math applied blind, waits on
+> controller. Framework RFC at
+> `docs/internal/rfc/combat-framework.md`; Phase 1 is the
+> next big lift but blocked on the Lua-lib-loading design
 > decision (C++ registration vs per-scene init vs require).
-> What next — framework Phase 1, the deferred camera pitch /
-> framerate bugs (needs controller; OBDX ETA May 22-25), or
-> something fresh?"
+> What next — pick a loading mechanism and ship Phase 1, more
+> Doctor lints (cheap), or the deferred controller-required
+> Bugs #3/#4 (OBDX ETA May 22-25)?"
