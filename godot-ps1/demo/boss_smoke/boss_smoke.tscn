@@ -22,9 +22,13 @@
 [ext_resource type="Resource" path="res://demo/boss_smoke/boss_stats.tres" id="8_boss_stats"]
 [ext_resource type="Resource" path="res://demo/boss_smoke/player_stats.tres" id="9_player_stats"]
 [ext_resource type="Material" path="res://demo/boss_smoke/preview_dim.tres" id="10_preview_mat"]
+[ext_resource type="Script" uid="uid://fctvwq3jxihi" path="res://addons/ps1godot/nodes/PS1Sky.cs" id="11_sky"]
+[ext_resource type="Texture2D" uid="uid://cgngyr38qan3b" path="res://assets/monitor/textures/sky_stars.png" id="12_sky_tex"]
 
 [sub_resource type="PlaneMesh" id="floor_mesh"]
 size = Vector2(30, 30)
+subdivide_width = 8
+subdivide_depth = 8
 
 [sub_resource type="BoxMesh" id="cube_2"]
 size = Vector3(2, 2, 2)
@@ -41,15 +45,25 @@ orientation = 2
 [node name="BossSmoke" type="Node3D"]
 script = ExtResource("1_scene")
 FogEnabled = true
-FogColor = Color(0.35, 0.20, 0.30, 1)
-FogNear = 6
-FogFar = 30
+FogColor = Color(0.10, 0.05, 0.12, 1)
+FogDensity = 2
 GteScaling = 4
 PlayerHeight = 1.7
 PlayerRadius = 0.3
 MoveSpeed = 3
 JumpHeight = 1.2
 Gravity = 20
+
+; --- Skybox ---
+; Full-screen quad drawn behind the world OT (Crash/Spyro pattern).
+; Using sky_stars.png as a placeholder dark-sky texture; swap in a
+; thematic boss-arena sky asset later.
+
+[node name="Sky" type="Node3D" parent="."]
+script = ExtResource("11_sky")
+Texture = ExtResource("12_sky_tex")
+BitDepth = 0
+Tint = Color(0.7, 0.55, 0.7, 1)
 
 ; --- Floor ---
 
@@ -70,7 +84,12 @@ script = ExtResource("3_player")
 CameraMode = 0
 
 [node name="Camera3D" type="Camera3D" parent="Player"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 3)
+; Over-the-shoulder rig: X = +0.5 (right shoulder), Y = +1.4 (slight
+; head-height raise), Z = +3 (behind). Keeps the avatar in the
+; lower-left third of frame so it doesn't block the boss / target.
+; Runtime overrides the basis with player yaw, so only the local
+; position (last three Transform3D fields) is consumed.
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5, 1.4, 3)
 fov = 72.0
 near = 0.2
 far = 60.0
@@ -148,36 +167,33 @@ Residency = 0
 
 [node name="BG" type="Node" parent="BossHPCanvas"]
 script = ExtResource("6_uiel")
-ElementType = 0
+ElementName = "BG"
+Type = 1
 X = 16
 Y = 16
-W = 288
-H = 12
-ColorR = 20
-ColorG = 20
-ColorB = 20
+Width = 288
+Height = 12
+Color = Color(0.08, 0.08, 0.08, 1)
 
 [node name="fill" type="Node" parent="BossHPCanvas"]
 script = ExtResource("6_uiel")
-ElementType = 0
+ElementName = "fill"
+Type = 1
 X = 20
 Y = 20
-W = 280
-H = 4
-ColorR = 200
-ColorG = 40
-ColorB = 40
+Width = 280
+Height = 4
+Color = Color(0.78, 0.16, 0.16, 1)
 
 [node name="Label" type="Node" parent="BossHPCanvas"]
 script = ExtResource("6_uiel")
-ElementType = 1
+ElementName = "Label"
+Type = 2
 X = 20
 Y = 28
-W = 280
-H = 12
-ColorR = 240
-ColorG = 220
-ColorB = 220
+Width = 280
+Height = 12
+Color = Color(0.94, 0.86, 0.86, 1)
 Text = "BOSS"
 
 [node name="PlayerHPCanvas" type="Node" parent="."]
@@ -188,44 +204,40 @@ Residency = 0
 
 [node name="hp_bg" type="Node" parent="PlayerHPCanvas"]
 script = ExtResource("6_uiel")
-ElementType = 0
+ElementName = "hp_bg"
+Type = 1
 X = 16
 Y = 200
-W = 104
-H = 8
-ColorR = 20
-ColorG = 20
-ColorB = 20
+Width = 104
+Height = 8
+Color = Color(0.08, 0.08, 0.08, 1)
 
 [node name="hp_fill" type="Node" parent="PlayerHPCanvas"]
 script = ExtResource("6_uiel")
-ElementType = 0
+ElementName = "hp_fill"
+Type = 1
 X = 18
 Y = 202
-W = 100
-H = 4
-ColorR = 60
-ColorG = 200
-ColorB = 60
+Width = 100
+Height = 4
+Color = Color(0.24, 0.78, 0.24, 1)
 
 [node name="stamina_bg" type="Node" parent="PlayerHPCanvas"]
 script = ExtResource("6_uiel")
-ElementType = 0
+ElementName = "stamina_bg"
+Type = 1
 X = 16
 Y = 212
-W = 104
-H = 8
-ColorR = 20
-ColorG = 20
-ColorB = 20
+Width = 104
+Height = 8
+Color = Color(0.08, 0.08, 0.08, 1)
 
 [node name="stamina_fill" type="Node" parent="PlayerHPCanvas"]
 script = ExtResource("6_uiel")
-ElementType = 0
+ElementName = "stamina_fill"
+Type = 1
 X = 18
 Y = 214
-W = 100
-H = 4
-ColorR = 200
-ColorG = 200
-ColorB = 60
+Width = 100
+Height = 4
+Color = Color(0.78, 0.78, 0.24, 1)
