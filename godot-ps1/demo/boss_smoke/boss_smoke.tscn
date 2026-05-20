@@ -250,6 +250,17 @@ CanvasName = "controls_help"
 VisibleOnLoad = true
 Residency = 0
 
+[node name="backing" type="Node" parent="ControlsHelpCanvas"]
+script = ExtResource("6_uiel")
+ElementName = "backing"
+Type = 1
+X = 40
+Y = 28
+Width = 240
+Height = 152
+Color = Color(0.08, 0.06, 0.12, 1)
+Translucent = true
+
 [node name="title" type="Node" parent="ControlsHelpCanvas"]
 script = ExtResource("6_uiel")
 ElementName = "title"
