@@ -29,11 +29,11 @@ namespace PS1Godot.Exporter;
 //                  Name table — referenced by header.nameTableOffset.
 public static class SplashpackWriter
 {
-    public const ushort SplashpackVersion = 34;
+    public const ushort SplashpackVersion = 35;
     // Header layout grew by 16 bytes in v24 (sky struct: tpage + clut + UVs
     // + bitDepth + tint + enabled flag, mirroring the UI Image typeData
     // union slot). See WriteHeader and the runtime's SPLASHPACKFileHeader.
-    public const int HeaderSize = 248;
+    public const int HeaderSize = 256;
     public const int GameObjectSize = 92;
     public const int TriSize = 52;
     public const int LuaFileSize = 8; // luaCodeOffset (u32) + length (u32)
@@ -450,6 +450,34 @@ public static class SplashpackWriter
         if (scene.HurtBoxes.Count > 0)
         {
             WriteHurtBoxSection(w, scene, headerOffsets);
+        }
+
+        // v35+: per-entity UV scroll. Sparse — only entities with
+        // non-zero UVScrollSpeed contribute. Empty list = all meshes
+        // static (the common case).
+        if (scene.UVScrolls.Count > 0)
+        {
+            WriteUVScrollSection(w, scene, headerOffsets);
+        }
+    }
+
+    // ─── Per-entity UV scroll section (v35+) ───────────────────────────
+    //
+    // 8-byte UVScrollTableEntry × N: entityIndex (u16) + speedU/speedV
+    // (i16 fp8 each, 256 = 1 texel/sec) + 2 reserved bytes.
+    private static void WriteUVScrollSection(BinaryWriter w, SceneData scene, HeaderOffsets headerOffsets)
+    {
+        AlignTo4(w);
+        long tableStart = w.BaseStream.Position;
+        BackfillUInt16(w, headerOffsets.UVScrollCountPos, (ushort)scene.UVScrolls.Count);
+        BackfillUInt32(w, headerOffsets.UVScrollTableOffsetPos, (uint)tableStart);
+
+        foreach (var s in scene.UVScrolls)
+        {
+            w.Write((ushort)s.EntityIndex);
+            w.Write((short)Mathf.Clamp(s.SpeedUFp8, short.MinValue, short.MaxValue));
+            w.Write((short)Mathf.Clamp(s.SpeedVFp8, short.MinValue, short.MaxValue));
+            w.Write((ushort)0);  // reserved
         }
     }
 
@@ -1511,6 +1539,9 @@ public static class SplashpackWriter
         // v34+: per-entity hurtbox backfill positions.
         public long HurtBoxCountPos;
         public long HurtBoxTableOffsetPos;
+        // v35+: per-entity UV-scroll backfill positions.
+        public long UVScrollCountPos;
+        public long UVScrollTableOffsetPos;
     }
 
     private static HeaderOffsets WriteHeader(BinaryWriter w, SceneData scene, int atlasCount, int clutCount, int colliderCount,
@@ -1768,6 +1799,14 @@ public static class SplashpackWriter
         w.Write((ushort)0);    // pad_hurtbox
         offsets.HurtBoxTableOffsetPos = w.BaseStream.Position;
         w.Write((uint)0);      // hurtBoxTableOffset (backfilled)
+
+        // v35+: per-entity UV scroll. Same shape — sparse, only
+        // entities with non-zero UVScrollSpeed contribute records.
+        offsets.UVScrollCountPos = w.BaseStream.Position;
+        w.Write((ushort)0);    // uvScrollCount (backfilled)
+        w.Write((ushort)0);    // pad_uvscroll
+        offsets.UVScrollTableOffsetPos = w.BaseStream.Position;
+        w.Write((uint)0);      // uvScrollTableOffset (backfilled)
 
         long written = w.BaseStream.Position - headerStart;
         if (written != HeaderSize)

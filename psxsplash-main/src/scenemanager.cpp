@@ -162,6 +162,20 @@ void psxsplash::SceneManager::InitializeScene(uint8_t* splashpackData, LoadingSc
     // query time (table is sparse; typical scene has 0–10 entries).
     m_hurtBoxTable = sceneSetup.hurtBoxTable;
     m_hurtBoxCount = sceneSetup.hurtBoxCount;
+
+    // v35+: UV scroll — parallel fp8 accumulators sized to the sparse
+    // table. Each GameTick advances them by speedFp8. The renderer
+    // queries uvScrollOffsetFor at submission time and applies the
+    // integer portion to vertex UVs.
+    m_uvScrollTable = sceneSetup.uvScrollTable;
+    m_uvScrollCount = sceneSetup.uvScrollCount;
+    m_uvScrollAccU.clear();
+    m_uvScrollAccV.clear();
+    if (m_uvScrollCount > 0) {
+        m_uvScrollAccU.resize(m_uvScrollCount, 0);
+        m_uvScrollAccV.resize(m_uvScrollCount, 0);
+    }
+
     if (sceneSetup.statsTable && sceneSetup.statsCount > 0) {
         for (uint16_t i = 0; i < sceneSetup.statsCount; ++i) {
             const StatsTableEntry& src = sceneSetup.statsTable[i];
@@ -806,6 +820,19 @@ void psxsplash::SceneManager::GameTick(psyqo::GPU &gpu) {
     // with 200 entities is 200 u16 writes.
     for (size_t i = 0; i < m_iframes.size(); ++i) {
         if (m_iframes[i] > 0) --m_iframes[i];
+    }
+
+    // v35+: accumulate UV scroll. speedFp8 = texels per second × 256.
+    // dt12 is 4.12 fp seconds (4096 = 1 frame ≈ 1/60 s). So per-frame
+    // advance is speedFp8 * dt12 / 4096; we drop the >>12 to keep
+    // precision (the accumulator stays fp(8+12) = fp20 effectively
+    // and we mask the integer portion when feeding the renderer).
+    // 8 ticks of an int32 accumulator at max-speed never overflows.
+    for (uint16_t i = 0; i < m_uvScrollCount; ++i) {
+        int32_t deltaU = (m_uvScrollTable[i].speedUFp8 * m_dt12) >> 12;
+        int32_t deltaV = (m_uvScrollTable[i].speedVFp8 * m_dt12) >> 12;
+        m_uvScrollAccU[i] += deltaU;
+        m_uvScrollAccV[i] += deltaV;
     }
 
     // Update interaction system (checks for interact button press)
@@ -1800,4 +1827,29 @@ int psxsplash::SceneManager::overlapHurtBoxes(int32_t minX, int32_t minY, int32_
         }
     }
     return count;
+}
+
+bool psxsplash::SceneManager::uvScrollOffsetFor(const GameObject* obj, uint8_t* outU, uint8_t* outV) const {
+    if (!obj || m_uvScrollCount == 0) return false;
+    // Find this object's index. GameObjects are stored as pointers in
+    // m_gameObjects; pointer compare is cheap and the array is small.
+    uint16_t entityIndex = 0xFFFF;
+    for (size_t i = 0; i < m_gameObjects.size(); ++i) {
+        if (m_gameObjects[i] == obj) {
+            entityIndex = static_cast<uint16_t>(i);
+            break;
+        }
+    }
+    if (entityIndex == 0xFFFF) return false;
+
+    // Linear scan the small UV-scroll table for a matching entity.
+    for (uint16_t i = 0; i < m_uvScrollCount; ++i) {
+        if (m_uvScrollTable[i].entityIndex != entityIndex) continue;
+        // Accumulator is fp8 (256 = 1 texel). The integer part wraps
+        // mod 256 naturally when cast to uint8.
+        *outU = static_cast<uint8_t>((m_uvScrollAccU[i] >> 8) & 0xFF);
+        *outV = static_cast<uint8_t>((m_uvScrollAccV[i] >> 8) & 0xFF);
+        return true;
+    }
+    return false;
 }

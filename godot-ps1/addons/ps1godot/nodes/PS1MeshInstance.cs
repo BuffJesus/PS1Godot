@@ -277,6 +277,26 @@ public partial class PS1MeshInstance : MeshInstance3D
     /// </summary>
     [Export] public PS1Stats? Stats { get; set; }
 
+    /// <summary>
+    /// Per-frame UV scroll speed in texels per second. (0, 0) =
+    /// static texture (default). Used for fog walls, waterfalls,
+    /// lava surfaces, conveyor belts, spell circles, scrolling
+    /// title text — any application of moving UVs.
+    ///
+    /// PSX UVs are 8-bit per vertex (0–255) and the GPU samples
+    /// modulo the TPage; the runtime adds an integer offset to
+    /// every vertex UV before submission, accumulating from this
+    /// speed each frame. A power-of-2 texture scrolls cleanly
+    /// across its entire range; a non-power-of-2 texture will
+    /// show a seam where the UV wraps.
+    ///
+    /// Typical values: 4–16 for gentle flow (fog wall), 32–64
+    /// for visible motion (waterfall), 100+ for fast scrolling
+    /// (loading indicator). Negative values scroll the opposite
+    /// direction.
+    /// </summary>
+    [Export] public Vector2 UVScrollSpeed { get; set; } = Vector2.Zero;
+
     // _EnterTree runs every time the node enters the scene tree — both at
     // runtime and on every editor scene-open. _Ready can miss hot-reload
     // re-instantiation in [Tool] scripts, so do the lifecycle setup here.

@@ -173,6 +173,17 @@ public sealed class HurtBoxRecord
     public required int Multiplier { get; init; }
 }
 
+// v35+: per-entity UV scroll speed. Sparse — entities with
+// UVScrollSpeed == (0,0) skip the table entirely. SpeedU/SpeedV are
+// in fp8 texels-per-second (256 = 1 texel/sec). Runtime accumulates
+// an offset each tick and the renderer adds it to vertex UVs.
+public sealed class UVScrollRecord
+{
+    public required int EntityIndex { get; init; }
+    public required int SpeedUFp8 { get; init; }
+    public required int SpeedVFp8 { get; init; }
+}
+
 // v28+: scene-wide instrument bank record (16 bytes on disk). Maps to
 // SPLASHPACKInstrumentRecord in psxsplash-main/src/splashpack.hh.
 public sealed class InstrumentBankRecord
@@ -684,6 +695,13 @@ public sealed class SceneData
     // splashpack section; runtime indexes by entityIndex at query
     // time to apply per-zone damage multipliers.
     public List<HurtBoxRecord> HurtBoxes { get; } = new();
+
+    // v35+: per-entity UV scroll speeds. Sparse — entities with
+    // UVScrollSpeed == (0,0) (the default) don't contribute records.
+    // Writer emits as the v35 uvScroll section; runtime accumulates
+    // an offset per scroll-enabled entity each tick and the renderer
+    // applies it to vertex UVs before primitive submission.
+    public List<UVScrollRecord> UVScrolls { get; } = new();
 
     // v28+: scene-wide instrument bank. Each Instruments entry owns a
     // contiguous slice of Regions (firstRegionIndex / regionCount).

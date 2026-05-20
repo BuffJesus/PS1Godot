@@ -562,6 +562,7 @@ public static class SceneCollector
             EmitInteractableFor(pmi, objectIndex, data);
             EmitStatsFor(pmi, objectIndex, data);
             EmitHurtBoxesFor(pmi, objectIndex, data);
+            EmitUVScrollFor(pmi, objectIndex, data);
 
             // Stage 1 skinned-mesh export: if this is a PS1SkinnedMesh,
             // resolve its skeleton, compute per-triangle bone indices from
@@ -1953,6 +1954,23 @@ public static class SceneCollector
             LuaFileIndex = (short)luaIdx,
         });
         GD.Print($"[PS1Godot] Trigger '{tb.Name}': AABB=[{wMin}..{wMax}] luaIdx={luaIdx}");
+    }
+
+    // v35+: emit a UV-scroll record for any PS1MeshInstance whose
+    // UVScrollSpeed != (0, 0). Sparse — the common case (static
+    // textures) contributes no entry. Speed converted to fp8 texels-
+    // per-second (256 = 1 texel/sec).
+    private static void EmitUVScrollFor(PS1MeshInstance pmi, ushort objectIndex, SceneData data)
+    {
+        var speed = pmi.UVScrollSpeed;
+        if (speed.X == 0f && speed.Y == 0f) return;
+
+        data.UVScrolls.Add(new UVScrollRecord
+        {
+            EntityIndex = objectIndex,
+            SpeedUFp8   = Mathf.Clamp((int)(speed.X * 256f), short.MinValue, short.MaxValue),
+            SpeedVFp8   = Mathf.Clamp((int)(speed.Y * 256f), short.MinValue, short.MaxValue),
+        });
     }
 
     // v34+: emit hurtbox records for each PS1HurtBox child of a

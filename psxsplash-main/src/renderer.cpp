@@ -102,6 +102,14 @@ void psxsplash::Renderer::setupObjectTransform(
     // 9 call sites. Every render path calls setupObjectTransform before
     // its tri loop, so this stays in sync automatically.
     m_currentObjTranslucent = obj->isTranslucent();
+    // v35+: latch the per-object UV scroll offset for processTriangle
+    // to apply. Falls back to 0 for objects without an authored
+    // UVScrollSpeed (most of them).
+    m_currentUVOffsetU = 0;
+    m_currentUVOffsetV = 0;
+    if (m_uvLookup) {
+        m_uvLookup(m_uvLookupCtx, obj, &m_currentUVOffsetU, &m_currentUVOffsetV);
+    }
     ::clear<Register::TRX, Safe>();
     ::clear<Register::TRY, Safe>();
     ::clear<Register::TRZ, Safe>();
@@ -351,6 +359,15 @@ void psxsplash::Renderer::processTriangle(
         texP.primitive.uvA = tri.uvA;
         texP.primitive.uvB = tri.uvB;
         texP.primitive.uvC.u = tri.uvC.u; texP.primitive.uvC.v = tri.uvC.v;
+        // v35+: apply per-object UV scroll. uint8 add wraps naturally.
+        if (m_currentUVOffsetU | m_currentUVOffsetV) {
+            texP.primitive.uvA.u = static_cast<uint8_t>(texP.primitive.uvA.u + m_currentUVOffsetU);
+            texP.primitive.uvA.v = static_cast<uint8_t>(texP.primitive.uvA.v + m_currentUVOffsetV);
+            texP.primitive.uvB.u = static_cast<uint8_t>(texP.primitive.uvB.u + m_currentUVOffsetU);
+            texP.primitive.uvB.v = static_cast<uint8_t>(texP.primitive.uvB.v + m_currentUVOffsetV);
+            texP.primitive.uvC.u = static_cast<uint8_t>(texP.primitive.uvC.u + m_currentUVOffsetU);
+            texP.primitive.uvC.v = static_cast<uint8_t>(texP.primitive.uvC.v + m_currentUVOffsetV);
+        }
         texP.primitive.tpage = tri.tpage;
         texP.primitive.tpage.set(psyqo::Prim::TPageAttr::FullBackAndFullFront);
         psyqo::PrimPieces::ClutIndex clut(tri.clutX, tri.clutY);
@@ -365,6 +382,15 @@ void psxsplash::Renderer::processTriangle(
         p.primitive.uvA = tri.uvA;
         p.primitive.uvB = tri.uvB;
         p.primitive.uvC.u = tri.uvC.u; p.primitive.uvC.v = tri.uvC.v;
+        // v35+: per-object UV scroll. See twin block above.
+        if (m_currentUVOffsetU | m_currentUVOffsetV) {
+            p.primitive.uvA.u = static_cast<uint8_t>(p.primitive.uvA.u + m_currentUVOffsetU);
+            p.primitive.uvA.v = static_cast<uint8_t>(p.primitive.uvA.v + m_currentUVOffsetV);
+            p.primitive.uvB.u = static_cast<uint8_t>(p.primitive.uvB.u + m_currentUVOffsetU);
+            p.primitive.uvB.v = static_cast<uint8_t>(p.primitive.uvB.v + m_currentUVOffsetV);
+            p.primitive.uvC.u = static_cast<uint8_t>(p.primitive.uvC.u + m_currentUVOffsetU);
+            p.primitive.uvC.v = static_cast<uint8_t>(p.primitive.uvC.v + m_currentUVOffsetV);
+        }
         p.primitive.tpage = tri.tpage;
         p.primitive.tpage.set(psyqo::Prim::TPageAttr::FullBackAndFullFront);
         psyqo::PrimPieces::ClutIndex clut(tri.clutX, tri.clutY);

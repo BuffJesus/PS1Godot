@@ -500,30 +500,62 @@ reveal) is a [`PS1Cutscene`](nodes/ps1-cutscene.md) — multi-track
 camera + audio + object animation, fired by the FSM transition
 into `phase1_exit_cutscene`.
 
-## Fog gates
+## Fog gates and scrolling-UV effects
 
-Elden Ring's locked-arena pattern. A trigger box at the doorway
-that:
+The visible "fog wall" in Elden Ring is a translucent textured
+plane with the texture scrolling diagonally. PS1Godot ships
+[`PS1MeshInstance.UVScrollSpeed`](https://github.com/BuffJesus/PS1Godot/blob/main/godot-ps1/addons/ps1godot/nodes/PS1MeshInstance.cs){ target="_blank" }
+(Vector2) for exactly this — the runtime adds an accumulated
+offset to every vertex UV before each frame's primitive submission.
+uint8 wrap is intentional; a power-of-2 texture scrolls cleanly
+across its full range.
 
-1. Freezes player input (or restricts to "can't leave").
-2. Shows a fog-wall UI canvas blocking the doorway visually.
-3. Cues the boss's appearance.
-4. Disables itself once the boss is dead.
+### Authoring a fog gate
+
+```
+FogWall (PS1MeshInstance)
+  Mesh: PlaneMesh (sized to the doorway)
+  Material: PS1Material with a fog/noise texture (4 or 8 bpp,
+            translucent material with AlphaMode = Translucent)
+  UVScrollSpeed: (12, 6)   — diagonal flow, gentle
+
+FogGateTrigger (PS1TriggerBox)
+  Size: matches the doorway opening
+  ScriptFile: fog_gate.lua
+```
 
 ```lua
+-- fog_gate.lua
 function onTriggerEnter(self, index)
-    if Persist.Get("godrick_dead") == 1 then return end  -- already cleared
-    Controls.SetEnabled(false)
-    UI.SetCanvasVisible(UI.FindCanvas("fog_wall"), true)
-    Music.Play("godrick_theme", 100)
+    if Persist.Get("godrick_gate_crossed") then return end
+    Persist.Set("godrick_gate_crossed", 1)
+    Audio.PlaySfx("fog_gate_whoosh")
     Cutscene.Play("godrick_intro")
-    -- Cutscene's OnFinishLua re-enables controls after the intro
+    -- Cutscene's OnFinishLua fires Camera.LockOn(godrick) and
+    -- Controls.SetEnabled(true) when the intro finishes.
 end
 ```
 
-The fog-wall canvas is a translucent `PS1UIElement.Type = Box`
-sized to cover the doorway in screen space — author against the
-camera angle at the trigger point.
+That's it — no `PS1FogGate` mega-component, no special engine
+support beyond the UV-scroll feature. The gate composes from
+primitives you already know.
+
+### Other UV-scroll use cases
+
+- **Waterfalls** — vertical strip, `UVScrollSpeed = (0, 32)`. Try
+  a slight Y-tile texture for water-fall caustics.
+- **Lava / poison surfaces** — `(2, 4)` for slow ooze. Pair with
+  a `PS1TriggerBox` calling `Stats.DealDamage` on overlap if it
+  hurts.
+- **Conveyor belts** — `(0, 24)` along the belt direction. Move
+  the player on overlap via a sibling trigger.
+- **Spell circles** — `(8, 8)` for diagonal spin. Better than no
+  motion on a magic-circle prop.
+- **Scrolling text overlays** — UI canvases use sprite primitives
+  too; `UVScrollSpeed` works on the underlying mesh.
+
+The runtime cost is one branch + six uint8 adds per textured
+triangle on objects with non-zero scroll. Cheap.
 
 ## Death / respawn
 

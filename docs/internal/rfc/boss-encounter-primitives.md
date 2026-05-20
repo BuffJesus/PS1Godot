@@ -642,7 +642,28 @@ Composition wins over a `PS1FogGate` mega-component because:
 
 Promoted: see primitive 8.
 
-## Primitive 8 — `PS1MeshInstance.UVScrollSpeed`
+## Primitive 8 — `PS1MeshInstance.UVScrollSpeed`  ✅ LANDED (2026-05-19)
+
+**Status:** shipped (splashpack v35). `PS1MeshInstance.UVScrollSpeed`
+(Vector2) drives a fp8 texels-per-second accumulator the
+SceneManager advances each GameTick. The renderer's
+`setupObjectTransform` looks up the current accumulated offset for
+the object via a callback registered on Renderer; `processTriangle`
+adds it to vertex UVs before primitive submission. uint8 wrap on
+UVs is intentional — the PSX GPU samples modulo the TPage, so a
+power-of-2 texture scrolls cleanly across its full range.
+
+Use cases unlocked: fog gates (translucent fog texture scrolling
+diagonally), waterfalls (vertical), lava (slow), conveyors
+(horizontal), spell circles (slow rotation if you fake it via
+both axes), scrolling title text, animated portals.
+
+Live: combat-patterns.md "Fog gates and scrolling-UV effects"
+section.
+
+Original surface below for the record.
+
+### Original surface
 
 ### Context
 
@@ -735,9 +756,7 @@ Implementation order. Updated as primitives land:
 6. **Dodge / roll with i-frames** ✅ landed 2026-05-19.
 7. **PS1FogGate** ❌ cancelled — composition wins. Replaced by
    primitive 8.
-8. **`PS1MeshInstance.UVScrollSpeed`** — small mesh feature
-   (~1.5 days) unlocking fog gates + waterfalls + lava +
-   conveyors via composition. Pending.
+8. **`PS1MeshInstance.UVScrollSpeed`** ✅ landed 2026-05-19 (v35).
 
 **The full souls-like combat surface is shipped.** Stats +
 hurtboxes + onDamage + lock-on + dodge i-frames cover everything

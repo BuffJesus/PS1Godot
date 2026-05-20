@@ -331,6 +331,23 @@ class SceneManager {
     // list at query time. nullptr/0 = no entity authored hurtboxes.
     const HurtBoxTableEntry* m_hurtBoxTable = nullptr;
     uint16_t m_hurtBoxCount = 0;
+
+    // v35+: per-entity UV scroll. Sparse — m_uvScrollTable points at
+    // the on-disk records (speeds); m_uvScrollAcc carries the
+    // fractional accumulator (fp8) advanced each GameTick. Both
+    // sized to m_uvScrollCount, parallel. The renderer's lookup
+    // callback finds the right slot by entityIndex via a linear scan
+    // (table is tiny in practice — fog gate + waterfalls).
+    const UVScrollTableEntry* m_uvScrollTable = nullptr;
+    uint16_t m_uvScrollCount = 0;
+    eastl::vector<int32_t> m_uvScrollAccU;  // fp8 accumulator per entry
+    eastl::vector<int32_t> m_uvScrollAccV;
+
+  public:
+    // v35+: renderer callback — returns (offsetU, offsetV) for the
+    // given GameObject if it has UV scroll authored. Wired by main.cpp
+    // at scene init via Renderer::SetUVOffsetLookup.
+    bool uvScrollOffsetFor(const GameObject* obj, uint8_t* outU, uint8_t* outV) const;
     
     // Object name table (v9+): parallel to m_gameObjects, points into splashpack data
     eastl::vector<const char*> m_objectNames;

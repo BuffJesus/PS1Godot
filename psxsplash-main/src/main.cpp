@@ -100,6 +100,18 @@ void MainScene::start(StartReason reason) {
     // execute in one go.  For CD-ROM the init is async (drive reset +
     // ISO9660 parse) and yields to the main loop until complete.
 
+    // v35+: register the per-object UV-offset lookup so the renderer
+    // can apply UVScrollSpeed to vertex UVs at submission time. The
+    // SceneManager carries the accumulator; this static trampoline
+    // routes the call through the right instance.
+    psxsplash::Renderer::Get().SetUVOffsetLookup(
+        [](void* ctx, const psxsplash::GameObject* obj,
+           uint8_t* outU, uint8_t* outV) -> bool {
+            auto* sm = static_cast<psxsplash::SceneManager*>(ctx);
+            return sm->uvScrollOffsetFor(obj, outU, outV);
+        },
+        &m_sceneManager);
+
     m_initQueue
         .startWith(psxsplash::FileLoader::Get().scheduleInit())
         .then([this](psyqo::TaskQueue::Task* task) {

@@ -53,6 +53,18 @@ struct HurtBoxTableEntry {
 };
 static_assert(sizeof(HurtBoxTableEntry) == 20, "HurtBoxTableEntry must be 20 bytes");
 
+// v35+: on-disk per-entity UV scroll record. SpeedU/SpeedV in fp8
+// texels-per-second (256 = 1 texel/sec). Runtime maintains a
+// fractional accumulator per entity each tick; only the integer
+// portion gets applied to vertex UVs.
+struct UVScrollTableEntry {
+    uint16_t entityIndex;
+    int16_t  speedUFp8;
+    int16_t  speedVFp8;
+    uint16_t reserved;
+};
+static_assert(sizeof(UVScrollTableEntry) == 8, "UVScrollTableEntry must be 8 bytes");
+
 // v23+: per-PS1UIModel mutable runtime state (Lua mutates via SceneManager;
 // renderer reads each frame). Static layout authored in the splashpack
 // (canvas index, screen rect, projection H, name) lives in
@@ -330,6 +342,11 @@ struct SplashpackSceneSetup {
     // maybe a few minibosses per scene).
     const HurtBoxTableEntry* hurtBoxTable = nullptr;
     uint16_t hurtBoxCount = 0;
+
+    // v35+: per-entity UV scroll speeds. Sparse — most entities don't
+    // animate UVs and don't appear here.
+    const UVScrollTableEntry* uvScrollTable = nullptr;
+    uint16_t uvScrollCount = 0;
 
     const RoomData* rooms = nullptr;
     uint16_t roomCount = 0;

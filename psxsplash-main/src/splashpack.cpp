@@ -182,8 +182,16 @@ struct SPLASHPACKFileHeader {
     uint16_t hurtBoxCount;
     uint16_t pad_hurtbox;
     uint32_t hurtBoxTableOffset;
+    // v35+: per-entity UV scroll table. Sparse — only entities with
+    // non-zero UVScrollSpeed contribute. Each entry is 8 bytes
+    // (UVScrollTableEntry). uvScrollCount == 0 → no animated meshes
+    // in this scene; renderer's per-object UV-offset lookup returns
+    // false for every object.
+    uint16_t uvScrollCount;
+    uint16_t pad_uvscroll;
+    uint32_t uvScrollTableOffset;
 };
-static_assert(sizeof(SPLASHPACKFileHeader) == 248, "SPLASHPACKFileHeader must be 248 bytes");
+static_assert(sizeof(SPLASHPACKFileHeader) == 256, "SPLASHPACKFileHeader must be 256 bytes");
 
 // StatsTableEntry is the on-disk record; the same layout is exposed
 // at file scope in splashpack.hh so SceneManager / Lua can walk it.
@@ -216,7 +224,7 @@ void SplashPackLoader::LoadSplashpack(uint8_t *data, SplashpackSceneSetup &setup
     psyqo::Kernel::assert(data != nullptr, "Splashpack loading data pointer is null");
     psxsplash::SPLASHPACKFileHeader *header = reinterpret_cast<psxsplash::SPLASHPACKFileHeader *>(data);
     psyqo::Kernel::assert(__builtin_memcmp(header->magic, "SP", 2) == 0, "Splashpack has incorrect magic");
-    psyqo::Kernel::assert(header->version >= 34, "Splashpack version too old (need v34+): re-export from PS1Godot");
+    psyqo::Kernel::assert(header->version >= 35, "Splashpack version too old (need v35+): re-export from PS1Godot");
 
     setup.playerStartPosition = header->playerStartPos;
     setup.playerStartRotation = header->playerStartRot;
@@ -535,6 +543,17 @@ void SplashPackLoader::LoadSplashpack(uint8_t *data, SplashpackSceneSetup &setup
         setup.hurtBoxCount = header->hurtBoxCount;
         setup.hurtBoxTable = reinterpret_cast<const HurtBoxTableEntry *>(
             data + header->hurtBoxTableOffset);
+    }
+
+    // v35+: per-entity UV scroll. Sparse — SceneManager builds a
+    // small parallel accumulator array indexed by entityIndex at
+    // scene init.
+    setup.uvScrollCount = 0;
+    setup.uvScrollTable = nullptr;
+    if (header->uvScrollCount > 0 && header->uvScrollTableOffset != 0) {
+        setup.uvScrollCount = header->uvScrollCount;
+        setup.uvScrollTable = reinterpret_cast<const UVScrollTableEntry *>(
+            data + header->uvScrollTableOffset);
     }
 
     // v22+: sequenced music table. Entries live at

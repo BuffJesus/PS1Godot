@@ -65,6 +65,11 @@ class Renderer final {
     static constexpr size_t MAX_VISIBLE_TRIANGLES = 4096;
 
     static constexpr int32_t PROJ_H = 120;
+
+    // v35+: accessor for the singleton instance. Set after Renderer::Init,
+    // returns nullptr before. Used by main.cpp to wire the UV-scroll
+    // lookup callback into SceneManager at startup.
+    static Renderer& Get() { return *instance; }
     static constexpr int32_t SCREEN_CX = 160;
     static constexpr int32_t SCREEN_CY = 120;
 
@@ -195,6 +200,31 @@ class Renderer final {
     // calls so the per-tri primitive emission can pick setSemiTrans
     // vs setOpaque without an extra parameter through every call site.
     bool m_currentObjTranslucent = false;
+
+    // v35+: per-object UV scroll offset, applied to every tri's UV
+    // bytes inside processTriangle. uint8 wrap is intentional — the
+    // PSX GPU samples UVs modulo the TPage size; small offsets wrap
+    // naturally and a power-of-2 texture scrolls cleanly across its
+    // entire range. setupObjectTransform latches these from a
+    // SceneManager-provided lookup before each object's tri loop.
+    uint8_t m_currentUVOffsetU = 0;
+    uint8_t m_currentUVOffsetV = 0;
+
+    // Callback the renderer uses to fetch the current UV offset for
+    // an object. SceneManager sets this at scene init so the renderer
+    // doesn't need a SceneManager back-pointer. Returns false when
+    // the object has no UV scroll authored — caller leaves the
+    // offsets at 0 in that case.
+    using UVOffsetLookup = bool (*)(void* ctx, const GameObject* obj,
+                                    uint8_t* outU, uint8_t* outV);
+    UVOffsetLookup m_uvLookup = nullptr;
+    void* m_uvLookupCtx = nullptr;
+
+  public:
+    void SetUVOffsetLookup(UVOffsetLookup fn, void* ctx) {
+        m_uvLookup = fn; m_uvLookupCtx = ctx;
+    }
+  private:
 
     psyqo::Vec3 computeCameraViewPos();
     void setupObjectTransform(GameObject* obj, const psyqo::Vec3& cameraPosition);
