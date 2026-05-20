@@ -1,0 +1,218 @@
+[gd_scene load_steps=18 format=3 uid="uid://bossSmokeScene01"]
+
+; Boss-encounter smoke scene. Exercises every combat primitive landed
+; in the 2026-05-19 RFC arc:
+;   - PS1Stats (boss + player both have stat blocks)
+;   - PS1HurtBox (boss head/body/legs with descending crit multipliers)
+;   - Camera.LockOn (R3 toggles, fog-gate engages on entry)
+;   - dodge i-frames + onDamage callback (player_combat + boss_brain)
+;   - PS1MeshInstance.UVScrollSpeed (the fog wall mesh)
+;
+; Intentionally low-fi — placeholder cube meshes for the boss + avatar,
+; no textures, no music. The scene tree + scripts are the demo; visuals
+; are something to swap in later.
+
+[ext_resource type="Script" path="res://addons/ps1godot/nodes/PS1Scene.cs" id="1_scene"]
+[ext_resource type="Script" path="res://addons/ps1godot/nodes/PS1MeshInstance.cs" id="2_mesh"]
+[ext_resource type="Script" path="res://addons/ps1godot/nodes/PS1Player.cs" id="3_player"]
+[ext_resource type="Script" path="res://addons/ps1godot/nodes/PS1TriggerBox.cs" id="4_trigger"]
+[ext_resource type="Script" path="res://addons/ps1godot/nodes/PS1UICanvas.cs" id="5_uican"]
+[ext_resource type="Script" path="res://addons/ps1godot/nodes/PS1UIElement.cs" id="6_uiel"]
+[ext_resource type="Script" path="res://addons/ps1godot/nodes/PS1HurtBox.cs" id="7_hurt"]
+[ext_resource type="Resource" path="res://demo/boss_smoke/boss_stats.tres" id="8_boss_stats"]
+[ext_resource type="Resource" path="res://demo/boss_smoke/player_stats.tres" id="9_player_stats"]
+
+[sub_resource type="PlaneMesh" id="floor_mesh"]
+size = Vector2(30, 30)
+
+[sub_resource type="BoxMesh" id="cube_2"]
+size = Vector3(2, 2, 2)
+
+[sub_resource type="BoxMesh" id="cube_player"]
+size = Vector3(0.8, 1.6, 0.8)
+
+[sub_resource type="PlaneMesh" id="fog_plane"]
+size = Vector2(6, 4)
+orientation = 2
+
+; --- Root scene ---
+
+[node name="BossSmoke" type="Node3D"]
+script = ExtResource("1_scene")
+FogEnabled = true
+FogColor = Color(0.35, 0.20, 0.30, 1)
+FogNear = 6
+FogFar = 30
+GteScaling = 4
+PlayerHeight = 1.7
+PlayerRadius = 0.3
+MoveSpeed = 3
+JumpHeight = 1.2
+Gravity = 20
+
+; --- Floor ---
+
+[node name="Floor" type="MeshInstance3D" parent="."]
+mesh = SubResource("floor_mesh")
+script = ExtResource("2_mesh")
+Collision = 1
+Tag = 0
+
+; --- Player rig ---
+
+[node name="Player" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 8)
+script = ExtResource("3_player")
+CameraMode = 0
+
+[node name="Camera3D" type="Camera3D" parent="Player"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 3)
+fov = 72.0
+near = 0.2
+far = 60.0
+
+[node name="Avatar" type="MeshInstance3D" parent="Player"]
+mesh = SubResource("cube_player")
+script = ExtResource("2_mesh")
+Collision = 0
+Tag = 0
+Stats = ExtResource("9_player_stats")
+ScriptFile = "res://demo/scripts/boss_smoke_player.lua"
+
+; --- Boss + hurtboxes ---
+
+[node name="Boss" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, -6)
+mesh = SubResource("cube_2")
+script = ExtResource("2_mesh")
+Collision = 1
+Tag = 7
+Stats = ExtResource("8_boss_stats")
+ScriptFile = "res://demo/scripts/boss_smoke_brain.lua"
+
+[node name="HeadHurtBox" type="Node3D" parent="Boss"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.8, 0)
+script = ExtResource("7_hurt")
+Size = Vector3(0.5, 0.3, 0.5)
+DamageMultiplier = 200
+
+[node name="BodyHurtBox" type="Node3D" parent="Boss"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
+script = ExtResource("7_hurt")
+Size = Vector3(0.8, 0.6, 0.5)
+DamageMultiplier = 100
+
+[node name="LegsHurtBox" type="Node3D" parent="Boss"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.8, 0)
+script = ExtResource("7_hurt")
+Size = Vector3(0.6, 0.4, 0.5)
+DamageMultiplier = 50
+
+; --- Fog gate (visual + trigger) ---
+
+[node name="FogWall" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 2)
+mesh = SubResource("fog_plane")
+script = ExtResource("2_mesh")
+Collision = 0
+Tag = 0
+Translucent = true
+UVScrollSpeed = Vector2(12, 8)
+
+[node name="FogGateTrigger" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 2)
+script = ExtResource("4_trigger")
+Size = Vector3(3, 1.5, 0.3)
+ScriptFile = "res://demo/scripts/boss_smoke_fog_gate.lua"
+
+; --- HUD canvases ---
+
+[node name="BossHPCanvas" type="Node" parent="."]
+script = ExtResource("5_uican")
+CanvasName = "boss_hp"
+VisibleOnLoad = false
+Residency = 0
+
+[node name="BG" type="Node" parent="BossHPCanvas"]
+script = ExtResource("6_uiel")
+ElementType = 0
+X = 16
+Y = 16
+W = 288
+H = 12
+ColorR = 20
+ColorG = 20
+ColorB = 20
+
+[node name="fill" type="Node" parent="BossHPCanvas"]
+script = ExtResource("6_uiel")
+ElementType = 0
+X = 20
+Y = 20
+W = 280
+H = 4
+ColorR = 200
+ColorG = 40
+ColorB = 40
+
+[node name="Label" type="Node" parent="BossHPCanvas"]
+script = ExtResource("6_uiel")
+ElementType = 1
+X = 20
+Y = 28
+W = 280
+H = 12
+ColorR = 240
+ColorG = 220
+ColorB = 220
+Text = "BOSS"
+
+[node name="PlayerHPCanvas" type="Node" parent="."]
+script = ExtResource("5_uican")
+CanvasName = "player_hp"
+VisibleOnLoad = true
+Residency = 0
+
+[node name="hp_bg" type="Node" parent="PlayerHPCanvas"]
+script = ExtResource("6_uiel")
+ElementType = 0
+X = 16
+Y = 200
+W = 104
+H = 8
+ColorR = 20
+ColorG = 20
+ColorB = 20
+
+[node name="hp_fill" type="Node" parent="PlayerHPCanvas"]
+script = ExtResource("6_uiel")
+ElementType = 0
+X = 18
+Y = 202
+W = 100
+H = 4
+ColorR = 60
+ColorG = 200
+ColorB = 60
+
+[node name="stamina_bg" type="Node" parent="PlayerHPCanvas"]
+script = ExtResource("6_uiel")
+ElementType = 0
+X = 16
+Y = 212
+W = 104
+H = 8
+ColorR = 20
+ColorG = 20
+ColorB = 20
+
+[node name="stamina_fill" type="Node" parent="PlayerHPCanvas"]
+script = ExtResource("6_uiel")
+ElementType = 0
+X = 18
+Y = 214
+W = 100
+H = 4
+ColorR = 200
+ColorG = 200
+ColorB = 60
