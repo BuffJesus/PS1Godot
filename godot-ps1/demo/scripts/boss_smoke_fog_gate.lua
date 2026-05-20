@@ -13,14 +13,6 @@ function onTriggerEnter(self, index)
     Audio.PlaySfx("fog_gate_whoosh")
     Music.Play("boss_theme", 100)
 
-    -- Aim the camera at the boss. Lock-on engages target-relative
-    -- input automatically.
-    local p = Player.GetPosition()
-    local boss = Entity.FindNearest(p, 7)  -- TAG_BOSS
-    if boss then
-        Camera.LockOn(boss)
-    end
-
     -- Reveal the boss HP bar now that the encounter has actually
     -- started. The brain script only resizes the fill — visibility
     -- is owned here so the bar can't appear before the fog gate.
@@ -28,13 +20,9 @@ function onTriggerEnter(self, index)
     if hpCanvas >= 0 then
         UI.SetCanvasVisible(hpCanvas, true)
     end
-end
 
-function onTriggerExit(self, index)
-    -- Player retreating mid-fight breaks lock-on. Music stays — the
-    -- fight isn't over until the boss dies.
-    if Persist.Get("smoke_boss_dead") ~= 1 then
-        -- Don't lock-off automatically; let the player retreat
-        -- without losing lock. Real games vary on this.
-    end
+    -- Lock-on is opt-in via R3 (see boss_smoke_player.lua:tryLockOn).
+    -- Auto-engaging here removed because there's no way to break it
+    -- without a pad, and the souls "press to lock" idiom is what the
+    -- demo's actually trying to teach.
 end

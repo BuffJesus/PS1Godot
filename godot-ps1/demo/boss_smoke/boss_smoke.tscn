@@ -241,3 +241,88 @@ Y = 214
 Width = 100
 Height = 4
 Color = Color(0.78, 0.78, 0.24, 1)
+
+; --- First-run controls overlay (dismissed by Cross in player script) ---
+
+[node name="ControlsHelpCanvas" type="Node" parent="."]
+script = ExtResource("5_uican")
+CanvasName = "controls_help"
+VisibleOnLoad = true
+Residency = 0
+
+[node name="title" type="Node" parent="ControlsHelpCanvas"]
+script = ExtResource("6_uiel")
+ElementName = "title"
+Type = 2
+X = 120
+Y = 40
+Width = 80
+Height = 12
+Color = Color(0.94, 0.86, 0.94, 1)
+Text = "CONTROLS"
+
+[node name="row_move" type="Node" parent="ControlsHelpCanvas"]
+script = ExtResource("6_uiel")
+ElementName = "row_move"
+Type = 2
+X = 60
+Y = 64
+Width = 200
+Height = 12
+Color = Color(0.88, 0.88, 0.88, 1)
+Text = "LEFT STICK    MOVE"
+
+[node name="row_cam" type="Node" parent="ControlsHelpCanvas"]
+script = ExtResource("6_uiel")
+ElementName = "row_cam"
+Type = 2
+X = 60
+Y = 80
+Width = 200
+Height = 12
+Color = Color(0.88, 0.88, 0.88, 1)
+Text = "RIGHT STICK   CAMERA"
+
+[node name="row_lock" type="Node" parent="ControlsHelpCanvas"]
+script = ExtResource("6_uiel")
+ElementName = "row_lock"
+Type = 2
+X = 60
+Y = 96
+Width = 200
+Height = 12
+Color = Color(0.88, 0.88, 0.88, 1)
+Text = "R3            LOCK-ON"
+
+[node name="row_dodge" type="Node" parent="ControlsHelpCanvas"]
+script = ExtResource("6_uiel")
+ElementName = "row_dodge"
+Type = 2
+X = 60
+Y = 112
+Width = 200
+Height = 12
+Color = Color(0.88, 0.88, 0.88, 1)
+Text = "CIRCLE        DODGE"
+
+[node name="row_attack" type="Node" parent="ControlsHelpCanvas"]
+script = ExtResource("6_uiel")
+ElementName = "row_attack"
+Type = 2
+X = 60
+Y = 128
+Width = 200
+Height = 12
+Color = Color(0.88, 0.88, 0.88, 1)
+Text = "R2            ATTACK"
+
+[node name="row_dismiss" type="Node" parent="ControlsHelpCanvas"]
+script = ExtResource("6_uiel")
+ElementName = "row_dismiss"
+Type = 2
+X = 60
+Y = 156
+Width = 200
+Height = 12
+Color = Color(0.55, 0.35, 0.85, 1)
+Text = "X             DISMISS"

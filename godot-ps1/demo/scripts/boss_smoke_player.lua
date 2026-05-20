@@ -27,6 +27,11 @@ local cooldown = 0
 local meleeCD = 0
 local staminaRegenAcc = 0
 
+-- First-run controls overlay (authored as `controls_help` canvas in
+-- boss_smoke.tscn, VisibleOnLoad=true). X dismisses it; gameplay
+-- continues underneath the whole time (no pause).
+local helpVisible = true
+
 local function updateBars(self)
     local hpCanvas = UI.FindCanvas("player_hp")
     if hpCanvas < 0 then return end
@@ -118,6 +123,17 @@ function onCreate(self)
 end
 
 function onUpdate(self, dt)
+    -- Dismiss the controls overlay on first X press. After dismiss the
+    -- flag stays false for the rest of the scene's lifetime — players
+    -- shouldn't have to re-press X every time they pause/resume.
+    if helpVisible and Input.IsPressed(Input.CROSS) then
+        local helpCanvas = UI.FindCanvas("controls_help")
+        if helpCanvas >= 0 then
+            UI.SetCanvasVisible(helpCanvas, false)
+        end
+        helpVisible = false
+    end
+
     if cooldown > 0 then cooldown = cooldown - 1 end
     if meleeCD > 0 then meleeCD = meleeCD - 1 end
 
