@@ -682,10 +682,11 @@ void psxsplash::Lua::InstallCombatLibrary() {
         // frame and only transitions to TELL when timer == 0 AND
         // player is in attack range, so the boss visibly tracks
         // the player between attacks instead of camping at the
-        // range edge. Bug #6 (boss aggros on frame 1) is the
-        // caller's responsibility — the state machine has no
-        // encounter gate of its own; gate the boss:update call
-        // externally (e.g. `if Persist.Get(...) ~= 1 then return`).
+        // range edge. Bug #6 (boss aggros on frame 1) is closed by
+        // construction WHEN `encounter_id` is set: the state
+        // machine auto-gates update() on `<encounter_id>_aggro`
+        // and resets that flag at construction time (scene-load
+        // local). Pair with an Encounter.new{id = same value}.
         //
         // Phase mechanism: `phases` is an ordered array. When HP
         // drops below `phase.hp_ratio * maxHP`, the next index
@@ -707,6 +708,23 @@ void psxsplash::Lua::InstallCombatLibrary() {
         "    local STATE_TELL  = 2\n"
         "    local STATE_HIT   = 3\n"
         "    local STATE_DEAD  = 4\n"
+        // Encounter binding: pairs the boss with an Encounter.new
+        // of the same id. The aggro key gates update() each frame
+        // — boss stays dormant until Encounter:onEnter() flips it.
+        // The dead key is the death-flag write so the encounter's
+        // re-entry check sees this boss as cleared. Both keys are
+        // derived; persist_dead_key can still be set explicitly
+        // for bosses without an encounter.
+        "    local enc_id = def.encounter_id\n"
+        "    local key_aggro = enc_id and (enc_id .. \"_aggro\") or nil\n"
+        "    local key_dead  = def.persist_dead_key\n"
+        "                       or (enc_id and (enc_id .. \"_dead\"))\n"
+        // Scene-load reset of the aggro flag. Construction runs at
+        // chunk-load time (scenemanager LoadLuaFile loop) before
+        // any onCreate fires, so a respawn after death drops the
+        // boss back to dormant. The dead flag is NOT reset —
+        // cleared bosses stay cleared per the souls convention.
+        "    if key_aggro then Persist.Set(key_aggro, 0) end\n"
         "    local inst = {\n"
         "        _state = STATE_IDLE,\n"
         "        _timer = 0,\n"
@@ -724,6 +742,13 @@ void psxsplash::Lua::InstallCombatLibrary() {
         "    end\n"
         "    function inst:update(entity, dt)\n"
         "        if self._state == STATE_DEAD then return end\n"
+        // Encounter gate (when encounter_id is set). The boss
+        // brain no longer needs an inline `if Persist.Get(...)
+        // ~= 1 then return end` — that boilerplate moved here
+        // so it can't be forgotten by the next boss author.
+        "        if key_aggro and Persist.Get(key_aggro) ~= 1 then\n"
+        "            return\n"
+        "        end\n"
         // Live HP bar — collapses what was an updateHPBar local
         // in every brain script. Element name defaults to "fill"
         // matching the boss_smoke canvas convention.
@@ -820,8 +845,8 @@ void psxsplash::Lua::InstallCombatLibrary() {
         "                local c = UI.FindCanvas(def.hp_canvas)\n"
         "                if c >= 0 then UI.SetCanvasVisible(c, false) end\n"
         "            end\n"
-        "            if def.persist_dead_key then\n"
-        "                Persist.Set(def.persist_dead_key, 1)\n"
+        "            if key_dead then\n"
+        "                Persist.Set(key_dead, 1)\n"
         "            end\n"
         "            Entity.SetActive(entity, false)\n"
         "            return\n"
@@ -860,6 +885,107 @@ void psxsplash::Lua::InstallCombatLibrary() {
         "        self._state = STATE_IDLE\n"
         "        self._timer = 0\n"
         "        self._phase = 0\n"
+        "    end\n"
+        "    return inst\n"
+        "end\n"
+        // Encounter.new (RFC §L2 Phase 3) — fog-gate lifecycle.
+        // Owns four jobs that the boss_smoke debug arc revealed
+        // were all separate fixes the author kept getting wrong:
+        //   1. Reveal HP canvas + start music on entry  (Bug #1)
+        //   2. Wake the boss via Persist flag           (Bug #6)
+        //   3. Block retreat through the fog wall       (Bug #9)
+        //   4. Suppress re-fire during an active fight  (Bug #9 redux)
+        //
+        // Persist keys derive from `def.id`:
+        //   <id>_aggro  — 1 while the encounter is live; the boss
+        //                 brain reads this in onUpdate to stay
+        //                 dormant before the cross.
+        //   <id>_dead   — 1 after the boss is cleared; entry is a
+        //                 no-op when set.
+        //
+        // Boss interop: when authored with `Combat.MeleeBoss{...
+        // persist_dead_key = "<id>_dead" }`, the brain's death
+        // path sets the dead flag automatically — no encounter:
+        // markCleared call from the brain needed. markCleared is
+        // shipped anyway for callers that don't use MeleeBoss.
+        //
+        // The trigger callback's `self` is a number (a trigger
+        // index, not a GameObject) — runtime limitation noted in
+        // the RFC. So block-retreat snap-back hardcodes a Z
+        // reference (`trigger_z_raw`) per the gotcha until the
+        // runtime gains a Trigger.GetPosition or pushes a handle.
+        "Encounter = Encounter or {}\n"
+        "function Encounter.new(def)\n"
+        "    local id          = def.id\n"
+        "    local key_aggro   = id .. \"_aggro\"\n"
+        "    local key_dead    = id .. \"_dead\"\n"
+        "    local inst = { _def = def }\n"
+        "    function inst:onEnter()\n"
+        // Two gates to suppress accidental re-fire:
+        // - Already cleared: stay quiet across save/load.
+        // - Already active: a retreat snap-back may put the
+        //   player back inside the trigger AABB mid-fight, which
+        //   would otherwise restart music + flash the HP canvas
+        //   re-reveal animation. The "already in fight" guard
+        //   kills the loop.
+        "        if Persist.Get(key_dead)  == 1 then return end\n"
+        "        if Persist.Get(key_aggro) == 1 then return end\n"
+        "        if def.sfx_on_enter then\n"
+        "            Audio.PlaySfx(def.sfx_on_enter)\n"
+        "        end\n"
+        "        if def.music then\n"
+        "            Music.Play(def.music, def.music_volume or 100)\n"
+        "        end\n"
+        "        if def.hp_canvas then\n"
+        "            local c = UI.FindCanvas(def.hp_canvas)\n"
+        "            if c >= 0 then UI.SetCanvasVisible(c, true) end\n"
+        "        end\n"
+        "        Persist.Set(key_aggro, 1)\n"
+        "        if def.on_enter_extra then def.on_enter_extra(self) end\n"
+        "    end\n"
+        "    function inst:onExit()\n"
+        // Block-retreat is the souls "fog wall is solid from
+        // inside" semantic. We only snap back during an active,
+        // un-cleared fight — after the boss dies the gate opens
+        // and the player walks out freely.
+        "        if not def.block_retreat then return end\n"
+        "        if Persist.Get(key_aggro) ~= 1 then return end\n"
+        "        if Persist.Get(key_dead)  == 1 then return end\n"
+        "        if not def.trigger_z_raw then return end\n"
+        "        local p = Player.GetPosition()\n"
+        // Compare against the trigger's authored Z to decide
+        // which side the player just crossed to. Z below the
+        // trigger center = retreat toward spawn.
+        "        if p.z._raw < def.trigger_z_raw then\n"
+        "            Player.SetPosition(Vec3.new(\n"
+        "                p.x, p.y, def.arena_anchor_z_raw or 0))\n"
+        "            if def.on_retreat_block then\n"
+        "                def.on_retreat_block(self)\n"
+        "            else\n"
+        // Default thud — same magnitude the boss_smoke fog
+        // gate used pre-framework. Subtle but distinct enough
+        // that the player feels the wall.
+        "                Camera.ShakeRaw(82, 4)\n"
+        "            end\n"
+        "        end\n"
+        "    end\n"
+        // markCleared — explicit "boss is dead" API. Redundant
+        // when the boss uses Combat.MeleeBoss{persist_dead_key=...}
+        // (the brain's death path already does the work), but
+        // ships for non-MeleeBoss callers.
+        "    function inst:markCleared()\n"
+        "        Persist.Set(key_dead, 1)\n"
+        "        if def.hp_canvas then\n"
+        "            local c = UI.FindCanvas(def.hp_canvas)\n"
+        "            if c >= 0 then UI.SetCanvasVisible(c, false) end\n"
+        "        end\n"
+        "    end\n"
+        "    function inst:isActive()\n"
+        "        return Persist.Get(key_aggro) == 1\n"
+        "           and Persist.Get(key_dead)  ~= 1\n"
+        "    end\n"
+        "    function inst:isCleared()\n"
+        "        return Persist.Get(key_dead) == 1\n"
         "    end\n"
         "    return inst\n"
         "end\n"

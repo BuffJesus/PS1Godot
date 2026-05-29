@@ -1,27 +1,28 @@
 -- Boss brain for the boss-smoke scene. Migrated to Combat.MeleeBoss
--- (Combat framework Phase 2, RFC docs/internal/rfc/combat-framework.md
--- §L1). The old hand-rolled state machine (~200 lines + ~11 bug
--- fixes baked in) is now ~30 lines — every range/swing/recovery
--- foot-gun lives inside the library where it can't be re-broken.
+-- with encounter binding (Combat framework Phase 2+3, RFC
+-- docs/internal/rfc/combat-framework.md §L1+§L2). What used to be
+-- ~200 lines + ~11 baked-in bug fixes is now this — the state
+-- machine, encounter gate, and persist-key wiring all live in the
+-- library where the next boss author inherits them by default.
 --
--- Encounter gate stays here for now: `Persist.Get("smoke_boss_aggro")`
--- check at the top of onUpdate is the fog-gate handoff. Phase 3 of
--- the framework (Encounter module) collapses that into Encounter.new
--- so the gate isn't per-boss boilerplate either.
+-- `encounter_id = "smoke_boss"` pairs this brain with the
+-- Encounter.new of the same id in boss_smoke_fog_gate.lua. The
+-- library derives "smoke_boss_aggro" (gate flag — boss stays
+-- dormant until Encounter:onEnter() flips it) and "smoke_boss_dead"
+-- (death flag — the encounter reads this to skip re-entry).
 
 local boss = Combat.MeleeBoss{
-    -- Ranges (world units; squared internally to fp12²).
+    encounter_id = "smoke_boss",
+
     aggro_radius  = 8,
     attack_radius = 2,
 
-    -- Cadence — 60 fps at 30 frames/0.5 s for tell.
     tell_frames    = 30,
     hit_frames     = 12,
     recover_frames = 30,
 
-    -- Damage + swing volume. Asymmetric y matches the original
-    -- 4×3×4 PSX cube (b.y - 1 .. b.y + 2) so an out-of-arena
-    -- player can't be reached.
+    -- Asymmetric y matches the original 4×3×4 PSX swing cube
+    -- (b.y - 1 .. b.y + 2) so an out-of-arena player can't be hit.
     swing_damage  = 18,
     swing_range   = 2,
     swing_y_below = 1,
@@ -32,10 +33,8 @@ local boss = Combat.MeleeBoss{
     iframes              = 6,
     iframes_phase_change = 60,
 
-    -- HUD + persistence.
-    hp_canvas        = "boss_hp",
-    hp_element       = "fill",
-    persist_dead_key = "smoke_boss_dead",
+    hp_canvas  = "boss_hp",
+    hp_element = "fill",
 
     -- Game-feel (state machine itself is silent).
     on_tell = function() Camera.ShakeRaw(82, 4) end,
@@ -63,16 +62,10 @@ local boss = Combat.MeleeBoss{
 }
 
 function onCreate(self)
-    -- Boss is dormant until the player crosses the fog wall (gate
-    -- script flips this to 1). Clearing here makes the flag scene-
-    -- load-local rather than save-game persistent.
-    Persist.Set("smoke_boss_aggro", 0)
     Debug.Log("boss brain ready — HP " .. Stats.GetMaxHP(self))
 end
 
 function onUpdate(self, dt)
-    -- Encounter gate — Phase 3 Encounter module replaces this.
-    if Persist.Get("smoke_boss_aggro") ~= 1 then return end
     boss:update(self, dt)
 end
 
