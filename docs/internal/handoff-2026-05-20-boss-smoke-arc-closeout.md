@@ -310,3 +310,81 @@ boss existing to extract their shape from, per the RFC.
 
 HEAD as of this addendum: `60970a6`. Working tree otherwise
 matches the prior handoff state.
+
+## 2026-05-29 increment — Combat framework Phase 1 shipped
+
+Phase 1 of the combat framework (`docs/internal/rfc/combat-framework.md`
+§L1 + §L3) landed in `74074b6`. The loading-mechanism
+question is resolved in favor of option (a) — embed the Lua
+source in psxsplash and pcall it at runtime startup — for three
+reasons evident from reading the runtime:
+
+1. **Precedent.** `FSM`, `Quest`, and `BT` already ship this way
+   in `psxsplash-main/src/lua.cpp:Lua::Init`.
+2. **Cross-script reads already work.** Per-script envs are
+   constructed in `LoadLuaFile` with `__index = _G` as a
+   fallback metatable (`lua.cpp:633-641`). A global installed
+   once is readable from every script; *writes* still silo per
+   memory `project_psxlua_per_script_env`.
+3. **Author can't forget to ship the lib** — it's in the binary.
+
+Wiring detail worth remembering: `Lua::Init()` runs from
+`L.Reset()` which fires *before* `LuaAPI::RegisterAll`
+(`scenemanager.cpp:73 vs :86`). At that point `_G.UI` doesn't
+yet exist, so a `UI.UpdateStatBar = ...` write would create an
+empty `UI` table that RegisterAll then clobbers with
+`L.setGlobal("UI")`. Solution: new `Lua::InstallCombatLibrary()`
+method called from scenemanager.cpp:88, after RegisterAll has
+populated the engine globals.
+
+### Surface shipped
+
+| Helper | Resolves |
+|---|---|
+| `Combat.DistanceSqRaw(a, b)` | Bug #7 — FixedPoint.__mul's /4096 rescale |
+| `Combat.InRange(a, b, units)` | Sugar over DistanceSqRaw |
+| `Combat.MeleeSwing{...}` | Bugs #5 (skip_self) + #11 (anchor on attacker) by default. y_below/y_above override symmetric range for asymmetric silhouettes (boss_smoke 1+2). |
+| `Combat.ChaseStep{...}` | Wraps `(d * speed) / 4096`, skips y |
+| `UI.UpdateStatBar{...}` | Width/height default to authored via UI.GetSize |
+
+`Combat.MeleeBoss` state machine is Phase 2 (deferred — it's
+where the brain shrinks ~200 → ~25 lines, so it lands as one
+big migration diff once it exists).
+
+### First caller migrated
+
+`boss_smoke_player.lua` updateBars: 15 lines → 5. Behavior
+identical (width/height read from the authored hp_fill /
+stamina_fill = 100×4). F5 verification expected unchanged
+bar tracking; `boss_smoke_brain.lua` not migrated (waits on
+Phase 2).
+
+### Build note
+
+psxsplash header (`lua.h`) gained a public method, so the
+build was `make clean && make` per the stale-.o trap memory.
+New `psxsplash.ps-exe` 342016 bytes; F5 on boss_smoke needs
+the Run-on-PSX path to pick this up (it should automatically
+since the build uses the same install path).
+
+### Next-session candidates (refreshed)
+
+1. **F5 verify the migration.** Run boss_smoke, confirm HP +
+   stamina bars track identically to pre-migration. If they
+   don't, the `UI.GetSize` default-width fallback is the most
+   likely suspect — pass explicit `width = 100, height = 4` in
+   the player script.
+2. **Combat framework Phase 2** — `Combat.MeleeBoss` state
+   machine (1 day per the RFC). Migrate
+   `boss_smoke_brain.lua` to it; the diff is the proof case.
+3. **Combat framework Phase 3** — `Encounter` module (1 day).
+   Closes Bugs #1/#6/#9 by construction. After Phase 2 ships.
+4. **Doctor lints once composite nodes exist.** 6 of the
+   remaining RFC §L5 candidates wait on Phase 4 nodes.
+5. **Deferred controller-required Bugs #3/#4** — OBDX hardware
+   memory says ETA May 22-25 (now overdue). If the pad has
+   arrived, Bug #3 camera pitch needs right-stick verification
+   and Bug #4 framerate dip needs PSXSPLASH_PERFOVERLAY
+   readings under actual movement.
+
+HEAD as of this addendum: `74074b6`.
