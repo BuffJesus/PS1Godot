@@ -676,6 +676,193 @@ void psxsplash::Lua::InstallCombatLibrary() {
         "        p.y,\n"
         "        p.z + (dz * speed) / 4096))\n"
         "end\n"
+        // Combat.MeleeBoss (RFC §L1 Phase 2) — souls-style state
+        // machine composing the helpers above. Resolves Bug #10 by
+        // construction: AGGRO decrements the recovery timer every
+        // frame and only transitions to TELL when timer == 0 AND
+        // player is in attack range, so the boss visibly tracks
+        // the player between attacks instead of camping at the
+        // range edge. Bug #6 (boss aggros on frame 1) is the
+        // caller's responsibility — the state machine has no
+        // encounter gate of its own; gate the boss:update call
+        // externally (e.g. `if Persist.Get(...) ~= 1 then return`).
+        //
+        // Phase mechanism: `phases` is an ordered array. When HP
+        // drops below `phase.hp_ratio * maxHP`, the next index
+        // advances and its override fields replace the base
+        // values via `effective(key)`. Phase index only advances
+        // (souls bosses don't un-phase). Per-phase `on_enter`
+        // fires once on entry.
+        //
+        // Game-feel is opt-in via callbacks (`on_tell`,
+        // `on_hit_land`, `on_death`, phase `on_enter`) — the
+        // state machine itself is pure mechanics, no shakes or
+        // pauses without an authored callback. Death cleanup
+        // that IS infrastructure (hide HP canvas, persist dead
+        // key, deactivate entity) runs declaratively from def
+        // fields so callers don't re-derive it.
+        "function Combat.MeleeBoss(def)\n"
+        "    local STATE_IDLE  = 0\n"
+        "    local STATE_AGGRO = 1\n"
+        "    local STATE_TELL  = 2\n"
+        "    local STATE_HIT   = 3\n"
+        "    local STATE_DEAD  = 4\n"
+        "    local inst = {\n"
+        "        _state = STATE_IDLE,\n"
+        "        _timer = 0,\n"
+        "        _phase = 0,\n"
+        "        _aggro_sq  = (def.aggro_radius  * 4096) * (def.aggro_radius  * 4096),\n"
+        "        _attack_sq = (def.attack_radius * 4096) * (def.attack_radius * 4096),\n"
+        "    }\n"
+        // effective(key): per-call lookup that walks the active
+        // phase override first, falls back to base def. Phase 0
+        // (no overrides yet entered) always falls through.
+        "    local function effective(key)\n"
+        "        local phase = def.phases and def.phases[inst._phase]\n"
+        "        if phase and phase[key] ~= nil then return phase[key] end\n"
+        "        return def[key]\n"
+        "    end\n"
+        "    function inst:update(entity, dt)\n"
+        "        if self._state == STATE_DEAD then return end\n"
+        // Live HP bar — collapses what was an updateHPBar local
+        // in every brain script. Element name defaults to "fill"
+        // matching the boss_smoke canvas convention.
+        "        if def.hp_canvas then\n"
+        "            UI.UpdateStatBar{\n"
+        "                entity = entity,\n"
+        "                canvas = def.hp_canvas,\n"
+        "                element = def.hp_element or \"fill\",\n"
+        "                stat = \"hp\",\n"
+        "            }\n"
+        "        end\n"
+        "        local b = Entity.GetPosition(entity)\n"
+        "        local p = Player.GetPosition()\n"
+        "        local dx = p.x - b.x\n"
+        "        local dz = p.z - b.z\n"
+        "        local distSq = dx._raw * dx._raw + dz._raw * dz._raw\n"
+        // Face the player whenever the boss has noticed it. IDLE
+        // keeps the authored facing (so the boss doesn't snap to
+        // the player before the encounter begins).
+        "        if self._state ~= STATE_IDLE then\n"
+        "            Entity.SetRotationY(entity, Math.Atan2(dx, dz))\n"
+        "        end\n"
+        "        if self._state == STATE_IDLE then\n"
+        "            if distSq < self._aggro_sq then\n"
+        "                self._state = STATE_AGGRO\n"
+        "                self._timer = 0\n"
+        "            end\n"
+        "        elseif self._state == STATE_AGGRO then\n"
+        // AGGRO has two responsibilities (Bug #10 lesson):
+        // 1. Chase when out of attack range.
+        // 2. Recovery window after a swing — keep chasing for
+        //    `recover_frames` even if already in range so the
+        //    boss tracks the player around the arena.
+        // Transition to TELL only when both timer == 0 AND
+        // distSq <= attack range.
+        "            local doStep = self._timer > 0 or distSq > self._attack_sq\n"
+        "            if doStep then\n"
+        "                if self._timer > 0 then self._timer = self._timer - 1 end\n"
+        "                Combat.ChaseStep{\n"
+        "                    self = entity, dx = dx, dz = dz,\n"
+        "                    speed_fp12 = effective(\"chase_speed_fp12\") or 128,\n"
+        "                }\n"
+        "            else\n"
+        "                self._state = STATE_TELL\n"
+        "                self._timer = effective(\"tell_frames\") or 30\n"
+        "                if def.on_tell then def.on_tell(self, entity) end\n"
+        "            end\n"
+        "        elseif self._state == STATE_TELL then\n"
+        "            self._timer = self._timer - 1\n"
+        "            if self._timer <= 0 then\n"
+        "                self._state = STATE_HIT\n"
+        "                self._timer = effective(\"hit_frames\") or 12\n"
+        "                local range = effective(\"swing_range\") or 2\n"
+        // Forward MeleeSwing's on_hit to the boss-level
+        // on_hit_land callback so game-feel (shake + pause)
+        // sits at the boss level rather than per-swing.
+        "                Combat.MeleeSwing{\n"
+        "                    attacker = entity,\n"
+        "                    range = range,\n"
+        "                    damage = effective(\"swing_damage\") or 0,\n"
+        "                    y_below = effective(\"swing_y_below\") or range,\n"
+        "                    y_above = effective(\"swing_y_above\") or range,\n"
+        "                    on_hit = function(h, applied)\n"
+        "                        if def.on_hit_land then\n"
+        "                            def.on_hit_land(inst, entity, h, applied)\n"
+        "                        end\n"
+        "                    end,\n"
+        "                }\n"
+        "            end\n"
+        "        elseif self._state == STATE_HIT then\n"
+        "            self._timer = self._timer - 1\n"
+        "            if self._timer <= 0 then\n"
+        "                self._state = STATE_AGGRO\n"
+        "                self._timer = effective(\"recover_frames\") or 30\n"
+        "            end\n"
+        "        end\n"
+        "    end\n"
+        "    function inst:handleDamage(entity, applied, source)\n"
+        "        if self._state == STATE_DEAD then return end\n"
+        "        if def.iframes then\n"
+        "            Controls.StartIFrames(entity, def.iframes)\n"
+        "        end\n"
+        "        local hp = Stats.GetHP(entity)\n"
+        "        local maxHP = Stats.GetMaxHP(entity)\n"
+        "        if hp <= 0 then\n"
+        "            self._state = STATE_DEAD\n"
+        // Infrastructure death cleanup: hide the HP canvas (so it
+        // doesn't linger over the corpse), set a persist key for
+        // the encounter module / save system to read, and disable
+        // the entity (collision + ticks stop). on_death callback
+        // runs first so it can read live state before deactivation.
+        "            if def.on_death then def.on_death(self, entity) end\n"
+        "            if def.hp_canvas then\n"
+        "                local c = UI.FindCanvas(def.hp_canvas)\n"
+        "                if c >= 0 then UI.SetCanvasVisible(c, false) end\n"
+        "            end\n"
+        "            if def.persist_dead_key then\n"
+        "                Persist.Set(def.persist_dead_key, 1)\n"
+        "            end\n"
+        "            Entity.SetActive(entity, false)\n"
+        "            return\n"
+        "        end\n"
+        // Phase advancement: scan forward from current phase,
+        // enter the first phase whose hp_ratio threshold the
+        // boss is now below. `hp < maxHP * hp_ratio` uses Lua's
+        // mixed int*float arithmetic — maxHP is int, hp_ratio
+        // is float (e.g. 0.5), the product is float, the < int
+        // comparison works.
+        "        if maxHP > 0 and def.phases then\n"
+        "            for i = self._phase + 1, #def.phases do\n"
+        "                local phase = def.phases[i]\n"
+        "                if phase.hp_ratio and hp < maxHP * phase.hp_ratio then\n"
+        "                    local from = self._phase\n"
+        "                    self._phase = i\n"
+        "                    if def.iframes_phase_change then\n"
+        "                        Controls.StartIFrames(entity, def.iframes_phase_change)\n"
+        "                    end\n"
+        "                    if phase.on_enter then phase.on_enter(self, entity) end\n"
+        "                    if def.on_phase_change then\n"
+        "                        def.on_phase_change(self, from, i)\n"
+        "                    end\n"
+        "                    break\n"
+        "                end\n"
+        "            end\n"
+        "        end\n"
+        "    end\n"
+        // Reset — restore the IDLE/timer=0/phase=0 starting state.
+        // Useful for respawn-after-death scenarios where the
+        // encounter wants to re-arm the boss without reloading
+        // the scene. Does NOT restore HP or re-show the canvas;
+        // the encounter script handles those (it has more
+        // context about what "respawn" means for the game).
+        "    function inst:Reset()\n"
+        "        self._state = STATE_IDLE\n"
+        "        self._timer = 0\n"
+        "        self._phase = 0\n"
+        "    end\n"
+        "    return inst\n"
+        "end\n"
         // UI.UpdateStatBar — collapse the four-line FindCanvas/
         // FindElement/Get*/SetSize dance into one call. Width
         // defaults to the element's authored width (read via
