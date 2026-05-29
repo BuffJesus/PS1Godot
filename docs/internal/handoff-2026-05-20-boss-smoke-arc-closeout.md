@@ -465,3 +465,92 @@ the encounter, watch bars + boss behavior. Look for:
    overdue (ETA was May 22-25 per `project_obdx_eta`).
 
 HEAD as of this addendum: `c58cb90`.
+
+## 2026-05-29 increment — Combat framework Phase 3 shipped
+
+`Encounter.new(def)` landed in `111a480`. RFC §L2 is now
+complete: fog-gate lifecycle owns reveal HP canvas + start
+music, wake the boss, block retreat during active fight, and
+suppress re-fire on retreat-snap-back re-entry. All four
+were separate hand-rolled fixes in the boss_smoke debug arc;
+now they're library-owned.
+
+### Persist convention
+
+`<id>_aggro` (gate flag, scene-load-local) and `<id>_dead`
+(cleared flag, save-game persistent). Both derived from
+`def.id`. **The same id paired into `Combat.MeleeBoss
+{encounter_id = id}` closes the loop end-to-end:**
+
+- Encounter.new on construction clears `<id>_aggro` (scene
+  reset).
+- MeleeBoss on construction ALSO clears it (idempotent).
+- Encounter:onEnter() sets `<id>_aggro` to 1 + reveals UI.
+- MeleeBoss:update() returns early if `<id>_aggro` ~= 1.
+- MeleeBoss death path sets `<id>_dead` to 1.
+- Encounter:onEnter() reads `<id>_dead` to skip re-entry.
+
+No explicit cross-script calls. Just a shared id, with both
+sides using the same key-derivation convention.
+
+### MeleeBoss `encounter_id` field (Phase 2 follow-up)
+
+Added in the same commit. When set:
+- `persist_dead_key` is derived (`<encounter_id>_dead`) — but
+  can still be explicitly overridden for boss-without-encounter.
+- `update()` auto-gates on `<encounter_id>_aggro`, so the
+  brain script doesn't write the gate check.
+- Aggro flag is cleared at construction.
+
+This is what got the brain another ~10% smaller post-Phase 2
+even though Phase 2 already collapsed the state machine.
+
+### boss_smoke shrink scorecard
+
+| File           | Pre-framework | Post-Phase 1 | Post-Phase 2 | Post-Phase 3 |
+|----------------|---------------|--------------|--------------|--------------|
+| player.lua     | (existing)    | -10 lines    | -            | -            |
+| brain.lua      | 237           | -            | 81           | 74           |
+| fog_gate.lua   | 72            | -            | -            | 37           |
+| **combat-related total** | **~309**  |   ~299       |   ~143       | **111**      |
+
+**~64% reduction** in encounter-authoring code, and the
+remaining 111 lines are almost entirely game design (HP,
+ranges, swing volume, cadence, callbacks) — not mechanism.
+The RFC's "second boss author fills in five fields and ships"
+target is now genuinely reachable: the entire boss_smoke
+authoring surface is the table literals in those three files.
+
+### What's left in Phase 3 not shipped here
+
+- **Doctor checks 4, 5, 8** per the RFC's Phase 3 deliverable
+  list (`Encounter without boss`, `Encounter ID collision`,
+  `Trigger position not authored`). These all need
+  `PS1Encounter` composite-node existence — Phase 4 territory.
+  Deferred per the same rationale that gates Phase 4 itself
+  ("compose, don't speculate — extract from a second boss's
+  actual needs").
+
+### Next-session candidates (refreshed)
+
+1. **F5 verify the full migration** (Phase 1 + 2 + 3 together).
+   On a clean scene boot: enter fog gate → music + HP bar
+   reveal + boss wakes; engage → IDLE → AGGRO → TELL → HIT
+   → AGGRO loops with chase recovery; reach 50% HP → phase 2
+   transition with big shake; kill boss → death cleanup + HP
+   bar hides + gate opens; walk back out → no snap-back
+   anymore (cleared = retreat permitted).
+2. **Combat framework Phase 4** — composite Godot nodes
+   (`PS1Encounter` + `PS1StatBar`). RFC says "gated on a
+   second boss existing." If the next encounter is on the
+   roadmap, can extract; otherwise defer.
+3. **Deferred controller-required Bugs #3/#4** — OBDX hardware
+   overdue per `project_obdx_eta`.
+
+The combat framework's L1+L2+L3 Lua surface is now complete.
+The remaining roadmap items (L4 composite nodes, L5 Doctor
+lints for composite-node properties, BossBT graph kind in a
+separate future RFC) all sit downstream of either a second
+boss or a longer authoring-tooling lift.
+
+HEAD as of this addendum: `111a480`.
