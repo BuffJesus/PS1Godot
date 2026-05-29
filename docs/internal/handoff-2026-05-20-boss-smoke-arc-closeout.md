@@ -388,3 +388,80 @@ since the build uses the same install path).
    readings under actual movement.
 
 HEAD as of this addendum: `74074b6`.
+
+## 2026-05-29 increment — Combat framework Phase 2 shipped
+
+`Combat.MeleeBoss` state machine landed in `c58cb90`. The
+boss_smoke brain migration is the proof case: **237 → 81
+lines**, of which ~30 are actual code (the rest is comments
+and the authoring-surface table literal). The hand-rolled
+state machine plus five fix-comment paragraphs the original
+carried for Bugs #5/#7/#10/#11 are all gone — those rules
+live inside the library now where the next boss author
+inherits them by default.
+
+### Design choices worth remembering
+
+- **Five states (not six).** The original brain had an
+  explicit `STATE_PHASE2`; the framework folds it into a
+  generic phase-override mechanism (`phases` is an array,
+  `phase.hp_ratio` is the entry threshold, `phase.<key>`
+  shadows `def.<key>` via `effective(key)`). Souls bosses
+  with three/four phases are now array-extensions, not new
+  states.
+- **Phase index is monotonic.** Once entered, never reversed
+  — souls bosses don't un-phase on heal.
+- **Pure mechanics + opt-in feel.** State machine fires no
+  shakes/pauses without an explicit callback. boss_smoke
+  provides `on_tell`/`on_hit_land`/`on_death`/`on_enter`. A
+  silent boss is the default.
+- **Death cleanup is split.** Infrastructure (hide HP canvas,
+  set persist key, deactivate entity) is declarative via def
+  fields. Cinematic (shake, pause, Camera.LockOff) is the
+  `on_death` callback. `on_death` runs *first* so it can
+  read live state.
+- **Two iframe knobs.** `iframes` per-hit (boss_smoke=6),
+  optional `iframes_phase_change` for the longer invuln
+  during the phase-2 transition shake (boss_smoke=60).
+
+### What the migration loses
+
+The migrated brain doesn't preserve one thing from the
+original: the boss_smoke `STATE_PHASE2` was explicitly a
+*faster chase* (`step = 4096 / 20` vs phase 1's `4096 / 32`).
+The framework's `chase_speed_fp12` defaults to 128 ≈ 4096/32
+across all phases. To restore the speed-up, add
+`chase_speed_fp12 = 205` (≈4096/20) to the phase 2 override
+table — leaving the base at the 32-frame cadence. Not done
+yet pending F5 verification of whether phase 2 needed it for
+difficulty or it was just original-encounter polish. Noting
+here so we don't lose track.
+
+### Open from Phase 1 (still open)
+
+F5-verify the player updateBars migration on boss_smoke. The
+Phase 2 commit didn't touch the player bar path, but the same
+F5 will exercise both Phase 1 and Phase 2 at once — start
+the encounter, watch bars + boss behavior. Look for:
+- HP/stamina bars track identically (Phase 1).
+- Boss IDLE → AGGRO → TELL → HIT → AGGRO → ... → PHASE_2
+  on hitting 50% HP, with shorter tell + bigger shake.
+- Death: shake + pause + HP canvas hides + boss deactivates.
+
+### Next-session candidates (refreshed)
+
+1. **F5 verify the migrations** (Phase 1 + Phase 2 together).
+2. **Combat framework Phase 3** — `Encounter` module
+   (~1 day per RFC). Collapses the `Persist.Get("..._aggro")`
+   gate, music start, HP canvas reveal, fog-gate retreat
+   block into `Encounter.new{...}`. boss_smoke_fog_gate.lua
+   migration is the proof: ~75 → ~10 lines per the RFC.
+3. **Combat framework Phase 4** — composite Godot nodes
+   (`PS1Encounter` + `PS1StatBar`). Gated on a *second*
+   boss existing per the RFC's "compose, don't speculate"
+   guidance. Also unblocks the remaining 5 RFC §L5 Doctor
+   lints.
+4. **Deferred controller-required Bugs #3/#4** — OBDX
+   overdue (ETA was May 22-25 per `project_obdx_eta`).
+
+HEAD as of this addendum: `c58cb90`.
