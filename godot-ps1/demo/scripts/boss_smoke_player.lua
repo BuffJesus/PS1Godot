@@ -32,17 +32,6 @@ local staminaRegenAcc = 0
 -- continues underneath the whole time (no pause).
 local helpVisible = true
 
--- Migrated to UI.UpdateStatBar (Combat framework Phase 1, RFC §L3).
--- Width / height default to the authored values from boss_smoke.tscn
--- (hp_fill / stamina_fill: 100×4), so the engine helper reads them
--- via UI.GetSize and we don't repeat the magic numbers here.
-local function updateBars(self)
-    UI.UpdateStatBar{ entity = self, canvas = "player_hp",
-                      element = "hp_fill",      stat = "hp" }
-    UI.UpdateStatBar{ entity = self, canvas = "player_hp",
-                      element = "stamina_fill", stat = "stamina" }
-end
-
 local function tryLockOn()
     if Camera.IsLocked() then
         Camera.LockOff()
@@ -112,7 +101,15 @@ end
 function onCreate(self)
     Debug.Log("player ready — HP " .. Stats.GetMaxHP(self)
               .. " stamina " .. Stats.GetMaxStamina(self))
-    updateBars(self)
+    -- Declarative HUD wiring (Combat framework L3 v2, RFC §L3).
+    -- Engine auto-ticks bound bars each frame before per-entity
+    -- onUpdate dispatch, so no per-frame UI.UpdateStatBar call
+    -- in onUpdate. Bars freeze automatically if the entity ever
+    -- goes inactive (player death cleanup, scene unload).
+    UI.BindStatBars(self, {
+        { canvas = "player_hp", element = "hp_fill",      stat = "hp"      },
+        { canvas = "player_hp", element = "stamina_fill", stat = "stamina" },
+    })
 end
 
 function onUpdate(self, dt)
@@ -156,8 +153,6 @@ function onUpdate(self, dt)
         Player.SetPosition(Vec3.new(p.x + stepX, p.y, p.z + stepZ))
         dodgeFrames = dodgeFrames - 1
     end
-
-    updateBars(self)
 end
 
 -- Boss hit the player.

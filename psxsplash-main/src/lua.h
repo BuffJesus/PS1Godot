@@ -58,6 +58,15 @@ class Lua {
     // later `L.setGlobal("UI")` would clobber our extension.
     void InstallCombatLibrary();
 
+    // Combat framework L3 v2 (RFC) — per-frame tick of declarative
+    // UI.BindStatBars bindings. Resolves `_G.UI.TickBars` and pcalls
+    // it if it exists. Safe to be missing at any layer (no UI table,
+    // no TickBars field, not a function) — silently returns. Called
+    // from SceneManager::GameTick right before the per-entity
+    // onUpdate dispatch, after the pause short-circuit so paused
+    // frames don't tick bars (matches the gameplay-time freeze).
+    void TickFrameworkAutoBindings();
+
     void LoadLuaFile(const char* code, size_t len, int index);
     void RegisterSceneScripts(int index);
     void RegisterGameObject(GameObject* go);

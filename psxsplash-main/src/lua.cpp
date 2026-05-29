@@ -749,16 +749,21 @@ void psxsplash::Lua::InstallCombatLibrary() {
         "        if key_aggro and Persist.Get(key_aggro) ~= 1 then\n"
         "            return\n"
         "        end\n"
-        // Live HP bar — collapses what was an updateHPBar local
-        // in every brain script. Element name defaults to "fill"
-        // matching the boss_smoke canvas convention.
-        "        if def.hp_canvas then\n"
-        "            UI.UpdateStatBar{\n"
-        "                entity = entity,\n"
+        // Live HP bar — one-time UI.BindStatBars on first update
+        // (RFC §L3 v2). The engine's auto-tick keeps the bar in
+        // sync with Stats.GetHP each frame from this point; we
+        // don't repeat the work here. `self._barBound` sticky
+        // flag prevents re-registering on subsequent updates.
+        // Defaulting `element` to "fill" matches the canvas
+        // convention from before the PS1StatBar composite node
+        // shipped — callers can still override with `hp_element`.
+        "        if def.hp_canvas and not self._barBound then\n"
+        "            self._barBound = true\n"
+        "            UI.BindStatBars(entity, {{\n"
         "                canvas = def.hp_canvas,\n"
         "                element = def.hp_element or \"fill\",\n"
         "                stat = \"hp\",\n"
-        "            }\n"
+        "            }})\n"
         "        end\n"
         "        local b = Entity.GetPosition(entity)\n"
         "        local p = Player.GetPosition()\n"
@@ -1019,6 +1024,69 @@ void psxsplash::Lua::InstallCombatLibrary() {
         "    local width  = args.width  or authoredW\n"
         "    local height = args.height or authoredH\n"
         "    UI.SetSize(el, (cur * width) / maxv, height)\n"
+        "end\n"
+        // UI.BindStatBars (RFC §L3 v2) — declarative form. Register
+        // a list of {entity, canvas, element, stat} entries once
+        // (typically from an entity's onCreate); the engine ticks
+        // them every frame via Lua::TickFrameworkAutoBindings, which
+        // calls UI.TickBars below right before the per-entity
+        // onUpdate dispatch. Authors stop hand-rolling per-frame
+        // update calls.
+        //
+        // Storage is module-private at the UI table. We don't expose
+        // _statBarBindings as a stable API — only the Bind / Unbind /
+        // Tick callable surface is contractual.
+        //
+        // First arg `entity` is sticky across all entries in the
+        // list (typical pattern — one entity owns multiple bars,
+        // like player's hp + stamina). Each entry can also override
+        // entity individually if a single Bind call needs to mix
+        // entities.
+        "UI._statBarBindings = UI._statBarBindings or {}\n"
+        "function UI.BindStatBars(entity, bars)\n"
+        "    local list = UI._statBarBindings\n"
+        "    for i = 1, #bars do\n"
+        "        local b = bars[i]\n"
+        "        list[#list + 1] = {\n"
+        "            entity  = b.entity or entity,\n"
+        "            canvas  = b.canvas,\n"
+        "            element = b.element,\n"
+        "            stat    = b.stat,\n"
+        "            width   = b.width,\n"
+        "            height  = b.height,\n"
+        "        }\n"
+        "    end\n"
+        "end\n"
+        // Optional explicit cleanup. The RFC's "bars auto-unbind on
+        // entity destroy" is delivered by UI.TickBars's Entity.IsActive
+        // skip — inactive entities stop driving their bars. UnbindStatBars
+        // exists for callers that want to remove a binding while keeping
+        // the entity active (e.g., entering a UI screen where the HUD
+        // hides). Identity match via the entity userdata.
+        "function UI.UnbindStatBars(entity)\n"
+        "    local list = UI._statBarBindings\n"
+        "    local out = {}\n"
+        "    for i = 1, #list do\n"
+        "        if list[i].entity ~= entity then\n"
+        "            out[#out + 1] = list[i]\n"
+        "        end\n"
+        "    end\n"
+        "    UI._statBarBindings = out\n"
+        "end\n"
+        // Engine-called every gameplay frame (after pause + before
+        // entity onUpdate dispatch). Iterates the binding list,
+        // skips entries whose entity went inactive (boss died,
+        // entity hidden by scripted disable, etc.) — the bar
+        // freezes at its last value. Each surviving entry calls
+        // UI.UpdateStatBar to do the actual fill resize.
+        "function UI.TickBars()\n"
+        "    local list = UI._statBarBindings\n"
+        "    for i = 1, #list do\n"
+        "        local b = list[i]\n"
+        "        if Entity.IsActive(b.entity) then\n"
+        "            UI.UpdateStatBar(b)\n"
+        "        end\n"
+        "    end\n"
         "end\n";
     if (L.loadBuffer(kCombatLibSrc, sizeof(kCombatLibSrc) - 1, "builtin:combat") == LUA_OK) {
         if (L.pcall(0, 0) != LUA_OK) {
@@ -1029,6 +1097,34 @@ void psxsplash::Lua::InstallCombatLibrary() {
         printf("Error loading Combat library: %s\n", L.optString(-1, "Unknown error"));
         L.pop();
     }
+}
+
+// RFC §L3 v2 — engine-side per-frame tick of the UI.BindStatBars
+// registry. Resolves `_G.UI.TickBars` and pcalls it. Any missing
+// layer (no UI table, no TickBars field, not a function) is a
+// silent skip — covers the pre-InstallCombatLibrary state and the
+// case where a scene's scripts haven't called BindStatBars yet (the
+// embedded library always installs UI.TickBars, but defensive code
+// stays defensive). `lua_settop` restores the stack regardless of
+// success / pcall failure so we leak nothing into subsequent calls.
+void psxsplash::Lua::TickFrameworkAutoBindings() {
+    auto L = m_state;
+    int top = lua_gettop(L.getState());
+    L.pushGlobalTable();
+    L.getField(-1, "UI");
+    if (!L.isTable(-1)) {
+        lua_settop(L.getState(), top);
+        return;
+    }
+    L.getField(-1, "TickBars");
+    if (!L.isFunction(-1)) {
+        lua_settop(L.getState(), top);
+        return;
+    }
+    if (L.pcall(0, 0) != LUA_OK) {
+        printf("Error in UI.TickBars: %s\n", L.optString(-1, "Unknown error"));
+    }
+    lua_settop(L.getState(), top);
 }
 
 void psxsplash::Lua::Shutdown() {

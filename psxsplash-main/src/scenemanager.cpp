@@ -819,6 +819,13 @@ void psxsplash::SceneManager::GameTick(psyqo::GPU &gpu) {
     uint32_t collisionEnd = gpu.now();
     
     uint32_t luaStart = gpu.now();
+    // Combat framework L3 v2 (RFC) — auto-tick declarative
+    // UI.BindStatBars bindings BEFORE per-entity onUpdate. Lua
+    // scripts that register bars in onCreate then never have to
+    // touch them again; the framework keeps the gauges in sync
+    // with Stats each frame. Silent no-op when no scene has
+    // registered bindings yet.
+    L.TickFrameworkAutoBindings();
     // Lua update tick - call onUpdate for all registered objects with onUpdate handler
     for (auto* go : m_gameObjects) {
         if (go && go->isActive()) {
