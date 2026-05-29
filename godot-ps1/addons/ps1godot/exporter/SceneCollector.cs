@@ -2035,6 +2035,42 @@ public static class SceneCollector
             LuaFileIndex = (short)luaIdx,
         });
 
+        // Lint-side record: resolve BossEntity NodePath + probe the
+        // target for PS1Stats / ScriptFile presence. CombatValidationReport
+        // reads this from data.Encounters to emit the §L5 row 4/5/7
+        // warnings without re-walking the scene tree itself. Today the
+        // probe knows about PS1MeshInstance (the only boss type any
+        // demo uses); extend the cast when a non-MeshInstance boss
+        // ships (e.g. a skinned mesh that gains its own Stats/Script
+        // fields).
+        string bossNodeName = "";
+        bool bossResolved = false;
+        bool bossHasStats = false;
+        bool bossHasScript = false;
+        if (enc.BossEntity != null && !enc.BossEntity.IsEmpty)
+        {
+            var bossNode = enc.GetNodeOrNull(enc.BossEntity);
+            if (bossNode != null)
+            {
+                bossResolved = true;
+                bossNodeName = bossNode.Name;
+                if (bossNode is PS1MeshInstance pmi)
+                {
+                    bossHasStats  = pmi.Stats != null;
+                    bossHasScript = !string.IsNullOrEmpty(pmi.ScriptFile);
+                }
+            }
+        }
+        data.Encounters.Add(new EncounterRecord
+        {
+            Name           = enc.Name,
+            EncounterId    = enc.EncounterId ?? "",
+            BossNodeName   = bossNodeName,
+            BossResolved   = bossResolved,
+            BossHasStats   = bossHasStats,
+            BossHasScript  = bossHasScript,
+        });
+
         GD.Print($"[PS1Godot] Encounter '{enc.Name}' (id='{enc.EncounterId}'): AABB=[{wMin}..{wMax}] triggerZRaw={triggerZRaw} hpCanvas='{hpCanvasName}' luaIdx={luaIdx}");
     }
 

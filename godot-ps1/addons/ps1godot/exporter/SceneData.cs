@@ -184,6 +184,34 @@ public sealed class UVScrollRecord
     public required int SpeedVFp8 { get; init; }
 }
 
+// Combat-framework Phase 4 (RFC §L4): one entry per PS1Encounter
+// composite node in the scene. NOT serialized to the splashpack —
+// the runtime sees the composite node's lowered TriggerBoxRecord
+// + synthetic Lua sidecar. This record exists only so the editor-
+// time PS1Doctor lints (CombatValidationReport.Check*Encounter*)
+// can validate the boss/canvas/id wiring without re-walking the
+// Godot scene tree from the validator pass.
+public sealed class EncounterRecord
+{
+    public required string Name { get; init; }          // node name, for log messages
+    public required string EncounterId { get; init; }   // Persist key prefix
+    // Name of the resolved boss node, or empty if BossEntity NodePath
+    // was unset or pointed at a missing node. Used by lint messages.
+    public required string BossNodeName { get; init; }
+    // True if `BossEntity` NodePath resolved to a real node in-scene.
+    // False covers both "field empty" and "path doesn't resolve."
+    public required bool BossResolved { get; init; }
+    // True if the resolved boss node has a non-null `Stats` resource
+    // (PS1MeshInstance.Stats / PS1Player.Stats). Lint row 4: a boss
+    // without stats can't take damage so the encounter is unwinnable.
+    public required bool BossHasStats { get; init; }
+    // True if the resolved boss node has a non-empty `ScriptFile`
+    // (PS1MeshInstance.ScriptFile / PS1Player.ScriptFile). Lint row 7:
+    // a boss without a script has no brain — the encounter starts but
+    // the boss does nothing.
+    public required bool BossHasScript { get; init; }
+}
+
 // v28+: scene-wide instrument bank record (16 bytes on disk). Maps to
 // SPLASHPACKInstrumentRecord in psxsplash-main/src/splashpack.hh.
 public sealed class InstrumentBankRecord
@@ -702,6 +730,15 @@ public sealed class SceneData
     // an offset per scroll-enabled entity each tick and the renderer
     // applies it to vertex UVs before primitive submission.
     public List<UVScrollRecord> UVScrolls { get; } = new();
+
+    // Combat-framework Phase 4: one entry per PS1Encounter node
+    // collected from the scene. Editor-only — not serialized into
+    // the splashpack. The synthetic Lua sidecar + TriggerBoxRecord
+    // are what the runtime sees. This list exists so PS1Doctor lints
+    // (CombatValidationReport.Check*Encounter*) can validate the
+    // authoring metadata at export time without re-walking the
+    // Godot scene tree from the validator pass.
+    public List<EncounterRecord> Encounters { get; } = new();
 
     // v28+: scene-wide instrument bank. Each Instruments entry owns a
     // contiguous slice of Regions (firstRegionIndex / regionCount).

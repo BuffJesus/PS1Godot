@@ -29,6 +29,10 @@ public static class CombatValidationReport
         warnings += CheckHurtBoxWithoutStats(data, sceneIndex, offenderSink);
         warnings += CheckBarFillExceedsBg(data, sceneIndex, offenderSink);
         warnings += CheckPairedBarsNearBlack(data, sceneIndex, offenderSink);
+        warnings += CheckEncounterEmptyId(data, sceneIndex, offenderSink);
+        warnings += CheckEncounterIdCollision(data, sceneIndex, offenderSink);
+        warnings += CheckEncounterWithoutBoss(data, sceneIndex, offenderSink);
+        warnings += CheckBossMissingScript(data, sceneIndex, offenderSink);
         return warnings;
     }
 
@@ -263,6 +267,160 @@ public static class CombatValidationReport
         if (warnings > 0)
         {
             GD.Print($"[PS1Godot]   Combat lint scene[{sceneIndex}]: {warnings} stat-bar pair(s) have near-black fill against near-black bg.");
+        }
+        return warnings;
+    }
+
+    // PS1Encounter authoring lints (RFC §L5 rows 4/5/7 + an empty-id
+    // check that isn't in the table but covers a silent foot-gun the
+    // RFC mention does not). All four read from data.Encounters which
+    // SceneCollector.EmitEncounter populates with pre-resolved boss-
+    // entity state — the lints don't re-walk the Godot tree.
+    //
+    // Distinct from the symmetric Stats/HurtBox lints above: those
+    // run per-entity over Stats / HurtBoxes records; these run per
+    // PS1Encounter composite node, so the offender id is the
+    // encounter node name (or `<canvas>/<element>` style join when
+    // about a paired entity).
+
+    // Empty EncounterId silently breaks the Persist binding —
+    // <id>_aggro and <id>_dead collapse to "_aggro" / "_dead" and
+    // collide with other id-less encounters. The boss's MeleeBoss
+    // also gates on the same empty-prefix key, so the gate either
+    // never opens (no flip) or opens for the wrong encounter (cross-
+    // talk). Error tier — there's no legitimate use of an empty id.
+    private static int CheckEncounterEmptyId(
+        SceneData data, int sceneIndex,
+        List<(string Name, string Reason)>? offenderSink)
+    {
+        int warnings = 0;
+        foreach (var enc in data.Encounters)
+        {
+            if (!string.IsNullOrEmpty(enc.EncounterId)) continue;
+            string msg = "EncounterId is empty — Persist keys derive from it, so the gate flag and dead flag collide with other empty-id encounters in the same save.";
+            GD.PushError($"[CombatLint] scene_{sceneIndex} {enc.Name}: {msg}");
+            offenderSink?.Add((enc.Name, "PS1Encounter has empty EncounterId — Persist binding silently broken"));
+            warnings++;
+        }
+        if (warnings > 0)
+        {
+            GD.Print($"[PS1Godot]   Combat lint scene[{sceneIndex}]: {warnings} PS1Encounter(s) with empty EncounterId.");
+        }
+        return warnings;
+    }
+
+    // RFC §L5 row 5 — two PS1Encounter nodes with the same
+    // EncounterId share the same Persist keys, so one's dead-flag
+    // write closes the other's gate too. Warning tier (not Error)
+    // because there's a rare legitimate use: two physical doorways
+    // into the same fight (front door + back door), both pointing
+    // at the same encounter id. The author who genuinely wants this
+    // can dismiss the warning. The far more common case is "I
+    // copy-pasted the node and forgot to rename" which the warning
+    // surfaces immediately.
+    private static int CheckEncounterIdCollision(
+        SceneData data, int sceneIndex,
+        List<(string Name, string Reason)>? offenderSink)
+    {
+        // Group encounters by id; report each id with > 1 entry.
+        // Empty ids skipped here — the empty-id lint above catches
+        // them with a more specific message.
+        var byId = new Dictionary<string, List<string>>();
+        foreach (var enc in data.Encounters)
+        {
+            if (string.IsNullOrEmpty(enc.EncounterId)) continue;
+            if (!byId.TryGetValue(enc.EncounterId, out var list))
+            {
+                list = new List<string>();
+                byId[enc.EncounterId] = list;
+            }
+            list.Add(enc.Name);
+        }
+        int warnings = 0;
+        foreach (var (id, names) in byId)
+        {
+            if (names.Count < 2) continue;
+            string joined = string.Join(", ", names);
+            string msg = $"EncounterId '{id}' is shared by {names.Count} PS1Encounter nodes ({joined}). All share Persist keys — clearing one clears all.";
+            GD.PushWarning($"[CombatLint] scene_{sceneIndex} {msg}");
+            offenderSink?.Add(($"encounter_id={id}", $"Shared by {names.Count} PS1Encounter nodes — Persist key collision"));
+            warnings++;
+        }
+        if (warnings > 0)
+        {
+            GD.Print($"[PS1Godot]   Combat lint scene[{sceneIndex}]: {warnings} EncounterId collision(s).");
+        }
+        return warnings;
+    }
+
+    // RFC §L5 row 4 — encounter with no boss (or boss without stats).
+    // Two failure modes share this lint:
+    //
+    // (a) BossEntity NodePath is empty or doesn't resolve. The
+    //     encounter still fires (sets aggro flag, plays music,
+    //     reveals HUD) but no MeleeBoss reads the flag — the
+    //     fight has no opponent.
+    //
+    // (b) BossEntity resolves to a real node but the node has no
+    //     PS1Stats. Stats.DealDamage no-ops on a no-stats entity
+    //     (StatsResolveIndex returns 0xFFFF), so the boss is
+    //     invulnerable and the encounter is unwinnable.
+    //
+    // Both surface as Error rather than Warning — neither has a
+    // legitimate use case the author would deliberately design.
+    private static int CheckEncounterWithoutBoss(
+        SceneData data, int sceneIndex,
+        List<(string Name, string Reason)>? offenderSink)
+    {
+        int warnings = 0;
+        foreach (var enc in data.Encounters)
+        {
+            if (!enc.BossResolved)
+            {
+                string msg = "BossEntity NodePath is empty or doesn't resolve — encounter fires but no MeleeBoss reads the aggro flag, fight has no opponent.";
+                GD.PushError($"[CombatLint] scene_{sceneIndex} {enc.Name}: {msg}");
+                offenderSink?.Add((enc.Name, "PS1Encounter without boss — encounter starts but nothing fights back"));
+                warnings++;
+                continue;
+            }
+            if (!enc.BossHasStats)
+            {
+                string msg = $"BossEntity '{enc.BossNodeName}' has no PS1Stats — Stats.DealDamage no-ops on it, boss is invulnerable and encounter is unwinnable.";
+                GD.PushError($"[CombatLint] scene_{sceneIndex} {enc.Name}: {msg}");
+                offenderSink?.Add((enc.Name, $"PS1Encounter.BossEntity '{enc.BossNodeName}' has no PS1Stats — unwinnable"));
+                warnings++;
+            }
+        }
+        if (warnings > 0)
+        {
+            GD.Print($"[PS1Godot]   Combat lint scene[{sceneIndex}]: {warnings} encounter(s) without valid boss.");
+        }
+        return warnings;
+    }
+
+    // RFC §L5 row 7 — boss has stats but no Lua script. The encounter
+    // fires, the boss takes hits (HP bar moves), but the boss never
+    // moves, attacks, or transitions phases because there's no brain
+    // running. Warning tier — could legitimately be intentional for a
+    // "training dummy" target, but rare enough to flag.
+    private static int CheckBossMissingScript(
+        SceneData data, int sceneIndex,
+        List<(string Name, string Reason)>? offenderSink)
+    {
+        int warnings = 0;
+        foreach (var enc in data.Encounters)
+        {
+            if (!enc.BossResolved) continue;
+            if (!enc.BossHasStats) continue;  // CheckEncounterWithoutBoss already errored
+            if (enc.BossHasScript) continue;
+            string msg = $"BossEntity '{enc.BossNodeName}' has PS1Stats but no Lua script — boss takes hits but never moves, attacks, or transitions phases.";
+            GD.PushWarning($"[CombatLint] scene_{sceneIndex} {enc.Name}: {msg}");
+            offenderSink?.Add((enc.Name, $"Boss '{enc.BossNodeName}' is a stat block with no brain — set ScriptFile in the inspector"));
+            warnings++;
+        }
+        if (warnings > 0)
+        {
+            GD.Print($"[PS1Godot]   Combat lint scene[{sceneIndex}]: {warnings} boss(es) missing PS1Lua script.");
         }
         return warnings;
     }
