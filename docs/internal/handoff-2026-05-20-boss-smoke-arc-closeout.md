@@ -816,3 +816,106 @@ gated on real demand per the RFC itself.
 4. **Deferred controller bugs #3/#4** — OBDX overdue.
 
 HEAD as of this addendum: `3e49577`.
+
+## 2026-05-29 increment — L3 v2 (BindStatBars) — RFC closeout
+
+`UI.BindStatBars` declarative auto-tick shipped in `7afc244`.
+Closes the final open item from the original combat-framework
+RFC — the only remaining roadmap entry is Phase 5 BossBT
+graph kind, which the RFC itself explicitly punted to a
+separate future RFC.
+
+### Engine hook
+
+- `Lua::TickFrameworkAutoBindings()` — new public method.
+  Resolves `_G.UI.TickBars` and pcalls it; silent skip when
+  any layer is missing. `lua_settop` saves/restores stack
+  position regardless of pcall result.
+- Called from `SceneManager::GameTick` immediately before
+  the per-entity onUpdate loop. Lives downstream of the
+  pause short-circuit (`if (paused) return` at
+  scenemanager.cpp:750), so paused frames don't tick bars
+  — values freeze with gameplay time, matching hit-stop
+  semantics.
+
+### Embedded Lua
+
+Three additions to the `kCombatLibSrc` string:
+
+- `UI._statBarBindings` — module-private list (not part
+  of the contractual surface).
+- `UI.BindStatBars(entity, bars)` — appends entries.
+  Sticky `entity` arg with per-entry override available.
+- `UI.UnbindStatBars(entity)` — explicit cleanup. The
+  RFC's "bars auto-unbind on entity destroy" is delivered
+  by TickBars's `Entity.IsActive` skip, so explicit unbind
+  is only needed for "remove binding while entity stays
+  active" cases.
+- `UI.TickBars()` — engine-called, iterates the list,
+  skips inactive entities, calls UpdateStatBar per active
+  entry.
+
+### MeleeBoss adapter
+
+When `def.hp_canvas` is set, the FIRST `inst:update()`
+call binds via `UI.BindStatBars` then sets a sticky
+`self._barBound` flag. Subsequent updates no-op the bar
+path entirely — the engine auto-tick owns it. Authors
+using `Combat.MeleeBoss{hp_canvas = "..."}` get the v2
+treatment without touching their script.
+
+### boss_smoke migrations
+
+- `boss_smoke_player.lua`: removed `updateBars` local +
+  its 2 call sites. Replaced with one `UI.BindStatBars`
+  call in onCreate. -15 / +8 lines. Player script no
+  longer touches the HUD path at all.
+- Boss brain: unchanged (MeleeBoss handles the binding
+  internally).
+
+### Combat framework totals (2026-05-29 — final)
+
+| Slice | Commit | Delivery |
+|---|---|---|
+| Phase 1   | 74074b6 | Combat + UI.UpdateStatBar embedded |
+| Phase 2   | c58cb90 | Combat.MeleeBoss state machine |
+| Phase 3   | 111a480 | Encounter module + MeleeBoss binding |
+| Phase 4-A | e5e0510 | PS1Encounter composite node |
+| Phase 4-B | 285b243 | 4 encounter Doctor lints |
+| Phase 4.5 | 3e49577 | PS1StatBar composite + L5 #9 lint |
+| L3 v2     | 7afc244 | UI.BindStatBars auto-tick |
+
+**Original RFC is fully shipped except Phase 5 BossBT
+graph kind**, which the RFC itself defers to a separate
+future RFC.
+
+### Combat framework session arc (eight feat commits, 2026-05-29)
+
+- L1 (DistanceSqRaw/InRange/MeleeSwing/ChaseStep) ✅
+- L1 v2 (MeleeBoss state machine) ✅
+- L2 (Encounter module + MeleeBoss binding) ✅
+- L3 (UI.UpdateStatBar imperative) ✅
+- L3 v2 (UI.BindStatBars declarative + engine tick) ✅
+- L4 PS1Encounter composite + lowering ✅
+- L4 PS1StatBar composite + lowering ✅
+- L5 Doctor lints (9 of 9) ✅
+
+### Next-session candidates (refreshed)
+
+1. **F5 verify the whole stack** (Phases 1 through L3 v2).
+   Needs Godot editor restart for PS1Encounter.cs.uid +
+   PS1StatBar.cs.uid generation. Specific things to watch:
+   - Player HP + stamina bars track via BindStatBars
+     auto-tick (no `updateBars` in player.lua anymore).
+   - Boss HP bar appears when encounter fires (boss's
+     first onUpdate registers it via MeleeBoss adapter).
+   - Bars freeze automatically when entities die/disable
+     (player on death sequence, boss on Entity.SetActive
+     false). No more stale bars.
+   - Bar values frozen during Scene.PauseFor() hit-stops
+     (the tick lives inside the unpaused path).
+2. **Phase 5 BossBT graph kind** — separate future RFC
+   per the combat-framework RFC. Compose, don't bundle.
+3. **Deferred controller bugs #3/#4** — OBDX overdue.
+
+HEAD as of this addendum: `7afc244`.
