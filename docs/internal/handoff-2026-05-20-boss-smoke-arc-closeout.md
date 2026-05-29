@@ -720,3 +720,99 @@ real demand.
 4. **Deferred controller bugs #3/#4** — OBDX overdue.
 
 HEAD as of this addendum: `285b243`.
+
+## 2026-05-29 increment — Phase 4.5 (PS1StatBar) — RFC §L5 now 9/9
+
+PS1StatBar composite node + boss_smoke migration + the final
+RFC §L5 lint shipped in `3e49577`. The L5 set is **complete**:
+9 of 9 Doctor checks land in CombatValidationReport.cs.
+
+### PS1StatBar node
+
+Drop one Node under a PS1UICanvas, fill geometry + colors +
+binding fields. Lowers at export to 2-3 synthetic
+PS1UIElement Box/Text records using the `<name>_bg` /
+`<name>_fill` / `<name>_label` convention. Composite-emitted
+bars are bit-equivalent to hand-rolled ones — the existing
+`Bar fill exceeds BG` and `Paired bars near-black` lints
+fire on both.
+
+Conservative scope cuts (vs the RFC table):
+- `LowThreshold` / `LowFillColor` — would need
+  UI.UpdateStatBar to support color swap, not shipped.
+- `Interpolated` — RFC tagged v2.
+- `CanvasName` — redundant (must be a direct child).
+- **No auto-emit of per-frame UI.UpdateStatBar.** Authors
+  still write the call in their entity's onUpdate. RFC §L3
+  v2 (`UI.BindStatBars` declarative form) waits on either
+  an engine pre-update hook or export-time Lua source
+  rewriting — both bigger lifts than the composite node.
+
+### CheckStatsWithoutHud lint (§L5 row 9, final)
+
+Info tier. For each `PS1Stats.MaxHP > 0`, warns if no
+PS1StatBar with `TrackedStat="hp"` points at the entity.
+Hand-rolled `<name>_bg`/`<name>_fill` bars from before the
+composite node existed don't count toward coverage — the
+lint surfaces "migrate to PS1StatBar" pressure.
+
+### boss_smoke migration
+
+| Before | After |
+|---|---|
+| 6 UIElements (3 _bg/_fill pairs across 2 canvases) | 3 PS1StatBars + 1 surviving Label PS1UIElement |
+
+- BossHPCanvas: PS1StatBar `BossHPBar` (ElementName="boss_hp",
+  tracks Boss.hp). Label PS1UIElement kept as a sibling
+  because the boss_smoke layout puts "BOSS" *below* the bar,
+  while PS1StatBar's Label field overlays at the same
+  position. Not worth extending the node for one use case.
+- PlayerHPCanvas: 2 PS1StatBars (`PlayerHPBar` /
+  `PlayerStaminaBar`), tracking Player/Avatar.
+- boss_smoke_brain.lua: `hp_element = "fill"` →
+  `"boss_hp_fill"` to match the PS1StatBar's emitted name.
+- boss_smoke_player.lua: unchanged — PS1StatBar
+  ElementName="hp"/"stamina" emits "hp_fill"/"stamina_fill",
+  exactly what the player script already calls.
+
+50% fewer nodes in the HUD authoring tree, all bindings
+visible in the inspector via TrackedEntity + TrackedStat.
+
+### Combat framework session totals (2026-05-29)
+
+| Slice | Commit | Delivery |
+|---|---|---|
+| Phase 1   | 74074b6 | Combat + UI.UpdateStatBar embedded |
+| Phase 2   | c58cb90 | Combat.MeleeBoss state machine |
+| Phase 3   | 111a480 | Encounter module + MeleeBoss binding |
+| Phase 4-A | e5e0510 | PS1Encounter composite node |
+| Phase 4-B | 285b243 | 4 encounter Doctor lints |
+| Phase 4.5 | 3e49577 | PS1StatBar composite + L5 #9 lint |
+
+**RFC §L1/L2/L3 Lua surface: complete.**
+**§L4 composite-node mode: complete** (both
+PS1Encounter + PS1StatBar shipped).
+**§L5 Doctor: 9/9 — done.**
+
+Only open RFC items: L3 v2 (`UI.BindStatBars` declarative
+auto-update) and Phase 5 BossBT graph kind. Both explicitly
+gated on real demand per the RFC itself.
+
+### Next-session candidates (refreshed)
+
+1. **F5 verify the whole stack** (Phases 1-4.5). After Godot
+   editor restart (so PS1Encounter.cs.uid + PS1StatBar.cs.uid
+   generate). All three composite-emitted bars should render
+   identically to the pre-migration hand-rolled ones; boss
+   encounter should drive end-to-end. Two scene changes need
+   live verification: (a) BossHPBar uses Padding=4 (matching
+   the original BG inset), (b) boss brain's hp_element now
+   reads "boss_hp_fill".
+2. **L3 v2 — UI.BindStatBars declarative auto-update.** If
+   demand materializes. Requires engine work (Lua pre-update
+   hook for a `UI.TickBars()` registered-list pass).
+3. **Phase 5 BossBT graph kind** — separate future RFC per
+   the combat-framework RFC.
+4. **Deferred controller bugs #3/#4** — OBDX overdue.
+
+HEAD as of this addendum: `3e49577`.
