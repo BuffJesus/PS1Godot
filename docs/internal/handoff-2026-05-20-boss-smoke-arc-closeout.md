@@ -649,3 +649,74 @@ re-resolution after the editor reload.
    overdue.
 
 HEAD as of this addendum: `e5e0510`.
+
+## 2026-05-29 increment — Phase 4 second slice (Doctor lints)
+
+Four PS1Encounter lints shipped in `285b243`. RFC §L5 L4
+coverage is now **8 of 9** (the 9th — "Stats without HUD" —
+sits on the deferred PS1StatBar composite node).
+
+### Lints + tiers
+
+| Tier | Check | Catches |
+|---|---|---|
+| Error | EmptyId | Empty `EncounterId` → Persist key collision |
+| Warn  | IdCollision | Two PS1Encounter share an id |
+| Error | WithoutBoss | BossEntity unresolved OR no PS1Stats (unwinnable) |
+| Warn  | MissingScript | Boss has stats but no Lua — takes hits, never moves |
+
+### Plumbing added
+
+- **`EncounterRecord`** in SceneData — editor-only (not
+  serialized to splashpack). Pre-resolves boss-entity state
+  at collection time (`BossResolved` / `BossHasStats` /
+  `BossHasScript`) so lints can be data-driven instead of
+  re-walking the Godot scene tree.
+- **`SceneData.Encounters`** list — populated by EmitEncounter
+  alongside the TriggerBox + synthetic LuaFile emission.
+
+### Probe scope
+
+Currently knows about `PS1MeshInstance` (the only boss type
+any demo uses). When a non-MeshInstance boss ships
+(`PS1SkinnedMesh` would need its own Stats/ScriptFile fields
+first), the cast in EmitEncounter needs extending — flagged
+in the commit message so this isn't lost.
+
+### Combat framework session totals (2026-05-29)
+
+| Slice | Commit | Delivery |
+|---|---|---|
+| Phase 1 | 74074b6 | Combat + UI.UpdateStatBar embedded |
+| Phase 2 | c58cb90 | Combat.MeleeBoss state machine |
+| Phase 3 | 111a480 | Encounter module + MeleeBoss binding |
+| Phase 4 slice A | e5e0510 | PS1Encounter composite node |
+| Phase 4 slice B | 285b243 | 4 encounter Doctor lints |
+
+Six feat commits + matching handoff increments, all on
+2026-05-29. boss_smoke combat surface 309 → 74 lines + 7
+inspector fields. RFC §L1/L2/L3 Lua surface complete, L4
+composite-node mode complete for the slice that's
+non-speculative, L5 Doctor coverage 8/9. L5 #9 + Phase 4.5
+PS1StatBar + Phase 5 BossBT graph all sit downstream of
+real demand.
+
+### Next-session candidates (refreshed)
+
+1. **F5 verify the whole stack** when the user is at home
+   (Phase 1+2+3+4+4-lints together). Stack-up of:
+   - Encounter lints fire as Error on the migrated
+     boss_smoke (BossEntity is set, has Stats + script —
+     should be clean).
+   - Auto-generated encounter Lua produces working music +
+     HUD reveal + retreat block.
+   - MeleeBoss state machine drives boss with phase 2 at
+     50% HP.
+   - Bars track per UI.UpdateStatBar.
+2. **Phase 4.5 — PS1StatBar + UI.BindStatBars**. Bigger
+   lift (engine pre-update hook or export-time Lua
+   rewriting). Defer until a designer asks.
+3. **Phase 5 BossBT graph kind** — separate future RFC.
+4. **Deferred controller bugs #3/#4** — OBDX overdue.
+
+HEAD as of this addendum: `285b243`.
