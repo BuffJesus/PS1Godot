@@ -554,3 +554,98 @@ separate future RFC) all sit downstream of either a second
 boss or a longer authoring-tooling lift.
 
 HEAD as of this addendum: `111a480`.
+
+## 2026-05-29 increment — Combat framework Phase 4 first slice
+
+PS1Encounter composite node landed in `e5e0510`. **First time
+authoring an encounter doesn't require touching Lua at all** —
+drop one Node3D, fill seven inspector fields, ship. The auto-
+generated Lua sidecar at export-time matches the hand-rolled
+fog gate's behavior bit-for-bit.
+
+### Phase 4 RFC vs what shipped
+
+The RFC explicitly gates Phase 4 on a *second* boss existing,
+to extract composite-node shape from real needs rather than
+speculate. We don't have a second boss yet. Shipping anyway
+because the user explicitly asked for Phase 4; risk mitigated
+by:
+
+- **Dropping `FogWall` and `on_enter_extra` fields** from the
+  RFC's PS1Encounter table — neither is exercised by boss_smoke,
+  so we can't validate them. Both are additive when a real
+  encounter demands them. The `Phases 1-3 Lua surface (RFC §L1
+  + §L2 + §L3)` is already complete and the composite node
+  lowers TO that surface, so we have nothing speculative on
+  the Lua side.
+- **Doctor lints deferred to next slice.** Needs new
+  `data.Encounters` SceneData plumbing — orthogonal to the
+  composite-node delivery, and the RFC's §L5 rows 4/5/7
+  benefit from sitting on real PS1Encounter usage data.
+- **PS1StatBar deferred.** Needs `UI.BindStatBars` engine
+  infra that we never shipped in Phase 1 (we shipped the
+  imperative `UI.UpdateStatBar` only). PS1StatBar's auto-emit
+  would need either an engine pre-update hook for `TickBars`
+  or per-entity Lua source rewriting at export. Both are
+  bigger lifts than the composite node itself; defer to a
+  Phase 4.5 slice if/when the demand materializes.
+
+### Migration to PS1Encounter
+
+| Before | After |
+|---|---|
+| `FogGateTrigger` PS1TriggerBox node + 37-line `boss_smoke_fog_gate.lua` | One `FogGate` PS1Encounter node with 7 inspector fields |
+
+The .lua file is deleted; export auto-generates an equivalent
+`<auto>/encounter_FogGate.lua` injected as a synthetic
+LuaFileRecord. Runtime sees no difference — same trigger box,
+same script callbacks, same Encounter.new{...} invocation.
+
+### Pre-existing scene bug discovered & reconciled
+
+The old `FogGateTrigger` .tscn had `Size = Vector3(3, 1.5,
+0.3)` but PS1TriggerBox's property is `HalfExtents`, not
+`Size` — the line was dead. Trigger ran at default
+HalfExtents = (1, 1, 1) the whole time. The new PS1Encounter
+node preserves the actual runtime behavior (HalfExtents =
+(1, 1, 1)), not the dead authored intent. F5 should be
+unchanged.
+
+### F5-verify-after-Godot-editor-restart
+
+The new PS1Encounter.cs needs Godot to scan + assign a .uid
+to it. Process:
+
+1. Open Godot editor with the project.
+2. Editor scans the new C# file, generates
+   `PS1Encounter.cs.uid` and rebuilds the C# assembly.
+3. Load boss_smoke.tscn — the FogGate node should show its
+   PS1Encounter properties in the inspector.
+4. F5/Run-on-PSX: export should log
+   `[PS1Godot] Encounter 'FogGate' (id='smoke_boss'):
+   AABB=[...] triggerZRaw=-2048 hpCanvas='boss_hp' luaIdx=N`.
+5. Encounter behavior identical to pre-migration: enter the
+   AABB → music + HP bar reveal + boss wakes; retreat with
+   boss alive → snap-back; kill boss → walk out freely.
+
+If the export logs `BossHPCanvas '..' is not a PS1UICanvas`
+or similar, the NodePath in the .tscn might need
+re-resolution after the editor reload.
+
+### Next-session candidates (refreshed)
+
+1. **F5 verify Phase 1+2+3+4 stack.** All four phases ship a
+   change to boss_smoke's behavior path; verify the
+   composition end-to-end.
+2. **Doctor lints for PS1Encounter** — Phase 4 second slice.
+   RFC §L5 rows 4/5/7. Needs data.Encounters SceneData
+   plumbing.
+3. **PS1StatBar composite + UI.BindStatBars** — Phase 4.5.
+   Bigger lift (engine pre-update hook or export-time Lua
+   rewriting). Defer until demand exists.
+4. **Combat framework Phase 5** — `BossBT` graph kind. RFC
+   says "separate future RFC."
+5. **Deferred controller-required Bugs #3/#4** — OBDX hardware
+   overdue.
+
+HEAD as of this addendum: `e5e0510`.
