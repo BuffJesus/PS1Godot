@@ -740,6 +740,17 @@ public sealed class SceneData
     // Godot scene tree from the validator pass.
     public List<EncounterRecord> Encounters { get; } = new();
 
+    // Combat-framework Phase 4.5: PS1StatBar's (TrackedEntity name,
+    // TrackedStat) bindings collected from the scene. Editor-only —
+    // the bars themselves lower to PS1UIElement records in
+    // UICanvases.Elements, which is what the runtime reads. This set
+    // exists so CheckStatsWithoutHud can verify every PS1Stats-bearing
+    // entity has at least one bar pointing at its "hp" stat without
+    // walking the Godot tree from the validator pass. Tuple shape:
+    // (entityNodeName, statKey) where statKey is "hp" / "stamina" /
+    // "mana" (case-sensitive, lowercased).
+    public HashSet<(string EntityName, string Stat)> StatBarTargets { get; } = new();
+
     // v28+: scene-wide instrument bank. Each Instruments entry owns a
     // contiguous slice of Regions (firstRegionIndex / regionCount).
     // Each DrumKits entry owns a contiguous slice of DrumMappings.

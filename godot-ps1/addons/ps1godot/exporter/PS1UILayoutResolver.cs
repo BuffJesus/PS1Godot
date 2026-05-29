@@ -104,6 +104,15 @@ public static class PS1UILayoutResolver
                 // Silently skip here so it doesn't trip the "unknown widget"
                 // warning below.
                 break;
+            case PS1StatBar sb:
+                // Composite stat bar (RFC §L4 Phase 4.5). Lowers to 2-3
+                // synthetic PS1UIElement instances using the `<Name>_bg` /
+                // `<Name>_fill` (+ optional `_label`) convention. Synthetic
+                // elements participate in the same UIElementRecord emission
+                // downstream so authored bars and composite-emitted bars
+                // are indistinguishable at runtime.
+                EmitStatBar(sb, output);
+                break;
             default:
                 GD.PushWarning($"[PS1Godot] PS1UICanvas '{_canvas.Name}' has child '{child.Name}' " +
                                $"of type {child.GetType().Name} — not a PS1 UI widget, ignored.");
@@ -385,6 +394,68 @@ public static class PS1UILayoutResolver
             }
         }
         return output;
+    }
+
+    // PS1StatBar (Phase 4.5) lowering. Two Box elements + optional Text:
+    //   - `<name>_bg`   at (X-Padding, Y-Padding, W+2P, H+2P), BGColor.
+    //   - `<name>_fill` at (X, Y, W, H), FillColor.
+    //   - `<name>_label` at (X, Y) if Label is non-empty.
+    //
+    // Synthesizes PS1UIElement instances rather than UIElementRecords
+    // directly so the downstream EmitUICanvas path handles
+    // color/text/theme resolution uniformly. Same `<name>_bg` /
+    // `<name>_fill` suffix the existing combat lints check, so a
+    // composite-emitted bar lints against the same rules as a hand-
+    // authored one.
+    private static void EmitStatBar(PS1StatBar sb, List<Placed> output)
+    {
+        string baseName = string.IsNullOrWhiteSpace(sb.ElementName)
+            ? sb.Name : sb.ElementName;
+        int fX = sb.X, fY = sb.Y, fW = sb.Width, fH = sb.Height;
+        int p = sb.Padding;
+
+        var bg = new PS1UIElement
+        {
+            Name = baseName + "_bg",
+            ElementName = baseName + "_bg",
+            Type = PS1UIElementType.Box,
+            VisibleOnLoad = true,
+            X = fX - p, Y = fY - p, Width = fW + 2 * p, Height = fH + 2 * p,
+            Color = sb.BGColor,
+            ThemeSlot = PS1UIThemeSlot.Custom,
+        };
+        output.Add(new Placed(bg, bg.X, bg.Y, bg.Width, bg.Height));
+
+        var fill = new PS1UIElement
+        {
+            Name = baseName + "_fill",
+            ElementName = baseName + "_fill",
+            Type = PS1UIElementType.Box,
+            VisibleOnLoad = true,
+            X = fX, Y = fY, Width = fW, Height = fH,
+            Color = sb.FillColor,
+            ThemeSlot = PS1UIThemeSlot.Custom,
+        };
+        output.Add(new Placed(fill, fill.X, fill.Y, fill.Width, fill.Height));
+
+        if (!string.IsNullOrEmpty(sb.Label))
+        {
+            // Label overlays the fill at the same top-left. Width matches
+            // the fill so HAlign-center (the runtime default the fill
+            // alignment honors) ends up centered over the bar.
+            var label = new PS1UIElement
+            {
+                Name = baseName + "_label",
+                ElementName = baseName + "_label",
+                Type = PS1UIElementType.Text,
+                VisibleOnLoad = true,
+                X = fX, Y = fY, Width = fW, Height = fH,
+                Color = sb.LabelColor,
+                Text = sb.Label,
+                ThemeSlot = PS1UIThemeSlot.Custom,
+            };
+            output.Add(new Placed(label, label.X, label.Y, label.Width, label.Height));
+        }
     }
 
     // Anchor resolution against the PSX 320×240 reference rect, given an

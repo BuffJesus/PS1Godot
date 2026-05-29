@@ -33,6 +33,7 @@ public static class CombatValidationReport
         warnings += CheckEncounterIdCollision(data, sceneIndex, offenderSink);
         warnings += CheckEncounterWithoutBoss(data, sceneIndex, offenderSink);
         warnings += CheckBossMissingScript(data, sceneIndex, offenderSink);
+        warnings += CheckStatsWithoutHud(data, sceneIndex, offenderSink);
         return warnings;
     }
 
@@ -421,6 +422,46 @@ public static class CombatValidationReport
         if (warnings > 0)
         {
             GD.Print($"[PS1Godot]   Combat lint scene[{sceneIndex}]: {warnings} boss(es) missing PS1Lua script.");
+        }
+        return warnings;
+    }
+
+    // RFC §L5 row 9 (final) — "Stats without HUD." Any entity with
+    // PS1Stats.MaxHP > 0 should have a corresponding PS1StatBar with
+    // TrackedStat = "hp" pointing at it. Without the bar, hits land
+    // but the player has no feedback for the boss's HP — invisible
+    // damage on an invisible health pool.
+    //
+    // Info tier (per RFC) because there are legitimate cases: a
+    // non-tracked NPC that takes damage for scripted reasons but
+    // doesn't need a bar, or a hidden HP pool used as a script timer.
+    // Hand-rolled `<name>_bg`/`<name>_fill` Box pairs from before the
+    // PS1StatBar composite node existed don't count for this check —
+    // the suggestion is to migrate them.
+    private static int CheckStatsWithoutHud(
+        SceneData data, int sceneIndex,
+        List<(string Name, string Reason)>? offenderSink)
+    {
+        int warnings = 0;
+        foreach (var stats in data.Stats)
+        {
+            if (stats.MaxHP <= 0) continue;
+
+            string entName = (stats.EntityIndex >= 0 &&
+                              stats.EntityIndex < data.Objects.Count)
+                ? (string)data.Objects[stats.EntityIndex].Node.Name
+                : $"entity[{stats.EntityIndex}]";
+
+            if (data.StatBarTargets.Contains((entName, "hp"))) continue;
+
+            string msg = $"has PS1Stats (MaxHP={stats.MaxHP}) but no PS1StatBar with TrackedStat='hp' points at it — hits land without on-screen feedback.";
+            GD.Print($"[CombatLint] scene_{sceneIndex} {entName}: {msg}");
+            offenderSink?.Add((entName, "PS1Stats with MaxHP > 0 but no PS1StatBar tracks it — invisible HP pool"));
+            warnings++;
+        }
+        if (warnings > 0)
+        {
+            GD.Print($"[PS1Godot]   Combat lint scene[{sceneIndex}]: {warnings} stats-bearing entity(ies) with no PS1StatBar.");
         }
         return warnings;
     }

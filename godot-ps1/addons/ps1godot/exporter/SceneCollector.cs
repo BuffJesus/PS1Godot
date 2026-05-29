@@ -917,6 +917,13 @@ public static class SceneCollector
 
         var theme = canvas.Theme;
         var elements = new System.Collections.Generic.List<UIElementRecord>();
+        // PS1StatBar (Phase 4.5) target registration. Walk the canvas's
+        // children for PS1StatBar nodes, resolve each TrackedEntity
+        // NodePath → node name, push to data.StatBarTargets. The
+        // resolver itself emits the synthetic PS1UIElement instances
+        // for bg/fill/label; this pass only collects the binding
+        // metadata the Doctor's "Stats without HUD" lint reads.
+        CollectStatBarTargets(canvas, data);
         // Walk through layout containers (HBox/VBox/SizeBox/Overlay/Spacer)
         // and emit a flat list of (PS1UIElement, absolute-X/Y/W/H) tuples.
         // Container nesting is purely an authoring convenience; the
@@ -1034,6 +1041,28 @@ public static class SceneCollector
             }
             GD.Print($"[PS1Godot] Loading screen detected: '{name}' " +
                      $"({elements.Count} elements, progress bar: {(hasProgressBar ? "yes" : "missing")}).");
+        }
+    }
+
+    // Walk a PS1UICanvas's children for PS1StatBar nodes, resolve each
+    // bar's TrackedEntity NodePath → node name, and push to
+    // data.StatBarTargets. The set's (entityName, stat) tuples feed
+    // CombatValidationReport.CheckStatsWithoutHud — it's editor-only
+    // metadata that never reaches the splashpack. Only direct children
+    // are walked, matching the layout-resolver scope (a StatBar nested
+    // inside an HBox isn't supported authoring today, and the layout
+    // resolver's own behavior would need an extension first).
+    private static void CollectStatBarTargets(PS1UICanvas canvas, SceneData data)
+    {
+        foreach (var child in canvas.GetChildren())
+        {
+            if (child is not PS1StatBar sb) continue;
+            if (sb.TrackedEntity == null || sb.TrackedEntity.IsEmpty) continue;
+            var ent = sb.GetNodeOrNull(sb.TrackedEntity);
+            if (ent == null) continue;
+            string statKey = (sb.TrackedStat ?? "hp").Trim().ToLowerInvariant();
+            if (statKey != "hp" && statKey != "stamina" && statKey != "mana") continue;
+            data.StatBarTargets.Add(((string)ent.Name, statKey));
         }
     }
 

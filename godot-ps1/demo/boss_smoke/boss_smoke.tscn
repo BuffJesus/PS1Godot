@@ -24,6 +24,7 @@
 [ext_resource type="Material" path="res://demo/boss_smoke/preview_dim.tres" id="10_preview_mat"]
 [ext_resource type="Script" uid="uid://fctvwq3jxihi" path="res://addons/ps1godot/nodes/PS1Sky.cs" id="11_sky"]
 [ext_resource type="Texture2D" uid="uid://cgngyr38qan3b" path="res://assets/monitor/textures/sky_stars.png" id="12_sky_tex"]
+[ext_resource type="Script" path="res://addons/ps1godot/nodes/PS1StatBar.cs" id="13_statbar"]
 
 [sub_resource type="PlaneMesh" id="floor_mesh"]
 size = Vector2(30, 30)
@@ -178,25 +179,18 @@ CanvasName = "boss_hp"
 VisibleOnLoad = false
 Residency = 0
 
-[node name="BG" type="Node" parent="BossHPCanvas"]
-script = ExtResource("6_uiel")
-ElementName = "BG"
-Type = 1
-X = 16
-Y = 16
-Width = 288
-Height = 12
-Color = Color(0.08, 0.08, 0.08, 1)
-
-[node name="fill" type="Node" parent="BossHPCanvas"]
-script = ExtResource("6_uiel")
-ElementName = "fill"
-Type = 1
+[node name="BossHPBar" type="Node" parent="BossHPCanvas"]
+script = ExtResource("13_statbar")
+ElementName = "boss_hp"
 X = 20
 Y = 20
 Width = 280
 Height = 4
-Color = Color(0.78, 0.16, 0.16, 1)
+Padding = 4
+FillColor = Color(0.78, 0.16, 0.16, 1)
+BGColor = Color(0.08, 0.08, 0.08, 1)
+TrackedEntity = NodePath("../../Boss")
+TrackedStat = "hp"
 
 [node name="Label" type="Node" parent="BossHPCanvas"]
 script = ExtResource("6_uiel")
@@ -215,45 +209,31 @@ CanvasName = "player_hp"
 VisibleOnLoad = true
 Residency = 0
 
-[node name="hp_bg" type="Node" parent="PlayerHPCanvas"]
-script = ExtResource("6_uiel")
-ElementName = "hp_bg"
-Type = 1
-X = 16
-Y = 200
-Width = 104
-Height = 8
-Color = Color(0.08, 0.08, 0.08, 1)
-
-[node name="hp_fill" type="Node" parent="PlayerHPCanvas"]
-script = ExtResource("6_uiel")
-ElementName = "hp_fill"
-Type = 1
+[node name="PlayerHPBar" type="Node" parent="PlayerHPCanvas"]
+script = ExtResource("13_statbar")
+ElementName = "hp"
 X = 18
 Y = 202
 Width = 100
 Height = 4
-Color = Color(0.24, 0.78, 0.24, 1)
+Padding = 2
+FillColor = Color(0.24, 0.78, 0.24, 1)
+BGColor = Color(0.08, 0.08, 0.08, 1)
+TrackedEntity = NodePath("../../Player/Avatar")
+TrackedStat = "hp"
 
-[node name="stamina_bg" type="Node" parent="PlayerHPCanvas"]
-script = ExtResource("6_uiel")
-ElementName = "stamina_bg"
-Type = 1
-X = 16
-Y = 212
-Width = 104
-Height = 8
-Color = Color(0.08, 0.08, 0.08, 1)
-
-[node name="stamina_fill" type="Node" parent="PlayerHPCanvas"]
-script = ExtResource("6_uiel")
-ElementName = "stamina_fill"
-Type = 1
+[node name="PlayerStaminaBar" type="Node" parent="PlayerHPCanvas"]
+script = ExtResource("13_statbar")
+ElementName = "stamina"
 X = 18
 Y = 214
 Width = 100
 Height = 4
-Color = Color(0.78, 0.78, 0.24, 1)
+Padding = 2
+FillColor = Color(0.78, 0.78, 0.24, 1)
+BGColor = Color(0.08, 0.08, 0.08, 1)
+TrackedEntity = NodePath("../../Player/Avatar")
+TrackedStat = "stamina"
 
 ; --- First-run controls overlay (dismissed by Cross in player script) ---
 

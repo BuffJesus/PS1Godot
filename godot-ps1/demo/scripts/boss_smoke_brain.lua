@@ -33,8 +33,10 @@ local boss = Combat.MeleeBoss{
     iframes              = 6,
     iframes_phase_change = 60,
 
+    -- hp_element matches what the PS1StatBar in BossHPCanvas emits:
+    -- ElementName="boss_hp" lowers to "boss_hp_bg" + "boss_hp_fill".
     hp_canvas  = "boss_hp",
-    hp_element = "fill",
+    hp_element = "boss_hp_fill",
 
     -- Game-feel (state machine itself is silent).
     on_tell = function() Camera.ShakeRaw(82, 4) end,
