@@ -1114,3 +1114,139 @@ both fully shipped, all sub-slices included.**
    `project_obdx_eta`.
 
 HEAD as of this addendum: `d5251f4`.
+
+## 2026-05-29 increment — boss_smoke_brain migrated to BossBT graph
+
+The end-to-end proof case for the combat-framework's full
+inspector → graph → Lua → engine chain landed in `008259b`.
+boss_smoke_brain.lua dropped from 74 → 23 lines (a 90%
+reduction from the pre-framework 237).
+
+### What moved
+
+- **boss_smoke_bossbt.tres** (new) — real BossBT graph
+  encoding all of boss_smoke's tuning. One `bossbt_config`
+  carrying 17 fields, one `bossbt_phase` (hp_ratio=0.5
+  with the phase-2 shake callback).
+- **boss_smoke_bossbt.lua** (new placeholder) —
+  overwritten on every export by
+  `SceneCollector.RecompileSiblingGraphIfPresent`. Header
+  comment explicitly says DO NOT EDIT.
+- **boss_smoke.tscn** — `UserScripts` array on
+  BossSmoke now includes the compiled `.lua`, so the
+  chunk runs at scene init and populates
+  `_G.bossbt_boss_smoke_bossbt` before any entity's
+  onCreate.
+- **boss_smoke_brain.lua** — 74 → 23 lines. The 23 are
+  just lifecycle dispatch + a single
+  `Combat.MeleeBoss(_G.bossbt_boss_smoke_bossbt)` line.
+
+### Compiler extension required
+
+BossBT MVP shipped with 13 config slots. boss_smoke's
+tuning uses 17 — `swing_y_below` / `swing_y_above`
+(asymmetric AABB to keep out-of-arena players safe) +
+`iframes` / `iframes_phase_change` (per-hit + phase
+transition invuln). **APPENDED slots 13-16** to
+`bossbt_config` (preserves slot ordering, so existing
+`.tres` including the sample keeps compiling):
+
+- `CompileBossBt` adds four `EmitBossBtConfigField` calls
+  for the new numeric fields. Empty → skip emission per
+  the existing pattern.
+- Editor `s_kindPayloadLabels` + `BuildVisualBody` gain
+  four more LineEdits with hints documenting the
+  default-on-blank behavior.
+
+### Full delivery chain runs end-to-end (when F5 fires)
+
+1. Export pass: `RecompileSiblingGraphIfPresent` reads
+   `boss_smoke_bossbt.tres`, compiles via
+   `PS1GraphCompiler.Compile("bossbt")`, overwrites
+   `boss_smoke_bossbt.lua` with the table literal.
+2. The compiled `.lua` rides into the splashpack via
+   `UserScripts`.
+3. psxsplash's LoadLuaFile loop pcalls each chunk's
+   top-level, registering `_G.bossbt_boss_smoke_bossbt`.
+4. Per-script env fallback (`__index = _G` from
+   `lua.cpp:633-641`) makes the global visible to
+   `boss_smoke_brain.lua`.
+5. Brain's `Combat.MeleeBoss(_G.bossbt_boss_smoke_bossbt)`
+   constructs the MeleeBoss instance.
+6. MeleeBoss auto-binds via `UI.BindStatBars` on first
+   update (L3 v2). Engine ticks bars + state machine
+   from there.
+
+### boss_smoke shrink scorecard — final-final
+
+| File              | Pre-framework | Post-this-commit |
+|-------------------|---------------|------------------|
+| brain.lua         | 237           | **23** (-90%)    |
+| fog_gate.lua      | 72            | 0 (deleted)      |
+| player.lua hud-bar code | 15 lines | 0                |
+| .tscn HUD nodes   | 6 UIElements  | 3 PS1StatBars    |
+| .tscn FogGate     | TriggerBox + lua | PS1Encounter  |
+| brain config      | inline literal | BossBT graph    |
+
+The 23 surviving brain lines are lifecycle dispatch only.
+Every tuning value lives in the graph; every authoring
+decision is inspector-visible.
+
+### Combat framework session totals (2026-05-29 — truly final)
+
+| Slice | Commit | Delivery |
+|---|---|---|
+| Phase 1   | 74074b6 | Combat + UI.UpdateStatBar embedded |
+| Phase 2   | c58cb90 | Combat.MeleeBoss state machine |
+| Phase 3   | 111a480 | Encounter module + MeleeBoss binding |
+| Phase 4-A | e5e0510 | PS1Encounter composite node |
+| Phase 4-B | 285b243 | 4 encounter Doctor lints |
+| Phase 4.5 | 3e49577 | PS1StatBar composite + L5 #9 lint |
+| L3 v2     | 7afc244 | UI.BindStatBars auto-tick |
+| Phase 5-A | 23f8586 | BossBT graph kind compiler |
+| Phase 5-B | d5251f4 | BossBT editor UI |
+| Migration | 008259b | boss_smoke_brain → BossBT graph |
+
+**Ten feat commits**. Combat-framework RFC + Phase 5 RFC +
+the migration proof case are all fully delivered.
+
+### F5 verification list when home
+
+When the user gets home and can run Godot + F5:
+
+1. **Open the project**, let Godot scan + generate
+   `.uid` for `PS1Encounter.cs` / `PS1StatBar.cs`. Restart
+   the editor if the existing scene shows scripts as
+   unresolved.
+2. **Load `boss_smoke.tscn`**. Verify the inspector for:
+   - `FogGate` shows PS1Encounter properties (EncounterId
+     = "smoke_boss", BossEntity = ../Boss, etc.).
+   - `BossHPCanvas/BossHPBar`, `PlayerHPCanvas/PlayerHPBar`,
+     `PlayerHPCanvas/PlayerStaminaBar` show PS1StatBar
+     properties.
+3. **Open the PS1Graph dock**, load
+   `demo/scripts/boss_smoke_bossbt.tres`. Verify both
+   nodes render with the BossBT category tint
+   (muted crimson) + the LineEdits show their values.
+4. **F5 / Run on PSX**. Expected log lines:
+   - `[PS1Godot] Encounter 'FogGate' (id='smoke_boss')`.
+   - `[PS1Godot] Auto-recompiled PS1Graph:
+     '.../boss_smoke_bossbt.tres' →
+     '.../boss_smoke_bossbt.lua'`.
+   - No `[CombatLint]` errors (warnings on the Label
+     UIElement vs PS1StatBar are expected — the boss bar's
+     "BOSS" Label stays as a sibling UIElement).
+5. **In-game**: walk through fog gate → music + HP bar
+   reveal + boss wakes; attack → HP bar drops; reach 50%
+   HP → phase-2 cutscene shake (`Camera.ShakeRaw(900,
+   30)` from the graph's phase on_enter); kill boss →
+   death cleanup, HP bar hides, gate opens.
+
+If anything fails at step 4 (compile error in the
+generated `boss_smoke_bossbt.lua`) the most likely
+suspect is the EmitBossBtConfigField number parser
+mis-handling one of the .tres payload strings. Read the
+generated `.lua` to find the `nil --[[ ... ]]` line; it
+names the bad payload.
+
+HEAD as of this addendum: `008259b`.
