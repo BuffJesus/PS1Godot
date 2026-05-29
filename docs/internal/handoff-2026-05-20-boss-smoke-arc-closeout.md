@@ -268,3 +268,45 @@ already in the existing memories.
 > What next — pick a loading mechanism and ship Phase 1, more
 > Doctor lints (cheap), or the deferred controller-required
 > Bugs #3/#4 (OBDX ETA May 22-25)?"
+
+## 2026-05-29 increment — 2 more Doctor lints shipped
+
+Picked up the "more Doctor lints" path from the suggested
+opener. Two checks landed in `60970a6`, both targeting the
+hand-authored `*_bg` / `*_fill` UI-element pairs from the
+boss_smoke demo (which the deferred PS1StatBar composite
+node will eventually emit identically — heuristic stays
+load-bearing across both authoring paths):
+
+- **RFC §L5 row 3 — Bar fill exceeds BG** (Warning). Per-canvas
+  pair lookup by name suffix; AABB containment check. Fires when
+  the fill rect escapes the bg rect on any side.
+- **RFC §L5 row 9 — Paired bars both near-black** (Info). Same
+  pairing infra; warns when both colors have RGB sum < 32 (PSX
+  framebuffer loses sub-step contrast — black-on-black is dead).
+
+Both produce 0 warnings on the existing demo (hp_fill inset 2px
+inside hp_bg; bg color sum 60 is above the near-black threshold).
+dotnet build clean (0 errors, 6 pre-existing warnings unchanged).
+**4 of 9 RFC §L5 checks now shipped** (1cd625b, c0619d6, plus the
+two in 60970a6).
+
+Remaining cheap L5 candidates **all wait on the deferred
+PS1Encounter / PS1StatBar composite nodes**:
+
+- Stats without HUD — needs PS1StatBar to enumerate stat-bar refs
+- Encounter without boss — needs PS1Encounter.BossEntity
+- Encounter ID collision — needs PS1Encounter
+- Boss attack range > arena — needs PS1Encounter (or Lua parse)
+- Boss missing PS1Lua — needs PS1Encounter
+- Trigger position not authored — needs PS1Encounter
+
+So the next sensible move is **the loading-mechanism decision for
+Combat Lua modules** (Phase 1 of the framework RFC). After that,
+shipping `combat.lua` + `ui_bar.lua` unblocks the boss_smoke
+migration which is the proof case the RFC sequenced its plan
+around. Composite nodes (Phase 4) are still gated on a *second*
+boss existing to extract their shape from, per the RFC.
+
+HEAD as of this addendum: `60970a6`. Working tree otherwise
+matches the prior handoff state.
