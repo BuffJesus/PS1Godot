@@ -57,6 +57,7 @@ public static class PS1GraphCompiler
             "fsm"      => CompileFsm(resource, effectivePath),
             "quest"    => CompileQuest(resource, effectivePath),
             "bt"       => CompileBt(resource, effectivePath),
+            "bossbt"   => CompileBossBt(resource, effectivePath),
             _          => CompileUntyped(resource),
         };
     }
@@ -646,6 +647,217 @@ public static class PS1GraphCompiler
         sb.AppendLine("    },");
         sb.AppendLine("}");
         return sb.ToString();
+    }
+
+    // BossBT compile (RFC docs/internal/rfc/bossbt-graph-kind.md).
+    // Emits `_G.bossbt_<basename> = { ... }` consumable by
+    // Combat.MeleeBoss. Two node Kinds compose the table:
+    //
+    //   bossbt_config — one per graph (lowest-Id wins on duplicates).
+    //     Payload slots 0..12 are the base parameters; see the RFC
+    //     for the slot → field mapping.
+    //   bossbt_phase — zero or more, sorted by descending hp_ratio
+    //     in the output (highest threshold fires first as the boss
+    //     loses HP, matching the runtime's monotonic phase advance).
+    //
+    // Empty payloads are omitted entirely so Combat.MeleeBoss's
+    // effective(key) fallback runs naturally — authors set only the
+    // fields that differ from defaults / phase 0.
+    //
+    // Lua snippets in callback slots (on_tell, on_hit_land, on_death,
+    // phase on_enter) are wrapped in `function(self, entity, ...) end`
+    // matching the signatures Combat.MeleeBoss invokes them with.
+    // Empty snippets emit no entry — Combat.MeleeBoss's `if def.on_X
+    // then` guards short-circuit correctly.
+    private static string CompileBossBt(PS1GraphResource resource, string effectivePath)
+    {
+        var sb = new StringBuilder();
+        string pathLabel = string.IsNullOrEmpty(effectivePath) ? "(unsaved)" : effectivePath;
+        string basename = BasenameForGlobal(effectivePath);
+        sb.AppendLine($"-- Compiled from {pathLabel} (bossbt)");
+        sb.AppendLine($"-- {resource.Nodes.Count} node(s), {resource.Connections.Count} connection(s)");
+        sb.AppendLine($"-- Drive: local boss = Combat.MeleeBoss(_G.bossbt_{basename}); ");
+        sb.AppendLine($"-- then forward onUpdate / onDamage to boss:update / boss:handleDamage.");
+        sb.AppendLine();
+
+        // Pick the canonical config node — lowest-Id non-disabled
+        // bossbt_config. Multiple configs in one graph is an authoring
+        // mistake; warn but accept the lowest-Id one as canonical so
+        // the compile stays deterministic.
+        PS1GraphNode? configNode = null;
+        int configCount = 0;
+        foreach (var n in resource.Nodes)
+        {
+            if (n.Kind != "bossbt_config" || n.IsDisabled) continue;
+            configCount++;
+            if (configNode == null || n.Id < configNode.Id) configNode = n;
+        }
+        if (configCount > 1)
+        {
+            sb.AppendLine($"-- WARNING: {configCount} bossbt_config nodes; using lowest-Id (n{configNode!.Id}). Delete the extras.");
+        }
+
+        // Phase nodes — sorted by descending hp_ratio. Phases with a
+        // missing / unparseable hp_ratio sort to the end (after all
+        // numeric ones) and emit with `hp_ratio = nil` so the runtime
+        // skips them. That keeps a half-authored graph from breaking
+        // the compile.
+        var phaseNodes = new List<(PS1GraphNode Node, double HpRatio, bool HasRatio)>();
+        foreach (var n in resource.Nodes)
+        {
+            if (n.Kind != "bossbt_phase" || n.IsDisabled) continue;
+            string raw = n.GetPayload(0);
+            if (double.TryParse(raw, System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out double r))
+            {
+                phaseNodes.Add((n, r, true));
+            }
+            else
+            {
+                phaseNodes.Add((n, 0, false));
+            }
+        }
+        phaseNodes.Sort((a, b) =>
+        {
+            // Has-ratio entries sort before missing-ratio entries.
+            if (a.HasRatio != b.HasRatio) return a.HasRatio ? -1 : 1;
+            // Among has-ratio, descending. Equal ratios fall back to
+            // Id-ascending for determinism.
+            int cmp = b.HpRatio.CompareTo(a.HpRatio);
+            if (cmp != 0) return cmp;
+            return a.Node.Id.CompareTo(b.Node.Id);
+        });
+
+        sb.AppendLine($"_G.bossbt_{basename} = {{");
+
+        if (configNode != null)
+        {
+            // Slot → field map. Each entry is (payload index, field
+            // name, type). String fields emit as quoted; number/int
+            // fields emit verbatim after a parse + format pass so
+            // garbage strings don't crash the runtime parse.
+            EmitBossBtConfigField(sb, configNode, 0,  "encounter_id",      isString: true);
+            EmitBossBtConfigField(sb, configNode, 1,  "aggro_radius",      isString: false);
+            EmitBossBtConfigField(sb, configNode, 2,  "attack_radius",     isString: false);
+            EmitBossBtConfigField(sb, configNode, 3,  "tell_frames",       isString: false);
+            EmitBossBtConfigField(sb, configNode, 4,  "hit_frames",        isString: false);
+            EmitBossBtConfigField(sb, configNode, 5,  "recover_frames",    isString: false);
+            EmitBossBtConfigField(sb, configNode, 6,  "swing_damage",      isString: false);
+            EmitBossBtConfigField(sb, configNode, 7,  "swing_range",       isString: false);
+            EmitBossBtConfigField(sb, configNode, 8,  "hp_canvas",         isString: true);
+            EmitBossBtConfigField(sb, configNode, 9,  "hp_element",        isString: true);
+
+            // Callback snippets wrap in function(self, entity, ...)
+            // signatures matching Combat.MeleeBoss's invocation sites.
+            EmitBossBtCallback(sb, configNode, 10, "on_tell",     "self, entity");
+            EmitBossBtCallback(sb, configNode, 11, "on_hit_land", "self, entity, hit, applied");
+            EmitBossBtCallback(sb, configNode, 12, "on_death",    "self, entity");
+        }
+        else if (resource.Nodes.Count > 0)
+        {
+            sb.AppendLine($"    -- WARNING: no bossbt_config node found. Add one.");
+        }
+
+        if (phaseNodes.Count > 0)
+        {
+            sb.AppendLine($"    phases = {{");
+            foreach (var p in phaseNodes)
+            {
+                sb.AppendLine($"        {{");
+                if (p.HasRatio)
+                {
+                    sb.AppendLine($"            hp_ratio = {p.HpRatio.ToString(System.Globalization.CultureInfo.InvariantCulture)},");
+                }
+                else
+                {
+                    sb.AppendLine($"            -- WARNING: n{p.Node.Id} has no hp_ratio; runtime will skip it.");
+                    sb.AppendLine($"            hp_ratio = nil,");
+                }
+                EmitBossBtConfigFieldIndented(sb, p.Node, 1, "tell_frames",    isString: false);
+                EmitBossBtConfigFieldIndented(sb, p.Node, 2, "recover_frames", isString: false);
+                EmitBossBtCallbackIndented(sb, p.Node, 3, "on_enter", "self, entity");
+                sb.AppendLine($"        }},");
+            }
+            sb.AppendLine($"    }},");
+        }
+
+        sb.AppendLine("}");
+        return sb.ToString();
+    }
+
+    // Emit one top-level config field with default 4-space indent.
+    // Skips entirely when the payload is empty so the runtime's
+    // effective(key) fallback runs naturally.
+    private static void EmitBossBtConfigField(StringBuilder sb, PS1GraphNode n,
+        int payloadIdx, string fieldName, bool isString)
+    {
+        string raw = n.GetPayload(payloadIdx);
+        if (string.IsNullOrEmpty(raw)) return;
+        if (isString)
+        {
+            sb.AppendLine($"    {fieldName} = {EscapeLuaString(raw)},");
+        }
+        else
+        {
+            // Number field — round-trip through double for safety so
+            // a garbage string doesn't ship as `aggro_radius = banana`.
+            // Comma keeps the table literal-valid even after a parse
+            // failure, but the lint logs the failure.
+            string emit = ParseLuaNumberOrFallback(raw, n.Id, fieldName);
+            sb.AppendLine($"    {fieldName} = {emit},");
+        }
+    }
+
+    // Same as EmitBossBtConfigField but indented for inside `phases = {{...}}`.
+    private static void EmitBossBtConfigFieldIndented(StringBuilder sb, PS1GraphNode n,
+        int payloadIdx, string fieldName, bool isString)
+    {
+        string raw = n.GetPayload(payloadIdx);
+        if (string.IsNullOrEmpty(raw)) return;
+        string emit = isString ? EscapeLuaString(raw) : ParseLuaNumberOrFallback(raw, n.Id, fieldName);
+        sb.AppendLine($"            {fieldName} = {emit},");
+    }
+
+    // Wrap a Lua snippet in `function(<params>) <snippet> end` and
+    // emit as a top-level field. Empty snippets skip entirely so the
+    // runtime's `if def.on_X then` guard short-circuits.
+    private static void EmitBossBtCallback(StringBuilder sb, PS1GraphNode n,
+        int payloadIdx, string fieldName, string paramList)
+    {
+        string snippet = n.GetPayload(payloadIdx);
+        if (string.IsNullOrWhiteSpace(snippet)) return;
+        sb.AppendLine($"    {fieldName} = function({paramList}) {snippet} end,");
+    }
+
+    // Same as EmitBossBtCallback but indented for inside phases.
+    private static void EmitBossBtCallbackIndented(StringBuilder sb, PS1GraphNode n,
+        int payloadIdx, string fieldName, string paramList)
+    {
+        string snippet = n.GetPayload(payloadIdx);
+        if (string.IsNullOrWhiteSpace(snippet)) return;
+        sb.AppendLine($"            {fieldName} = function({paramList}) {snippet} end,");
+    }
+
+    // Number-payload parse helper. Accepts integers and decimals
+    // (culture-invariant), rejects everything else with a noisy
+    // comment so a misauthored field doesn't ship as invalid Lua.
+    // Returns a string ready to drop verbatim into `<field> = <X>,`.
+    private static string ParseLuaNumberOrFallback(string raw, int nodeId, string fieldName)
+    {
+        if (int.TryParse(raw, System.Globalization.NumberStyles.Integer,
+            System.Globalization.CultureInfo.InvariantCulture, out int i))
+        {
+            return i.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+        if (double.TryParse(raw, System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture, out double d))
+        {
+            return d.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+        // Non-number string — emit a comment with the bad value so
+        // the author can find it in the compiled .lua, plus `nil` so
+        // the runtime sees an unset field.
+        return $"nil --[[ n{nodeId} {fieldName}: not a number, got '{raw}' ]]";
     }
 
     private static bool IsLuaIdentifier(string s)
