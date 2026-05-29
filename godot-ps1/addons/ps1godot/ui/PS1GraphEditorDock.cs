@@ -115,6 +115,8 @@ public partial class PS1GraphEditorDock : VBoxContainer
         new NodeKindEntry("bt_sequence",    "BT Sequence",      GraphKind: "bt"),
         new NodeKindEntry("bt_selector",    "BT Selector",      GraphKind: "bt"),
         new NodeKindEntry("bt_leaf",        "BT Leaf",          GraphKind: "bt"),
+        new NodeKindEntry("bossbt_config",  "Boss Config",      GraphKind: "bossbt"),
+        new NodeKindEntry("bossbt_phase",   "Boss Phase",       GraphKind: "bossbt"),
     };
 
     // Available graph kinds, surfaced when the author hits New.
@@ -128,6 +130,7 @@ public partial class PS1GraphEditorDock : VBoxContainer
         ("fsm",      "FSM (state machine)"),
         ("quest",    "Quest"),
         ("bt",       "Behavior Tree"),
+        ("bossbt",   "Boss BT (Combat.MeleeBoss config)"),
     };
 
     // Per-kind metadata for tooltips, palette categorisation, and the
@@ -149,6 +152,7 @@ public partial class PS1GraphEditorDock : VBoxContainer
         ["Quest"]    = new Color(0.85f, 0.60f, 0.30f),  // amber
         ["Untyped"]  = new Color(0.55f, 0.55f, 0.55f),  // grey
         ["Meta"]     = new Color(0.65f, 0.50f, 0.75f),  // muted purple
+        ["BossBT"]   = new Color(0.80f, 0.35f, 0.40f),  // muted crimson — souls boss vibe
     };
 
     // Per-kind payload-slot labels for the Node Details inspector
@@ -181,6 +185,29 @@ public partial class PS1GraphEditorDock : VBoxContainer
         ["bt_sequence"]    = new string[0],   // composite — no payloads
         ["bt_selector"]    = new string[0],
         ["bt_leaf"]        = new[] { "Lua snippet (return 'success' / 'failure' / 'running')" },
+        ["bossbt_config"]  = new[]
+        {
+            "encounter_id (Persist key prefix; pair with PS1Encounter)",
+            "aggro_radius (world units; e.g. 8)",
+            "attack_radius (world units; e.g. 2)",
+            "tell_frames (windup before swing; e.g. 30)",
+            "hit_frames (swing-active window; e.g. 12)",
+            "recover_frames (post-swing chase window; e.g. 30)",
+            "swing_damage (e.g. 18)",
+            "swing_range (world units; e.g. 2)",
+            "hp_canvas (PS1UICanvas name; e.g. boss_hp)",
+            "hp_element (PS1UIElement fill name; e.g. boss_hp_fill)",
+            "on_tell Lua (e.g. Camera.ShakeRaw(82, 4))",
+            "on_hit_land Lua (params: self, entity, hit, applied)",
+            "on_death Lua (e.g. Camera.LockOff())",
+        },
+        ["bossbt_phase"]   = new[]
+        {
+            "hp_ratio (0..1; e.g. 0.5 for half HP)",
+            "tell_frames override (optional; blank = base)",
+            "recover_frames override (optional; blank = base)",
+            "on_enter Lua (e.g. Camera.ShakeRaw(900, 30))",
+        },
     };
 
     // Corner-icon glyph table for the GraphNode title (UE port-plan
@@ -198,6 +225,8 @@ public partial class PS1GraphEditorDock : VBoxContainer
         ["sub_dialogue"]   = "↪",
         ["transition"]     = "→",
         ["outcome"]        = "🏁",
+        ["bossbt_config"]  = "⚔",
+        ["bossbt_phase"]   = "⚠",
     };
     private static readonly System.Collections.Generic.Dictionary<string, KindMeta> s_kindMeta = new()
     {
@@ -222,6 +251,8 @@ public partial class PS1GraphEditorDock : VBoxContainer
         ["bt_sequence"]    = new("BT",       "Behavior Tree Sequence: ticks children left-to-right. Stops + returns 'failure' on first failed child; returns 'running' if any child returns 'running' (resumes next tick); returns 'success' only if all children succeed."),
         ["bt_selector"]    = new("BT",       "Behavior Tree Selector (fallback): ticks children left-to-right. Stops + returns 'success' on first succeeded child; returns 'running' if any child returns 'running'; returns 'failure' only if all children fail."),
         ["bt_leaf"]        = new("BT",       "Behavior Tree Leaf: author-supplied Lua snippet that must return 'success', 'failure', or 'running'. Snippet receives `self` (the BT instance) as parameter. Use self._scratch to hold per-tick state."),
+        ["bossbt_config"]  = new("BossBT",   "Boss base config — one per BossBT graph. Compiles to the top-level Combat.MeleeBoss fields. Pair the encounter_id with a PS1Encounter node of the same id so the gate flag derives correctly. Empty payloads omitted from the compiled table (effective(key) fallback fills in)."),
+        ["bossbt_phase"]   = new("BossBT",   "Boss phase override — zero or more per graph. hp_ratio is the trigger threshold (0..1 of MaxHP). Phases sort by descending hp_ratio in the compiled output so highest threshold fires first as HP drops. Override fields blank = inherit from base config."),
     };
 
     // Slice-2 palette: per-pin-type colours. Picked to match common
@@ -1424,6 +1455,51 @@ public partial class PS1GraphEditorDock : VBoxContainer
                 // No SetSlot — pinless.
                 break;
             }
+            case "bossbt_config":
+            {
+                // BossBT base config (RFC docs/internal/rfc/bossbt-graph-kind.md).
+                // 13 payload slots → 13 LineEdits. No pins — phases are
+                // gathered by Kind, not by exec connections, so this
+                // node is purely a parameter carrier.
+                //
+                // Payload slot layout matches PS1GraphCompiler.CompileBossBt.
+                // Mismatched indices = silent compiler emission of the
+                // wrong field, so keep the order in lockstep with both
+                // s_kindPayloadLabels["bossbt_config"] and CompileBossBt.
+                g.AddChild(new Label { Text = "boss config (drive Combat.MeleeBoss)" });
+                EmitBossBtPayloadEdit(g, n, 0,  "encounter_id… (e.g. smoke_boss)");
+                EmitBossBtPayloadEdit(g, n, 1,  "aggro_radius (units, e.g. 8)");
+                EmitBossBtPayloadEdit(g, n, 2,  "attack_radius (units, e.g. 2)");
+                EmitBossBtPayloadEdit(g, n, 3,  "tell_frames (e.g. 30)");
+                EmitBossBtPayloadEdit(g, n, 4,  "hit_frames (e.g. 12)");
+                EmitBossBtPayloadEdit(g, n, 5,  "recover_frames (e.g. 30)");
+                EmitBossBtPayloadEdit(g, n, 6,  "swing_damage (e.g. 18)");
+                EmitBossBtPayloadEdit(g, n, 7,  "swing_range (units, e.g. 2)");
+                EmitBossBtPayloadEdit(g, n, 8,  "hp_canvas (e.g. boss_hp)");
+                EmitBossBtPayloadEdit(g, n, 9,  "hp_element (e.g. boss_hp_fill)");
+                EmitBossBtPayloadEdit(g, n, 10, "on_tell Lua…");
+                EmitBossBtPayloadEdit(g, n, 11, "on_hit_land Lua…");
+                EmitBossBtPayloadEdit(g, n, 12, "on_death Lua…");
+                break;
+            }
+            case "bossbt_phase":
+            {
+                // BossBT phase override (RFC). 4 payload slots → 4
+                // LineEdits. Pinless like the config node — phases are
+                // gathered by Kind and sorted by descending hp_ratio
+                // at compile, so no exec edges are needed.
+                //
+                // hp_ratio is the entry threshold (0..1 of MaxHP);
+                // tell_frames / recover_frames override the base
+                // config values; on_enter fires once when the phase
+                // becomes active.
+                g.AddChild(new Label { Text = "phase override" });
+                EmitBossBtPayloadEdit(g, n, 0, "hp_ratio (0..1, e.g. 0.5)");
+                EmitBossBtPayloadEdit(g, n, 1, "tell_frames override (blank = base)");
+                EmitBossBtPayloadEdit(g, n, 2, "recover_frames override (blank = base)");
+                EmitBossBtPayloadEdit(g, n, 3, "on_enter Lua…");
+                break;
+            }
             default:
             {
                 // Fallback: untyped + Payload as a plain label. Lets
@@ -1435,6 +1511,23 @@ public partial class PS1GraphEditorDock : VBoxContainer
                 break;
             }
         }
+    }
+
+    // Helper for BossBT config / phase node bodies — adds one LineEdit
+    // hooked to PS1GraphNode.SetPayload(payloadIdx, …). Used per payload
+    // slot in both cases to keep BuildVisualBody readable. No SetSlot
+    // call — BossBT nodes are pinless (config / phase data carriers
+    // gathered by Kind, not exec edges).
+    private static void EmitBossBtPayloadEdit(GraphNode g, PS1GraphNode n,
+        int payloadIdx, string placeholder)
+    {
+        var edit = new LineEdit
+        {
+            Text = n.GetPayload(payloadIdx),
+            PlaceholderText = placeholder,
+        };
+        edit.TextChanged += text => n.SetPayload(payloadIdx, text);
+        g.AddChild(edit);
     }
 
     private static string TitleFor(PS1GraphNode n) =>
