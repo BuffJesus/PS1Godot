@@ -1029,3 +1029,88 @@ nodes initially.
    `project_obdx_eta`.
 
 HEAD as of this addendum: `23f8586`.
+
+## 2026-05-29 increment — Phase 5 second slice (BossBT editor UI)
+
+The deferred chunk from Phase 5 first slice landed in
+`d5251f4`. Authors can now create + edit BossBT graphs
+in the PS1Graph editor dock — no .tres-by-hand needed.
+
+### What shipped
+
+- **Palette + meta wiring**: `s_kinds`, `s_graphKinds`,
+  `s_categoryTints` (new "BossBT" category in muted
+  crimson — souls boss vibe), `s_kindPayloadLabels`
+  (per-slot labels for the Node Details inspector),
+  `s_kindMeta` tooltips, `s_kindGlyphs` (⚔ for config,
+  ⚠ for phase).
+- **Body builders**: `BuildVisualBody` cases for
+  `bossbt_config` (13 LineEdits) and `bossbt_phase` (4
+  LineEdits). Both pinless — phases are gathered by Kind
+  not by exec edges. Shared `EmitBossBtPayloadEdit`
+  helper keeps both cases readable.
+- **Comment contract** flagged at each case: payload
+  index → field-name lockstep with CompileBossBt. A
+  drift here would silently emit fields into the wrong
+  slots.
+
+### Full delivery chain now end-to-end
+
+1. Author drops a BossBT `.tres` via the editor's New
+   button → Kind dropdown → Boss BT.
+2. Adds a Boss Config node + N Boss Phase nodes from the
+   palette, fills inspector LineEdits.
+3. Auto-recompile at export emits
+   `_G.bossbt_<basename>` to the sibling `.lua`.
+4. Brain script:
+   `local boss = Combat.MeleeBoss(_G.bossbt_<basename>)`.
+5. PS1Encounter (composite) pairs by id; bars wire via
+   PS1StatBar's TrackedEntity / TrackedStat fields.
+6. Doctor lints 9/9 verify the wiring at editor time.
+7. Engine ticks bars + state machine; runtime checks
+   active state via `Entity.IsActive` in UI.TickBars.
+
+**Inspector authoring → visual graph → Lua compile →
+engine ticks. No hand-rolled Lua boilerplate anywhere
+along the chain** (still legal — both paths
+interoperate).
+
+### Combat framework session totals (2026-05-29 — final-final)
+
+| Slice | Commit | Delivery |
+|---|---|---|
+| Phase 1   | 74074b6 | Combat + UI.UpdateStatBar embedded |
+| Phase 2   | c58cb90 | Combat.MeleeBoss state machine |
+| Phase 3   | 111a480 | Encounter module + MeleeBoss binding |
+| Phase 4-A | e5e0510 | PS1Encounter composite node |
+| Phase 4-B | 285b243 | 4 encounter Doctor lints |
+| Phase 4.5 | 3e49577 | PS1StatBar composite + L5 #9 lint |
+| L3 v2     | 7afc244 | UI.BindStatBars auto-tick |
+| Phase 5-A | 23f8586 | BossBT graph kind compiler |
+| Phase 5-B | d5251f4 | BossBT editor UI |
+
+**Nine feat commits. Combat-framework RFC + Phase 5 RFC
+both fully shipped, all sub-slices included.**
+
+### Next-session candidates (refreshed)
+
+1. **F5 verify the entire combat-framework stack** when
+   home. After Godot editor restart for new `.cs.uid`
+   generation:
+   - Run boss_smoke. Verify Phases 1+2+3+4-A+4-B+4.5+L3 v2
+     all work composed (bars + encounter + state machine
+     all driven by the framework, no hand-rolled per-frame
+     code in player.lua / brain.lua).
+   - Open the PS1Graph dock and create a `Boss BT` graph.
+     Drop a Boss Config + 1 Boss Phase. Save next to a
+     sibling `.lua`. F5 → verify compiled `_G.bossbt_*`
+     table shape matches `docs/internal/examples/sample_bossbt.tres`.
+2. **(Optional) Migrate boss_smoke_brain.lua to a real
+   BossBT graph as proof of the end-to-end chain.** The
+   brain becomes 3 lines that call `Combat.MeleeBoss(_G.bossbt_smoke)`.
+   Defer until F5 verify passes — this is the final demo
+   move, not infrastructure.
+3. **Deferred controller bugs #3/#4** — OBDX overdue per
+   `project_obdx_eta`.
+
+HEAD as of this addendum: `d5251f4`.
