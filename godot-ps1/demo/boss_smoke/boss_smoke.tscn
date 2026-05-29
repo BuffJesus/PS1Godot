@@ -54,6 +54,7 @@ PlayerRadius = 0.3
 MoveSpeed = 3
 JumpHeight = 1.2
 Gravity = 20
+UserScripts = Array[String](["res://demo/scripts/boss_smoke_bossbt.lua"])
 
 ; --- Skybox ---
 ; Full-screen quad drawn behind the world OT (Crash/Spyro pattern).

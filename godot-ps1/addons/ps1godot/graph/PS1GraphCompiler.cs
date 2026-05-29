@@ -752,6 +752,17 @@ public static class PS1GraphCompiler
             EmitBossBtCallback(sb, configNode, 10, "on_tell",     "self, entity");
             EmitBossBtCallback(sb, configNode, 11, "on_hit_land", "self, entity, hit, applied");
             EmitBossBtCallback(sb, configNode, 12, "on_death",    "self, entity");
+
+            // Advanced fields appended in slots 13-16 (Phase 5 second
+            // slice +) for the swing-AABB asymmetry + i-frame knobs
+            // boss_smoke's tuning needs. APPENDED rather than inlined
+            // into the base block above so existing .tres files
+            // (including docs/internal/examples/sample_bossbt.tres)
+            // keep compiling correctly without reordering slots.
+            EmitBossBtConfigField(sb, configNode, 13, "swing_y_below",         isString: false);
+            EmitBossBtConfigField(sb, configNode, 14, "swing_y_above",         isString: false);
+            EmitBossBtConfigField(sb, configNode, 15, "iframes",               isString: false);
+            EmitBossBtConfigField(sb, configNode, 16, "iframes_phase_change",  isString: false);
         }
         else if (resource.Nodes.Count > 0)
         {

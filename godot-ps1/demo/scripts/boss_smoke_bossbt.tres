@@ -1,0 +1,49 @@
+[gd_resource type="Resource" script_class="PS1GraphResource" format=3]
+
+[ext_resource type="Script" path="res://addons/ps1godot/graph/PS1GraphConnection.cs" id="1_conn"]
+[ext_resource type="Script" path="res://addons/ps1godot/graph/PS1GraphNode.cs" id="2_node"]
+[ext_resource type="Script" path="res://addons/ps1godot/graph/PS1GraphResource.cs" id="3_res"]
+
+[sub_resource type="Resource" id="cfg_node"]
+script = ExtResource("2_node")
+Id = 0
+Kind = "bossbt_config"
+Position = Vector2(-200, 0)
+Payloads = Array[String]([
+    "smoke_boss",
+    "8",
+    "2",
+    "30",
+    "12",
+    "30",
+    "18",
+    "2",
+    "boss_hp",
+    "boss_hp_fill",
+    "Camera.ShakeRaw(82, 4)",
+    "if applied > 0 then Camera.ShakeRaw(614, 14); Scene.PauseFor(4) end",
+    "Camera.ShakeRaw(1228, 30); Scene.PauseFor(12); Camera.LockOff()",
+    "1",
+    "2",
+    "6",
+    "60",
+])
+
+[sub_resource type="Resource" id="phase_node"]
+script = ExtResource("2_node")
+Id = 1
+Kind = "bossbt_phase"
+Position = Vector2(200, 0)
+Payloads = Array[String]([
+    "0.5",
+    "15",
+    "20",
+    "Camera.ShakeRaw(900, 30)",
+])
+
+[resource]
+script = ExtResource("3_res")
+Kind = "bossbt"
+Nodes = Array[ExtResource("2_node")]([SubResource("cfg_node"), SubResource("phase_node")])
+Connections = Array[ExtResource("1_conn")]([])
+NextNodeId = 2

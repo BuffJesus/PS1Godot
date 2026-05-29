@@ -200,6 +200,10 @@ public partial class PS1GraphEditorDock : VBoxContainer
             "on_tell Lua (e.g. Camera.ShakeRaw(82, 4))",
             "on_hit_land Lua (params: self, entity, hit, applied)",
             "on_death Lua (e.g. Camera.LockOff())",
+            "swing_y_below (vertical reach below attacker; blank = swing_range)",
+            "swing_y_above (vertical reach above attacker; blank = swing_range)",
+            "iframes (per-hit invuln frames; e.g. 6; blank = no iframes)",
+            "iframes_phase_change (long invuln during phase transition; e.g. 60)",
         },
         ["bossbt_phase"]   = new[]
         {
@@ -1480,6 +1484,14 @@ public partial class PS1GraphEditorDock : VBoxContainer
                 EmitBossBtPayloadEdit(g, n, 10, "on_tell Lua…");
                 EmitBossBtPayloadEdit(g, n, 11, "on_hit_land Lua…");
                 EmitBossBtPayloadEdit(g, n, 12, "on_death Lua…");
+                // Advanced fields (slots 13-16) — asymmetric swing AABB
+                // + i-frame knobs. Blank = library default (symmetric
+                // swing_range, no iframes). Appended slots so older
+                // .tres files still load + compile correctly.
+                EmitBossBtPayloadEdit(g, n, 13, "swing_y_below (blank = swing_range)");
+                EmitBossBtPayloadEdit(g, n, 14, "swing_y_above (blank = swing_range)");
+                EmitBossBtPayloadEdit(g, n, 15, "iframes per hit (e.g. 6)");
+                EmitBossBtPayloadEdit(g, n, 16, "iframes during phase change (e.g. 60)");
                 break;
             }
             case "bossbt_phase":
