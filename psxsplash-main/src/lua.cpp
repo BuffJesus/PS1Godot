@@ -584,6 +584,140 @@ void psxsplash::Lua::Init() {
     }
 }
 
+// Combat framework Phase 1 (RFC docs/internal/rfc/combat-framework.md
+// §L1 + §L3). Five helpers extracted from the eleven foot-guns the
+// boss_smoke encounter shipped on: distance helpers that avoid
+// FixedPoint.__mul's /4096 rescale (Bug #7), a melee swing that
+// anchors on the attacker and skips self by default (Bugs #5 + #11),
+// a chase step wrapper, and a stat-bar updater for the 90% case of
+// "set width = (cur/max) * authored width".
+//
+// Embedded as Lua source rather than C++ for the same reasons FSM/
+// Quest/BT are above: zero per-scene plumbing, no risk of an author
+// shipping a splashpack with a missing lib file. The Lua code below
+// references Entity / Vec3 / Physics / Stats / UI globals but those
+// resolve lazily at call time, not load time — so the installer is
+// safe to run before any scene script.
+//
+// HOWEVER: `UI = UI or {}` followed by `UI.UpdateStatBar = ...`
+// CAN'T run before LuaAPI::RegisterAll because RegisterAll does
+// `L.setGlobal("UI")` which clobbers any pre-existing UI table.
+// That's why this is a separate method from Init() — Init runs
+// from L.Reset() which happens before LuaAPI registration in
+// scenemanager.cpp:73 vs :86. InstallCombatLibrary is called after.
+void psxsplash::Lua::InstallCombatLibrary() {
+    auto L = m_state;
+    static const char kCombatLibSrc[] =
+        "Combat = Combat or {}\n"
+        // DistanceSqRaw — fp12² (matches *_RADIUS_SQ thresholds).
+        // (a - b)._raw bypasses the __mul rescale; result fits int32
+        // for distances up to ~46 world units (squared ~ 2.1G).
+        "function Combat.DistanceSqRaw(a, b)\n"
+        "    local dxRaw = (a.x - b.x)._raw\n"
+        "    local dzRaw = (a.z - b.z)._raw\n"
+        "    return dxRaw * dxRaw + dzRaw * dzRaw\n"
+        "end\n"
+        // InRange — units is a plain number; we square (units*4096)
+        // and compare. Same ~46-unit ceiling as DistanceSqRaw.
+        "function Combat.InRange(a, b, units)\n"
+        "    local fp = units * 4096\n"
+        "    return Combat.DistanceSqRaw(a, b) <= fp * fp\n"
+        "end\n"
+        // MeleeSwing — AABB centered on the attacker (Bug #11 fixed
+        // by construction: no more 'attack box at target position'
+        // = infinite reach). skip_self defaults true (Bug #5: boss
+        // self-damaged from its own swing). y_below/y_above default
+        // to `range` for a symmetric cube; override for asymmetric
+        // creature silhouettes (boss_smoke wants 1+2 e.g.). Returns
+        // hits list (each .applied annotated) or nil when empty so
+        // `if hits then ...` reads naturally.
+        "function Combat.MeleeSwing(args)\n"
+        "    local attacker = args.attacker\n"
+        "    if not attacker then return nil end\n"
+        "    local range  = args.range  or 2\n"
+        "    local damage = args.damage or 0\n"
+        "    local skip_self = args.skip_self\n"
+        "    if skip_self == nil then skip_self = true end\n"
+        "    local y_below = args.y_below or range\n"
+        "    local y_above = args.y_above or range\n"
+        "    local b = Entity.GetPosition(attacker)\n"
+        "    local minV = Vec3.new(b.x - range, b.y - y_below, b.z - range)\n"
+        "    local maxV = Vec3.new(b.x + range, b.y + y_above, b.z + range)\n"
+        "    local raw = Physics.OverlapBoxDetailed(minV, maxV)\n"
+        "    local hits = {}\n"
+        "    for i = 1, #raw do\n"
+        "        local h = raw[i]\n"
+        "        if (not skip_self) or h.object ~= attacker then\n"
+        "            local applied = Stats.DealDamage(h.object, damage, attacker)\n"
+        "            h.applied = applied\n"
+        "            hits[#hits + 1] = h\n"
+        "            if args.on_hit then args.on_hit(h, applied) end\n"
+        "        end\n"
+        "    end\n"
+        "    if #hits == 0 then\n"
+        "        if args.on_whiff then args.on_whiff() end\n"
+        "        return nil\n"
+        "    end\n"
+        "    return hits\n"
+        "end\n"
+        // ChaseStep — wraps `(d * speed) / 4096` so authors stop
+        // copy-pasting it (and forgetting to clear y to keep the
+        // chase on the XZ plane). speed_fp12 = 128 ≈ 0.03 units/
+        // frame, the boss_smoke phase-1 cadence.
+        "function Combat.ChaseStep(args)\n"
+        "    local self = args.self\n"
+        "    if not self then return end\n"
+        "    local dx = args.dx\n"
+        "    local dz = args.dz\n"
+        "    local speed = args.speed_fp12 or 128\n"
+        "    local p = Entity.GetPosition(self)\n"
+        "    Entity.SetPosition(self, Vec3.new(\n"
+        "        p.x + (dx * speed) / 4096,\n"
+        "        p.y,\n"
+        "        p.z + (dz * speed) / 4096))\n"
+        "end\n"
+        // UI.UpdateStatBar — collapse the four-line FindCanvas/
+        // FindElement/Get*/SetSize dance into one call. Width
+        // defaults to the element's authored width (read via
+        // UI.GetSize) so callers don't have to remember the magic
+        // number from their .tscn. Stat is "hp" | "stamina" | "mana".
+        "UI = UI or {}\n"
+        "function UI.UpdateStatBar(args)\n"
+        "    local canvas = UI.FindCanvas(args.canvas)\n"
+        "    if canvas < 0 then return end\n"
+        "    local el = UI.FindElement(canvas, args.element)\n"
+        "    if el < 0 then return end\n"
+        "    local stat = args.stat\n"
+        "    local cur, maxv = 0, 0\n"
+        "    if stat == \"hp\" then\n"
+        "        cur  = Stats.GetHP(args.entity)\n"
+        "        maxv = Stats.GetMaxHP(args.entity)\n"
+        "    elseif stat == \"stamina\" then\n"
+        "        cur  = Stats.GetStamina(args.entity)\n"
+        "        maxv = Stats.GetMaxStamina(args.entity)\n"
+        "    elseif stat == \"mana\" then\n"
+        "        cur  = Stats.GetMana(args.entity)\n"
+        "        maxv = Stats.GetMaxMana(args.entity)\n"
+        "    else\n"
+        "        return\n"
+        "    end\n"
+        "    if maxv <= 0 then return end\n"
+        "    local authoredW, authoredH = UI.GetSize(el)\n"
+        "    local width  = args.width  or authoredW\n"
+        "    local height = args.height or authoredH\n"
+        "    UI.SetSize(el, (cur * width) / maxv, height)\n"
+        "end\n";
+    if (L.loadBuffer(kCombatLibSrc, sizeof(kCombatLibSrc) - 1, "builtin:combat") == LUA_OK) {
+        if (L.pcall(0, 0) != LUA_OK) {
+            printf("Error installing Combat library: %s\n", L.optString(-1, "Unknown error"));
+            L.pop();
+        }
+    } else {
+        printf("Error loading Combat library: %s\n", L.optString(-1, "Unknown error"));
+        L.pop();
+    }
+}
+
 void psxsplash::Lua::Shutdown() {
 
     if (m_state.getState()) {

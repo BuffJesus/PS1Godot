@@ -49,6 +49,15 @@ class Lua {
     void Reset();     // Destroy and recreate the Lua VM (call on scene load)
     void Shutdown();  // Close the Lua VM without recreating (call on scene unload)
 
+    // Combat framework Phase 1 helpers (RFC §L1). Installs the
+    // `_G.Combat` table (DistanceSqRaw / InRange / MeleeSwing /
+    // ChaseStep) and extends `_G.UI` with UpdateStatBar. Must be
+    // called AFTER `LuaAPI::RegisterAll` because the install lines
+    // depend on the `UI` global already existing — if Combat tried
+    // to do `UI.UpdateStatBar = ...` before RegisterAll runs, the
+    // later `L.setGlobal("UI")` would clobber our extension.
+    void InstallCombatLibrary();
+
     void LoadLuaFile(const char* code, size_t len, int index);
     void RegisterSceneScripts(int index);
     void RegisterGameObject(GameObject* go);

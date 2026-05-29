@@ -32,22 +32,15 @@ local staminaRegenAcc = 0
 -- continues underneath the whole time (no pause).
 local helpVisible = true
 
+-- Migrated to UI.UpdateStatBar (Combat framework Phase 1, RFC §L3).
+-- Width / height default to the authored values from boss_smoke.tscn
+-- (hp_fill / stamina_fill: 100×4), so the engine helper reads them
+-- via UI.GetSize and we don't repeat the magic numbers here.
 local function updateBars(self)
-    local hpCanvas = UI.FindCanvas("player_hp")
-    if hpCanvas < 0 then return end
-    local hpBar = UI.FindElement(hpCanvas, "hp_fill")
-    local stBar = UI.FindElement(hpCanvas, "stamina_fill")
-
-    local maxHP = Stats.GetMaxHP(self)
-    if maxHP > 0 then
-        UI.SetSize(hpBar, (Stats.GetHP(self) * 100) / maxHP, 4)  -- authored bar w=100 h=4
-    end
-
-    local maxStamina = Stats.GetMaxStamina(self)
-    if maxStamina > 0 then
-        local stFill = (Stats.GetStamina(self) * 100) / maxStamina
-        UI.SetSize(stBar, stFill, 4)
-    end
+    UI.UpdateStatBar{ entity = self, canvas = "player_hp",
+                      element = "hp_fill",      stat = "hp" }
+    UI.UpdateStatBar{ entity = self, canvas = "player_hp",
+                      element = "stamina_fill", stat = "stamina" }
 end
 
 local function tryLockOn()

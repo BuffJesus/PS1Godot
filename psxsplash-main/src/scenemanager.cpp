@@ -85,6 +85,12 @@ void psxsplash::SceneManager::InitializeScene(uint8_t* splashpackData, LoadingSc
     m_dialogueRunner.init(&m_controls, &m_uiSystem);
     LuaAPI::RegisterAll(L.getState(), this, &m_cutscenePlayer, &m_animationPlayer, &m_uiSystem, &m_dialogueRunner);
 
+    // Combat framework Phase 1 (RFC §L1 + §L3). Installs `_G.Combat`
+    // helpers and extends `_G.UI` with `UpdateStatBar`. Must run
+    // AFTER LuaAPI::RegisterAll's `L.setGlobal("UI")` or the engine
+    // table clobbers the extension. See lua.cpp:InstallCombatLibrary.
+    L.InstallCombatLibrary();
+
 #ifdef PSXSPLASH_PROFILER
     debug::Profiler::getInstance().initialize();
 #endif
