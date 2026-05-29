@@ -919,3 +919,113 @@ future RFC.
 3. **Deferred controller bugs #3/#4** — OBDX overdue.
 
 HEAD as of this addendum: `7afc244`.
+
+## 2026-05-29 increment — Phase 5 BossBT compiler shipped
+
+The original combat-framework RFC's last open item: a
+PS1Graph kind that compiles to a `Combat.MeleeBoss` config
+table. Visual authoring layer ON TOP of the Lua surface per
+the original RFC's "compose, don't bundle" guidance — not a
+replacement.
+
+Landed in `23f8586`:
+
+- **`PS1GraphCompiler.CompileBossBt`** — new "bossbt" Kind
+  dispatch. Reads `bossbt_config` (one per graph, lowest-Id
+  wins on duplicates with a warning) + `bossbt_phase` (zero
+  or more, sorted by descending hp_ratio in the output —
+  highest threshold fires first, matching the runtime's
+  monotonic phase advance).
+
+- **`docs/internal/rfc/bossbt-graph-kind.md`** — the RFC the
+  combat-framework RFC said would land separately. Captures
+  payload slot layouts, author flow, deferred editor work,
+  and alternatives considered.
+
+- **`docs/internal/examples/sample_bossbt.tres`** — hand-
+  authored reference graph mirroring boss_smoke's tuning.
+  Lives outside `res://` so F5 doesn't auto-compile it; it's
+  the worked example for compiler validation + the editor
+  second slice.
+
+### Compile shape
+
+Drop-in for `Combat.MeleeBoss`:
+
+```lua
+local boss = Combat.MeleeBoss(_G.bossbt_<basename>)
+```
+
+The compiled table mirrors the existing hand-authored shape
+(see `docs/authoring/boss-encounters.md`).
+
+### Conservative scope cuts (Phase 5 first slice)
+
+- **No swing_y_below / swing_y_above / chase_speed_fp12 /
+  iframes / iframes_phase_change / on_phase_change** payload
+  slots. Authors who need them stay on hand-written
+  MeleeBoss until a real boss demands them.
+- **No editor palette / node-body UI.** `s_kinds` +
+  `s_graphKinds` need 2-line additions; `BuildVisualBody`
+  needs ~80 lines of mechanical LineEdit-per-payload code
+  per the two new Kinds. Deferred to Phase 5 second slice;
+  hand-written `.tres` compiles correctly today (verified
+  via the sample). The sample also serves as the test case
+  the editor UI can be validated against once shipped.
+- **No demo migration.** boss_smoke_brain.lua stays on
+  hand-written `Combat.MeleeBoss{...}` until the editor UI
+  lands. Both paths interoperate freely — the framework
+  doesn't care whether the table came from a graph or a
+  literal.
+
+### Number parsing
+
+Number payloads (radii, frame counts, damage) round-trip
+through `TryParse` (culture-invariant). Non-number strings
+emit `nil --[[ ... ]]` with the bad value commented inline
+so compiled .lua stays parseable but the author can find
+their typo via a `grep "bossbt warning" demo/scripts/`.
+
+### Combat framework session totals (2026-05-29 — final)
+
+| Slice | Commit | Delivery |
+|---|---|---|
+| Phase 1   | 74074b6 | Combat + UI.UpdateStatBar embedded |
+| Phase 2   | c58cb90 | Combat.MeleeBoss state machine |
+| Phase 3   | 111a480 | Encounter module + MeleeBoss binding |
+| Phase 4-A | e5e0510 | PS1Encounter composite node |
+| Phase 4-B | 285b243 | 4 encounter Doctor lints |
+| Phase 4.5 | 3e49577 | PS1StatBar composite + L5 #9 lint |
+| L3 v2     | 7afc244 | UI.BindStatBars auto-tick |
+| Phase 5-A | 23f8586 | BossBT graph kind compiler |
+
+**Both the original combat-framework RFC AND the spun-off
+Phase 5 RFC are now fully shipped except for the Phase 5
+second slice (editor palette + node-body UI)**, which the
+Phase 5 RFC itself explicitly gates on real authoring demand
+following the same rationale that gated Phase 4 composite
+nodes initially.
+
+### Next-session candidates (refreshed)
+
+1. **F5 verify the entire stack** (Phases 1 through 5-A).
+   Needs Godot editor restart for PS1Encounter.cs.uid +
+   PS1StatBar.cs.uid generation. After restart:
+   - All combat behavior identical to boss_smoke pre-
+     framework: gate → music + bars → boss state machine
+     → phase transition at 50% → death cleanup.
+   - Bars auto-tick via UI.BindStatBars without per-frame
+     code in player.lua / brain.lua.
+   - Doctor reports 9/9 L5 lints clean on the demo (all
+     three encounter-side checks pass after the
+     migration; bar lints pass on the PS1StatBar-emitted
+     bars; Stats-without-HUD lint passes because both
+     PS1StatBar nodes have TrackedEntity set).
+2. **Phase 5 second slice — BossBT editor UI** when an
+   author wants to use the graph kind. The sample .tres
+   is the validation case; expected effort is ~80 lines
+   in `BuildVisualBody` + 2 in palette.
+3. **Deferred controller bugs #3/#4** — OBDX overdue per
+   `project_obdx_eta`.
+
+HEAD as of this addendum: `23f8586`.
